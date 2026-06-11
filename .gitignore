@@ -1,0 +1,5 @@
+# Session-scoped agent scratch state (see AGENTS.md)
+.agent-workspace/
+
+# Local machine settings
+.claude/settings.local.json
