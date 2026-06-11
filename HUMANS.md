@@ -220,6 +220,8 @@ Modern skill systems are designed around progressive disclosure. Agents initiall
 
 Skills are the right home for context needed by a kind of task, but not by every task.
 
+A skill is a task model, not packed context. It should name the jobs its output serves, what varies between invocations, and which choices must come from the human rather than be invented. A skill that encodes only the artifact's shape aligns the agent with the shape: generic completion, better formatted. Modelling the task does for skills what boundaries do for code. It makes the generic continuation harder to represent.
+
 If a section of `AGENTS.md` starts becoming a procedure, it probably belongs in a skill.
 
 This keeps `AGENTS.md` behavioural while allowing the wider instruction system to be detailed.
