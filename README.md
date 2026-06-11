@@ -1,43 +1,55 @@
+<div align="center">
+
 # HUMANS.md
 
-HUMANS.md is a compact instruction-system project for AI coding agents. It separates always-loaded agent conduct, human-maintainer rationale, and task-specific skills so agents can move quickly without losing scope, reviewability, or human authority.
+**A behavioural instruction system for AI coding agents, built on one claim: always-loaded instructions should be a conduct contract, not a repository encyclopedia.**
 
-## Why It Exists
+</div>
 
-Most agent instruction files drift toward encyclopedias: setup notes, style fragments, project lore, and generic advice all compete for always-loaded context. This project takes the opposite stance. Durable instructions should shape default behavior; detailed task knowledge should load only when needed; rules that need hard edges should move into tooling.
+Most agent instruction files drift toward encyclopedias. Setup commands, style fragments, project lore, and generic advice all compete for always-loaded context, and the evidence this repository cites suggests that posture can reduce task success while increasing cost. This project takes the opposite stance and ships the working system that follows from it: a small standing contract that shapes conduct, skills that carry task knowledge only when a task needs it, tooling for rules that must be guaranteed, and a rationale document that keeps the design from collapsing back into boilerplate.
 
-The result is a smaller, sharper control surface for agent work:
+The aim, in the project's own words, is controlled acceleration: faster agent work under tighter human ownership.
 
-- `AGENTS.md` defines the active behavior contract.
-- `HUMANS.md` preserves the design rationale for humans maintaining that contract.
-- `skills/` holds focused, progressive-disclosure task guidance.
+## The Claim
 
-## Core Ideas
+Always-loaded instructions change an agent's defaults before any task is understood. That makes them powerful and dangerous for the same reason, so they must earn their place. The system here splits the instruction surface into layers, each with one job:
 
-`AGENTS.md` is not a repository map. It is the standing behavior layer agents should carry into most tasks: stay bounded, surface assumptions, verify what matters, leave reviewable work, and keep the target artifact primary.
+- **Conduct** lives in the standing contract: stay inside the task, surface consequential choices, keep scope visible, leave reviewable work.
+- **Task knowledge** lives in skills, loaded deliberately through progressive disclosure.
+- **Rules with hard consequences** belong in tooling: hooks, permissions, tests, CI. Prose is not enforcement.
+- **Rationale** lives with the humans who maintain the system, not in agent context.
 
-`HUMANS.md` is not loaded as agent instruction by default. It explains why the contract is shaped this way, including the preference for layer boundaries, progressive disclosure, useful friction, scratch-state closure, and guardrails against both under-modelled work and over-engineering.
+The full argument, with its references and anti-patterns, is in [`HUMANS.md`](HUMANS.md).
 
-Skills are the place for repeatable task knowledge. They should be narrow, triggerable, and practical. A skill may be detailed because it is loaded deliberately, not because every task needs it.
+## The Layers
 
-## Included Skills
+| Artifact | Role | Loaded |
+| --- | --- | --- |
+| [`AGENTS.md`](AGENTS.md) | The active behaviour contract: bounded scope, human authority, explicit assumptions, verification, reviewable handoff | Always, by agents |
+| [`CLAUDE.md`](CLAUDE.md) | Compatibility pointer to `AGENTS.md`, never a second source of truth | Always, by Claude Code |
+| [`HUMANS.md`](HUMANS.md) | The design rationale, written for humans maintaining the instruction system | Never, unless a human asks |
+| [`skills/`](skills/) | Task models loaded on demand when their task is in hand | Per task |
+| [`docs/`](docs/) | Records of experiments run on the instruction system itself | Never |
+| `.agent-workspace/` | Session-scoped scratch state, disposable by design | Per session |
 
-### `skill-generator`
+## Skills
 
-Guides agents through creating, revising, or auditing other skills. It emphasizes artifact-first authoring, clear trigger metadata, non-goals, platform-aware packaging, and resistance to turning every skill into a miniature framework.
+Three skills currently ship with the repository:
 
-### `readme-generator`
+- [`skill-generator`](skills/skill-generator/SKILL.md): create, revise, or audit a skill. It treats the task model as the skill: jobs, variation, requester-owned choices, and activation boundary are built and confirmed before any body is written.
+- [`skill-packaging`](skills/skill-packaging/SKILL.md): package, validate, port, or diagnose a skill for a specific platform, without letting the platform reshape the skill.
+- [`readme-generator`](skills/readme-generator/SKILL.md): create or maintain a repository README as a capture of project intent, grounded in repository facts rather than invention.
 
-Guides agents through creating project READMEs with staggered disclosure: description first, clean pitch next, then only the overview, installation, usage, and development sections the repository actually warrants.
+## Method
 
-## Using This Repo
+Skills here are not taken on faith. They are forward-tested: a fresh-context agent is given the skill and a realistic request seeded with traps, and its behaviour is judged against the skill's own task model. [`docs/2026-06-11-skill-creation-forward-test.md`](docs/2026-06-11-skill-creation-forward-test.md) records one such experiment, a head-to-head comparison of two skill-creation skills that ended in a merge, with the surviving instruments named and the open questions kept visible.
 
-Use `AGENTS.md` as the canonical active contract for agents working in the repository.
+## Engaging With This Repository
 
-Use `HUMANS.md` when editing or evaluating the instruction system itself. It is human rationale, not runtime instruction text to copy wholesale into agent context.
-
-Use skills from `skills/` when the task matches their trigger. Keep new skills focused on recurring task capabilities rather than general conduct, broad project documentation, or rules that need enforcement.
+- **To adopt the posture**: read [`AGENTS.md`](AGENTS.md). It is the canonical active contract and small enough to read in a minute.
+- **To maintain or evaluate the system**: read [`HUMANS.md`](HUMANS.md) first. Every layer boundary in this repository exists for a reason recorded there, including the criteria for what may enter the contract at all.
+- **To add task knowledge**: write a skill, using `skill-generator`. If a candidate addition only explains the codebase, it belongs in documentation; if violating it would be materially harmful, it needs enforcement, not prose.
 
 ## Status
 
-This repository is small by design. There is no build step, package manager, or test suite in the current project state.
+Small by design. There is no build step, package manager, or test suite; the artifacts are the instruction files themselves and the experiments run against them. Released under the [MIT licence](LICENSE).
