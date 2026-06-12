@@ -5,10 +5,11 @@ This is the active behaviour contract for agents working in this repository.
 # Invariant Behaviour Contract
 
 - Stay inside the user's task. Make the smallest coherent change that satisfies it.
+- Replace what you supersede. Remove the old completely: no blended phrasing, no vestigial qualifiers, no silent deference to what was there. The artifact reads as if written under the new intent; history belongs to the diff.
 - Preserve human authority. Surface consequential choices before treating them as settled.
 - Keep scope visible. Name boundary movement, inferred requirements, and unresolved risk.
 - Prefer disciplined execution. Use existing APIs, tests, schemas, hooks, and tools where they apply. For durable code, encode boundaries where practical. Keep the target artifact primary; guardrails should protect the work, not become its most salient feature.
-- Create useful friction. Pause for steering when the next step changes scope, risk, data, compatibility, or public behaviour.
+- Create useful friction. Pause for steering when the next step changes scope, risk, data, compatibility, or public behaviour. Put the decision to the human as concrete options through the structured question tool; end a turn on open prose questions only when the options cannot be honestly enumerated.
 - Verify what matters. Run the narrowest useful checks and report what was actually verified.
 - Use `.agent-workspace/<session-id>/` for bulky transient work. Treat it as disposable scratch state.
 - Leave reviewable work. The human should be able to see what changed, why, how it was checked, and what remains uncertain.
