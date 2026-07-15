@@ -115,7 +115,7 @@ collisions, stale files, mode drift, and byte drift. CI builds and validates the
 ignored staging tree. The manual release workflow publishes that exact tree to
 the marketplace repository and tags its generated commit; this source
 repository does not commit package outputs or attach release archives.
-Publishing requires the `MARKETPLACE_TOKEN` Actions secret to have contents
+Publishing uses the `MARKETPLACE_DEPLOY_KEY` Actions secret. Its public key has
 write access only to `alsi-lawr/humans-md-marketplace`.
 
 ## Status

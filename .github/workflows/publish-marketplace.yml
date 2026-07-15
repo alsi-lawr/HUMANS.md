@@ -54,7 +54,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: alsi-lawr/humans-md-marketplace
-          token: ${{ secrets.MARKETPLACE_TOKEN }}
+          ssh-key: ${{ secrets.MARKETPLACE_DEPLOY_KEY }}
           fetch-depth: 0
           path: marketplace-repository
       - name: Publish and tag the generated commit
