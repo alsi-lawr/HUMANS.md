@@ -34,6 +34,12 @@ def main():
         if "developer_instructions" not in data: fail(errors,f"missing role instructions: {p.name}")
         if "model" in data or "model_reasoning_effort" in data: fail(errors,f"model default in role: {p.name}")
     known={p.stem for p in (adapter/"agents").glob("*.toml")}
+    try: fragment=tomllib.loads((adapter/"config-fragment.toml").read_text())
+    except Exception as e: fail(errors,f"invalid Codex config fragment: {e}"); fragment={}
+    for role in ROLES:
+        declaration=fragment.get("agents",{}).get(role,{})
+        names=declaration.get("nickname_candidates")
+        if not isinstance(names,list) or not names or not all(isinstance(x,str) and x.strip() for x in names): fail(errors,f"missing nickname candidates: {role}")
     for p in sorted((adapter/"matrices").glob("*.toml")):
         try: d=tomllib.loads(p.read_text())
         except Exception as e: fail(errors,f"invalid TOML {p.name}: {e}"); continue
@@ -69,6 +75,8 @@ def main():
             if not dst.is_file() or src.read_bytes()!=dst.read_bytes(): fail(errors,f"installed role mismatch: {role}")
             declaration=config.get("agents",{}).get(role,{})
             if declaration.get("config_file") != str(dst): fail(errors,f"installed role declaration mismatch: {role}")
+            names=declaration.get("nickname_candidates")
+            if not isinstance(names,list) or not names: fail(errors,f"installed nickname candidates missing: {role}")
     if errors:
         print("validation failed:",*errors,sep="\n- "); return 1
     print(f"validated {len(SKILLS)} skills, {len(ROLES)} worker roles, and {len(list((adapter/'matrices').glob('*.toml')))} Codex matrices")

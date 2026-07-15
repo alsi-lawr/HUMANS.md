@@ -1,6 +1,6 @@
 ---
 name: ticket-batch-subagent-pipeline
-description: "Use when implementing an accepted ticket batch under an already selected platform strategy matrix with task-scoped writers, optional look-ahead workers, and recorded review flow. Do not choose models, reasoning, or strategy defaults."
+description: "Use when implementing an accepted ticket batch under an already selected platform strategy matrix with task-scoped writers, matrix-declared look-ahead workers, and recorded review flow. Do not choose models, reasoning, or strategy defaults."
 ---
 
 

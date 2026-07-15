@@ -7,7 +7,7 @@ description: "Use when resolved ticket, planning, orchestration, or review artif
     # Ticket Scratch Closeout
 
     1. Read repository authority and inventory task scratch.
-    2. Classify every artifact as disposable, active, or durable. Current-session material may be durable only after its work is resolved.
+    2. Classify every artifact as disposable, active, or durable. Promote current-session material only after its work is resolved.
     3. Resolve the configured planning store, project namespace, and persistence adapter; do not assume a host, sibling path, or VCS.
     4. Preserve selected durable artifacts and provenance without normalising historical content.
     5. Compare source and destination file lists and hashes; validate schemas and run bundled validators.
