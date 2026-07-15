@@ -1,0 +1,1 @@
+Assign disjoint domains to inspectors and bounded questions to their investigators while preserving root duplicate and disposition authority.

@@ -1,0 +1,73 @@
+schema_version = 1
+adapter = "codex"
+
+[root]
+profile = "root"
+model = "gpt-5.6-sol"
+reasoning = "xhigh"
+
+[[workers]]
+role = "inspector"
+profile = "inspector"
+model = "gpt-5.6-terra"
+reasoning = "xhigh"
+
+[[workers]]
+role = "detective"
+profile = "detective"
+model = "gpt-5.6-terra"
+reasoning = "medium"
+
+[[workers]]
+role = "dialogue-review-chair"
+profile = "dialogue-review-chair"
+model = "gpt-5.6-terra"
+reasoning = "xhigh"
+
+[[workers]]
+role = "dialogue-review-challenger"
+profile = "dialogue-review-challenger"
+model = "gpt-5.6-terra"
+reasoning = "xhigh"
+
+[[workers]]
+role = "atomic-ticket-reviewer"
+profile = "atomic-ticket-reviewer"
+model = "gpt-5.6-terra"
+reasoning = "xhigh"
+
+[[workers]]
+role = "verification-reviewer"
+profile = "verification-reviewer"
+model = "gpt-5.6-terra"
+reasoning = "medium"
+
+[[workers]]
+role = "implementation-writer"
+profile = "implementation-writer"
+model = "gpt-5.6-terra"
+reasoning = "high"
+
+[catalog]
+id_field = "slug"
+instruction_fields = ["base_instructions"]
+model_message_fields = ["instructions_template"]
+selector_fields = ["model_messages.approvals"]
+
+[[catalog.targets]]
+id = "gpt-5.6-sol"
+required_reasoning = ["xhigh"]
+instruction_file = "instructions/root.md"
+null_selectors = ["model_messages.approvals"]
+
+[catalog.targets.expected]
+display_name = "GPT-5.6-Sol"
+
+[[catalog.targets]]
+id = "gpt-5.6-terra"
+required_reasoning = ["medium", "high", "xhigh"]
+instruction_file = "instructions/worker.md"
+null_selectors = ["model_messages.approvals"]
+
+[catalog.targets.expected]
+display_name = "GPT-5.6-Terra"

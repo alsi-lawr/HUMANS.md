@@ -1,0 +1,42 @@
+[features]
+multi_agent = true
+multi_agent_v2 = false
+
+[agents]
+max_depth = 2
+max_threads = 6
+
+[agents.inspector]
+description = "Casefile inspector."
+config_file = "__HUMANS_MD_PLUGIN_ROOT__/agents/inspector.toml"
+nickname_candidates = ["Surveyor", "Verifier"]
+
+[agents.detective]
+description = "Casefile investigator."
+config_file = "__HUMANS_MD_PLUGIN_ROOT__/agents/detective.toml"
+nickname_candidates = ["Sleuth", "Tracer"]
+
+[agents.dialogue-review-chair]
+description = "Casefile dialogue review chair."
+config_file = "__HUMANS_MD_PLUGIN_ROOT__/agents/dialogue-review-chair.toml"
+nickname_candidates = ["Chair", "Arbiter"]
+
+[agents.dialogue-review-challenger]
+description = "Casefile dialogue review challenger."
+config_file = "__HUMANS_MD_PLUGIN_ROOT__/agents/dialogue-review-challenger.toml"
+nickname_candidates = ["Challenger", "Skeptic"]
+
+[agents.atomic-ticket-reviewer]
+description = "Casefile atomic ticket reviewer."
+config_file = "__HUMANS_MD_PLUGIN_ROOT__/agents/atomic-ticket-reviewer.toml"
+nickname_candidates = ["Reviewer", "Auditor"]
+
+[agents.verification-reviewer]
+description = "Casefile focused verification reviewer."
+config_file = "__HUMANS_MD_PLUGIN_ROOT__/agents/verification-reviewer.toml"
+nickname_candidates = ["Verifier", "Checker"]
+
+[agents.implementation-writer]
+description = "Casefile implementation writer."
+config_file = "__HUMANS_MD_PLUGIN_ROOT__/agents/implementation-writer.toml"
+nickname_candidates = ["Builder", "Implementer"]

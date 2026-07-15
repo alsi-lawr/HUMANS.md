@@ -1,0 +1,1 @@
+Give the verifier only the primary findings and acceptance result, and prevent it from repeating the complete matrix.

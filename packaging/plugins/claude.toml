@@ -1,0 +1,114 @@
+schema_version = 1
+plugin_id = "claude-humans-md"
+name = "humans-md"
+vendor = "claude"
+version = "0.1.0"
+publisher = "alsi-lawr"
+repository = "alsi-lawr/HUMANS.md"
+license = "MIT"
+description = "Portable behavioural contracts and governed Casefile workflows for coding agents."
+output = "plugins/claude/humans-md"
+
+[[copy]]
+source = "LICENSE"
+destination = "LICENSE"
+
+[[copy]]
+source = "adapters/claude/README.md"
+destination = "README.md"
+
+[[copy]]
+source = "casefile-workflow"
+destination = "casefile-workflow"
+
+[[copy]]
+source = "verification"
+destination = "verification"
+
+[[copy]]
+source = "scripts/validate-skill.py"
+destination = "scripts/validate-skill.py"
+
+[[copy]]
+source = "scripts/verify-skill.py"
+destination = "scripts/verify-skill.py"
+
+[[copy]]
+source = "scripts/validate-casefile.py"
+destination = "scripts/validate-casefile.py"
+
+[[copy]]
+source = "adapters/claude/agents"
+destination = "agents"
+
+[[copy]]
+source = "adapters/claude/matrices"
+destination = "matrices"
+
+[[copy]]
+source = "adapters/claude/profiles.toml"
+destination = "config/profiles.toml"
+
+[[copy]]
+source = "adapters/claude/skills"
+destination = "skills"
+
+[[copy]]
+source = "skills/casefile-workflow"
+destination = "skills/casefile-workflow"
+
+[[copy]]
+source = "skills/casefile-investigate-solo"
+destination = "skills/casefile-investigate-solo"
+
+[[copy]]
+source = "skills/casefile-investigate-atomic"
+destination = "skills/casefile-investigate-atomic"
+
+[[copy]]
+source = "skills/casefile-investigate-inspector-tree"
+destination = "skills/casefile-investigate-inspector-tree"
+
+[[copy]]
+source = "skills/casefile-review-atomic"
+destination = "skills/casefile-review-atomic"
+
+[[copy]]
+source = "skills/casefile-review-dialogue"
+destination = "skills/casefile-review-dialogue"
+
+[[copy]]
+source = "skills/casefile-review-two-stage"
+destination = "skills/casefile-review-two-stage"
+
+[[copy]]
+source = "skills/casefile-implement-ticket-batch"
+destination = "skills/casefile-implement-ticket-batch"
+
+[[copy]]
+source = "skills/casefile-switch-strategy"
+destination = "skills/casefile-switch-strategy"
+
+[[copy]]
+source = "skills/casefile-closeout"
+destination = "skills/casefile-closeout"
+
+[[copy]]
+source = "skills/contract-bootstrap"
+destination = "skills/contract-bootstrap"
+
+[[copy]]
+source = "skills/git-contribution"
+destination = "skills/git-contribution"
+
+[[copy]]
+source = "skills/skill-generator"
+destination = "skills/skill-generator"
+
+[[copy]]
+source = "skills/skill-packaging"
+destination = "skills/skill-packaging"
+
+[[copy]]
+source = "skills/readme-generator"
+destination = "skills/readme-generator"

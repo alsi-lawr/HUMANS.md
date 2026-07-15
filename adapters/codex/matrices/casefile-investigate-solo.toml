@@ -1,0 +1,19 @@
+schema_version = 1
+strategy_id = "casefile-investigate-solo"
+phase = "investigation"
+adapter = "codex"
+
+[orchestrator]
+binding = "root"
+
+[limits]
+max_concurrent_subagents = 1
+max_depth = 0
+
+[requirements]
+capabilities = []
+
+[coordination]
+batch_when_capacity_exceeded = false
+candidate_review_before_ticket = true
+shared_ticket_storage_required = false

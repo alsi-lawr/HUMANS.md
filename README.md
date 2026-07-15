@@ -2,59 +2,104 @@
 
 # HUMANS.md
 
-**A behavioural instruction system for AI coding agents, built on one claim: always-loaded instructions should be a conduct contract, not a repository encyclopedia.**
+**A thesis and reproducible plugin system for controlled acceleration: lean standing conduct, task-shaped skills, and governed Casefile work.**
 
 </div>
 
-Most agent instruction files drift toward encyclopedias. Setup commands, style fragments, project lore, and generic advice all compete for always-loaded context, and the evidence this repository cites suggests that posture can reduce task success while increasing cost. This project takes the opposite stance and ships the working system that follows from it: a small standing contract that shapes conduct, skills that carry task knowledge only when a task needs it, tooling for rules that must be guaranteed, and a rationale document that keeps the design from collapsing back into boilerplate.
+Repository instruction files often become encyclopedias. HUMANS.md argues for a narrower split: always-loaded text governs conduct, skills carry task knowledge only when needed, and deterministic tools enforce boundaries prose cannot guarantee. The repository now ships that thesis as portable source plus reproducible `humans-md` packages for Codex and Claude.
 
-The aim, in the project's own words, is controlled acceleration: faster agent work under tighter human ownership.
+## The thesis
 
-## The Claim
+Always-loaded instructions change agent defaults before a task is understood. They should therefore carry durable behavioural invariants rather than setup lore, broad repository context, or task procedures. This project separates five concerns:
 
-Always-loaded instructions change an agent's defaults before any task is understood. That makes them powerful and dangerous for the same reason, so they must earn their place. The system here splits the instruction surface into layers, each with one job:
+- [`AGENTS.md`](AGENTS.md) is the standing behaviour contract.
+- [`HUMANS.md`](HUMANS.md) preserves the human rationale and evidence.
+- [`skills/`](skills/) contains portable task models loaded on demand.
+- [`casefile-workflow/`](casefile-workflow/) contains portable roles, schemas, and guarded workflow scripts.
+- [`adapters/`](adapters/) and [`packaging/plugins/`](packaging/plugins/) bind portable source to a runtime and deterministically generate committed packages.
 
-- **Conduct** lives in the standing contract: stay inside the task, surface consequential choices, keep scope visible, leave reviewable work.
-- **Task knowledge** lives in skills, loaded deliberately through progressive disclosure.
-- **Rules with hard consequences** belong in tooling: hooks, permissions, tests, CI. Prose is not enforcement.
-- **Rationale** lives with the humans who maintain the system, not in agent context.
+The operating aim is controlled acceleration: faster work because boundaries, choices, ownership, and evidence are easier to inspect.
 
-The full argument, with its references and anti-patterns, is in [`HUMANS.md`](HUMANS.md).
+## Casefile
 
-## The Layers
+Casefile turns repository investigation and accepted implementation into governed, reviewable records. Its active public skills are:
 
-| Artifact | Role | Loaded |
-| --- | --- | --- |
-| [`AGENTS.md`](AGENTS.md) | The active behaviour contract: bounded scope, human authority, explicit assumptions, verification, reviewable handoff | Always, by agents |
-| [`CLAUDE.md`](CLAUDE.md) | Compatibility pointer to `AGENTS.md`, never a second source of truth | Always, by Claude Code |
-| [`HUMANS.md`](HUMANS.md) | The design rationale, written for humans maintaining the instruction system | Never, unless a human asks |
-| [`skills/`](skills/) | Task models loaded on demand when their task is in hand | Per task |
-| [`docs/`](docs/) | Records of experiments run on the instruction system itself | Never |
-| `.agent-workspace/` | Session-scoped scratch state, disposable by design | Per session |
+- `casefile-workflow`
+- `casefile-investigate-solo`, `casefile-investigate-atomic`, and `casefile-investigate-inspector-tree`
+- `casefile-review-atomic`, `casefile-review-dialogue`, and `casefile-review-two-stage`
+- `casefile-implement-ticket-batch`, `casefile-switch-strategy`, and `casefile-closeout`
 
-## Skills
+Every governed phase requires an explicit compatible matrix. The request-receiving root retains authority; investigators report candidates before tickets, overlapping writes have one owner, reviews are recorded, and strategy switches preserve work while refusing capability or ownership conflicts.
 
-The repository ships focused skills, including:
+## Portable skills
 
-- [`skill-generator`](skills/skill-generator/SKILL.md): create, revise, or audit a skill. It treats the task model as the skill: jobs, variation, requester-owned choices, and activation boundary are built and confirmed before any body is written.
-- [`skill-packaging`](skills/skill-packaging/SKILL.md): package, validate, port, or diagnose a skill for a specific platform, without letting the platform reshape the skill.
-- [`readme-generator`](skills/readme-generator/SKILL.md): create or maintain a repository README as a capture of project intent, grounded in repository facts rather than invention.
-- [`ticketed-repository-investigation`](skills/ticketed-repository-investigation/SKILL.md): coordinate portable, ticket-producing investigation with explicit strategy selection and human-owned contention.
-- Investigation and review strategy skills select solo, atomic, hierarchical, dialogue, atomic-review, or two-stage execution without embedding platform defaults.
-- [`ticket-batch-subagent-pipeline`](skills/ticket-batch-subagent-pipeline/SKILL.md) and [`ticket-scratch-closeout`](skills/ticket-scratch-closeout/SKILL.md): consume selected implementation matrices and promote resolved planning records through configured adapters.
+The packages include every Casefile skill plus `contract-bootstrap`, `git-contribution`, `skill-generator`, `skill-packaging`, and `readme-generator`. The `build-code` and `test-benchmark-code` skills are intentionally excluded for a later code-skills package.
 
-Reusable role contracts, schemas, and the first platform adapter live in [`planning-workflow/`](planning-workflow/). Operational records remain outside this repository in the private `agent-planning` store.
+`skill-generator` begins with a human-selected TOML verification strategy. Stable suites separate positive triggers, hard near-neighbour non-triggers, and task behaviour from hidden rubrics. Candidate and no-skill or immutable-old-skill baseline arms run in the same evaluation window, absolute acceptance precedes comparative deltas, and evidence remains classified rather than inflated.
 
-## Method
+## Reproducible packages
 
-Skills here are not taken on faith. They are forward-tested: a fresh-context agent is given the skill and a realistic request seeded with traps, and its behaviour is judged against the skill's own task model. [`docs/2026-06-11-skill-creation-forward-test.md`](docs/2026-06-11-skill-creation-forward-test.md) records one such experiment, a head-to-head comparison of two skill-creation skills that ended in a merge, with the surviving instruments named and the open questions kept visible.
+Both committed packages are version 0.1.0, published as `alsi-lawr`, sourced from `alsi-lawr/HUMANS.md`, and licensed MIT:
 
-## Engaging With This Repository
+- [`plugins/codex/humans-md/`](plugins/codex/humans-md/)
+- [`plugins/claude/humans-md/`](plugins/claude/humans-md/)
 
-- **To adopt the posture**: read [`AGENTS.md`](AGENTS.md). It is the canonical active contract and small enough to read in a minute.
-- **To maintain or evaluate the system**: read [`HUMANS.md`](HUMANS.md) first. Every layer boundary in this repository exists for a reason recorded there, including the criteria for what may enter the contract at all.
-- **To add task knowledge**: write a skill, using `skill-generator`. If a candidate addition only explains the codebase, it belongs in documentation; if violating it would be materially harmful, it needs enforcement, not prose.
+Build and compare every manifest with Python 3.14 and the standard library only:
 
-## Status
+```sh
+python scripts/strip-non-ascii.py --check .
+python scripts/package-plugin.py build --all
+python scripts/package-plugin.py check --all
+python scripts/validate-skill.py --all --root .
+python scripts/validate-casefile.py --source .
+python -m unittest discover -s tests -v
+```
 
-Small by design. There is no build step, package manager, or test suite; the artifacts are the instruction files themselves and the experiments run against them. Released under the [MIT licence](LICENSE).
+The packager rejects traversal, symlinks, missing or empty sources, duplicate destinations, non-ASCII text, mode drift, byte drift, and stale output. Generated packages contain all runtime resources and do not depend on this checkout after installation.
+
+## Adapter status
+
+### Codex
+
+The Codex package contains `.codex-plugin/plugin.json`, repository marketplace metadata, named worker profiles, exact matrices, setup skills, and guarded scripts. The accepted V1 contract binds root to Sol/xhigh and matrix workers to Terra at their declared efforts, with `multi_agent = true` and `multi_agent_v2 = false`.
+
+Add the package directory as a personal marketplace only when ready to inspect it:
+
+```sh
+codex plugin marketplace add /absolute/path/to/plugins/codex/humans-md --json
+codex plugin list --available --json
+```
+
+Installation and cutover are separate, opt-in operations. The setup skill renders candidate configuration; it does not edit active configuration. A live cutover must back up direct resources and relevant configuration, install through the marketplace, validate strict configuration and discovery, restart into a new root thread, prove V1 plus exact child model and effort, and restore automatically on failure. This repository does not distribute or edit `models_cache.json`.
+
+### Claude
+
+The Claude package keeps only `plugin.json` beneath `.claude-plugin`; `skills/` and `agents/` are package-root components and resource references use `${CLAUDE_PLUGIN_ROOT}`. Its policy tiers are Opus/high for inspectors and review chairs, Sonnet/medium-high for investigators, writers, challengers, and atomic reviewers, and Haiku/medium for focused verification. The adapter records the medium-high policy tier and maps it to the supported `high` frontmatter value rather than emitting an invalid level.
+
+The strict structural command is:
+
+```sh
+claude plugin validate plugins/claude/humans-md --strict
+```
+
+Claude was not installed, validated, or behaviourally tested as part of this implementation batch. Strict validation, installation, loading, triggering, and exact routing remain release gates.
+
+## Contract bootstrap
+
+Package installation never changes a repository contract. `contract-bootstrap` acts only on an explicit request and explicit source and destination. It previews the complete diff, refuses an ambiguous merge, requires replacement authority for a differing target, creates a hash-addressed backup, writes atomically, and leaves an identical target untouched.
+
+## Evidence and reproducibility
+
+Mechanical evidence comes from the stdlib tests, source validators, package parity check, ASCII check, matrix validation, and vendor structural checks. Behavioral evidence uses the separate [`verification/`](verification/) strategies, suite, isolated prompts, and rubrics. The 2026-07-15 migration is summarized in the sanitized [Casefile migration case study](docs/case-studies/2026-07-15-thesis-and-plugin.md); governed private evidence remains access-controlled.
+
+CI repeats ASCII, tests, source and package validation, strict Claude validation, and isolated Codex marketplace discovery. A weekly/manual workflow exports the latest bundled Codex catalog and compares only declared profile-relevant fields. It maintains one labelled issue and never edits instructions or commits catalog data.
+
+## Limitations and release gates
+
+- No live Codex cutover success is claimed. Fresh-process V1 and exact inspector model/effort proof are unresolved gates.
+- Claude installation and behavioural verification are unresolved gates.
+- The balanced behavioral suite is specified but must be executed in isolated runtime contexts for every included revised or adopted skill before behavioral claims.
+- Durable private record promotion is a separate closeout ticket; public documentation contains no raw transcript.
+- Publication, pushing, release tags, automated grading, evaluation viewers, description optimization, and code-skill packaging are outside this batch.
+
+Released under the [MIT licence](LICENSE).

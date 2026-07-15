@@ -1,0 +1,1 @@
+Run the accepted solo matrix. Preserve root authority, create no workers, and show where duplicate arbitration and disposition occur.

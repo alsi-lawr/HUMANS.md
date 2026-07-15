@@ -1,0 +1,1 @@
+The batch has overlapping output paths. Assign one exclusive writer, return immutable commits, and route corrections through the recorded review stages.

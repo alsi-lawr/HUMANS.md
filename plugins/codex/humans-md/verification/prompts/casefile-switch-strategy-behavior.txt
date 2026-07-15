@@ -1,0 +1,1 @@
+Inventory root, work, capabilities, and active ownership; refuse the switch if two writers overlap, otherwise record a governed transition.

@@ -1,0 +1,1 @@
+Assign six independent reviewers to disjoint ticket groups.

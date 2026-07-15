@@ -1,0 +1,10 @@
+{
+  "author": {
+    "name": "alsi-lawr"
+  },
+  "description": "Portable behavioural contracts and governed Casefile workflows for coding agents.",
+  "license": "MIT",
+  "name": "humans-md",
+  "repository": "https://github.com/alsi-lawr/HUMANS.md",
+  "version": "0.1.0"
+}

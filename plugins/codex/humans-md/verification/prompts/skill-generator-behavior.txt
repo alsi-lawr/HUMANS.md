@@ -1,0 +1,1 @@
+Before drafting, require isolated positive, hard non-trigger, and behavior cases with simultaneous no-skill baseline and absolute acceptance.

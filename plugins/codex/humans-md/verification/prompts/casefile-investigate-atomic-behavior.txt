@@ -1,0 +1,1 @@
+There are more disjoint questions than worker slots. Apply the accepted atomic matrix without nesting and describe batching plus ticket-path reservation.

@@ -1,0 +1,31 @@
+schema_version = 1
+strategy_id = "casefile-review-dialogue"
+phase = "review"
+adapter = "claude"
+[orchestrator]
+binding = "root"
+[limits]
+max_concurrent_subagents = 2
+max_depth = 2
+[requirements]
+capabilities = ["subagents", "nested_subagents", "shared_writable_planning"]
+[[workers]]
+role = "dialogue-review-chair"
+platform_profile = "dialogue-review-chair"
+model = "opus"
+reasoning = "high"
+minimum_count = 1
+maximum_count = 1
+can_spawn_subagents = true
+[[workers]]
+role = "dialogue-review-challenger"
+platform_profile = "dialogue-review-challenger"
+model = "sonnet"
+reasoning = "medium-high"
+minimum_count = 1
+maximum_count = 1
+can_spawn_subagents = false
+[coordination]
+batch_when_capacity_exceeded = true
+candidate_review_before_ticket = false
+shared_ticket_storage_required = true

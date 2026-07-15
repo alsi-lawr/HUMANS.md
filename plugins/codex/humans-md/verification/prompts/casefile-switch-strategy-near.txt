@@ -1,0 +1,1 @@
+Rename the strategy files in this inactive repository with no governed work in progress.

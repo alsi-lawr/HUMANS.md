@@ -1,0 +1,318 @@
+schema_version = 1
+suite_id = "humans-md-casefile-v1"
+description = "Stable isolated trigger, hard-neighbour, and task-behaviour cases for every included source skill."
+
+[[cases]]
+id = "casefile-closeout-positive"
+skill = "casefile-closeout"
+partition = "positive_trigger"
+prompt = "prompts/casefile-closeout-positive.txt"
+rubric = "rubrics/trigger.md"
+
+[[cases]]
+id = "casefile-closeout-near"
+skill = "casefile-closeout"
+partition = "hard_non_trigger"
+prompt = "prompts/casefile-closeout-near.txt"
+rubric = "rubrics/trigger.md"
+
+[[cases]]
+id = "casefile-closeout-behavior"
+skill = "casefile-closeout"
+partition = "task_behavior"
+prompt = "prompts/casefile-closeout-behavior.txt"
+rubric = "rubrics/behavior.md"
+
+[[cases]]
+id = "casefile-implement-ticket-batch-positive"
+skill = "casefile-implement-ticket-batch"
+partition = "positive_trigger"
+prompt = "prompts/casefile-implement-ticket-batch-positive.txt"
+rubric = "rubrics/trigger.md"
+
+[[cases]]
+id = "casefile-implement-ticket-batch-near"
+skill = "casefile-implement-ticket-batch"
+partition = "hard_non_trigger"
+prompt = "prompts/casefile-implement-ticket-batch-near.txt"
+rubric = "rubrics/trigger.md"
+
+[[cases]]
+id = "casefile-implement-ticket-batch-behavior"
+skill = "casefile-implement-ticket-batch"
+partition = "task_behavior"
+prompt = "prompts/casefile-implement-ticket-batch-behavior.txt"
+rubric = "rubrics/behavior.md"
+
+[[cases]]
+id = "casefile-investigate-atomic-positive"
+skill = "casefile-investigate-atomic"
+partition = "positive_trigger"
+prompt = "prompts/casefile-investigate-atomic-positive.txt"
+rubric = "rubrics/trigger.md"
+
+[[cases]]
+id = "casefile-investigate-atomic-near"
+skill = "casefile-investigate-atomic"
+partition = "hard_non_trigger"
+prompt = "prompts/casefile-investigate-atomic-near.txt"
+rubric = "rubrics/trigger.md"
+
+[[cases]]
+id = "casefile-investigate-atomic-behavior"
+skill = "casefile-investigate-atomic"
+partition = "task_behavior"
+prompt = "prompts/casefile-investigate-atomic-behavior.txt"
+rubric = "rubrics/behavior.md"
+
+[[cases]]
+id = "casefile-investigate-inspector-tree-positive"
+skill = "casefile-investigate-inspector-tree"
+partition = "positive_trigger"
+prompt = "prompts/casefile-investigate-inspector-tree-positive.txt"
+rubric = "rubrics/trigger.md"
+
+[[cases]]
+id = "casefile-investigate-inspector-tree-near"
+skill = "casefile-investigate-inspector-tree"
+partition = "hard_non_trigger"
+prompt = "prompts/casefile-investigate-inspector-tree-near.txt"
+rubric = "rubrics/trigger.md"
+
+[[cases]]
+id = "casefile-investigate-inspector-tree-behavior"
+skill = "casefile-investigate-inspector-tree"
+partition = "task_behavior"
+prompt = "prompts/casefile-investigate-inspector-tree-behavior.txt"
+rubric = "rubrics/behavior.md"
+
+[[cases]]
+id = "casefile-investigate-solo-positive"
+skill = "casefile-investigate-solo"
+partition = "positive_trigger"
+prompt = "prompts/casefile-investigate-solo-positive.txt"
+rubric = "rubrics/trigger.md"
+
+[[cases]]
+id = "casefile-investigate-solo-near"
+skill = "casefile-investigate-solo"
+partition = "hard_non_trigger"
+prompt = "prompts/casefile-investigate-solo-near.txt"
+rubric = "rubrics/trigger.md"
+
+[[cases]]
+id = "casefile-investigate-solo-behavior"
+skill = "casefile-investigate-solo"
+partition = "task_behavior"
+prompt = "prompts/casefile-investigate-solo-behavior.txt"
+rubric = "rubrics/behavior.md"
+
+[[cases]]
+id = "casefile-review-atomic-positive"
+skill = "casefile-review-atomic"
+partition = "positive_trigger"
+prompt = "prompts/casefile-review-atomic-positive.txt"
+rubric = "rubrics/trigger.md"
+
+[[cases]]
+id = "casefile-review-atomic-near"
+skill = "casefile-review-atomic"
+partition = "hard_non_trigger"
+prompt = "prompts/casefile-review-atomic-near.txt"
+rubric = "rubrics/trigger.md"
+
+[[cases]]
+id = "casefile-review-atomic-behavior"
+skill = "casefile-review-atomic"
+partition = "task_behavior"
+prompt = "prompts/casefile-review-atomic-behavior.txt"
+rubric = "rubrics/behavior.md"
+
+[[cases]]
+id = "casefile-review-dialogue-positive"
+skill = "casefile-review-dialogue"
+partition = "positive_trigger"
+prompt = "prompts/casefile-review-dialogue-positive.txt"
+rubric = "rubrics/trigger.md"
+
+[[cases]]
+id = "casefile-review-dialogue-near"
+skill = "casefile-review-dialogue"
+partition = "hard_non_trigger"
+prompt = "prompts/casefile-review-dialogue-near.txt"
+rubric = "rubrics/trigger.md"
+
+[[cases]]
+id = "casefile-review-dialogue-behavior"
+skill = "casefile-review-dialogue"
+partition = "task_behavior"
+prompt = "prompts/casefile-review-dialogue-behavior.txt"
+rubric = "rubrics/behavior.md"
+
+[[cases]]
+id = "casefile-review-two-stage-positive"
+skill = "casefile-review-two-stage"
+partition = "positive_trigger"
+prompt = "prompts/casefile-review-two-stage-positive.txt"
+rubric = "rubrics/trigger.md"
+
+[[cases]]
+id = "casefile-review-two-stage-near"
+skill = "casefile-review-two-stage"
+partition = "hard_non_trigger"
+prompt = "prompts/casefile-review-two-stage-near.txt"
+rubric = "rubrics/trigger.md"
+
+[[cases]]
+id = "casefile-review-two-stage-behavior"
+skill = "casefile-review-two-stage"
+partition = "task_behavior"
+prompt = "prompts/casefile-review-two-stage-behavior.txt"
+rubric = "rubrics/behavior.md"
+
+[[cases]]
+id = "casefile-switch-strategy-positive"
+skill = "casefile-switch-strategy"
+partition = "positive_trigger"
+prompt = "prompts/casefile-switch-strategy-positive.txt"
+rubric = "rubrics/trigger.md"
+
+[[cases]]
+id = "casefile-switch-strategy-near"
+skill = "casefile-switch-strategy"
+partition = "hard_non_trigger"
+prompt = "prompts/casefile-switch-strategy-near.txt"
+rubric = "rubrics/trigger.md"
+
+[[cases]]
+id = "casefile-switch-strategy-behavior"
+skill = "casefile-switch-strategy"
+partition = "task_behavior"
+prompt = "prompts/casefile-switch-strategy-behavior.txt"
+rubric = "rubrics/behavior.md"
+
+[[cases]]
+id = "casefile-workflow-positive"
+skill = "casefile-workflow"
+partition = "positive_trigger"
+prompt = "prompts/casefile-workflow-positive.txt"
+rubric = "rubrics/trigger.md"
+
+[[cases]]
+id = "casefile-workflow-near"
+skill = "casefile-workflow"
+partition = "hard_non_trigger"
+prompt = "prompts/casefile-workflow-near.txt"
+rubric = "rubrics/trigger.md"
+
+[[cases]]
+id = "casefile-workflow-behavior"
+skill = "casefile-workflow"
+partition = "task_behavior"
+prompt = "prompts/casefile-workflow-behavior.txt"
+rubric = "rubrics/behavior.md"
+
+[[cases]]
+id = "contract-bootstrap-positive"
+skill = "contract-bootstrap"
+partition = "positive_trigger"
+prompt = "prompts/contract-bootstrap-positive.txt"
+rubric = "rubrics/trigger.md"
+
+[[cases]]
+id = "contract-bootstrap-near"
+skill = "contract-bootstrap"
+partition = "hard_non_trigger"
+prompt = "prompts/contract-bootstrap-near.txt"
+rubric = "rubrics/trigger.md"
+
+[[cases]]
+id = "contract-bootstrap-behavior"
+skill = "contract-bootstrap"
+partition = "task_behavior"
+prompt = "prompts/contract-bootstrap-behavior.txt"
+rubric = "rubrics/behavior.md"
+
+[[cases]]
+id = "git-contribution-positive"
+skill = "git-contribution"
+partition = "positive_trigger"
+prompt = "prompts/git-contribution-positive.txt"
+rubric = "rubrics/trigger.md"
+
+[[cases]]
+id = "git-contribution-near"
+skill = "git-contribution"
+partition = "hard_non_trigger"
+prompt = "prompts/git-contribution-near.txt"
+rubric = "rubrics/trigger.md"
+
+[[cases]]
+id = "git-contribution-behavior"
+skill = "git-contribution"
+partition = "task_behavior"
+prompt = "prompts/git-contribution-behavior.txt"
+rubric = "rubrics/behavior.md"
+
+[[cases]]
+id = "readme-generator-positive"
+skill = "readme-generator"
+partition = "positive_trigger"
+prompt = "prompts/readme-generator-positive.txt"
+rubric = "rubrics/trigger.md"
+
+[[cases]]
+id = "readme-generator-near"
+skill = "readme-generator"
+partition = "hard_non_trigger"
+prompt = "prompts/readme-generator-near.txt"
+rubric = "rubrics/trigger.md"
+
+[[cases]]
+id = "readme-generator-behavior"
+skill = "readme-generator"
+partition = "task_behavior"
+prompt = "prompts/readme-generator-behavior.txt"
+rubric = "rubrics/behavior.md"
+
+[[cases]]
+id = "skill-generator-positive"
+skill = "skill-generator"
+partition = "positive_trigger"
+prompt = "prompts/skill-generator-positive.txt"
+rubric = "rubrics/trigger.md"
+
+[[cases]]
+id = "skill-generator-near"
+skill = "skill-generator"
+partition = "hard_non_trigger"
+prompt = "prompts/skill-generator-near.txt"
+rubric = "rubrics/trigger.md"
+
+[[cases]]
+id = "skill-generator-behavior"
+skill = "skill-generator"
+partition = "task_behavior"
+prompt = "prompts/skill-generator-behavior.txt"
+rubric = "rubrics/behavior.md"
+
+[[cases]]
+id = "skill-packaging-positive"
+skill = "skill-packaging"
+partition = "positive_trigger"
+prompt = "prompts/skill-packaging-positive.txt"
+rubric = "rubrics/trigger.md"
+
+[[cases]]
+id = "skill-packaging-near"
+skill = "skill-packaging"
+partition = "hard_non_trigger"
+prompt = "prompts/skill-packaging-near.txt"
+rubric = "rubrics/trigger.md"
+
+[[cases]]
+id = "skill-packaging-behavior"
+skill = "skill-packaging"
+partition = "task_behavior"
+prompt = "prompts/skill-packaging-behavior.txt"
+rubric = "rubrics/behavior.md"

@@ -1,0 +1,1 @@
+The target differs. Show the complete diff, require replacement authority, create a hash-addressed backup, and make repeated application a no-op.

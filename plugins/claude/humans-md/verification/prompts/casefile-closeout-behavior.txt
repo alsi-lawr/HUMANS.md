@@ -1,0 +1,1 @@
+Validate the project mapping, compare source and destination hashes, and retain source whenever durability is not independently proved.

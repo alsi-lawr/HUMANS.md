@@ -1,0 +1,47 @@
+schema_version = 1
+adapter = "claude"
+
+[effort_policy]
+medium-high = "high"
+
+[[workers]]
+role = "inspector"
+model = "opus"
+policy_tier = "high"
+frontmatter_effort = "high"
+
+[[workers]]
+role = "detective"
+model = "sonnet"
+policy_tier = "medium-high"
+frontmatter_effort = "high"
+
+[[workers]]
+role = "dialogue-review-chair"
+model = "opus"
+policy_tier = "high"
+frontmatter_effort = "high"
+
+[[workers]]
+role = "dialogue-review-challenger"
+model = "sonnet"
+policy_tier = "medium-high"
+frontmatter_effort = "high"
+
+[[workers]]
+role = "atomic-ticket-reviewer"
+model = "sonnet"
+policy_tier = "medium-high"
+frontmatter_effort = "high"
+
+[[workers]]
+role = "verification-reviewer"
+model = "haiku"
+policy_tier = "medium"
+frontmatter_effort = "medium"
+
+[[workers]]
+role = "implementation-writer"
+model = "sonnet"
+policy_tier = "medium-high"
+frontmatter_effort = "high"

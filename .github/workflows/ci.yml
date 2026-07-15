@@ -1,0 +1,43 @@
+name: Reproducibility
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "lts/*"
+      - name: Check ASCII source and generated packages
+        run: python scripts/strip-non-ascii.py --check .
+      - name: Run stdlib tests
+        run: python -m unittest discover -s tests -v
+      - name: Validate source
+        run: |
+          python scripts/validate-skill.py --all --root .
+          python scripts/validate-casefile.py --source .
+      - name: Check deterministic package parity
+        run: |
+          python scripts/package-plugin.py check --all
+          python scripts/validate-skill.py --root . --package plugins/codex/humans-md --package plugins/claude/humans-md
+      - name: Strict Claude package validation
+        run: |
+          npm install --global @anthropic-ai/claude-code
+          claude plugin validate plugins/claude/humans-md --strict
+      - name: Isolated Codex marketplace discovery
+        run: |
+          npm install --global @openai/codex
+          export CODEX_HOME="$RUNNER_TEMP/codex-home"
+          mkdir -p "$CODEX_HOME"
+          codex plugin marketplace add "$GITHUB_WORKSPACE/plugins/codex/humans-md" --json
+          codex plugin list --available --json | python scripts/check-codex-discovery.py

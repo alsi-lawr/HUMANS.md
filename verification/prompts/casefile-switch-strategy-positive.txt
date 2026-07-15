@@ -1,0 +1,1 @@
+Switch this active Casefile review to the explicitly selected compatible strategy without losing work.

@@ -1,0 +1,10 @@
+{
+  "name": "humans-md",
+  "plugins": [
+    {
+      "description": "Portable behavioural contracts and governed Casefile workflows for coding agents.",
+      "name": "humans-md",
+      "source": "."
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+schema_version = 1
+strategy_id = "skill-structural-v1"
+mode = "structural"
+baseline_kind = "none"
+required_evidence_classes = ["mechanical"]
+
+[absolute]
+minimum_candidate_pass_rate = 1.0
+require_all_hard_non_triggers = true
+
+[comparative]
+minimum_mean_delta = 0.0
+
+[isolation]
+fresh_context_per_case = true
+rubric_hidden_from_prompt = true
+simultaneous_arms = false

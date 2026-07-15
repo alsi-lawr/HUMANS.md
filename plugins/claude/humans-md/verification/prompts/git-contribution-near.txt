@@ -1,0 +1,1 @@
+Edit the TypeScript component but do not inspect or mutate repository history.
