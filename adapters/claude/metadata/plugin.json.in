@@ -5,7 +5,6 @@
   "description": ${description_json},
   "license": ${license_json},
   "name": ${name_json},
-  "publisher": ${publisher_json},
   "repository": ${repository_url_json},
   "version": ${version_json}
 }

@@ -159,16 +159,20 @@ def validate_package(root: Path) -> list[str]:
         errors.append(f"{manifest_path}: invalid package identity")
     if not manifest.get("description"):
         errors.append(f"{manifest_path}: description is required")
-    for field in ("publisher", "repository", "license"):
+    for field in ("repository", "license"):
         if not isinstance(manifest.get(field), str) or not manifest[field]:
             errors.append(f"{manifest_path}: {field} is required")
     if claude.is_file():
+        if manifest.get("author", {}).get("name") != "alsi-lawr":
+            errors.append(f"{manifest_path}: author.name must declare the publisher")
         entries = sorted(path.relative_to(root / ".claude-plugin").as_posix() for path in (root / ".claude-plugin").rglob("*") if path.is_file())
         if entries != ["plugin.json"]:
             errors.append("only plugin.json may be beneath .claude-plugin")
         if not (root / "agents").is_dir() or not (root / "skills").is_dir():
             errors.append("Claude agents and skills must be package-root components")
     else:
+        if not isinstance(manifest.get("publisher"), str) or not manifest["publisher"]:
+            errors.append(f"{manifest_path}: publisher is required")
         marketplace = root / ".agents/plugins/marketplace.json"
         if not marketplace.is_file():
             errors.append("Codex marketplace metadata is missing")

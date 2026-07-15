@@ -114,7 +114,7 @@ class CodexCutoverTests(unittest.TestCase):
                     "marketplace added\n", encoding="ascii"
                 )
                 return cutover.CommandResult(0, "added", "")
-            if command[:3] == ["fake-codex", "plugin", "install"]:
+            if command[:3] == ["fake-codex", "plugin", "add"]:
                 (paths["marketplace"] / "installed.json").write_text(
                     "installed\n", encoding="ascii"
                 )

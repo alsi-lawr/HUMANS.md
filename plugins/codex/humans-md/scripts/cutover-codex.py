@@ -380,8 +380,8 @@ def run_cutover(
         )
         commands.append(
             run_command(
-                "plugin_install",
-                [executable, "plugin", "install", document["install_ref"], "--json"],
+                "plugin_add",
+                [executable, "plugin", "add", document["install_ref"], "--json"],
                 environment,
                 runner,
             )

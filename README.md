@@ -67,7 +67,7 @@ Add the package directory as a personal marketplace only when ready to inspect i
 
 ```sh
 codex plugin marketplace add /absolute/path/to/plugins/codex/humans-md --json
-codex plugin install humans-md@humans-md --json
+codex plugin add humans-md@humans-md --json
 codex plugin list --available --json
 ```
 

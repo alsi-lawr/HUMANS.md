@@ -44,5 +44,5 @@ jobs:
           export CODEX_HOME="$RUNNER_TEMP/codex-home"
           mkdir -p "$CODEX_HOME"
           codex plugin marketplace add "$GITHUB_WORKSPACE/plugins/codex/humans-md" --json
-          codex plugin install humans-md@humans-md --json
+          codex plugin add humans-md@humans-md --json
           codex plugin list --available --json | python scripts/check-codex-discovery.py
