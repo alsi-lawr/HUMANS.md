@@ -1,109 +1,130 @@
 <div align="center">
 
-# HUMANS.md
+# humans-md
 
-**A thesis and reproducible plugin system for controlled acceleration: lean standing conduct, task-shaped skills, and governed Casefile work.**
+**Give coding agents boundaries, not a manual.**
+
+A portable plugin of behaviour contracts, task-shaped skills, and governed Casefile workflows for Codex and Claude.
+
+`v0.1.0` | `Codex` | `Claude` | `MIT`
 
 </div>
 
-Repository instruction files often become encyclopedias. HUMANS.md argues for a narrower split: always-loaded text governs conduct, skills carry task knowledge only when needed, and deterministic tools enforce boundaries prose cannot guarantee. The repository now ships that thesis as portable source plus reproducible `humans-md` packages for Codex and Claude.
+---
 
-## The thesis
+`humans-md` packages a complete instruction system for agent-assisted repository work. Install it to get a focused contract template, reusable skills, and an explicit workflow for moving from investigation to reviewed implementation without giving up human control of strategy, scope, or writes.
 
-Always-loaded instructions change agent defaults before a task is understood. They should therefore carry durable behavioural invariants rather than setup lore, broad repository context, or task procedures. This project separates five concerns:
+## Install
 
-- [`AGENTS.md`](AGENTS.md) is the standing behaviour contract.
-- [`HUMANS.md`](HUMANS.md) preserves the human rationale and evidence.
-- [`skills/`](skills/) contains portable task models loaded on demand.
-- [`casefile-workflow/`](casefile-workflow/) contains portable roles, schemas, and guarded workflow scripts.
-- [`adapters/`](adapters/) and the portable [`packaging/plugins/humans-md.toml`](packaging/plugins/humans-md.toml) product manifest bind shared source to runtimes and deterministically generate committed packages.
+Clone the repository, then use the generated package for your runtime.
 
-The operating aim is controlled acceleration: faster work because boundaries, choices, ownership, and evidence are easier to inspect.
+```sh
+git clone git@github.com:alsi-lawr/HUMANS.md.git
+cd HUMANS.md
+```
 
-## Casefile
+### Codex
 
-Casefile turns repository investigation and accepted implementation into governed, reviewable records. Its active public skills are:
+Add the local package as a personal marketplace and install it:
 
-- `casefile-workflow`
-- `casefile-investigate-solo`, `casefile-investigate-atomic`, and `casefile-investigate-inspector-tree`
-- `casefile-review-atomic`, `casefile-review-dialogue`, and `casefile-review-two-stage`
-- `casefile-implement-ticket-batch`, `casefile-switch-strategy`, and `casefile-closeout`
+```sh
+codex plugin marketplace add "$PWD/plugins/codex/humans-md" --json
+codex plugin add humans-md@humans-md --json
+codex plugin list --json
+```
 
-Every governed phase requires an explicit compatible matrix. The request-receiving root retains authority; investigators report candidates before tickets, overlapping writes have one owner, reviews are recorded, and strategy switches preserve work while refusing capability or ownership conflicts.
+Installation loads the plugin but does not rewrite active instructions or runtime profiles. The packaged `casefile-codex-setup`, catalog-profile, and cutover skills keep those changes preview-first and opt-in.
 
-## Portable skills
+### Claude
 
-The packages include every Casefile skill plus `contract-bootstrap`, `git-contribution`, `skill-generator`, `skill-packaging`, and `readme-generator`. The `build-code` and `test-benchmark-code` skills are intentionally excluded for a later code-skills package.
+Validate the package, then load it for a session:
 
-`skill-generator` begins every create, revise, or audit task by enumerating compatible installed TOML verification presets, recommending one without selecting it, and recording the human's selected path and hash in the task model. Stable suites separate positive triggers, hard near-neighbour non-triggers, and task behaviour from hidden rubrics. Candidate and no-skill or immutable-old-skill baseline arms run in the same evaluation window, absolute acceptance precedes comparative deltas, and evidence remains classified rather than inflated.
+```sh
+claude plugin validate plugins/claude/humans-md --strict
+claude --plugin-dir "$PWD/plugins/claude/humans-md"
+```
 
-## Reproducible packages
+The package is also ready to be placed in a Claude marketplace. It is not published to one by this repository.
 
-Both committed packages are version 0.1.0, published as `alsi-lawr`, sourced from `alsi-lawr/HUMANS.md`, and licensed MIT:
+## What ships
+
+| Surface | What it provides |
+| --- | --- |
+| **Contract** | A portable `AGENTS.md` template and an explicit, backup-producing bootstrap tool. Installation never applies the template automatically. |
+| **Skills** | Focused workflows for skill creation and packaging, README work, Git contributions, contract bootstrap, and every Casefile phase. |
+| **Casefile** | Roles, schemas, matrices, and guarded scripts for investigation, ticket review, accepted implementation, strategy changes, and closeout. |
+| **Adapters** | Runtime-specific metadata, model bindings, setup tools, and generated packages for Codex and Claude. |
+| **Verification** | Deterministic package checks plus separate structural, balanced, and comparative skill-verification presets. |
+
+The Casefile path is deliberately legible:
+
+```text
+request -> investigate -> tickets -> review -> implement -> closeout
+```
+
+The request-receiving root remains in charge. Strategies are selected explicitly, investigators report candidates before tickets are reserved, overlapping writes receive one owner, and review evidence stays separate from correction work.
+
+## Use it
+
+Ask for the outcome; the plugin supplies the task model.
+
+```text
+Investigate this repository and preserve accepted findings as governed tickets.
+```
+
+```text
+Implement the accepted ticket batch using the selected Casefile matrix.
+```
+
+```text
+Create a skill for our migration-planning workflow and help me choose how to verify it.
+```
+
+```text
+Preview the packaged behaviour contract against this repository's AGENTS.md.
+```
+
+Planning persistence remains user-configured. Public packages do not assume a private planning path, and contract bootstrap refuses to merge or replace existing instructions without explicit authority.
+
+## Portable source, generated packages
+
+The source of truth is split by responsibility:
+
+```text
+skills/                  portable task instructions
+casefile-workflow/       portable roles, schemas, and scripts
+adapters/                Codex and Claude bindings
+packaging/plugins/       portable product manifests
+plugins/                 committed generated packages
+```
+
+Both packages are generated from [`packaging/plugins/humans-md.toml`](packaging/plugins/humans-md.toml):
 
 - [`plugins/codex/humans-md/`](plugins/codex/humans-md/)
 - [`plugins/claude/humans-md/`](plugins/claude/humans-md/)
 
-Build and compare every discovered product and vendor adapter with Python 3.14 and the standard library only:
+Regenerate or check them with Python 3.14 and the standard library:
 
 ```sh
-python scripts/strip-non-ascii.py --check .
-python scripts/package-plugin.py build --all
-python scripts/package-plugin.py check --all
-python scripts/validate-skill.py --all --root .
-python scripts/validate-casefile.py --source .
-python -m unittest discover -s tests -v
+python3 scripts/package-plugin.py build --all
+python3 scripts/package-plugin.py check --all
+python3 scripts/validate-skill.py --all --root .
+python3 scripts/validate-casefile.py --source .
 ```
 
-The packager has no hard-coded product name, identity, or vendor list. It rejects traversal, symlinks, missing or empty sources, duplicate destinations, overlapping outputs, non-ASCII text, mode drift, byte drift, and stale output. Generated packages contain all runtime resources and do not depend on this checkout after installation. Both include the canonical `AGENTS.md` template; installation never applies it, and `contract-bootstrap` still requires an explicit source, destination, preview, and replacement decision.
+Generation rejects unsafe paths, symlinks, missing resources, output collisions, stale files, mode drift, and byte drift. CI repeats package parity, ASCII, vendor, and isolated discovery checks.
 
-## Adapter status
+## Status
 
-### Codex
+| Runtime | Evidence |
+| --- | --- |
+| **Codex** | Package generation, isolated installation, strict configuration, V1 selection, Sol/xhigh root, Terra/xhigh inspector, and installed-byte parity verified on the maintainer's machine. |
+| **Claude** | Deterministic generation and strict plugin validation verified. Installation, triggering, routing, and behavioural execution remain unverified. |
 
-The Codex package contains `.codex-plugin/plugin.json`, repository marketplace metadata, 11 matrix-qualified worker profiles, exact matrices, setup and cutover skills, and guarded scripts. The accepted V1 contract binds root to Sol/xhigh and matrix workers to Terra at their declared efforts, with `multi_agent = true`, `multi_agent_v2 = false`, and declared `multi_agent_version` selectors set to JSON null. Eight locally authored model instruction/message pairs are stored as separate adapter resources; no full catalog is committed.
+The balanced candidate/baseline suite is specified but has not been executed, so sampled behavioural claims remain unverified. See the sanitized [Casefile migration record](docs/2026-07-15-casefile-plugin-workflow.md) for the implementation and review trail.
 
-Add the package directory as a personal marketplace only when ready to inspect it:
+## Why this shape?
 
-```sh
-codex plugin marketplace add /absolute/path/to/plugins/codex/humans-md --json
-codex plugin add humans-md@humans-md --json
-codex plugin list --available --json
-```
-
-Installation and cutover are separate, opt-in operations. The setup skill renders candidate configuration; it does not edit active configuration. The cutover tool is preview-only unless explicitly applied with a complete plan. It inventories and hashes active configuration, direct resources, and marketplace state; installs the marketplace package and reviewed complete configuration; requires strict, discovery, fresh V1, root, and inspector probes; removes only named superseded copies after success; and restores plus hash-verifies the complete inventory on failure.
-
-The 2026-07-15 personal cutover completed successfully. Fresh processes recorded V1, Sol/xhigh at the root, and Terra/xhigh for the matrix-qualified inspector; source, installed, and packaged bytes matched. Fifteen superseded direct paths were removed after the gates passed, while unrelated direct skills and global instructions were preserved. The hash-addressed rollback inventory remains local; rollback was not exercised because no gate failed.
-
-The catalog profiler consumes a caller-supplied fresh export, but cannot mechanically attest freshness after a file is renamed. It rejects a path named `models_cache.json`, input/target aliasing, and symlink inputs; patches only hash-bound authored resources and declared selectors; and restores prior bytes, mode, and mtime after a failed write or verification.
-
-### Claude
-
-The Claude package keeps only `plugin.json` beneath `.claude-plugin`; `skills/` and `agents/` are package-root components and resource references use `${CLAUDE_PLUGIN_ROOT}`. Its policy tiers are Opus/high for inspectors and review chairs, Sonnet/medium-high for investigators, writers, challengers, and atomic reviewers, and Haiku/medium for focused verification. The adapter records the medium-high policy tier and maps it to the supported `high` frontmatter value rather than emitting an invalid level.
-
-The strict structural command is:
-
-```sh
-claude plugin validate plugins/claude/humans-md --strict
-```
-
-Local verification passed Claude's strict structural validator. The package was not installed, loaded, triggered, routed, or behaviourally tested; those live checks remain release gates.
-
-## Contract bootstrap
-
-Package installation never changes a repository contract. Each package carries `templates/AGENTS.md`, but `contract-bootstrap` acts only on an explicit request and explicit source and destination. It previews the complete diff, refuses an ambiguous merge, requires replacement authority for a differing target, creates a hash-addressed backup, writes atomically, and leaves an identical target untouched.
-
-## Evidence and reproducibility
-
-Mechanical evidence comes from the stdlib tests, standalone source/package validators, package parity check, ASCII check, matrix/profile cross-checks, and vendor structural checks. Behavioral evidence uses the separate [`verification/`](verification/) strategies, suite, realistic isolated prompts, hidden rubrics, and hash-bound run schema. No behavioral run records are present, so sampled behavior remains `unverified`. The 2026-07-15 migration is summarized in the sanitized [Casefile plugin workflow case study](docs/2026-07-15-casefile-plugin-workflow.md); its governed private record was promoted and hash-verified under HMD-006.
-
-CI repeats ASCII, tests, source and standalone package validation, strict Claude validation, and isolated Codex marketplace add, plugin add, and discovery. A weekly/manual workflow exports the latest bundled Codex catalog and compares only declared profile-relevant fields, including non-null `multi_agent_version`. It maintains one labelled issue and never edits instructions or commits catalog data.
-
-## Limitations and release gates
-
-- Claude installation, loading, routing, and behavioural verification are unresolved gates.
-- The balanced behavioral suite is specified but must be executed in isolated runtime contexts for every included revised or adopted skill before behavioral claims.
-- The durable private record contains no reconstructed prior-agent artifacts; the public case study contains no raw transcript.
-- Publication, pushing, release tags, automated grading, evaluation viewers, description optimization, and code-skill packaging are outside this batch.
+[`HUMANS.md`](HUMANS.md) contains the argument and evidence behind the system. The short version: standing instructions should govern conduct; task knowledge should load only for the task; hard guarantees belong in tools.
 
 Released under the [MIT licence](LICENSE).
