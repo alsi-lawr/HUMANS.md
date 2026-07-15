@@ -368,7 +368,6 @@ def run_cutover(
         candidate = Path(document["candidate_config"])
         active = Path(document["active_config"])
         active_mode = (active.stat().st_mode & 0o777) if active.is_file() else 0o600
-        atomic_write(active, candidate.read_bytes(), active_mode)
         executable = document["codex_executable"]
         commands.append(
             run_command(
@@ -386,6 +385,7 @@ def run_cutover(
                 runner,
             )
         )
+        atomic_write(active, candidate.read_bytes(), active_mode)
         for gate in document["gates"]:
             commands.append(
                 run_command(

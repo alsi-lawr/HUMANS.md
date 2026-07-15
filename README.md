@@ -71,7 +71,9 @@ codex plugin add humans-md@humans-md --json
 codex plugin list --available --json
 ```
 
-Installation and cutover are separate, opt-in operations. The setup skill renders candidate configuration; it does not edit active configuration. The cutover tool is preview-only unless explicitly applied with a complete plan. It inventories and hashes active configuration, direct resources, and marketplace state; installs the marketplace package and reviewed complete configuration; requires strict, discovery, fresh V1, root, and inspector probes; removes only named superseded copies after success; and restores plus hash-verifies the complete inventory on failure. It has unit-test evidence only and has never been invoked against live user state.
+Installation and cutover are separate, opt-in operations. The setup skill renders candidate configuration; it does not edit active configuration. The cutover tool is preview-only unless explicitly applied with a complete plan. It inventories and hashes active configuration, direct resources, and marketplace state; installs the marketplace package and reviewed complete configuration; requires strict, discovery, fresh V1, root, and inspector probes; removes only named superseded copies after success; and restores plus hash-verifies the complete inventory on failure.
+
+The 2026-07-15 personal cutover completed successfully. Fresh processes recorded V1, Sol/xhigh at the root, and Terra/xhigh for the matrix-qualified inspector; source, installed, and packaged bytes matched. Fifteen superseded direct paths were removed after the gates passed, while unrelated direct skills and global instructions were preserved. The hash-addressed rollback inventory remains local; rollback was not exercised because no gate failed.
 
 The catalog profiler consumes a caller-supplied fresh export, but cannot mechanically attest freshness after a file is renamed. It rejects a path named `models_cache.json`, input/target aliasing, and symlink inputs; patches only hash-bound authored resources and declared selectors; and restores prior bytes, mode, and mtime after a failed write or verification.
 
@@ -85,7 +87,7 @@ The strict structural command is:
 claude plugin validate plugins/claude/humans-md --strict
 ```
 
-Primary review verified the package with Claude's strict structural validator. The package was not installed, loaded, triggered, routed, or behaviourally tested; those live checks remain release gates.
+Local verification passed Claude's strict structural validator. The package was not installed, loaded, triggered, routed, or behaviourally tested; those live checks remain release gates.
 
 ## Contract bootstrap
 
@@ -95,11 +97,10 @@ Package installation never changes a repository contract. Each package carries `
 
 Mechanical evidence comes from the stdlib tests, standalone source/package validators, package parity check, ASCII check, matrix/profile cross-checks, and vendor structural checks. Behavioral evidence uses the separate [`verification/`](verification/) strategies, suite, realistic isolated prompts, hidden rubrics, and hash-bound run schema. No behavioral run records are present, so sampled behavior remains `unverified`. The 2026-07-15 migration is summarized in the sanitized [Casefile plugin workflow case study](docs/2026-07-15-casefile-plugin-workflow.md); its intended durable private destination remains pending HMD-006 promotion and hash verification.
 
-CI repeats ASCII, tests, source and standalone package validation, strict Claude validation, and isolated Codex marketplace add, install, and discovery. A weekly/manual workflow exports the latest bundled Codex catalog and compares only declared profile-relevant fields, including non-null `multi_agent_version`. It maintains one labelled issue and never edits instructions or commits catalog data.
+CI repeats ASCII, tests, source and standalone package validation, strict Claude validation, and isolated Codex marketplace add, plugin add, and discovery. A weekly/manual workflow exports the latest bundled Codex catalog and compares only declared profile-relevant fields, including non-null `multi_agent_version`. It maintains one labelled issue and never edits instructions or commits catalog data.
 
 ## Limitations and release gates
 
-- No live Codex cutover success is claimed. Primary review proved only isolated package installation/discovery; fresh-process V1 and exact inspector model/effort proof are unresolved gates.
 - Claude installation, loading, routing, and behavioural verification are unresolved gates.
 - The balanced behavioral suite is specified but must be executed in isolated runtime contexts for every included revised or adopted skill before behavioral claims.
 - Durable private record promotion is a separate closeout ticket; public documentation contains no raw transcript.

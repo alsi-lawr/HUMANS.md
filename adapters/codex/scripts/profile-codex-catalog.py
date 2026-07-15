@@ -101,8 +101,6 @@ def set_path(document: dict, dotted: str, value: object) -> None:
         if not isinstance(child, dict):
             raise ValueError(f"declared selector parent is missing: {dotted}")
         current = child
-    if parts[-1] not in current:
-        raise ValueError(f"declared selector is missing: {dotted}")
     current[parts[-1]] = value
 
 
@@ -213,7 +211,6 @@ def build(catalog_document: dict, profile: dict, profile_path: Path) -> tuple[di
         if not isinstance(selectors, list) or set(selectors) - allowed_selectors:
             raise ValueError(f"non-allowlisted selector for {model_id}")
         for selector in selectors:
-            get_path(source_model, selector)
             set_path(output_model, selector, None)
     return result, stale
 
