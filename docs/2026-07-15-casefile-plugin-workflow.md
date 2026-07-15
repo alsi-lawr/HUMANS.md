@@ -10,9 +10,9 @@ This report traces the `humans-md` migration across the planning session that pr
 4. The hash-verified [governed Casefile record](https://github.com/alsi-lawr/agent-planning/tree/main/projects/humans-md/investigations/20260715-thesis-and-plugin), preserved by planning commit [`0e327f0`](https://github.com/alsi-lawr/agent-planning/commit/0e327f0e38054699afa7034c063424cbd20abfe1).
 5. The generated packages, validators, test output, and live-cutover record named below.
 
-Every human-authored project input in both rollouts is reproduced without summarisation: five direct prompts and ten structured selections from planning, followed by eleven direct prompts from implementation. Agent turns are condensed into observable actions, outcomes, and limits; no agent message or hidden reasoning is copied. Each human input is identified by its JSONL line, UTC timestamp, and SHA-256 hash of the original UTF-8 payload.
+Every human-authored project input in both rollouts is reproduced without summarisation: five direct prompts and ten structured selections from planning, followed by twelve direct prompts from implementation. Agent turns are condensed into observable actions, outcomes, and limits; no agent message or hidden reasoning is copied. Each human input is identified by its JSONL line, UTC timestamp, and SHA-256 hash of the original UTF-8 payload.
 
-HTML character references preserve the rendered prompt text while keeping this source ASCII-only and preventing historical names inside evidence blocks from being mistaken for active public contracts. Round-trip verification decodes those references and byte-compares all 26 rendered bodies with their session payloads.
+HTML character references preserve the rendered prompt text while keeping this source ASCII-only and preventing historical names inside evidence blocks from being mistaken for active public contracts. Round-trip verification decodes those references and byte-compares all 27 rendered bodies with their session payloads.
 
 The session transport also records automatic repository-context envelopes, an injected skill body, sub-agent notifications, approval/tool traffic, and a machine-generated `<turn_aborted>` marker. Those are excluded because they are not message text or structured answers authored by the human. The direct correction immediately following the abort is included.
 
@@ -623,14 +623,29 @@ The agent fixed those defects in `fb9beda`, corrected exported-null handling and
 
 **Agent-turn summary.** The agent inferred all published branches and tags, full anonymisation, no nearby-repository rewrite, mapped remote verification, and GitHub replacement. The audit found eighteen reachable commits: six used the personal address and twelve already used the GitHub noreply identity; no signed commit or tag required signature-loss approval.
 
-With restrictive permissions, the agent created and verified a complete recovery bundle, cloned a private mirror without local object sharing, applied `git-filter-repo` 2.47 through an exact mailmap, and verified commit trees, parent mappings, refs, and identities. It snapshotted GitHub state, disclosed the unavoidable loss of three stars, six Actions histories, and original repository/issue/PR timestamps and internal IDs, and obtained fresh deletion approval. The repository was deleted and recreated; settings, topics, Actions policy, issue #1, and PR #2 were restored. A fresh remote clone passed mapped verification for all eighteen commits and both branch refs. GitHub's synthetic PR merge ref uses `GitHub <noreply@github.com>` and contains no personal address.
+With restrictive permissions, the agent created and verified a complete recovery bundle, cloned a private mirror without local object sharing, applied `git-filter-repo` 2.47 through an exact mailmap, and verified commit trees, parent mappings, refs, and identities. It snapshotted GitHub state and disclosed the unavoidable loss of three stars, six Actions histories, and original repository/issue/PR timestamps and internal IDs. It then paused for the required fresh destructive approval; no deletion occurred before the next human turn.
 
-The public report uses the rewritten commit identifiers; the old-to-new map and original bundle remain private recovery evidence rather than tracked repository content.
+### Implementation turn 12
+
+**Human prompt (verbatim).** Session JSONL line 1718; `2026-07-15T18:56:56.873Z`; raw UTF-8 SHA-256 `85a39ab345d672ff8ca9b9c6876f3adcacf45ee7c1e2dbd2408fd338bd55e07e`.
+
+<details>
+<summary>Show verbatim human input</summary>
+
+<pre>Yes</pre>
+
+</details>
+
+**Agent-turn summary.** The agent rechecked the source snapshot, repository identity, and exact remote branch SHAs, then deleted and recreated the GitHub repository. It published the anonymised branches; restored settings, topics, labels, Actions policy, issue #1, and PR #2; repointed local refs with expected-old safeguards; and retained the dirty research/report work and unrelated untracked code skills.
+
+A fresh remote clone passed mapped verification for the eighteen rewritten commits and both original branch refs. After the research and transcript commits, all twenty published branch commits use `alsi-lawr <177320313+alsi-lawr@users.noreply.github.com>` as author and committer. No personal address appears in any fetched ref. GitHub's synthetic PR merge ref uses `GitHub <noreply@github.com>`. The public report uses rewritten commit identifiers; the old-to-new map and complete original bundle remain private recovery evidence.
+
+The approved replacement permanently lost three stars, six prior Actions histories, and original repository/issue/PR timestamps and internal IDs. The issue and PR numbers, URLs, titles, bodies, branches, and open states were restored, then updated for the later research scope.
 
 **Evidence.**
 
 - Rewritten branch: [`feat/1-humans-md-plugin`](https://github.com/alsi-lawr/HUMANS.md/tree/feat/1-humans-md-plugin).
-- Recreated [issue #1](https://github.com/alsi-lawr/HUMANS.md/issues/1) and [PR #2](https://github.com/alsi-lawr/HUMANS.md/pull/2).
+- Recreated and updated [issue #1](https://github.com/alsi-lawr/HUMANS.md/issues/1) and [PR #2](https://github.com/alsi-lawr/HUMANS.md/pull/2).
 - Local recovery and audit artifacts remain under the session-scoped identity-rewrite scratch directory and are intentionally not committed.
 
 ## Ticket and review disposition
@@ -650,7 +665,7 @@ The primary atomic review's verdict on `9c3f998` was **reject - corrections requ
 
 | Surface | Recorded result | Evidence limit |
 | --- | --- | --- |
-| Session transcript | 26 human-authored inputs round-trip exactly from two JSONL rollouts | Generated context, agent text, tool traffic, and transport markers are not represented as human prompts. |
+| Session transcript | 27 human-authored inputs round-trip exactly from two JSONL rollouts | Generated context, agent text, tool traffic, and transport markers are not represented as human prompts. |
 | Python 3.14 suite | 9 focused tests passed | Deterministic regression evidence only. |
 | Package parity | Claude 107 files; Codex 138 files | Path, mode, and byte parity against committed outputs. |
 | Source/package validation | 17 source skills; both standalone package validators; all Casefile surfaces passed | Mechanical structure and metadata, not behaviour. |
