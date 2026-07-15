@@ -5,7 +5,7 @@ description: "Use when a human explicitly asks to preview or apply the repositor
 
 # Contract Bootstrap
 
-Require explicit source and destination files. Run the bundled script without `--apply` first and show the destination plus complete unified diff. If the destination differs, require explicit replacement authority; never synthesize or merge contracts.
+Require explicit source and destination files. A packaged canonical source is available at `<plugin-root>/templates/AGENTS.md`, but never select or apply it implicitly. Run the bundled script without `--apply` first and show the destination plus complete unified diff. If the destination differs, require explicit replacement authority; never synthesize or merge contracts.
 
 On apply, preserve an existing target in a hash-addressed sibling backup before atomic replacement. Refuse a conflicting backup, keep restrictive temporary-file permissions, and verify the written bytes. Identical source and destination is a successful no-op that preserves mtime.
 

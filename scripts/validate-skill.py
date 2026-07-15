@@ -15,7 +15,7 @@ from pathlib import Path, PurePosixPath
 NAME = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 SEMVER = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$")
 LINK = re.compile(r"\[[^\]]*\]\(([^)]+)\)")
-PHASES = {"investigation", "review", "implementation", "closeout"}
+PHASES = {"planning", "investigation", "review", "implementation", "closeout"}
 EVIDENCE = {
     "mechanical",
     "sampled_behavior",
@@ -159,6 +159,9 @@ def validate_package(root: Path) -> list[str]:
         errors.append(f"{manifest_path}: invalid package identity")
     if not manifest.get("description"):
         errors.append(f"{manifest_path}: description is required")
+    for field in ("publisher", "repository", "license"):
+        if not isinstance(manifest.get(field), str) or not manifest[field]:
+            errors.append(f"{manifest_path}: {field} is required")
     if claude.is_file():
         entries = sorted(path.relative_to(root / ".claude-plugin").as_posix() for path in (root / ".claude-plugin").rglob("*") if path.is_file())
         if entries != ["plugin.json"]:
@@ -169,6 +172,17 @@ def validate_package(root: Path) -> list[str]:
         marketplace = root / ".agents/plugins/marketplace.json"
         if not marketplace.is_file():
             errors.append("Codex marketplace metadata is missing")
+        else:
+            try:
+                market = json.loads(marketplace.read_text(encoding="ascii"))
+            except (OSError, UnicodeError, json.JSONDecodeError) as error:
+                errors.append(f"invalid Codex marketplace metadata: {error}")
+            else:
+                for field in ("publisher", "repository", "license"):
+                    if market.get(field) != manifest.get(field):
+                        errors.append(f"Codex marketplace {field} differs from plugin metadata")
+    if not (root / "templates/AGENTS.md").is_file():
+        errors.append("packaged AGENTS.md contract template is missing")
     excluded = {"build-code", "test-benchmark-code"}
     present = {path.parent.name for path in (root / "skills").glob("*/SKILL.md")}
     if excluded & present:
@@ -190,6 +204,9 @@ def main() -> int:
     arguments = parser.parse_args()
     root = arguments.root.resolve()
     errors: list[str] = []
+    package_layout = (root / ".codex-plugin/plugin.json").is_file() or (
+        root / ".claude-plugin/plugin.json"
+    ).is_file()
     skills = list(arguments.skill)
     if arguments.all:
         skills += sorted((root / "skills").glob("*/SKILL.md"))
@@ -197,11 +214,21 @@ def main() -> int:
         path = skill if skill.is_absolute() else root / skill
         errors += validate_skill(path)
     if arguments.all:
-        for adapter in ("codex", "claude"):
-            profile_dir = root / "adapters" / adapter / "agents"
-            profiles = {path.stem for path in profile_dir.glob("*.toml")} | {path.stem for path in profile_dir.glob("*.md")}
-            for matrix in sorted((root / "adapters" / adapter / "matrices").glob("*.toml")):
+        if package_layout:
+            profiles = {path.stem for path in (root / "agents").glob("*.toml")} | {
+                path.stem for path in (root / "agents").glob("*.md")
+            }
+            for matrix in sorted((root / "matrices").glob("*.toml")):
                 errors += validate_matrix(matrix, profiles)
+            errors += validate_package(root)
+        else:
+            for adapter in ("codex", "claude"):
+                profile_dir = root / "adapters" / adapter / "agents"
+                profiles = {path.stem for path in profile_dir.glob("*.toml")} | {
+                    path.stem for path in profile_dir.glob("*.md")
+                }
+                for matrix in sorted((root / "adapters" / adapter / "matrices").glob("*.toml")):
+                    errors += validate_matrix(matrix, profiles)
         verify = root / "scripts/verify-skill.py"
         suite = root / "verification/suites/casefile.toml"
         for strategy in sorted((root / "verification/strategies").glob("*.toml")):
@@ -220,7 +247,8 @@ def main() -> int:
         print("skill validation failed:", *errors, sep="\n- ")
         return 1
     count = len(skills)
-    print(f"validated {count} source skill(s) and {len(arguments.package)} package(s)")
+    package_count = len(arguments.package) + (1 if arguments.all and package_layout else 0)
+    print(f"validated {count} skill(s) and {package_count} package(s)")
     return 0
 
 

@@ -6,37 +6,57 @@ multi_agent_v2 = false
 max_depth = 2
 max_threads = 6
 
-[agents.inspector]
-description = "Casefile inspector."
-config_file = "__HUMANS_MD_PLUGIN_ROOT__/agents/inspector.toml"
-nickname_candidates = ["Surveyor", "Verifier"]
+[agents.casefile-implement-ticket-batch-implementation-writer]
+description = "Casefile casefile-implement-ticket-batch implementation-writer."
+config_file = "__HUMANS_MD_PLUGIN_ROOT__/agents/casefile-implement-ticket-batch-implementation-writer.toml"
+nickname_candidates = ["Builder", "Implementer"]
 
-[agents.detective]
-description = "Casefile investigator."
-config_file = "__HUMANS_MD_PLUGIN_ROOT__/agents/detective.toml"
-nickname_candidates = ["Sleuth", "Tracer"]
-
-[agents.dialogue-review-chair]
-description = "Casefile dialogue review chair."
-config_file = "__HUMANS_MD_PLUGIN_ROOT__/agents/dialogue-review-chair.toml"
-nickname_candidates = ["Chair", "Arbiter"]
-
-[agents.dialogue-review-challenger]
-description = "Casefile dialogue review challenger."
-config_file = "__HUMANS_MD_PLUGIN_ROOT__/agents/dialogue-review-challenger.toml"
-nickname_candidates = ["Challenger", "Skeptic"]
-
-[agents.atomic-ticket-reviewer]
-description = "Casefile atomic ticket reviewer."
-config_file = "__HUMANS_MD_PLUGIN_ROOT__/agents/atomic-ticket-reviewer.toml"
+[agents.casefile-implement-ticket-batch-atomic-ticket-reviewer]
+description = "Casefile casefile-implement-ticket-batch atomic-ticket-reviewer."
+config_file = "__HUMANS_MD_PLUGIN_ROOT__/agents/casefile-implement-ticket-batch-atomic-ticket-reviewer.toml"
 nickname_candidates = ["Reviewer", "Auditor"]
 
-[agents.verification-reviewer]
-description = "Casefile focused verification reviewer."
-config_file = "__HUMANS_MD_PLUGIN_ROOT__/agents/verification-reviewer.toml"
+[agents.casefile-implement-ticket-batch-verification-reviewer]
+description = "Casefile casefile-implement-ticket-batch verification-reviewer."
+config_file = "__HUMANS_MD_PLUGIN_ROOT__/agents/casefile-implement-ticket-batch-verification-reviewer.toml"
 nickname_candidates = ["Verifier", "Checker"]
 
-[agents.implementation-writer]
-description = "Casefile implementation writer."
-config_file = "__HUMANS_MD_PLUGIN_ROOT__/agents/implementation-writer.toml"
-nickname_candidates = ["Builder", "Implementer"]
+[agents.casefile-investigate-atomic-detective]
+description = "Casefile casefile-investigate-atomic detective."
+config_file = "__HUMANS_MD_PLUGIN_ROOT__/agents/casefile-investigate-atomic-detective.toml"
+nickname_candidates = ["Sleuth", "Tracer"]
+
+[agents.casefile-investigate-inspector-tree-inspector]
+description = "Casefile casefile-investigate-inspector-tree inspector."
+config_file = "__HUMANS_MD_PLUGIN_ROOT__/agents/casefile-investigate-inspector-tree-inspector.toml"
+nickname_candidates = ["Surveyor", "Verifier"]
+
+[agents.casefile-investigate-inspector-tree-detective]
+description = "Casefile casefile-investigate-inspector-tree detective."
+config_file = "__HUMANS_MD_PLUGIN_ROOT__/agents/casefile-investigate-inspector-tree-detective.toml"
+nickname_candidates = ["Sleuth", "Tracer"]
+
+[agents.casefile-review-atomic-atomic-ticket-reviewer]
+description = "Casefile casefile-review-atomic atomic-ticket-reviewer."
+config_file = "__HUMANS_MD_PLUGIN_ROOT__/agents/casefile-review-atomic-atomic-ticket-reviewer.toml"
+nickname_candidates = ["Reviewer", "Auditor"]
+
+[agents.casefile-review-dialogue-dialogue-review-chair]
+description = "Casefile casefile-review-dialogue dialogue-review-chair."
+config_file = "__HUMANS_MD_PLUGIN_ROOT__/agents/casefile-review-dialogue-dialogue-review-chair.toml"
+nickname_candidates = ["Chair", "Arbiter"]
+
+[agents.casefile-review-dialogue-dialogue-review-challenger]
+description = "Casefile casefile-review-dialogue dialogue-review-challenger."
+config_file = "__HUMANS_MD_PLUGIN_ROOT__/agents/casefile-review-dialogue-dialogue-review-challenger.toml"
+nickname_candidates = ["Challenger", "Skeptic"]
+
+[agents.casefile-review-two-stage-atomic-ticket-reviewer]
+description = "Casefile casefile-review-two-stage atomic-ticket-reviewer."
+config_file = "__HUMANS_MD_PLUGIN_ROOT__/agents/casefile-review-two-stage-atomic-ticket-reviewer.toml"
+nickname_candidates = ["Reviewer", "Auditor"]
+
+[agents.casefile-review-two-stage-verification-reviewer]
+description = "Casefile casefile-review-two-stage verification-reviewer."
+config_file = "__HUMANS_MD_PLUGIN_ROOT__/agents/casefile-review-two-stage-verification-reviewer.toml"
+nickname_candidates = ["Verifier", "Checker"]

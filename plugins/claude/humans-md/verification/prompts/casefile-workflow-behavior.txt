@@ -1,1 +1,1 @@
-The investigation request is broad. Establish the project mapping, ask me to select compatible investigation and review strategies, and explain how candidate findings become accepted tickets without inventing a matrix.
+Investigate this repository for reliability, security, and maintainability defects and preserve the findings for later implementation. The planning store is configured, but I have not selected investigation or review strategies yet.

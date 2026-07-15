@@ -1,1 +1,1 @@
-The target differs. Show the complete diff, require replacement authority, create a hash-addressed backup, and make repeated application a no-op.
+Apply the packaged behavior contract to `AGENTS.md`. The repository already has a different contract written by another maintainer, and I have not said whether their version may be replaced.

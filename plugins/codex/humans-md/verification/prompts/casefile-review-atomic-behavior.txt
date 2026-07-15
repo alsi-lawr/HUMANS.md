@@ -1,1 +1,1 @@
-There are more ticket groups than review slots. Batch disjoint review evidence without allowing reviewers to edit tickets.
+Review twelve accepted tickets split across four unrelated subsystems using an atomic review matrix with two reviewer slots. Some tickets may need corrections, but the implementation authors are still available.

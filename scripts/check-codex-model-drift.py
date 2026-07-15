@@ -52,11 +52,17 @@ def main() -> int:
                 )
         for selector in target.get("null_selectors", []):
             current: object = model
+            found = True
             for part in selector.split("."):
                 if not isinstance(current, dict) or part not in current:
                     findings.append(f"Model `{model_id}` no longer exposes selector `{selector}`.")
+                    found = False
                     break
                 current = current[part]
+            if found and current is not None:
+                findings.append(
+                    f"Model `{model_id}` selector `{selector}` is `{current}` instead of JSON null."
+                )
     body = [
         "# Codex model profile drift",
         "",

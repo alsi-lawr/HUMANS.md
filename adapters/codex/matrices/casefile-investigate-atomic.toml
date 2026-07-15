@@ -15,7 +15,7 @@ capabilities = ["subagents", "shared_writable_planning"]
 
 [[workers]]
 role = "detective"
-platform_profile = "detective"
+platform_profile = "casefile-investigate-atomic-detective"
 model = "gpt-5.6-terra"
 reasoning = "medium"
 minimum_count = 1

@@ -1,1 +1,1 @@
-The worktree has unrelated staged and untracked changes. Commit only the assigned paths and verify the staged names before recording history.
+Commit the parser fix in `src/parser.py` and its test. The worktree also contains staged documentation edits and an untracked benchmark dataset from another task; leave those exactly as they are.

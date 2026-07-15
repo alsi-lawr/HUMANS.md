@@ -6,6 +6,7 @@ import argparse
 import hashlib
 import os
 import tempfile
+import tomllib
 from pathlib import Path
 
 
@@ -44,7 +45,9 @@ def render(plugin_root: Path) -> dict[str, bytes]:
             raise ValueError(f"missing packaged setup input: {path}")
     root = str(plugin_root).replace("\\", "/")
     fragment = required[0].read_text(encoding="ascii")
-    if fragment.count(TOKEN) != 7:
+    profiles = tomllib.loads(required[2].read_text(encoding="ascii"))
+    expected_paths = len(profiles.get("matrix_profiles", []))
+    if not expected_paths or fragment.count(TOKEN) != expected_paths:
         raise ValueError("configuration template has an unexpected path-token count")
     return {
         "config-fragment.toml": fragment.replace(TOKEN, root).encode("ascii"),

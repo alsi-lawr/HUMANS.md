@@ -1,1 +1,1 @@
-The existing README makes stale status claims. Recover repository type and intent, update factual drift, and surface any proposed intent change instead of inventing it.
+Update the README after checking the repository. It still says the package is experimental and source-only, but generated release artifacts and validation scripts now exist. Do not change what the project is trying to argue.
