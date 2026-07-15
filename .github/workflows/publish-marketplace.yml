@@ -73,6 +73,8 @@ jobs:
             echo "generated marketplace contains no changes" >&2
             exit 1
           fi
-          git -C marketplace-repository commit -m "release: humans-md v$VERSION"
+          git -C marketplace-repository commit \
+            -m "release: humans-md v$VERSION" \
+            -m "Source-Commit: $GITHUB_SHA"
           git -C marketplace-repository tag -a "v$VERSION" -m "humans-md v$VERSION"
           git -C marketplace-repository push --atomic origin HEAD:main "refs/tags/v$VERSION"
