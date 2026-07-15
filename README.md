@@ -121,7 +121,7 @@ Generation rejects unsafe paths, symlinks, missing resources, output collisions,
 | **Codex** | Package generation, isolated installation, strict configuration, V1 selection, Sol/xhigh root, Terra/xhigh inspector, and installed-byte parity verified on the maintainer's machine. |
 | **Claude** | Deterministic generation and strict plugin validation verified. Installation, triggering, routing, and behavioural execution remain unverified. |
 
-The balanced candidate/baseline suite is specified but has not been executed, so sampled behavioural claims remain unverified. See the sanitized [Casefile migration record](docs/2026-07-15-casefile-plugin-workflow.md) for the implementation and review trail.
+The balanced candidate/baseline suite is specified but has not been executed, so sampled behavioural claims remain unverified. See the evidenced [Casefile migration report](docs/2026-07-15-casefile-plugin-workflow.md) for verbatim human prompts and the implementation, review, and verification trail.
 
 ## Why this shape?
 
