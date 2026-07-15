@@ -83,6 +83,10 @@ def main():
     for schema in ("strategy-matrix.md","ticket.md","decision.md","investigation-layout.md"):
         if not (workflow/"schemas"/schema).is_file(): fail(errors,f"missing schema: {schema}")
     if ns.codex_home:
+        installed_workflow=ns.codex_home/"planning-workflow"
+        for relative in [Path("schemas")/p.name for p in (workflow/"schemas").glob("*.md")]+[Path("adapters/codex/matrices")/p.name for p in (adapter/"matrices").glob("*.toml")]:
+            src=workflow/relative; dst=installed_workflow/relative
+            if not dst.is_file() or src.read_bytes()!=dst.read_bytes(): fail(errors,f"installed workflow resource mismatch: {relative}")
         try: config=tomllib.loads((ns.codex_home/"config.toml").read_text())
         except Exception as e: fail(errors,f"installed config is invalid TOML: {e}"); config={}
         for skill in SKILLS:

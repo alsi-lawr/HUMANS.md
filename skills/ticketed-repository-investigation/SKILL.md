@@ -5,7 +5,7 @@ description: "Use when a human asks to investigate a repository and preserve fin
 
 # Ticketed Repository Investigation
 
-Assume the root request-receiving agent is the orchestrator; never spawn a replacement orchestrator. Read repository authority and current state, define the investigation boundary, and create the investigation layout from `planning-workflow/schemas/investigation-layout.md`.
+Assume the root request-receiving agent is the orchestrator; never spawn a replacement orchestrator. Read repository authority and current state, define the investigation boundary, and load `planning-workflow/schemas/investigation-layout.md` from the workflow package resolved by the active adapter, and create that layout.
 
 ## Resolve strategies
 
