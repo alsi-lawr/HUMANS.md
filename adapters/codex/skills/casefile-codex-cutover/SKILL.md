@@ -5,6 +5,10 @@ description: "Use only when a human explicitly authorises an opt-in transactiona
 
 # Casefile Codex Cutover
 
-Require an explicit complete cutover-plan TOML, installed plugin root, empty backup directory, and external record path. Preview with `${CODEX_PLUGIN_ROOT}/scripts/cutover-codex.py` before requesting apply authority. The plan inventories active configuration, direct skills, direct agents, workflow resources, and marketplace state by path and hash; names only superseded direct copies for post-success removal; and supplies strict config, discovery, fresh V1, root-profile, and exact inspector-profile gates.
+Require an explicit complete cutover-plan TOML, installed plugin root, empty backup directory, and external record path. The plan declares a marketplace Git source or marketplace root separately from the installed plugin root; chooses `add`, `upgrade`, or `reuse` for that marketplace and `add` or `reuse` for the plugin; and explicitly declares uninstall ownership. It inventories active configuration, direct skills, direct agents, workflow resources, and marketplace state and supplies install and recovery gates.
 
-Run `--apply` only after the human approves the preview and has arranged the required host restart and fresh-process probes. The tool installs the marketplace plugin, installs reviewed complete configuration, runs every gate, and removes named old copies only after success. Any command, probe, verification, removal, or record failure restores and hash-verifies the complete inventory. Never infer missing paths or gates, never edit `models_cache.json`, and never treat a package smoke check as cutover evidence.
+Read [the lifecycle-plan contract](references/lifecycle-plan.md) before drafting or reviewing the plan.
+
+Preview with `${CODEX_PLUGIN_ROOT}/scripts/cutover-codex.py install ...` before requesting apply authority. Run `install --apply` only after the human approves and has arranged the required host restart and fresh-process probes. Any command, probe, verification, removal, or record failure restores and hash-verifies the complete inventory. Success writes a bound recovery manifest into the backup directory; preserve it with the external install record.
+
+Never substitute `${CODEX_PLUGIN_ROOT}` for the marketplace source, infer missing paths or actions, edit `models_cache.json`, or treat a package smoke check as cutover evidence. Load `casefile-codex-uninstall` for removal or recovery.

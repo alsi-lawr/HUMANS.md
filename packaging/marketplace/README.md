@@ -6,14 +6,14 @@ Installable Codex and Claude packages generated from
 ## Codex
 
 ```sh
-codex plugin marketplace add alsi-lawr/humans-md-marketplace --ref v0.1.1
+codex plugin marketplace add alsi-lawr/humans-md-marketplace --ref v0.1.2
 codex plugin add humans-md@humans-md
 ```
 
 ## Claude
 
 ```sh
-claude plugin marketplace add alsi-lawr/humans-md-marketplace@v0.1.1
+claude plugin marketplace add alsi-lawr/humans-md-marketplace@v0.1.2
 claude plugin install humans-md@humans-md
 ```
 

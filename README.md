@@ -7,7 +7,7 @@
 Portable behaviour contracts, task-shaped skills, and governed Casefile
 workflows for Codex and Claude.
 
-`v0.1.1` | `Codex` | `Claude` | `MIT`
+`v0.1.2` | `Codex` | `Claude` | `MIT`
 
 </div>
 
@@ -16,7 +16,7 @@ workflows for Codex and Claude.
 ### Codex
 
 ```sh
-codex plugin marketplace add alsi-lawr/humans-md-marketplace --ref v0.1.1
+codex plugin marketplace add alsi-lawr/humans-md-marketplace --ref v0.1.2
 codex plugin add humans-md@humans-md
 ```
 
@@ -27,12 +27,19 @@ Use $humans-md:casefile-codex-setup to complete setup. Preview every change and 
 ```
 
 Installing the plugin exposes its skills. The setup skill prepares, but does
-not silently apply, the Codex configuration.
+not silently apply, the Codex configuration. Its approved cutover keeps a
+bound backup and install record for recovery.
+
+To uninstall and restore that selected pre-install state, invoke:
+
+```text
+Use $humans-md:casefile-codex-uninstall to preview uninstall using my successful install record and its backup. Do not apply it yet.
+```
 
 ### Claude
 
 ```sh
-claude plugin marketplace add alsi-lawr/humans-md-marketplace@v0.1.1
+claude plugin marketplace add alsi-lawr/humans-md-marketplace@v0.1.2
 claude plugin install humans-md@humans-md
 ```
 
