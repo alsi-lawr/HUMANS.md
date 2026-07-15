@@ -95,7 +95,7 @@ Package installation never changes a repository contract. Each package carries `
 
 ## Evidence and reproducibility
 
-Mechanical evidence comes from the stdlib tests, standalone source/package validators, package parity check, ASCII check, matrix/profile cross-checks, and vendor structural checks. Behavioral evidence uses the separate [`verification/`](verification/) strategies, suite, realistic isolated prompts, hidden rubrics, and hash-bound run schema. No behavioral run records are present, so sampled behavior remains `unverified`. The 2026-07-15 migration is summarized in the sanitized [Casefile plugin workflow case study](docs/2026-07-15-casefile-plugin-workflow.md); its intended durable private destination remains pending HMD-006 promotion and hash verification.
+Mechanical evidence comes from the stdlib tests, standalone source/package validators, package parity check, ASCII check, matrix/profile cross-checks, and vendor structural checks. Behavioral evidence uses the separate [`verification/`](verification/) strategies, suite, realistic isolated prompts, hidden rubrics, and hash-bound run schema. No behavioral run records are present, so sampled behavior remains `unverified`. The 2026-07-15 migration is summarized in the sanitized [Casefile plugin workflow case study](docs/2026-07-15-casefile-plugin-workflow.md); its governed private record was promoted and hash-verified under HMD-006.
 
 CI repeats ASCII, tests, source and standalone package validation, strict Claude validation, and isolated Codex marketplace add, plugin add, and discovery. A weekly/manual workflow exports the latest bundled Codex catalog and compares only declared profile-relevant fields, including non-null `multi_agent_version`. It maintains one labelled issue and never edits instructions or commits catalog data.
 
@@ -103,7 +103,7 @@ CI repeats ASCII, tests, source and standalone package validation, strict Claude
 
 - Claude installation, loading, routing, and behavioural verification are unresolved gates.
 - The balanced behavioral suite is specified but must be executed in isolated runtime contexts for every included revised or adopted skill before behavioral claims.
-- Durable private record promotion is a separate closeout ticket; public documentation contains no raw transcript.
+- The durable private record contains no reconstructed prior-agent artifacts; the public case study contains no raw transcript.
 - Publication, pushing, release tags, automated grading, evaluation viewers, description optimization, and code-skill packaging are outside this batch.
 
 Released under the [MIT licence](LICENSE).

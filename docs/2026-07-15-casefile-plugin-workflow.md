@@ -4,7 +4,7 @@
 
 This migration converted HUMANS.md from a source-only instruction repository into portable contracts plus deterministic Codex and Claude plugin packages. Five accepted tickets governed the public-name replacement, reusable skills, vendor adapters, verification machinery, CI, and thesis documentation. One exclusive writer owned overlapping repository output. Primary atomic review rejected the initial implementation and routed concrete corrections. A slow focused-review process was stopped before producing a verdict; the root retained that gap and ran the narrow mechanical and live gates instead of inventing reviewer acceptance.
 
-The [intended durable private destination](https://github.com/alsi-lawr/agent-planning/tree/main/projects/humans-md/investigations/20260715-thesis-and-plugin) remains pending promotion and hash verification under the separate closeout ticket. It is not yet claimed as available. This public summary contains no raw prompts, private transcripts, credentials, local configuration, or full model catalog.
+The governed record was promoted and hash-verified at the [private planning destination](https://github.com/alsi-lawr/agent-planning/tree/main/projects/humans-md/investigations/20260715-thesis-and-plugin) under HMD-006. This public summary contains no raw prompts, private transcripts, credentials, local configuration, or full model catalog.
 
 ## Decisions preserved
 
