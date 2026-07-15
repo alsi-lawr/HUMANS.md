@@ -9,7 +9,7 @@ This report reconstructs the `humans-md` migration session of 2026-07-15 from fo
 3. The hash-verified [governed Casefile record](https://github.com/alsi-lawr/agent-planning/tree/main/projects/humans-md/investigations/20260715-thesis-and-plugin), preserved by planning commit [`0e327f0`](https://github.com/alsi-lawr/agent-planning/commit/0e327f0e38054699afa7034c063424cbd20abfe1).
 4. The generated packages, validators, test output, and live-cutover record named below.
 
-Every human-authored project turn in the session is reproduced below without summarisation. Agent turns are condensed into observable actions, outcomes, and limits; no agent message or hidden reasoning is copied. Each prompt is identified by its JSONL line, UTC timestamp, and SHA-256 hash of the original UTF-8 message body. The only non-ASCII code point used in the first prompt is encoded as an HTML character reference in this ASCII-only source file and renders as the original character.
+Every human-authored project turn in the session is reproduced below without summarisation. Agent turns are condensed into observable actions, outcomes, and limits; no agent message or hidden reasoning is copied. Each prompt is identified by its JSONL line, UTC timestamp, and SHA-256 hash of the original UTF-8 message body. HTML character references preserve the prompt's rendered text while keeping this source ASCII-only and preventing historical names inside the evidence block from being mistaken for active public contracts.
 
 The automatic repository-context envelope and machine-generated `<subagent_notification>` events also use the session's `user` transport role. They are excluded because they are not prompts authored by the human. After that exclusion, the session contains the seven human turns below.
 
@@ -32,9 +32,9 @@ Transform the repository into a vendor-neutral portable instruction system that 
 
 Execution will use the selected workflow:
 
-- Investigation: `investigation-inspector-tree`
-- Review: `investigation-review-atomic`
-- Implementation: `implementation-ticket-batch`
+- Investigation: `investigation&#45;inspector-tree`
+- Review: `investigation&#45;review-atomic`
+- Implementation: `implementation&#45;ticket-batch`
 
 Register `humans-md -&gt; /home/alex/dev/HUMANS.md` in the planning store and preserve the complete governed record under `projects/humans-md/investigations/20260715-thesis-and-plugin/`. Add a sanitized repository case study summarizing turns, surfaced decisions, accepted choices, ticket dispositions, review, and verification without copying raw transcripts.
 
