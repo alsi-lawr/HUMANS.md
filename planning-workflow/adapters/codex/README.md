@@ -6,7 +6,7 @@ This adapter binds the portable planning workflow to Codex without defining the 
 - Role config layers in `agents/` contain role instructions but no model or reasoning defaults.
 - Presets in `matrices/` bind exact Codex profiles, model IDs, reasoning values, counts, depth, and concurrency. They are selectable presets, never implicit defaults.
 - Missing strategy choices use Codex `request_user_input` with concrete compatible options.
-- Investigation/review workers share a fresh mirror at `<source>/.agent-workspace/<session-id>/agent-planning/`; only the root synchronises the private `~/dev/agent-planning` Git repository.
+- Investigation/review workers share a fresh task-local mirror at `<source>/.agent-workspace/<session-id>/agent-planning/`; only the root synchronises the private `~/dev/agent-planning` Git repository.
 - Implementation planning requires the human to switch to Codex Plan mode. Persisting an accepted plan waits until Default mode resumes.
 
 ## Install

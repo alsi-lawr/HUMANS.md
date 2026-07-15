@@ -25,10 +25,25 @@ def main():
         if not p.is_file(): fail(errors,f"missing skill: {skill}"); continue
         text=p.read_text();
         if not text.startswith("---\nname: ") or "\ndescription: " not in text.split("---",2)[1]: fail(errors,f"invalid skill metadata: {skill}")
+        body=text.split("---",2)[2].lstrip("\n")
+        if not body.startswith("# "): fail(errors,f"skill body is not rendered Markdown: {skill}")
     portable="\n".join((skills/s/"SKILL.md").read_text() for s in SKILLS)
     banned=[r"gpt-",r"request_user_input",r"\bCodex\b",r"\bGitHub\b",r"max_concurrent_subagents\s*=",r"\bPlan mode\b",r"reasoning\s*="]
     for pattern in banned:
         if re.search(pattern,portable,re.I): fail(errors,f"platform binding leaked into portable skill: {pattern}")
+    portable_core=portable+"\n"+"\n".join(p.read_text() for p in (workflow/"roles").glob("*.md"))+"\n"+"\n".join(p.read_text() for p in (workflow/"schemas").glob("*.md"))
+    for pattern in (r"gpt-",r"request_user_input",r"\bCodex\b",r"\bGitHub\b",r"\bPlan mode\b"):
+        if re.search(pattern,portable_core,re.I): fail(errors,f"Codex packaging leaked into portable core: {pattern}")
+    behavioural={
+        skills/"ticketed-repository-investigation"/"SKILL.md": ["never spawn a replacement orchestrator","ask the human to select; never choose","reports a candidate before writing","merge the same defect","Rejected tickets retain resolved rationale","non-obvious contention","Do not close while provisional tickets exist"],
+        skills/"ticket-batch-subagent-pipeline"/"SKILL.md": ["exact selected matrix","exclusive write ownership","rather than repeating the full review"],
+        skills/"ticket-scratch-closeout"/"SKILL.md": ["Compare source and destination file lists and hashes","Delete source copies only after verification","secret-bearing"],
+        adapter/"README.md": ["request_user_input","Plan mode","task-local mirror","directly (not as symlinks)"],
+    }
+    for path, markers in behavioural.items():
+        text=path.read_text()
+        for marker in markers:
+            if marker not in text: fail(errors,f"missing behavioural contract in {path.relative_to(root)}: {marker}")
     for p in sorted((adapter/"agents").glob("*.toml")):
         data=tomllib.loads(p.read_text())
         if "developer_instructions" not in data: fail(errors,f"missing role instructions: {p.name}")
@@ -50,14 +65,17 @@ def main():
         limits=d.get("limits",{}); concurrency=limits.get("max_concurrent_subagents",0); depth=limits.get("max_depth",-1)
         if concurrency < 1 or depth < 0: fail(errors,f"{p.name}: invalid limits")
         spawning=False
+        minimum_total=0
         for w in d.get("workers",[]):
             required={"role","platform_profile","model","reasoning","minimum_count","maximum_count","can_spawn_subagents"}
             if required-w.keys(): fail(errors,f"{p.name}: incomplete worker")
             if w.get("role") not in known or w.get("platform_profile") not in known: fail(errors,f"{p.name}: unknown role/profile {w.get('role')}")
             if w.get("minimum_count",0)<1 or w.get("minimum_count",0)>w.get("maximum_count",0): fail(errors,f"{p.name}: invalid counts")
+            minimum_total += w.get("minimum_count",0)
             if not w.get("model") or not w.get("reasoning"): fail(errors,f"{p.name}: empty platform binding")
             if catalog and (w.get("model") not in catalog or w.get("reasoning") not in catalog.get(w.get("model"),set())): fail(errors,f"{p.name}: unsupported model/reasoning {w.get('model')}/{w.get('reasoning')}")
             spawning |= bool(w.get("can_spawn_subagents"))
+        if minimum_total > concurrency: fail(errors,f"{p.name}: minimum workers exceed concurrency")
         if spawning and depth < 2: fail(errors,f"{p.name}: nested worker without depth 2")
         coord=d.get("coordination",{})
         for k in ("batch_when_capacity_exceeded","candidate_review_before_ticket","shared_ticket_storage_required"):
