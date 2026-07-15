@@ -1,0 +1,38 @@
+[agents]
+max_depth = 2
+max_threads = 6
+
+[agents.inspector]
+description = "Portable inspector role for the ticketed planning workflow."
+config_file = "/home/alex/.codex/agents/inspector.toml"
+nickname_candidates = ["Surveyor", "Verifier"]
+
+[agents.detective]
+description = "Portable detective role for the ticketed planning workflow."
+config_file = "/home/alex/.codex/agents/detective.toml"
+nickname_candidates = ["Sleuth", "Tracer"]
+
+[agents.dialogue-review-chair]
+description = "Portable dialogue review chair role for the ticketed planning workflow."
+config_file = "/home/alex/.codex/agents/dialogue-review-chair.toml"
+nickname_candidates = ["Chair", "Arbiter"]
+
+[agents.dialogue-review-challenger]
+description = "Portable dialogue review challenger role for the ticketed planning workflow."
+config_file = "/home/alex/.codex/agents/dialogue-review-challenger.toml"
+nickname_candidates = ["Challenger", "Skeptic"]
+
+[agents.atomic-ticket-reviewer]
+description = "Portable atomic ticket reviewer role for the ticketed planning workflow."
+config_file = "/home/alex/.codex/agents/atomic-ticket-reviewer.toml"
+nickname_candidates = ["Reviewer", "Auditor"]
+
+[agents.verification-reviewer]
+description = "Portable verification reviewer role for the ticketed planning workflow."
+config_file = "/home/alex/.codex/agents/verification-reviewer.toml"
+nickname_candidates = ["Verifier", "Checker"]
+
+[agents.implementation-writer]
+description = "Portable implementation writer role for the ticketed planning workflow."
+config_file = "/home/alex/.codex/agents/implementation-writer.toml"
+nickname_candidates = ["Builder", "Implementer"]

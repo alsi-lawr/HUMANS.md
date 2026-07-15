@@ -1,0 +1,16 @@
+schema_version = 1
+strategy_id = "investigation-solo"
+phase = "investigation"
+platform = "codex"
+
+[orchestrator]
+binding = "root"
+
+[limits]
+max_concurrent_subagents = 1
+max_depth = 0
+
+[coordination]
+batch_when_capacity_exceeded = false
+candidate_review_before_ticket = true
+shared_ticket_storage_required = false

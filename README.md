@@ -34,11 +34,16 @@ The full argument, with its references and anti-patterns, is in [`HUMANS.md`](HU
 
 ## Skills
 
-Three skills currently ship with the repository:
+The repository ships focused skills, including:
 
 - [`skill-generator`](skills/skill-generator/SKILL.md): create, revise, or audit a skill. It treats the task model as the skill: jobs, variation, requester-owned choices, and activation boundary are built and confirmed before any body is written.
 - [`skill-packaging`](skills/skill-packaging/SKILL.md): package, validate, port, or diagnose a skill for a specific platform, without letting the platform reshape the skill.
 - [`readme-generator`](skills/readme-generator/SKILL.md): create or maintain a repository README as a capture of project intent, grounded in repository facts rather than invention.
+- [`ticketed-repository-investigation`](skills/ticketed-repository-investigation/SKILL.md): coordinate portable, ticket-producing investigation with explicit strategy selection and human-owned contention.
+- Investigation and review strategy skills select solo, atomic, hierarchical, dialogue, atomic-review, or two-stage execution without embedding platform defaults.
+- [`ticket-batch-subagent-pipeline`](skills/ticket-batch-subagent-pipeline/SKILL.md) and [`ticket-scratch-closeout`](skills/ticket-scratch-closeout/SKILL.md): consume selected implementation matrices and promote resolved planning records through configured adapters.
+
+Reusable role contracts, schemas, and the first platform adapter live in [`planning-workflow/`](planning-workflow/). Operational records remain outside this repository in the private `agent-planning` store.
 
 ## Method
 
