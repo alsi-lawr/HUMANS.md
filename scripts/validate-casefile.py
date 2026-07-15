@@ -394,8 +394,8 @@ def package_metadata(root: Path, vendor: str, errors: list[str]) -> None:
     for field, value in expected.items():
         if manifest.get(field) != value:
             errors.append(f"{vendor} package metadata mismatch: {field}")
-    if vendor == "codex" and manifest.get("publisher") != "alsi-lawr":
-        errors.append("codex package metadata mismatch: publisher")
+    if vendor == "codex" and manifest.get("author", {}).get("name") != "alsi-lawr":
+        errors.append("codex package metadata mismatch: author.name")
     if vendor == "claude" and manifest.get("author", {}).get("name") != "alsi-lawr":
         errors.append("claude package metadata mismatch: author.name")
 

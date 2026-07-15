@@ -7,3 +7,6 @@
 # Python runtime caches
 __pycache__/
 *.py[cod]
+
+# Generated marketplace staging tree
+/build/

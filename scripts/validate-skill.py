@@ -171,20 +171,13 @@ def validate_package(root: Path) -> list[str]:
         if not (root / "agents").is_dir() or not (root / "skills").is_dir():
             errors.append("Claude agents and skills must be package-root components")
     else:
-        if not isinstance(manifest.get("publisher"), str) or not manifest["publisher"]:
-            errors.append(f"{manifest_path}: publisher is required")
-        marketplace = root / ".agents/plugins/marketplace.json"
-        if not marketplace.is_file():
-            errors.append("Codex marketplace metadata is missing")
-        else:
-            try:
-                market = json.loads(marketplace.read_text(encoding="ascii"))
-            except (OSError, UnicodeError, json.JSONDecodeError) as error:
-                errors.append(f"invalid Codex marketplace metadata: {error}")
-            else:
-                for field in ("publisher", "repository", "license"):
-                    if market.get(field) != manifest.get(field):
-                        errors.append(f"Codex marketplace {field} differs from plugin metadata")
+        if manifest.get("author", {}).get("name") != "alsi-lawr":
+            errors.append(f"{manifest_path}: author.name must declare the publisher")
+        interface = manifest.get("interface", {})
+        if interface.get("displayName") != "humans-md":
+            errors.append(f"{manifest_path}: interface.displayName must declare the plugin")
+        if not interface.get("shortDescription"):
+            errors.append(f"{manifest_path}: interface.shortDescription is required")
     if not (root / "templates/AGENTS.md").is_file():
         errors.append("packaged AGENTS.md contract template is missing")
     excluded = {"build-code", "test-benchmark-code"}

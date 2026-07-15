@@ -92,16 +92,11 @@ source = "skills/readme-generator"
 destination = "skills/readme-generator"
 
 [vendors.codex]
-output = "plugins/codex/humans-md"
+output = "build/marketplace/plugins/codex/humans-md"
 
 [[vendors.codex.template]]
 source = "adapters/codex/metadata/plugin.json.in"
 destination = ".codex-plugin/plugin.json"
-format = "json"
-
-[[vendors.codex.template]]
-source = "adapters/codex/metadata/marketplace.json.in"
-destination = ".agents/plugins/marketplace.json"
 format = "json"
 
 [[vendors.codex.copy]]
@@ -145,7 +140,7 @@ source = "adapters/codex/skills"
 destination = "skills"
 
 [vendors.claude]
-output = "plugins/claude/humans-md"
+output = "build/marketplace/plugins/claude/humans-md"
 
 [[vendors.claude.template]]
 source = "adapters/claude/metadata/plugin.json.in"

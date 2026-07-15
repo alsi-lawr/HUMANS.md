@@ -1,1 +1,0 @@
-Update the README after checking the repository. It still says the package is experimental and source-only, but generated release artifacts and validation scripts now exist. Do not change what the project is trying to argue.

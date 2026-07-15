@@ -1,1 +1,0 @@
-Review twelve accepted tickets split across four unrelated subsystems using an atomic review matrix with two reviewer slots. Some tickets may need corrections, but the implementation authors are still available.

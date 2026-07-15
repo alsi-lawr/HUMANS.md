@@ -1,1 +1,0 @@
-Run a root-only investigation with no delegated workers.

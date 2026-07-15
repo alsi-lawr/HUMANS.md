@@ -1,1 +1,0 @@
-Implement accepted tickets APP-14 and APP-15 using the selected implementation matrix. Both change the source templates and the same generated package tree. Keep the unrelated worktree edits intact and return reviewable history.

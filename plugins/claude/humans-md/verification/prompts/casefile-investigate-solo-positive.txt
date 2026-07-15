@@ -1,1 +1,0 @@
-Use the selected root-only Casefile strategy to investigate this narrow schema inconsistency.

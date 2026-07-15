@@ -16,19 +16,16 @@ A portable plugin of behaviour contracts, task-shaped skills, and governed Casef
 
 ## Install
 
-Clone the repository, then use the generated package for your runtime.
-
-```sh
-git clone git@github.com:alsi-lawr/HUMANS.md.git
-cd HUMANS.md
-```
+Install the versioned package from the dedicated
+[`humans-md-marketplace`](https://github.com/alsi-lawr/humans-md-marketplace)
+repository.
 
 ### Codex
 
-Add the local package as a personal marketplace and install it:
+Add the tagged marketplace and install the plugin:
 
 ```sh
-codex plugin marketplace add "$PWD/plugins/codex/humans-md" --json
+codex plugin marketplace add alsi-lawr/humans-md-marketplace --ref v0.1.0 --json
 codex plugin add humans-md@humans-md --json
 codex plugin list --json
 ```
@@ -37,14 +34,15 @@ Installation loads the plugin but does not rewrite active instructions or runtim
 
 ### Claude
 
-Validate the package, then load it for a session:
+Add the tagged marketplace and install the plugin:
 
 ```sh
-claude plugin validate plugins/claude/humans-md --strict
-claude --plugin-dir "$PWD/plugins/claude/humans-md"
+claude plugin marketplace add alsi-lawr/humans-md-marketplace@v0.1.0
+claude plugin install humans-md@humans-md
 ```
 
-The package is also ready to be placed in a Claude marketplace. It is not published to one by this repository.
+Claude package generation and strict validation are verified; live loading and
+behaviour remain unverified.
 
 ## What ships
 
@@ -53,7 +51,7 @@ The package is also ready to be placed in a Claude marketplace. It is not publis
 | **Contract** | A portable `AGENTS.md` template and an explicit, backup-producing bootstrap tool. Installation never applies the template automatically. |
 | **Skills** | Focused workflows for skill creation and packaging, README work, Git contributions, contract bootstrap, and every Casefile phase. |
 | **Casefile** | Roles, schemas, matrices, and guarded scripts for investigation, ticket review, accepted implementation, strategy changes, and closeout. |
-| **Adapters** | Runtime-specific metadata, model bindings, setup tools, and generated packages for Codex and Claude. |
+| **Adapters** | Runtime-specific metadata, model bindings, setup tools, and package inputs for Codex and Claude. |
 | **Verification** | Deterministic package checks plus separate structural, balanced, and comparative skill-verification presets. |
 
 The Casefile path is deliberately legible:
@@ -86,7 +84,7 @@ Preview the packaged behaviour contract against this repository's AGENTS.md.
 
 Planning persistence remains user-configured. Public packages do not assume a private planning path, and contract bootstrap refuses to merge or replace existing instructions without explicit authority.
 
-## Portable source, generated packages
+## Portable source, released packages
 
 The source of truth is split by responsibility:
 
@@ -95,24 +93,29 @@ skills/                  portable task instructions
 casefile-workflow/       portable roles, schemas, and scripts
 adapters/                Codex and Claude bindings
 packaging/plugins/       portable product manifests
-plugins/                 committed generated packages
+packaging/marketplace/   marketplace catalogs and release README
+build/marketplace/       ignored local staging tree
 ```
 
-Both packages are generated from [`packaging/plugins/humans-md.toml`](packaging/plugins/humans-md.toml):
-
-- [`plugins/codex/humans-md/`](plugins/codex/humans-md/)
-- [`plugins/claude/humans-md/`](plugins/claude/humans-md/)
-
-Regenerate or check them with Python 3.14 and the standard library:
+Both packages are generated from
+[`packaging/plugins/humans-md.toml`](packaging/plugins/humans-md.toml) with
+Python 3.14 and the standard library:
 
 ```sh
 python3 scripts/package-plugin.py build --all
+cp -R packaging/marketplace/. build/marketplace/
 python3 scripts/package-plugin.py check --all
 python3 scripts/validate-skill.py --all --root .
 python3 scripts/validate-casefile.py --source .
 ```
 
-Generation rejects unsafe paths, symlinks, missing resources, output collisions, stale files, mode drift, and byte drift. CI repeats package parity, ASCII, vendor, and isolated discovery checks.
+Generation rejects unsafe paths, symlinks, missing resources, output
+collisions, stale files, mode drift, and byte drift. CI builds and validates the
+ignored staging tree. The manual release workflow publishes that exact tree to
+the marketplace repository and tags its generated commit; this source
+repository does not commit package outputs or attach release archives.
+Publishing requires the `MARKETPLACE_TOKEN` Actions secret to have contents
+write access only to `alsi-lawr/humans-md-marketplace`.
 
 ## Status
 
@@ -126,7 +129,7 @@ The balanced candidate/baseline suite is specified but has not been executed, so
 ## Research and citation
 
 `humans-md` is also maintained as a research-adjacent software artifact: the
-thesis, executable contracts, verification design, generated packages, and
+thesis, executable contracts, verification design, released packages, and
 development evidence are independently inspectable. It is not presented as a
 peer-reviewed study, and no general behavioural-effectiveness claim is made.
 

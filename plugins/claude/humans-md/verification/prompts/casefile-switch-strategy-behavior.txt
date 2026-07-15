@@ -1,1 +1,0 @@
-We are midway through implementation and want to switch from the current governed matrix to a faster ad-hoc one. Writer A owns `src/`, writer B owns `src/api/`, and both are still active. Existing patches and task-scratch notes must survive the switch.

@@ -1,1 +1,0 @@
-This task is finished and its notes are under `.agent-workspace/session-42/`. Move anything useful into our planning repository and clean up the scratch directory. I do not remember whether this project has been mapped there before.

@@ -2,77 +2,37 @@
 
 ## Evidence basis
 
-This report traces the `humans-md` migration across the planning session that produced the implementation plan and the fresh session that implemented it:
+This report traces the migration-relevant part of the planning session that
+produced the implementation plan and the fresh session that implemented it. It
+starts at planning turn 4, where the migration was requested, and ends at
+implementation turn 9, where the repository became a research-adjacent
+artifact. Earlier setup and later repository cleanup are outside this report's
+evidence boundary.
 
 1. Planning rollout `019f6619-6b0f-7980-8408-5fa1b43e7b00`, persisted at `~/.codex/sessions/2026/07/15/rollout-2026-07-15T15-06-09-019f6619-6b0f-7980-8408-5fa1b43e7b00.jsonl`.
 2. Implementation rollout `019f6669-5094-7aa0-aaf8-13676411e5f7`, persisted at `~/.codex/sessions/2026/07/15/rollout-2026-07-15T16-33-25-019f6669-5094-7aa0-aaf8-13676411e5f7.jsonl`.
 3. The public [repository commits](https://github.com/alsi-lawr/HUMANS.md/commits/feat/1-humans-md-plugin), [issue #1](https://github.com/alsi-lawr/HUMANS.md/issues/1), and [PR #2](https://github.com/alsi-lawr/HUMANS.md/pull/2).
 4. The hash-verified [governed Casefile record](https://github.com/alsi-lawr/agent-planning/tree/main/projects/humans-md/investigations/20260715-thesis-and-plugin), preserved by planning commit [`0e327f0`](https://github.com/alsi-lawr/agent-planning/commit/0e327f0e38054699afa7034c063424cbd20abfe1).
-5. The generated packages, validators, test output, and live-cutover record named below.
+5. The source manifests, tagged [marketplace releases](https://github.com/alsi-lawr/humans-md-marketplace), validators, test output, and live-cutover record named below.
 
-Every human-authored project input in both rollouts is reproduced without summarisation: five direct prompts and ten structured selections from planning, followed by twelve direct prompts from implementation. Agent turns are condensed into observable actions, outcomes, and limits; no agent message or hidden reasoning is copied. Each human input is identified by its JSONL line, UTC timestamp, and SHA-256 hash of the original UTF-8 payload.
+The report contains 21 human-authored migration inputs: two direct prompts and
+ten structured selections from planning, followed by nine direct prompts from
+implementation. Direct prompts are reproduced without summarisation.
+Structured responses show the exact selected labels and user notes without the
+transport JSON envelope. Agent turns are condensed into observable actions,
+outcomes, and limits; no agent message or hidden reasoning is copied. Each
+human input is identified by its JSONL line, UTC timestamp, and SHA-256 hash of
+the original UTF-8 payload.
 
-HTML character references preserve the rendered prompt text while keeping this source ASCII-only and preventing historical names inside evidence blocks from being mistaken for active public contracts. Round-trip verification decodes those references and byte-compares all 27 rendered bodies with their session payloads.
+HTML character references preserve rendered direct-prompt text while keeping
+this source ASCII-only and preventing historical names inside evidence blocks
+from being mistaken for active public contracts. The structured-response hash
+covers the original JSON payload; the report intentionally renders only the
+human-facing selections it contains.
 
 The session transport also records automatic repository-context envelopes, an injected skill body, sub-agent notifications, approval/tool traffic, and a machine-generated `<turn_aborted>` marker. Those are excluded because they are not message text or structured answers authored by the human. The direct correction immediately following the abort is included.
 
 ## Planning session
-
-### Planning turn 1
-
-**Human prompt (verbatim).** Session JSONL line 7; `2026-07-15T14:06:13.236Z`; raw UTF-8 SHA-256 `97570efece426defdc49fe45db2fa37b59cdb11efb9e471aa9555aa71a312665`.
-
-<details>
-<summary>Show the workflow hand-off</summary>
-
-<pre># Workflow hand-off
-
-The portable investigation and ticketing workflow is implemented and installed.
-
-- Reusable source: `~/dev/HUMANS.md/`
-- Operational records: `~/dev/agent-planning/`
-- Live Codex package: `~/.codex/{skills,agents,planning&#45;workflow}`
-- Validator: `python ~/dev/HUMANS.md/scripts/validate-planning&#45;workflow.py --source ~/dev/HUMANS.md --codex-home ~/.codex --model-catalog ~/.codex/models-sol-v1.json`
-
-The request-receiving root is always the orchestrator. Never choose an unspecified investigation, review, or implementation strategy; present compatible choices and ask me. Keep platform bindings in adapters and selected matrices, not the portable core.
-
-Before ticket creation, investigators report candidates and the root reserves an ID and exact provisional path. Resolve every ticket to accepted or rejected, retain rejected rationale, delegate substantive review, and escalate non-obvious contention to me.
-
-Preserve unrelated work. In `~/dev/HUMANS.md`, the untracked `skills/build-code/`, `skills/git-contribution/`, and `skills/test-benchmark-code/` directories are unrelated.
-
-Wait for my next task.</pre>
-
-</details>
-
-**Agent-turn summary.** The agent acknowledged the hand-off and waited. It subsequently treated the request-receiving root, explicit strategy selection, candidate arbitration, review, rejected-rationale retention, adapter boundaries, and unrelated untracked directories as governing constraints.
-
-### Planning turn 2
-
-**Human prompt (verbatim).** Session JSONL line 16; `2026-07-15T14:07:27.952Z`; raw UTF-8 SHA-256 `d56c9d0fb93b5a4c8bb90d1fad25272a748e6e85cbf9f15a739902ede739b9f6`.
-
-<details>
-<summary>Show verbatim human input</summary>
-
-<pre>Update the agent-planning instructions wherever they exist to include a mandatory toml map for &lt;project name&gt; -&gt; &lt;directory&gt; on addition.</pre>
-
-</details>
-
-**Agent-turn summary.** The agent traced the portable workflow, installed Codex mirrors, and operational planning store. It defined a store-root `projects.toml` with a `[projects]` table mapping each project namespace to an absolute source directory, required the entry before project records, refused silent conflicts, updated active source and mirrors, and backfilled the existing `phrasic` registration without rewriting historical records.
-
-**Evidence.** The resulting portable contract survives the naming migration in [`casefile-workflow/schemas/project-map.md`](../casefile-workflow/schemas/project-map.md) and [`casefile-workflow/scripts/validate-project-map.py`](../casefile-workflow/scripts/validate-project-map.py).
-
-### Planning turn 3
-
-**Human prompt (verbatim).** Session JSONL line 101; `2026-07-15T14:12:37.052Z`; raw UTF-8 SHA-256 `4b761a98c35ff78c7c74656a931830d7eca41807401b52d2986f57d50e0822b8`.
-
-<details>
-<summary>Show verbatim human input</summary>
-
-<pre>No forward test. You should absolutely add tooling to verify project map layout that's invocable by the skill, though.</pre>
-
-</details>
-
-**Agent-turn summary.** The agent abandoned the proposed fresh-context forward test and added deterministic project-map tooling instead. It made the investigation and closeout skills invoke the validator, installed the executable and updated resources, checked the real planning store, proved rejection of an unmapped namespace, and verified source/install parity. No forward test was performed.
 
 ### Planning turn 4
 
@@ -101,14 +61,13 @@ Use the $investigation&#45;review-atomic skill to do this.</pre>
 
 ### Planning turn 5
 
-**Human structured response (verbatim).** Session JSONL line 204; `2026-07-15T14:50:39.355Z`; raw UTF-8 SHA-256 `be0662598592c848d50361092e879e323e7b4e6f765d98df210d4ebee5e3c043`.
+**Human selections (selected text verbatim).** Session JSONL line 204;
+`2026-07-15T14:50:39.355Z`; raw structured-payload SHA-256
+`be0662598592c848d50361092e879e323e7b4e6f765d98df210d4ebee5e3c043`.
 
-<details>
-<summary>Show verbatim human input</summary>
-
-<pre>{"answers":{"implementation_strategy":{"answers":["Ticket batches (Recommended)"]},"plugin_target":{"answers":["Codex + Claude"]},"investigation_strategy":{"answers":["Inspector tree (Recommended)"]}}}</pre>
-
-</details>
+- **Implementation strategy:** Ticket batches (Recommended)
+- **Plugin target:** Codex + Claude
+- **Investigation strategy:** Inspector tree (Recommended)
 
 **Agent-turn summary.** The agent recorded inspector-tree investigation, atomic review, ticket-batch implementation, and both vendor packages. It used the inspector-tree matrix for read-only planning reconnaissance while leaving formal ticket creation and review to implementation, as required by Plan Mode.
 
@@ -127,118 +86,112 @@ Use the $investigation&#45;review-atomic skill to do this.</pre>
 
 ### Planning turn 7
 
-**Human structured response (verbatim).** Session JSONL line 220; `2026-07-15T14:54:16.565Z`; raw UTF-8 SHA-256 `f5ebaac0181df874955d57e385a94318214879c164793ea19500a0610e11288d`.
+**Human selections (selected text verbatim).** Session JSONL line 220;
+`2026-07-15T14:54:16.565Z`; raw structured-payload SHA-256
+`f5ebaac0181df874955d57e385a94318214879c164793ea19500a0610e11288d`.
 
-<details>
-<summary>Show verbatim human input</summary>
-
-<pre>{"answers":{"workflow_evidence":{"answers":["Store + case study (Recommended)","user_note: A literal transcript isn't required, but a summary of turns and decisions surfaced/accepted is required for the case study."]}}}</pre>
-
-</details>
+- **Workflow evidence:** Store + case study (Recommended)
+- **User note:** A literal transcript isn't required, but a summary of turns and decisions surfaced/accepted is required for the case study.
 
 **Agent-turn summary.** The agent recorded both evidence destinations. At this point it defined the public artifact as a turn-and-decision summary rather than a literal transcript, while the private store would retain the complete governed workflow. The later implementation-session instruction expressly changed that public-report boundary.
 
 ### Planning turn 8
 
-**Human structured response (verbatim).** Session JSONL line 302; `2026-07-15T15:06:27.260Z`; raw UTF-8 SHA-256 `2e15c6fc92fb15057a2899e7d34d5f5577994165f5101ca053b9418a6533aff4`.
+**Human selections (selected text verbatim).** Session JSONL line 302;
+`2026-07-15T15:06:27.260Z`; raw structured-payload SHA-256
+`2e15c6fc92fb15057a2899e7d34d5f5577994165f5101ca053b9418a6533aff4`.
 
-<details>
-<summary>Show verbatim human input</summary>
-
-<pre>{"answers":{"plugin_name":{"answers":["humans-md"]},"utility_skills":{"answers":["None of the above","user_note: adopt git-contribution from ~/.codex/skills/ as well, with a substantial review pass. All skill prose must be brief and impactful/forceful. Ensure that packaging allows for multiple plugin creation, as I will want to create separate plugins for my code skills in a future pass."]},"package_artifacts":{"answers":["Commit packages (Recommended)","user_note: add CI to verify this"]}}}</pre>
-
-</details>
+- **Plugin name:** humans-md
+- **Utility skills:** None of the above
+- **User note:** adopt git-contribution from ~/.codex/skills/ as well, with a substantial review pass. All skill prose must be brief and impactful/forceful. Ensure that packaging allows for multiple plugin creation, as I will want to create separate plugins for my code skills in a future pass.
+- **Package artifacts:** Commit packages (Recommended)
+- **User note:** add CI to verify this
 
 **Agent-turn summary.** The agent fixed the public identity as `humans-md`, made both generated packages committed outputs with CI parity, brought only `git-contribution` into this plugin for substantial review, kept the two code skills out of scope, required brief forceful skill prose, and made packaging manifest-driven for future plugins.
 
 ### Planning turn 9
 
-**Human structured response (verbatim).** Session JSONL line 323; `2026-07-15T15:10:19.864Z`; raw UTF-8 SHA-256 `dd1ba3a295f60ee04557864f26e6a7d0bb9f0e10ed84ca4e80ff7f0055ab2df0`.
+**Human selections (selected text verbatim).** Session JSONL line 323;
+`2026-07-15T15:10:19.864Z`; raw structured-payload SHA-256
+`dd1ba3a295f60ee04557864f26e6a7d0bb9f0e10ed84ca4e80ff7f0055ab2df0`.
 
-<details>
-<summary>Show verbatim human input</summary>
-
-<pre>{"answers":{"planning_store_default":{"answers":["User-configured (Recommended)"]},"codex_profile_scope":{"answers":["All authored profiles (Recommended)","user_note: If we could get a dependabot-style verification of staleness on this, that would be ideal. Ideally check every week or so for new/changed models and suggests changes."]},"contract_install":{"answers":["Opt-in bootstrap (Recommended)","user_note: Is this actually possible to do using the standard plugin system?"]}}}</pre>
-
-</details>
+- **Planning-store default:** User-configured (Recommended)
+- **Codex profile scope:** All authored profiles (Recommended)
+- **User note:** If we could get a dependabot-style verification of staleness on this, that would be ideal. Ideally check every week or so for new/changed models and suggests changes.
+- **Contract installation:** Opt-in bootstrap (Recommended)
+- **User note:** Is this actually possible to do using the standard plugin system?
 
 **Agent-turn summary.** The agent selected an explicitly invoked contract bootstrap, user-configured public planning persistence, and all authored Codex profiles. It verified that standard plugin manifests could distribute but not safely auto-install a standing contract, then framed preview, conflict refusal, backup, and confirmation as bootstrap requirements. It also investigated a weekly model-drift check.
 
 ### Planning turn 10
 
-**Human structured response (verbatim).** Session JSONL line 351; `2026-07-15T15:14:30.939Z`; raw UTF-8 SHA-256 `7fff2bd83714b48e711d0ac5a9d9eebfa4428718b3e0e4f73db531c5b690a420`.
+**Human selections (selected text verbatim).** Session JSONL line 351;
+`2026-07-15T15:14:30.939Z`; raw structured-payload SHA-256
+`7fff2bd83714b48e711d0ac5a9d9eebfa4428718b3e0e4f73db531c5b690a420`.
 
-<details>
-<summary>Show verbatim human input</summary>
-
-<pre>{"answers":{"python_dependency":{"answers":["Python 3.11 stdlib (Recommended)","user_note: should be the absolute latest python version."]},"skill_verification_strategy":{"answers":["Balanced sampling"]},"staleness_output":{"answers":["Update one issue (Recommended)"]}}}</pre>
-
-</details>
+- **Python dependency:** Python 3.11 stdlib (Recommended)
+- **User note:** should be the absolute latest python version.
+- **Skill verification strategy:** Balanced sampling
+- **Staleness output:** Update one issue (Recommended)
 
 **Agent-turn summary.** The agent resolved the Python note to the latest stable version available, Python 3.14, while retaining a stdlib-only boundary. It selected balanced sampling for revised skills and a single maintained issue for weekly model drift after confirming `codex debug models --bundled` could supply an unauthenticated catalog export.
 
 ### Planning turn 11
 
-**Human structured response (verbatim).** Session JSONL line 373; `2026-07-15T15:17:25.020Z`; raw UTF-8 SHA-256 `63316e0a8fb6e5b7a15ff2cc0ae1a1730f8e447054da7447780bbcb5c97ec0a4`.
+**Human selections (selected text verbatim).** Session JSONL line 373;
+`2026-07-15T15:17:25.020Z`; raw structured-payload SHA-256
+`63316e0a8fb6e5b7a15ff2cc0ae1a1730f8e447054da7447780bbcb5c97ec0a4`.
 
-<details>
-<summary>Show verbatim human input</summary>
-
-<pre>{"answers":{"plugin_version":{"answers":["0.1.0 (Recommended)"]},"cross_vendor_sampling":{"answers":["None of the above","user_note: codex full, claude cannot have forward tests as it is not setup on this machine."]},"claude_model_matrix":{"answers":["Tiered aliases (Recommended)"]}}}</pre>
-
-</details>
+- **Plugin version:** 0.1.0 (Recommended)
+- **Cross-vendor sampling:** None of the above
+- **User note:** codex full, claude cannot have forward tests as it is not setup on this machine.
+- **Claude model matrix:** Tiered aliases (Recommended)
 
 **Agent-turn summary.** The agent fixed version `0.1.0`, explicit tiered Claude role aliases, full Codex verification, and no Claude forward testing on the unconfigured machine. Claude evidence was therefore limited to deterministic generation and strict package validation.
 
 ### Planning turn 12
 
-**Human structured response (verbatim).** Session JSONL line 395; `2026-07-15T15:21:33.103Z`; raw UTF-8 SHA-256 `5d055d3ee5e68e905bcbb91b970f8eddfde148a825622161494dc95b421047c1`.
+**Human selections (selected text verbatim).** Session JSONL line 395;
+`2026-07-15T15:21:33.103Z`; raw structured-payload SHA-256
+`5d055d3ee5e68e905bcbb91b970f8eddfde148a825622161494dc95b421047c1`.
 
-<details>
-<summary>Show verbatim human input</summary>
-
-<pre>{"answers":{"skill_eval_tranche":{"answers":["Core matrix only (Recommended)"]},"codex_cutover":{"answers":["Atomic replacement (Recommended)","user_note: extra work discovered (unrelated to this answer): skill for switching ongoing work to an agent strategy using the workflow. Also, better labelling of the workflow instead of `investigation-x`"]}}}</pre>
-
-</details>
+- **Skill-evaluation tranche:** Core matrix only (Recommended)
+- **Codex cutover:** Atomic replacement (Recommended)
+- **User note:** extra work discovered (unrelated to this answer): skill for switching ongoing work to an agent strategy using the workflow. Also, better labelling of the workflow instead of `investigation-x`
 
 **Agent-turn summary.** The agent selected atomic replacement for the personal Codex cutover and limited imported skill-creator machinery to deterministic matrices, records, balanced sampling, and aggregation. It separated the newly surfaced strategy-switch skill and workflow naming request into an explicit feature contract before adding either to the plan.
 
 ### Planning turn 13
 
-**Human structured response (verbatim).** Session JSONL line 408; `2026-07-15T15:24:36.766Z`; raw UTF-8 SHA-256 `24d2167c7e9fab2817aace2a296dd6616af0723d925f7ef03f0256846c2ddd95`.
+**Human selections (selected text verbatim).** Session JSONL line 408;
+`2026-07-15T15:24:36.766Z`; raw structured-payload SHA-256
+`24d2167c7e9fab2817aace2a296dd6616af0723d925f7ef03f0256846c2ddd95`.
 
-<details>
-<summary>Show verbatim human input</summary>
-
-<pre>{"answers":{"strategy_switch_persistence":{"answers":["Allow ad-hoc switch"]},"workflow_naming":{"answers":["None of the above","user_note: name the workflow something memorable for this style, with split phase + strategy as additions to the name."]},"strategy_switch_scope":{"answers":["Any workflow phase (Recommended)"]}}}</pre>
-
-</details>
+- **Strategy-switch persistence:** Allow ad-hoc switch
+- **Workflow naming:** None of the above
+- **User note:** name the workflow something memorable for this style, with split phase + strategy as additions to the name.
+- **Strategy-switch scope:** Any workflow phase (Recommended)
 
 **Agent-turn summary.** The agent defined strategy switching across every phase, preserving the request root and existing work, permitting a task-local ad-hoc transition, and still requiring explicit compatible-matrix selection. It rejected compatibility aliases and moved to a memorable `<workflow>-<phase>-<strategy>` naming family.
 
 ### Planning turn 14
 
-**Human structured response (verbatim).** Session JSONL line 415; `2026-07-15T15:27:04.326Z`; raw UTF-8 SHA-256 `5ad7af4adc1158e303c8fa761c5cf2fe2a8cba957a64c48c0f6065a581c4b9b7`.
+**Human selections (selected text verbatim).** Session JSONL line 415;
+`2026-07-15T15:27:04.326Z`; raw structured-payload SHA-256
+`5ad7af4adc1158e303c8fa761c5cf2fe2a8cba957a64c48c0f6065a581c4b9b7`.
 
-<details>
-<summary>Show verbatim human input</summary>
-
-<pre>{"answers":{"workflow_brand":{"answers":["None of the above","user_note: based on the superintendent/investigator/detective naming, suggest 5 options. Surface this in mid-turn visible reasoning to me, then user the ask_user_question tool to ask if I want to choose the recommendation or None of the above with my own choice"]}}}</pre>
-
-</details>
+- **Workflow brand:** None of the above
+- **User note:** based on the superintendent/investigator/detective naming, suggest 5 options. Surface this in mid-turn visible reasoning to me, then user the ask_user_question tool to ask if I want to choose the recommendation or None of the above with my own choice
 
 **Agent-turn summary.** The agent evaluated five role-compatible, vendor-neutral names in a visible turn: Casefile, Inspectorate, Bureau, Precinct, and Casebook. It recommended Casefile and returned the decision through the structured question tool as requested.
 
 ### Planning turn 15
 
-**Human structured response (verbatim).** Session JSONL line 422; `2026-07-15T15:28:43.341Z`; raw UTF-8 SHA-256 `11d3a94ce63d685ba7c94dd5ee47c3c224b9b380a743c2d46c7aa07cfd5012a8`.
+**Human selections (selected text verbatim).** Session JSONL line 422;
+`2026-07-15T15:28:43.341Z`; raw structured-payload SHA-256
+`11d3a94ce63d685ba7c94dd5ee47c3c224b9b380a743c2d46c7aa07cfd5012a8`.
 
-<details>
-<summary>Show verbatim human input</summary>
-
-<pre>{"answers":{"workflow_brand_final":{"answers":["Casefile (Recommended)"]}}}</pre>
-
-</details>
+- **Final workflow brand:** Casefile (Recommended)
 
 **Agent-turn summary.** The agent fixed Casefile as the public prefix, integrated all preceding choices and investigation findings, and produced the decision-complete plan at `2026-07-15T15:33:19.602Z`. That agent-authored plan is not copied as an agent turn here; its complete text appears verbatim in the next session because the human sent it as the implementation prompt.
 
@@ -571,7 +524,14 @@ The agent fixed those defects in `fb9beda`, corrected exported-null handling and
 
 </details>
 
-**Agent-turn summary.** The agent corrected the evidence boundary again. It traced the opening plan to planning rollout `019f6619-6b0f-7980-8408-5fa1b43e7b00`, distinguished five direct human prompts and ten structured human responses from generated transport events, and rebuilt this report as a complete two-session chronology. The original HMD-005 record remains unchanged as historical evidence of the earlier summary-only requirement; the later human instructions supersede that public-report boundary without rewriting the governed history.
+**Agent-turn summary.** The agent corrected the evidence boundary again. It
+traced the opening plan to planning rollout
+`019f6619-6b0f-7980-8408-5fa1b43e7b00`, distinguished human prompts and
+structured selections from generated transport events, and rebuilt the report
+as a two-session chronology. The original HMD-005 record remains unchanged as
+historical evidence of the earlier summary-only requirement; the later human
+instruction superseded that public-report boundary without rewriting the
+governed history.
 
 **Evidence.**
 
@@ -597,57 +557,6 @@ The agent fixed those defects in `fb9beda`, corrected exported-null handling and
 - Research framing and reproduction guidance: [`docs/research-use.md`](research-use.md).
 - The README now links both while retaining its product-focused structure.
 
-### Implementation turn 10
-
-**Human prompt (verbatim).** Session JSONL line 1577; `2026-07-15T18:46:50.140Z`; raw UTF-8 SHA-256 `a123974e537f95868c9bab3887f0b56a2a86c30ebe7ef17548ebc47413cbb9d8`.
-
-<details>
-<summary>Show verbatim human input</summary>
-
-<pre>Anonymise the complete github git history with my noreply email.</pre>
-
-</details>
-
-**Agent-turn summary.** The agent activated the repository's identity-rewrite procedure and ran its mandatory intake before mutation. It interpreted the request as a permanent author, committer, and tagger rewrite rather than an ordinary amend or display-level mailmap.
-
-### Implementation turn 11
-
-**Human prompt (verbatim).** Session JSONL line 1600; `2026-07-15T18:48:17.218Z`; raw UTF-8 SHA-256 `d93c65b386490e9fc284b0994239293ac0e69a1b0778c95e87377ede7690a55a`.
-
-<details>
-<summary>Show verbatim human input</summary>
-
-<pre>You may infer the answers from my prompt. I authorise gh replacing the upstream. Full anonymisation.</pre>
-
-</details>
-
-**Agent-turn summary.** The agent inferred all published branches and tags, full anonymisation, no nearby-repository rewrite, mapped remote verification, and GitHub replacement. The audit found eighteen reachable commits: six used the personal address and twelve already used the GitHub noreply identity; no signed commit or tag required signature-loss approval.
-
-With restrictive permissions, the agent created and verified a complete recovery bundle, cloned a private mirror without local object sharing, applied `git-filter-repo` 2.47 through an exact mailmap, and verified commit trees, parent mappings, refs, and identities. It snapshotted GitHub state and disclosed the unavoidable loss of three stars, six Actions histories, and original repository/issue/PR timestamps and internal IDs. It then paused for the required fresh destructive approval; no deletion occurred before the next human turn.
-
-### Implementation turn 12
-
-**Human prompt (verbatim).** Session JSONL line 1718; `2026-07-15T18:56:56.873Z`; raw UTF-8 SHA-256 `85a39ab345d672ff8ca9b9c6876f3adcacf45ee7c1e2dbd2408fd338bd55e07e`.
-
-<details>
-<summary>Show verbatim human input</summary>
-
-<pre>Yes</pre>
-
-</details>
-
-**Agent-turn summary.** The agent rechecked the source snapshot, repository identity, and exact remote branch SHAs, then deleted and recreated the GitHub repository. It published the anonymised branches; restored settings, topics, labels, Actions policy, issue #1, and PR #2; repointed local refs with expected-old safeguards; and retained the dirty research/report work and unrelated untracked code skills.
-
-A fresh remote clone passed mapped verification for the eighteen rewritten commits and both original branch refs. After the research and transcript commits, all twenty published branch commits use `alsi-lawr <177320313+alsi-lawr@users.noreply.github.com>` as author and committer. No personal address appears in any fetched ref. GitHub's synthetic PR merge ref uses `GitHub <noreply@github.com>`. The public report uses rewritten commit identifiers; the old-to-new map and complete original bundle remain private recovery evidence.
-
-The approved replacement permanently lost three stars, six prior Actions histories, and original repository/issue/PR timestamps and internal IDs. The issue and PR numbers, URLs, titles, bodies, branches, and open states were restored, then updated for the later research scope.
-
-**Evidence.**
-
-- Rewritten branch: [`feat/1-humans-md-plugin`](https://github.com/alsi-lawr/HUMANS.md/tree/feat/1-humans-md-plugin).
-- Recreated and updated [issue #1](https://github.com/alsi-lawr/HUMANS.md/issues/1) and [PR #2](https://github.com/alsi-lawr/HUMANS.md/pull/2).
-- Local recovery and audit artifacts remain under the session-scoped identity-rewrite scratch directory and are intentionally not committed.
-
 ## Ticket and review disposition
 
 | Ticket | Governed disposition | Evidence-backed outcome |
@@ -665,14 +574,14 @@ The primary atomic review's verdict on `9c3f998` was **reject - corrections requ
 
 | Surface | Recorded result | Evidence limit |
 | --- | --- | --- |
-| Session transcript | 27 human-authored inputs round-trip exactly from two JSONL rollouts | Generated context, agent text, tool traffic, and transport markers are not represented as human prompts. |
+| Session transcript | 21 migration-relevant human inputs from two JSONL rollouts | Direct prompts are rendered verbatim; structured selections preserve selected text and notes without transport JSON. Generated context, agent text, tool traffic, and transport markers are excluded. |
 | Python 3.14 suite | 9 focused tests passed | Deterministic regression evidence only. |
-| Package parity | Claude 107 files; Codex 138 files | Path, mode, and byte parity against committed outputs. |
+| Package parity | Claude 107 files; Codex 138 files in the original migration check | Historical path, mode, and byte parity against the generated outputs used at the report cutoff. |
 | Source/package validation | 17 source skills; both standalone package validators; all Casefile surfaces passed | Mechanical structure and metadata, not behaviour. |
 | Claude | `claude plugin validate --strict` passed with Claude Code 2.1.204 | No install, loading, triggering, routing, or behavioural run. |
 | Isolated Codex | Marketplace add, plugin add, discovery, and installed-byte parity passed with Codex CLI 0.144.1 | Separate from personal live state. |
 | Personal Codex cutover | Strict config, discovery, V1, Sol/xhigh root, Terra/xhigh inspector, selective removal, and byte parity passed | Machine-local runtime evidence preserved in the private Casefile. |
 | Balanced skill suite | Strategy, suite, prompts, and rubrics exist | Candidate/baseline runs were not executed and remain `unverified`. |
-| Forge publication | Issue #1 and open PR #2 exist on the feature branch | No merge, release tag, or marketplace publication is claimed. |
+| Forge publication | Issue #1 and open PR #2 exist on the feature branch | State at the report cutoff; later distribution maintenance is outside the transcript boundary. |
 
 The compact implementation command transcript is preserved in [`evidence/final-checks.log`](https://github.com/alsi-lawr/agent-planning/blob/main/projects/humans-md/investigations/20260715-thesis-and-plugin/evidence/final-checks.log). The broader implementation disposition, including what was not verified, is in [`final-disposition.md`](https://github.com/alsi-lawr/agent-planning/blob/main/projects/humans-md/investigations/20260715-thesis-and-plugin/final-disposition.md).

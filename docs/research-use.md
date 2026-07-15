@@ -20,7 +20,8 @@ replication is made.
 | [`skills/`](../skills/) | Portable task models that can be compared or revised independently. |
 | [`casefile-workflow/`](../casefile-workflow/) | Roles, schemas, and governance machinery for traced work. |
 | [`verification/`](../verification/) | Stable prompts, hidden rubrics, suites, and strategy presets. |
-| [`plugins/`](../plugins/) | Reproducible Codex and Claude realizations of the portable source. |
+| [`packaging/`](../packaging/) | Product manifests and marketplace catalogs used to reproduce releases. |
+| [`humans-md-marketplace`](https://github.com/alsi-lawr/humans-md-marketplace) | Tagged Codex and Claude release trees generated from this source. |
 | [Migration report](2026-07-15-casefile-plugin-workflow.md) | Verbatim human inputs, summarized agent turns, decisions, review, and verification provenance. |
 
 The migration report is an authored process record. Its prompts were included
@@ -48,7 +49,8 @@ For a reproducible study or case comparison:
 
 1. Pin the repository commit, package version, runtime version, model, effort,
    feature flags, and selected Casefile matrix.
-2. Regenerate both packages and require path, mode, and byte parity.
+2. Regenerate both packages and compare their paths, modes, and bytes with the
+   selected marketplace tag.
 3. Select and record a compatible verification strategy before changing a
    skill; do not silently choose the most favourable strategy after results.
 4. Hash the candidate, immutable baseline, suite, prompts, rubrics, and raw run

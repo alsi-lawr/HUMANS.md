@@ -1,1 +1,0 @@
-Promote this resolved Casefile scratch record through the configured durable-store adapter.

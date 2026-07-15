@@ -1,1 +1,0 @@
-Delete ordinary temporary build logs from task scratch.
