@@ -295,24 +295,3 @@ skill = "skill-generator"
 partition = "task_behavior"
 prompt = "prompts/skill-generator-behavior.txt"
 rubric = "rubrics/behavior.md"
-
-[[cases]]
-id = "skill-packaging-positive"
-skill = "skill-packaging"
-partition = "positive_trigger"
-prompt = "prompts/skill-packaging-positive.txt"
-rubric = "rubrics/trigger.md"
-
-[[cases]]
-id = "skill-packaging-near"
-skill = "skill-packaging"
-partition = "hard_non_trigger"
-prompt = "prompts/skill-packaging-near.txt"
-rubric = "rubrics/trigger.md"
-
-[[cases]]
-id = "skill-packaging-behavior"
-skill = "skill-packaging"
-partition = "task_behavior"
-prompt = "prompts/skill-packaging-behavior.txt"
-rubric = "rubrics/behavior.md"

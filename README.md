@@ -6,7 +6,7 @@
 
 A portable plugin of behaviour contracts, task-shaped skills, and governed Casefile workflows for Codex and Claude.
 
-`v0.1.0` | `Codex` | `Claude` | `MIT`
+`v0.1.1` | `Codex` | `Claude` | `MIT`
 
 </div>
 
@@ -25,7 +25,7 @@ repository.
 Add the tagged marketplace and install the plugin:
 
 ```sh
-codex plugin marketplace add alsi-lawr/humans-md-marketplace --ref v0.1.0 --json
+codex plugin marketplace add alsi-lawr/humans-md-marketplace --ref v0.1.1 --json
 codex plugin add humans-md@humans-md --json
 codex plugin list --json
 ```
@@ -37,7 +37,7 @@ Installation loads the plugin but does not rewrite active instructions or runtim
 Add the tagged marketplace and install the plugin:
 
 ```sh
-claude plugin marketplace add alsi-lawr/humans-md-marketplace@v0.1.0
+claude plugin marketplace add alsi-lawr/humans-md-marketplace@v0.1.1
 claude plugin install humans-md@humans-md
 ```
 
@@ -49,7 +49,7 @@ behaviour remain unverified.
 | Surface | What it provides |
 | --- | --- |
 | **Contract** | A portable `AGENTS.md` template and an explicit, backup-producing bootstrap tool. Installation never applies the template automatically. |
-| **Skills** | Focused workflows for skill creation and packaging, README work, Git contributions, contract bootstrap, and every Casefile phase. |
+| **Skills** | Focused workflows for skill creation, README work, Git contributions, contract bootstrap, and every Casefile phase. |
 | **Casefile** | Roles, schemas, matrices, and guarded scripts for investigation, ticket review, accepted implementation, strategy changes, and closeout. |
 | **Adapters** | Runtime-specific metadata, model bindings, setup tools, and package inputs for Codex and Claude. |
 | **Verification** | Deterministic package checks plus separate structural, balanced, and comparative skill-verification presets. |

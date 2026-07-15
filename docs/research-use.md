@@ -7,7 +7,7 @@ argument, an executable instruction system, reproducible vendor packages, and
 an evidenced development record into one inspectable repository.
 
 It is not a peer-reviewed paper, a human-subject dataset, or a completed
-benchmark. Version `0.1.0` has deterministic and machine-local runtime evidence,
+benchmark. Version `0.1.1` has deterministic and machine-local runtime evidence,
 but no claim of general effectiveness, causal improvement, or cross-model
 replication is made.
 
@@ -77,7 +77,7 @@ artifact statement.
 Suggested human-readable citation:
 
 > alsi-lawr. (2026). *humans-md: Portable Behaviour Contracts and Casefile
-> Workflows for Coding Agents* (Version 0.1.0) [Computer software]. GitHub.
+> Workflows for Coding Agents* (Version 0.1.1) [Computer software]. GitHub.
 > https://github.com/alsi-lawr/HUMANS.md
 
 The MIT licence governs software reuse. Citation records provenance and credit;

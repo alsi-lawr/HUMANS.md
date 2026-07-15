@@ -27,7 +27,6 @@ REUSABLE_SKILLS = {
     "contract-bootstrap",
     "git-contribution",
     "skill-generator",
-    "skill-packaging",
     "readme-generator",
 }
 EXCLUDED_SKILLS = {"build-code", "test-benchmark-code"}
@@ -358,7 +357,7 @@ def manifest_validation(root: Path, errors: list[str]) -> None:
     manifest = load_toml(manifests[0], errors)
     expected_identity = {
         "name": "humans-md",
-        "version": "0.1.0",
+        "version": "0.1.1",
         "publisher": "alsi-lawr",
         "repository": "alsi-lawr/HUMANS.md",
         "license": "MIT",
@@ -387,7 +386,7 @@ def package_metadata(root: Path, vendor: str, errors: list[str]) -> None:
     manifest = load_json(manifest_path, errors)
     expected = {
         "name": "humans-md",
-        "version": "0.1.0",
+        "version": "0.1.1",
         "repository": "https://github.com/alsi-lawr/HUMANS.md",
         "license": "MIT",
     }

@@ -1,6 +1,6 @@
 ---
 name: skill-generator
-description: "Use when creating, revising, or auditing an agent skill: model its task, boundary, and verification before drafting. Hand platform packaging and loading diagnostics to skill-packaging."
+description: "Use when creating, revising, or auditing an agent skill: model its task, boundary, and verification before drafting."
 ---
 
 # Skill Generator
@@ -15,7 +15,7 @@ Classify every result as `mechanical`, `sampled_behavior`, `comparative`, `model
 
 ## Model the job
 
-Name the invocation as create, revise, or audit in the recorded task model. Derive jobs, variation, requester-owned choices, and activation boundary from the request, examples, and repository facts. Route standing conduct to the agent contract, guaranteed rules to tooling, repository knowledge to documentation, and packaging to `skill-packaging`. Show the model, routing, assumptions, and selected verification strategy before writing or auditing.
+Name the invocation as create, revise, or audit in the recorded task model. Derive jobs, variation, requester-owned choices, and activation boundary from the request, examples, and repository facts. Route standing conduct to the agent contract, guaranteed rules to tooling, and repository knowledge to documentation. Show the model, routing, assumptions, and selected verification strategy before writing or auditing.
 
 ## Write and verify
 

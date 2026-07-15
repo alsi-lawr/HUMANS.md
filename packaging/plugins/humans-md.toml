@@ -1,6 +1,6 @@
 schema_version = 1
 name = "humans-md"
-version = "0.1.0"
+version = "0.1.1"
 publisher = "alsi-lawr"
 repository = "alsi-lawr/HUMANS.md"
 repository_url = "https://github.com/alsi-lawr/HUMANS.md"
@@ -82,10 +82,6 @@ destination = "skills/contract-bootstrap"
 [[shared]]
 source = "skills/skill-generator"
 destination = "skills/skill-generator"
-
-[[shared]]
-source = "skills/skill-packaging"
-destination = "skills/skill-packaging"
 
 [[shared]]
 source = "skills/readme-generator"

@@ -1,1 +1,0 @@
-Package the completed `release-notes` skill for the named platform using the supplied manifest. One resource destination is `../shared/template.md`, and `assets/current` is a symlink to a file outside the skill directory.
