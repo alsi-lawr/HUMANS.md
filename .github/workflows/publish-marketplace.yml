@@ -45,6 +45,7 @@ jobs:
         run: |
           python scripts/package-plugin.py build --all
           cp -R packaging/marketplace/. build/marketplace/
+          cp LICENSE build/marketplace/LICENSE
           python scripts/package-plugin.py check --all
           python scripts/validate-skill.py --root . --package build/marketplace/plugins/codex/humans-md --package build/marketplace/plugins/claude/humans-md
           python build/marketplace/plugins/codex/humans-md/scripts/validate-casefile.py --source build/marketplace/plugins/codex/humans-md

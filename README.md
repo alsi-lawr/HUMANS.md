@@ -104,6 +104,7 @@ Python 3.14 and the standard library:
 ```sh
 python3 scripts/package-plugin.py build --all
 cp -R packaging/marketplace/. build/marketplace/
+cp LICENSE build/marketplace/LICENSE
 python3 scripts/package-plugin.py check --all
 python3 scripts/validate-skill.py --all --root .
 python3 scripts/validate-casefile.py --source .
