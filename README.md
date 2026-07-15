@@ -76,4 +76,4 @@ automatically. Planning storage remains user-configured.
 
 ## Read more
 
-[Thesis](HUMANS.md) | [Migration evidence](docs/2026-07-15-casefile-plugin-workflow.md) | [Research and citation](docs/research-use.md) | [Packages](https://github.com/alsi-lawr/humans-md-marketplace) | [MIT licence](LICENSE)
+[Casefile guide](casefile-workflow/README.md) | [Thesis](HUMANS.md) | [Migration evidence](docs/2026-07-15-casefile-plugin-workflow.md) | [Research and citation](docs/research-use.md) | [Packages](https://github.com/alsi-lawr/humans-md-marketplace) | [MIT licence](LICENSE)
