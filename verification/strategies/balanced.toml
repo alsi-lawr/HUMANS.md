@@ -1,0 +1,17 @@
+schema_version = 1
+strategy_id = "skill-balanced-v1"
+mode = "balanced"
+baseline_kind = "no-skill"
+required_evidence_classes = ["sampled_behavior", "comparative", "human_judgement"]
+
+[absolute]
+minimum_candidate_pass_rate = 0.9
+require_all_hard_non_triggers = true
+
+[comparative]
+minimum_mean_delta = 0.1
+
+[isolation]
+fresh_context_per_case = true
+rubric_hidden_from_prompt = true
+simultaneous_arms = true

@@ -1,0 +1,20 @@
+{
+  "description": "Portable behaviour contracts and governed Casefile workflows.",
+  "name": "humans-md",
+  "owner": {
+    "name": "alsi-lawr"
+  },
+  "plugins": [
+    {
+      "author": {
+        "name": "alsi-lawr"
+      },
+      "description": "Portable behavioural contracts and governed Casefile workflows for coding agents.",
+      "license": "MIT",
+      "name": "humans-md",
+      "repository": "https://github.com/alsi-lawr/HUMANS.md",
+      "source": "./plugins/claude/humans-md",
+      "strict": true
+    }
+  ]
+}

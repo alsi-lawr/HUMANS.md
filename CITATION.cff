@@ -1,0 +1,23 @@
+cff-version: "1.2.0"
+message: "If you use humans-md in research or practice, cite this software and identify the evaluated commit."
+title: "humans-md: Portable Behaviour Contracts and Casefile Workflows for Coding Agents"
+type: software
+authors:
+  - name: "alsi-lawr"
+abstract: >-
+  humans-md is a vendor-neutral instruction and workflow artifact for
+  agent-assisted repository work. It packages portable behaviour contracts,
+  task-shaped skills, deterministic validators, and a governed Casefile process
+  into reproducible Codex and Claude plugins. The repository also preserves an
+  evidenced design and implementation report with explicit verification limits.
+version: "0.1.1"
+license: MIT
+repository-code: "https://github.com/alsi-lawr/HUMANS.md"
+url: "https://github.com/alsi-lawr/HUMANS.md"
+keywords:
+  - "AI agents"
+  - "coding agents"
+  - "human-agent interaction"
+  - "instruction systems"
+  - "research software"
+  - "software engineering"

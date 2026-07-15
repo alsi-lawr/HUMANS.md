@@ -1,0 +1,37 @@
+schema_version = 1
+strategy_id = "casefile-review-dialogue"
+phase = "review"
+adapter = "codex"
+
+[orchestrator]
+binding = "root"
+
+[limits]
+max_concurrent_subagents = 2
+max_depth = 2
+
+[requirements]
+capabilities = ["subagents", "nested_subagents", "shared_writable_planning"]
+
+[[workers]]
+role = "dialogue-review-chair"
+platform_profile = "casefile-review-dialogue-dialogue-review-chair"
+model = "gpt-5.6-terra"
+reasoning = "xhigh"
+minimum_count = 1
+maximum_count = 1
+can_spawn_subagents = true
+
+[[workers]]
+role = "dialogue-review-challenger"
+platform_profile = "casefile-review-dialogue-dialogue-review-challenger"
+model = "gpt-5.6-terra"
+reasoning = "xhigh"
+minimum_count = 1
+maximum_count = 1
+can_spawn_subagents = false
+
+[coordination]
+batch_when_capacity_exceeded = true
+candidate_review_before_ticket = false
+shared_ticket_storage_required = true

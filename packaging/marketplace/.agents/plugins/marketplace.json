@@ -1,0 +1,20 @@
+{
+  "interface": {
+    "displayName": "humans-md"
+  },
+  "name": "humans-md",
+  "plugins": [
+    {
+      "category": "Coding",
+      "name": "humans-md",
+      "policy": {
+        "authentication": "ON_INSTALL",
+        "installation": "AVAILABLE"
+      },
+      "source": {
+        "path": "./plugins/codex/humans-md",
+        "source": "local"
+      }
+    }
+  ]
+}

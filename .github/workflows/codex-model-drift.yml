@@ -1,0 +1,54 @@
+name: Codex model profile drift
+
+on:
+  schedule:
+    - cron: "23 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  drift:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "lts/*"
+      - name: Export latest bundled model catalog
+        run: |
+          npm install --global @openai/codex
+          export CODEX_HOME="$RUNNER_TEMP/codex-home"
+          mkdir -p "$CODEX_HOME"
+          codex debug models --bundled > "$RUNNER_TEMP/codex-models.json"
+      - name: Compare declared profile fields
+        id: drift
+        continue-on-error: true
+        run: |
+          python scripts/check-codex-model-drift.py \
+            --catalog "$RUNNER_TEMP/codex-models.json" \
+            --profiles adapters/codex/profiles.toml \
+            --output "$RUNNER_TEMP/codex-model-drift.md"
+      - name: Maintain one labelled drift issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DRIFT_OUTCOME: ${{ steps.drift.outcome }}
+        run: |
+          label="codex-model-drift"
+          title="Codex model profile drift"
+          gh label create "$label" --color B60205 --description "Profile-relevant Codex model drift" --force
+          issue="$(gh issue list --state open --label "$label" --json number --jq '.[0].number // empty')"
+          if [ "$DRIFT_OUTCOME" = "failure" ]; then
+            if [ -n "$issue" ]; then
+              gh issue edit "$issue" --title "$title" --body-file "$RUNNER_TEMP/codex-model-drift.md"
+            else
+              gh issue create --title "$title" --label "$label" --body-file "$RUNNER_TEMP/codex-model-drift.md"
+            fi
+          elif [ -n "$issue" ]; then
+            gh issue close "$issue" --comment "Latest bundled export has no declared profile-relevant drift."
+          fi

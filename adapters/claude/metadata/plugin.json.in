@@ -1,0 +1,10 @@
+{
+  "author": {
+    "name": ${publisher_json}
+  },
+  "description": ${description_json},
+  "license": ${license_json},
+  "name": ${name_json},
+  "repository": ${repository_url_json},
+  "version": ${version_json}
+}

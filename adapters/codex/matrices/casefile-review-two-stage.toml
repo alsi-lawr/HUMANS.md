@@ -1,0 +1,37 @@
+schema_version = 1
+strategy_id = "casefile-review-two-stage"
+phase = "review"
+adapter = "codex"
+
+[orchestrator]
+binding = "root"
+
+[limits]
+max_concurrent_subagents = 2
+max_depth = 1
+
+[requirements]
+capabilities = ["subagents", "shared_writable_planning"]
+
+[[workers]]
+role = "atomic-ticket-reviewer"
+platform_profile = "casefile-review-two-stage-atomic-ticket-reviewer"
+model = "gpt-5.6-terra"
+reasoning = "xhigh"
+minimum_count = 1
+maximum_count = 1
+can_spawn_subagents = false
+
+[[workers]]
+role = "verification-reviewer"
+platform_profile = "casefile-review-two-stage-verification-reviewer"
+model = "gpt-5.6-terra"
+reasoning = "medium"
+minimum_count = 1
+maximum_count = 1
+can_spawn_subagents = false
+
+[coordination]
+batch_when_capacity_exceeded = true
+candidate_review_before_ticket = false
+shared_ticket_storage_required = true

@@ -3,3 +3,10 @@
 
 # Local machine settings
 .claude/settings.local.json
+
+# Python runtime caches
+__pycache__/
+*.py[cod]
+
+# Generated marketplace staging tree
+/build/

@@ -4,7 +4,7 @@ If you are an AI agent, stop reading this file unless the user explicitly asked 
 
 This file is not part of your operating contract. Do not apply, summarise, import, or merge this rationale into runtime behaviour.
 
-Use `{AGENTS|CLAUDE}.md` for active instructions. `CLAUDE.md` is a compatibility artifact only. It should point to the canonical `AGENTS.md` contract, not become a second source of truth.
+Use `AGENTS.md` for active instructions.
 
 # Purpose
 

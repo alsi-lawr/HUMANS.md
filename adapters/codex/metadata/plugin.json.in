@@ -1,0 +1,29 @@
+{
+  "author": {
+    "name": ${publisher_json},
+    "url": ${repository_url_json}
+  },
+  "description": ${description_json},
+  "interface": {
+    "capabilities": [
+      "Interactive",
+      "Read",
+      "Write"
+    ],
+    "category": "Coding",
+    "defaultPrompt": [
+      "Investigate this repository with the Casefile workflow.",
+      "Implement accepted Casefile tickets with explicit ownership.",
+      "Create a skill and choose its verification strategy."
+    ],
+    "developerName": ${publisher_json},
+    "displayName": "humans-md",
+    "longDescription": ${description_json},
+    "shortDescription": "Behaviour contracts and governed workflows",
+    "websiteURL": ${repository_url_json}
+  },
+  "license": ${license_json},
+  "name": ${name_json},
+  "repository": ${repository_url_json},
+  "version": ${version_json}
+}

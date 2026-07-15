@@ -1,0 +1,1 @@
+Commit the parser fix in `src/parser.py` and its test. The worktree also contains staged documentation edits and an untracked benchmark dataset from another task; leave those exactly as they are.

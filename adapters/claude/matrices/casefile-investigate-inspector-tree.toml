@@ -1,0 +1,31 @@
+schema_version = 1
+strategy_id = "casefile-investigate-inspector-tree"
+phase = "investigation"
+adapter = "claude"
+[orchestrator]
+binding = "root"
+[limits]
+max_concurrent_subagents = 6
+max_depth = 2
+[requirements]
+capabilities = ["subagents", "nested_subagents", "shared_writable_planning"]
+[[workers]]
+role = "inspector"
+platform_profile = "inspector"
+model = "opus"
+reasoning = "high"
+minimum_count = 1
+maximum_count = 3
+can_spawn_subagents = true
+[[workers]]
+role = "detective"
+platform_profile = "detective"
+model = "sonnet"
+reasoning = "medium-high"
+minimum_count = 1
+maximum_count = 5
+can_spawn_subagents = false
+[coordination]
+batch_when_capacity_exceeded = true
+candidate_review_before_ticket = true
+shared_ticket_storage_required = true

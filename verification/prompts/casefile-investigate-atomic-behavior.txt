@@ -1,0 +1,1 @@
+Investigate eight unrelated failures across the parser, cache, CLI, documentation links, schema loader, packaging, authentication adapter, and release script. The accepted atomic matrix permits three investigators and no nested workers. Preserve the findings as governed tickets.

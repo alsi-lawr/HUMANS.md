@@ -1,0 +1,1 @@
+Create a skill for producing database migration plans. It should activate for migration-planning requests but not for executing migrations or doing general schema review. I have not chosen how the skill will be verified.
