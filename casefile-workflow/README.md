@@ -22,7 +22,7 @@ selected vendor adapter supplies concrete bindings only for delegated roles.
 ## Lifecycle
 
 ```mermaid
-flowchart LR
+flowchart TB
     H[Human request] --> R[Root orchestrator]
     R --> M[Map project and open casefile]
     M --> SI{Select investigation strategy}
