@@ -32,8 +32,8 @@ Codex host and start a new root thread.
 The model and reasoning effort of the agent invoking Casefile remain yours;
 setup does not select or replace them.
 
-Uninstall removes only hash-bound humans-md configuration and preserves later
-unrelated config changes.
+Uninstall previews focused diffs for modified managed files, then after approval
+removes or restores humans-md-managed state while preserving unrelated config changes.
 
 To restore the backed-up state and remove the plugin and marketplace:
 
