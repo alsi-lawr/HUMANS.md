@@ -211,7 +211,36 @@ class CodexSetupTests(unittest.TestCase):
                 with contextlib.redirect_stdout(output):
                     setup.show_uninstall_diffs(home, default_path, default)
                 self.assertIn("diff --git", output.getvalue())
+                self.assertIn("-# >>> humans-md setup scalars >>>", output.getvalue())
                 setup.uninstall(home, "codex", default_path, default)
+
+                invalid = json.loads(receipt_path.read_bytes())
+                invalid["before"][0]["path"] = r"C:\config.toml"
+                receipt_path.write_bytes(setup.canonical(invalid))
+                with self.assertRaisesRegex(setup.SetupError, "unsafe receipt path"):
+                    setup.receipt(home, receipt_path)
+
+    def test_uninstall_aborts_when_a_managed_file_changes_after_snapshot(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            plugin, home, _, catalog, _ = self.fixture(Path(temporary))
+            fake = FakeCodex(catalog)
+            with self.fake_command(fake):
+                result = setup.install(setup.prepare(plugin, home, "codex"))
+                receipt_path, receipt = setup.receipt(home, Path(result["receipt"]))
+                contract = home / "AGENTS.md"
+                installed = contract.read_bytes()
+                original_snapshot = setup.snapshot
+
+                def snapshot(snapshot_home, paths, destination):
+                    entries = original_snapshot(snapshot_home, paths, destination)
+                    if destination.parent.name.startswith("uninstall-"):
+                        contract.write_bytes(b"changed after snapshot\n")
+                    return entries
+
+                with mock.patch.object(setup, "snapshot", snapshot):
+                    with self.assertRaisesRegex(setup.SetupError, "changed after uninstall snapshot"):
+                        setup.uninstall(home, "codex", receipt_path, receipt)
+                self.assertEqual(installed, contract.read_bytes())
 
 
 if __name__ == "__main__":
