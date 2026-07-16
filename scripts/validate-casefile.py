@@ -421,7 +421,7 @@ def manifest_validation(root: Path, errors: list[str]) -> None:
     manifest = load_toml(manifests[0], errors)
     expected_identity = {
         "name": "humans-md",
-        "version": "0.1.4",
+        "version": "0.1.5",
         "publisher": "alsi-lawr",
         "repository": "alsi-lawr/HUMANS.md",
         "license": "MIT",
@@ -450,7 +450,7 @@ def package_metadata(root: Path, vendor: str, errors: list[str]) -> None:
     manifest = load_json(manifest_path, errors)
     expected = {
         "name": "humans-md",
-        "version": "0.1.4",
+        "version": "0.1.5",
         "repository": "https://github.com/alsi-lawr/HUMANS.md",
         "license": "MIT",
     }

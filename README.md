@@ -7,14 +7,14 @@
 Portable behaviour contracts and governed Casefile workflows for Codex and
 Claude.
 
-`v0.1.4` | `MIT`
+`v0.1.5` | `MIT`
 
 </div>
 
 ## Install for Codex
 
 ```sh
-codex plugin marketplace add alsi-lawr/humans-md-marketplace --ref v0.1.4
+codex plugin marketplace add alsi-lawr/humans-md-marketplace --ref v0.1.5
 codex plugin add humans-md@humans-md
 ```
 
@@ -44,7 +44,7 @@ Use $humans-md:codex-uninstall. Preview the uninstall, then ask me once before a
 ## Install for Claude
 
 ```sh
-claude plugin marketplace add alsi-lawr/humans-md-marketplace@v0.1.4
+claude plugin marketplace add alsi-lawr/humans-md-marketplace@v0.1.5
 claude plugin install humans-md@humans-md --scope user
 ```
 

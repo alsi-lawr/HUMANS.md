@@ -15,9 +15,11 @@ generates and activates the V1 catalog override and has isolated mechanical
 coverage. Version `0.1.4` adds bounded implementation look-ahead and ticket
 pipelining with adapter-specific low-tier workers; its source and package
 contracts are mechanically validated, but its behavioural speed and quality
-effects are unverified. A fresh-process behavioural replication is still
-required. No claim of general effectiveness, causal improvement, or
-cross-model replication is made.
+effects are unverified. Version `0.1.5` simplifies the portable install and
+uninstall lifecycle, adds recoverable Claude `CLAUDE.md` setup, and preserves
+legacy Codex receipts; Claude skill execution remains unverified. A
+fresh-process behavioural replication is still required. No claim of general
+effectiveness, causal improvement, or cross-model replication is made.
 
 ## Research surfaces
 
@@ -85,7 +87,7 @@ artifact statement.
 Suggested human-readable citation:
 
 > alsi-lawr. (2026). *humans-md: Portable Behaviour Contracts and Casefile
-> Workflows for Coding Agents* (Version 0.1.4) [Computer software]. GitHub.
+> Workflows for Coding Agents* (Version 0.1.5) [Computer software]. GitHub.
 > https://github.com/alsi-lawr/HUMANS.md
 
 The MIT licence governs software reuse. Citation records provenance and credit;
