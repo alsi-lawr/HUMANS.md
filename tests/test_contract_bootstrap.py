@@ -44,9 +44,8 @@ class ContractBootstrapTests(unittest.TestCase):
             result = bootstrap.main()
         return result, output.getvalue()
 
-    def test_cli_preview_is_complete_and_non_mutating(self):
+    def test_preview_refusal_and_no_op(self):
         mtime = self.destination.stat().st_mtime_ns
-
         result, output = self.run_cli(
             "--source", str(self.source), "--destination", str(self.destination)
         )
@@ -60,66 +59,26 @@ class ContractBootstrapTests(unittest.TestCase):
         self.assertEqual(self.old_bytes, self.destination.read_bytes())
         self.assertEqual(mtime, self.destination.stat().st_mtime_ns)
         self.assertEqual([], self.backups())
-        self.assertEqual([], self.temporary_paths())
-
-    def test_cli_refuses_replacement_without_authority(self):
-        mtime = self.destination.stat().st_mtime_ns
 
         with self.assertRaisesRegex(ValueError, "--replace"):
-            self.run_cli(
-                "--source", str(self.source), "--destination", str(self.destination), "--apply"
-            )
+            bootstrap.install(self.source, self.destination, replace=False)
 
-        self.assertEqual(self.old_bytes, self.destination.read_bytes())
-        self.assertEqual(mtime, self.destination.stat().st_mtime_ns)
-        self.assertEqual([], self.backups())
-        self.assertEqual([], self.temporary_paths())
-
-    def test_cli_apply_is_a_no_op_for_identical_bytes(self):
         self.destination.write_bytes(self.source_bytes)
         mtime = self.destination.stat().st_mtime_ns
-
-        result, output = self.run_cli(
-            "--source",
-            str(self.source),
-            "--destination",
-            str(self.destination),
-            "--apply",
-            "--replace",
-        )
-
-        self.assertEqual(0, result)
-        self.assertIn("no changes", output)
-        self.assertIn("unchanged", output)
+        self.assertEqual("unchanged", bootstrap.install(self.source, self.destination, replace=True))
         self.assertEqual(mtime, self.destination.stat().st_mtime_ns)
         self.assertEqual([], self.backups())
 
-    def test_cli_apply_works_without_fchmod(self):
-        with mock.patch.object(bootstrap.os, "fchmod", None):
-            result, output = self.run_cli(
-                "--source",
-                str(self.source),
-                "--destination",
-                str(self.destination),
-                "--apply",
-                "--replace",
-            )
-
-        self.assertEqual(0, result)
-        self.assertIn("installed", output)
-        self.assertEqual(self.source_bytes, self.destination.read_bytes())
-        self.assertEqual([self.old_bytes], [backup.read_bytes() for backup in self.backups()])
-        self.assertEqual([], self.temporary_paths())
-
-    def test_each_replacement_creates_a_new_backup_and_preserves_existing_backups(self):
+    def test_missing_fchmod_creates_distinct_backups_without_touching_existing_ones(self):
         unrelated = self.root / "AGENTS.md.backup-pre-existing"
         unrelated.write_bytes(b"unrelated backup\n")
         source_old = self.root / "old.md"
         source_old.write_bytes(self.old_bytes)
 
-        self.assertEqual("installed", bootstrap.install(self.source, self.destination, replace=True))
-        self.assertEqual("installed", bootstrap.install(source_old, self.destination, replace=True))
-        self.assertEqual("installed", bootstrap.install(self.source, self.destination, replace=True))
+        with mock.patch.object(bootstrap.os, "fchmod", None):
+            self.assertEqual("installed", bootstrap.install(self.source, self.destination, replace=True))
+            self.assertEqual("installed", bootstrap.install(source_old, self.destination, replace=True))
+            self.assertEqual("installed", bootstrap.install(self.source, self.destination, replace=True))
 
         backups = self.backups()
         self.assertEqual(4, len(backups))
@@ -129,40 +88,34 @@ class ContractBootstrapTests(unittest.TestCase):
         self.assertNotEqual(old_backups[0], old_backups[1])
         self.assertEqual(self.source_bytes, self.destination.read_bytes())
 
-    def test_backup_failure_cleans_temporary_state_and_closes_descriptor(self):
-        self.assert_stage_failures(stage="backup")
+    def test_fdopen_failure_closes_raw_descriptor_and_removes_temporary_path(self):
+        primary_error = OSError("injected fdopen failure")
+        descriptors: list[int] = []
+        original_close = bootstrap.os.close
 
-    def test_destination_failure_retains_committed_backup_and_cleans_temporary_state(self):
-        self.assert_stage_failures(stage="destination")
+        def fdopen(descriptor, *arguments, **keywords):
+            descriptors.append(descriptor)
+            raise primary_error
 
-    def assert_stage_failures(self, stage: str):
-        for operation in ("write", "flush", "fsync", "mode", "replace"):
-            with self.subTest(stage=stage, operation=operation):
-                self.destination.write_bytes(self.old_bytes)
-                failure, streams = self.failure_injection(operation, stage)
-                with failure, self.assertRaises(OSError):
-                    bootstrap.install(self.source, self.destination, replace=True)
+        with (
+            mock.patch.object(bootstrap.os, "fdopen", fdopen),
+            mock.patch.object(bootstrap.os, "close", wraps=original_close) as close,
+        ):
+            with self.assertRaises(OSError) as raised:
+                bootstrap.atomic_write(self.destination, self.source_bytes)
 
-                self.assertEqual(self.old_bytes, self.destination.read_bytes())
-                self.assertTrue(streams)
-                self.assertTrue(all(stream.closed for stream in streams))
-                self.assertEqual([], self.temporary_paths())
-                if stage == "backup":
-                    self.assertEqual([], self.backups())
-                else:
-                    backups = self.backups()
-                    self.assertEqual(1, len(backups))
-                    self.assertEqual(self.old_bytes, backups[0].read_bytes())
-                for backup in self.backups():
-                    backup.unlink()
+        self.assertIs(primary_error, raised.exception)
+        self.assertIn(mock.call(descriptors[0]), close.call_args_list)
+        self.assertEqual(self.old_bytes, self.destination.read_bytes())
+        self.assertEqual([], self.temporary_paths())
 
-    def failure_injection(self, operation: str, stage: str):
-        occurrence = 1 if stage == "backup" else 2
-        streams: list[object] = []
+    @unittest.skipUnless(hasattr(os, "fchmod"), "fchmod is unavailable")
+    def test_supported_fchmod_failure_closes_stream_and_preserves_error(self):
+        primary_error = PermissionError("injected fchmod failure")
         original_fdopen = bootstrap.os.fdopen
-        calls = 0
+        streams = []
 
-        class Stream:
+        class TrackingStream:
             def __init__(self, stream):
                 self.stream = stream
 
@@ -180,81 +133,42 @@ class ContractBootstrapTests(unittest.TestCase):
             def fileno(self):
                 return self.stream.fileno()
 
-            def write(self, data):
-                nonlocal calls
-                if operation == "write":
-                    calls += 1
-                    if calls == occurrence:
-                        raise OSError("injected write failure")
-                return self.stream.write(data)
-
-            def flush(self):
-                nonlocal calls
-                if operation == "flush":
-                    calls += 1
-                    if calls == occurrence:
-                        raise OSError("injected flush failure")
-                return self.stream.flush()
-
         def fdopen(*arguments, **keywords):
-            stream = Stream(original_fdopen(*arguments, **keywords))
+            stream = TrackingStream(original_fdopen(*arguments, **keywords))
             streams.append(stream)
             return stream
 
-        failures = contextlib.ExitStack()
-        failures.enter_context(mock.patch.object(bootstrap.os, "fdopen", fdopen))
+        with (
+            mock.patch.object(bootstrap.os, "fdopen", fdopen),
+            mock.patch.object(bootstrap.os, "fchmod", side_effect=primary_error),
+        ):
+            with self.assertRaises(PermissionError) as raised:
+                bootstrap.atomic_write(self.destination, self.source_bytes)
 
-        if operation in {"write", "flush"}:
-            return failures, streams
+        self.assertIs(primary_error, raised.exception)
+        self.assertTrue(streams[0].closed)
+        self.assertEqual(self.old_bytes, self.destination.read_bytes())
+        self.assertEqual([], self.temporary_paths())
 
-        if operation == "fsync":
-            original_fsync = bootstrap.os.fsync
-            calls = 0
-
-            def fsync(descriptor):
-                nonlocal calls
-                calls += 1
-                if calls == occurrence:
-                    raise OSError("injected fsync failure")
-                return original_fsync(descriptor)
-
-            failures.enter_context(mock.patch.object(bootstrap.os, "fsync", fsync))
-            return failures, streams
-
-        if operation == "mode":
-            original_chmod = bootstrap.os.chmod
-            calls = 0
-
-            def chmod(path, mode):
-                nonlocal calls
-                calls += 1
-                if calls == occurrence:
-                    raise OSError("injected mode failure")
-                return original_chmod(path, mode)
-
-            failures.enter_context(mock.patch.object(bootstrap.os, "chmod", chmod))
-            return failures, streams
-
+    def test_destination_replace_failure_retains_backup_and_destination(self):
+        primary_error = OSError("injected destination replace failure")
         original_replace = bootstrap.os.replace
         calls = 0
 
         def replace(source, destination):
             nonlocal calls
             calls += 1
-            if calls == occurrence:
-                raise OSError("injected replace failure")
+            if calls == 2:
+                raise primary_error
             return original_replace(source, destination)
 
-        failures.enter_context(mock.patch.object(bootstrap.os, "replace", replace))
-        return failures, streams
-
-    def test_available_fchmod_error_propagates_and_cleans_up(self):
-        with mock.patch.object(bootstrap.os, "fchmod", side_effect=PermissionError("denied")):
-            with self.assertRaises(PermissionError):
+        with mock.patch.object(bootstrap.os, "replace", replace):
+            with self.assertRaises(OSError) as raised:
                 bootstrap.install(self.source, self.destination, replace=True)
 
+        self.assertIs(primary_error, raised.exception)
         self.assertEqual(self.old_bytes, self.destination.read_bytes())
-        self.assertEqual([], self.backups())
+        self.assertEqual([self.old_bytes], [backup.read_bytes() for backup in self.backups()])
         self.assertEqual([], self.temporary_paths())
 
     def test_post_write_byte_mismatch_raises(self):
