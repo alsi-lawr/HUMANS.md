@@ -45,11 +45,19 @@ Use $humans-md:codex-uninstall. Preview the uninstall, then ask me once before a
 
 ```sh
 claude plugin marketplace add alsi-lawr/humans-md-marketplace@v0.1.4
-claude plugin install humans-md@humans-md
+claude plugin install humans-md@humans-md --scope user
 ```
 
-Then run `/humans-md:claude-setup`. Claude packaging is strictly validated,
-but its runtime behaviour has not been forward-tested by this project.
+Then run `/humans-md:claude-setup`. It previews the packaged contract against
+the global `${CLAUDE_CONFIG_DIR:-~/.claude}/CLAUDE.md`, asks before replacing
+it, and retains the exact prior file for recovery. Restart Claude Code after a
+successful setup.
+
+To restore that prior `CLAUDE.md` state and invoke Claude's canonical plugin
+uninstall, run `/humans-md:claude-uninstall`.
+
+Claude packaging is strictly validated, but its runtime behaviour has not been
+forward-tested by this project.
 
 ## Use Casefile
 
@@ -73,7 +81,7 @@ Invoke `casefile-switch` when the selected strategy needs to change.
 Implementation can remain serial or use the bounded pipeline to preflight one
 independent next ticket and begin it while the prior commit is reviewed.
 
-To preview the repository behaviour contract without changing it:
+In Codex, to preview the repository behaviour contract without changing it:
 
 ```text
 Use $humans-md:contract-bootstrap to preview the packaged AGENTS.md contract against this repository. Do not apply it yet.

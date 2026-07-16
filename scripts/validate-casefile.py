@@ -156,7 +156,10 @@ def layout(root: Path) -> str:
 def common_validation(root: Path, kind: str, errors: list[str]) -> None:
     skills = root / "skills"
     workflow = root / "casefile-workflow"
-    for name in sorted(CASEFILE_SKILLS | REUSABLE_SKILLS):
+    included = CASEFILE_SKILLS | REUSABLE_SKILLS
+    if kind == "claude-package":
+        included -= {"contract-bootstrap"}
+    for name in sorted(included):
         if not (skills / name / "SKILL.md").is_file():
             errors.append(f"missing included skill: {name}")
     for old in OLD_PUBLIC_NAMES | SUPERSEDED_SKILL_DIRS:
@@ -170,7 +173,7 @@ def common_validation(root: Path, kind: str, errors: list[str]) -> None:
     ):
         errors.append("superseded workflow, root pointer, or discovery shim remains")
 
-    portable_names = CASEFILE_SKILLS | REUSABLE_SKILLS
+    portable_names = included
     if kind == "codex-package":
         portable_names = portable_names - {"git-contribution"}
     portable_paths = [skills / name / "SKILL.md" for name in portable_names]
@@ -229,7 +232,7 @@ def common_validation(root: Path, kind: str, errors: list[str]) -> None:
     suite_skills = {
         case.get("skill") for case in suite.get("cases", []) if isinstance(case, dict)
     }
-    if suite_skills != CASEFILE_SKILLS | REUSABLE_SKILLS:
+    if kind == "source" and suite_skills != CASEFILE_SKILLS | REUSABLE_SKILLS:
         errors.append("verification suite does not cover every included portable skill")
 
 
@@ -370,10 +373,15 @@ def claude_validation(adapter_root: Path, errors: list[str]) -> None:
     package_root = adapter_root.parent if adapter_root.name == "config" else None
     matrix_dir = package_root / "matrices" if package_root else adapter_root / "matrices"
     skill_dir = package_root / "skills" if package_root else adapter_root / "skills"
-    if not (skill_dir / "claude-setup/SKILL.md").is_file():
-        errors.append("Claude setup skill is missing: claude-setup")
+    for name in ("claude-setup", "claude-uninstall"):
+        if not (skill_dir / name / "SKILL.md").is_file():
+            errors.append(f"Claude lifecycle skill is missing: {name}")
     if (skill_dir / "casefile-claude-setup").exists():
         errors.append("superseded Claude setup skill remains: casefile-claude-setup")
+    if package_root and (skill_dir / "contract-bootstrap").exists():
+        errors.append("Claude package retains superseded contract-bootstrap skill")
+    if package_root and not (package_root / "scripts/bootstrap-contract.py").is_file():
+        errors.append("Claude bootstrap script is missing")
     matrix_validation("claude", matrix_dir, errors)
     profiles = load_toml(adapter_root / "profiles.toml", errors)
     workers = {
@@ -479,7 +487,8 @@ def main() -> int:
     if errors:
         print("Casefile validation failed:", *errors, sep="\n- ")
         return 1
-    print(f"validated Casefile {kind}: {len(CASEFILE_SKILLS)} workflow skills and {len(REUSABLE_SKILLS)} reusable skills")
+    reusable_count = len(REUSABLE_SKILLS) - (kind == "claude-package")
+    print(f"validated Casefile {kind}: {len(CASEFILE_SKILLS)} workflow skills and {reusable_count} reusable skills")
     return 0
 
 

@@ -12,17 +12,8 @@ from pathlib import Path
 def atomic_write(path: Path, data: bytes, mode: int = 0o644) -> None:
     descriptor, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
     temporary_path = Path(temporary)
-    committed = False
     try:
-        try:
-            stream = os.fdopen(descriptor, "wb")
-        except BaseException:
-            try:
-                os.close(descriptor)
-            except BaseException:
-                pass
-            raise
-        with stream:
+        with os.fdopen(descriptor, "wb") as stream:
             fchmod = getattr(os, "fchmod", None)
             if fchmod is not None:
                 fchmod(stream.fileno(), 0o600)
@@ -32,11 +23,15 @@ def atomic_write(path: Path, data: bytes, mode: int = 0o644) -> None:
         if os.name == "posix":
             os.chmod(temporary_path, mode)
         os.replace(temporary_path, path)
-        committed = True
     except BaseException:
-        if not committed:
-            temporary_path.unlink(missing_ok=True)
+        try:
+            os.close(descriptor)
+        except OSError:
+            pass
+        temporary_path.unlink(missing_ok=True)
         raise
+
+
 def preview(source: Path, destination: Path) -> tuple[bytes, bytes | None, str]:
     source_bytes = source.read_bytes()
     if not source_bytes:

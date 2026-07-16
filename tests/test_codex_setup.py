@@ -25,7 +25,7 @@ class FakeCodex:
         self.marketplace = True
 
     def result(self, args, value, code=0):
-        return subprocess.CompletedProcess(args, code, json.dumps(value).encode(), b"")
+        return subprocess.CompletedProcess(args, code, json.dumps(value), "")
 
     def __call__(self, args: list[str], environment: dict[str, str]):
         if args[-2:] == ["debug", "models"]:
@@ -34,7 +34,7 @@ class FakeCodex:
                 document = tomllib.loads(config.read_text(encoding="ascii"))
                 if "model_catalog_json" in document:
                     return subprocess.CompletedProcess(
-                        args, 0, Path(document["model_catalog_json"]).read_bytes(), b""
+                        args, 0, Path(document["model_catalog_json"]).read_text(), ""
                     )
             return self.result(args, self.catalog)
         if args[1:4] == ["plugin", "marketplace", "list"]:
@@ -56,8 +56,8 @@ class FakeCodex:
             self.installed = False
             return self.result(args, {})
         if "doctor" in args:
-            output = b"Configuration\n  [ok] config loaded\n" if self.doctor_ok else b"failed\n"
-            return subprocess.CompletedProcess(args, 0 if self.doctor_ok else 2, output, b"")
+            output = "Configuration\n  [ok] config loaded\n" if self.doctor_ok else "failed\n"
+            return subprocess.CompletedProcess(args, 0 if self.doctor_ok else 2, output, "")
         raise AssertionError(args)
 
 
@@ -158,14 +158,10 @@ class CodexSetupTests(unittest.TestCase):
             with self.fake_command(FakeCodex(catalog)):
                 self.assertIn("gpt-5.6-sol", setup.prepare(plugin, home, "codex")["patched"])
 
-    def test_checked_decodes_utf8_strictly(self):
-        result = subprocess.CompletedProcess(["codex"], 0, "caf\u00e9".encode(), b"")
+    def test_checked_uses_text_command_output(self):
+        result = subprocess.CompletedProcess(["codex"], 0, "caf\u00e9", "")
         with mock.patch.object(setup, "command", return_value=result):
             self.assertEqual("caf\u00e9", setup.checked(["codex"], {}))
-        malformed = subprocess.CompletedProcess(["codex"], 0, b"\xff", b"")
-        with mock.patch.object(setup, "command", return_value=malformed):
-            with self.assertRaisesRegex(setup.SetupError, "invalid UTF-8"):
-                setup.checked(["codex"], {})
 
     def test_fdopen_failure_and_rollback_restore_original_bytes(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -195,10 +191,14 @@ class CodexSetupTests(unittest.TestCase):
                 result = setup.install(setup.prepare(plugin, home, "codex"))
                 receipt_path = Path(result["receipt"])
                 receipt = json.loads(receipt_path.read_bytes())
+                receipt["schema_version"] = 3
+                receipt["installed"] = receipt["before"]
+                receipt_path.write_bytes(setup.canonical(receipt))
+                setup.receipt(home, receipt_path)
                 receipt["schema_version"] = 2
+                receipt.pop("installed")
                 receipt["after"] = {"obsolete": "digest"}
                 receipt["config_blocks"] = {"scalars": "obsolete", "tables": "obsolete"}
-                receipt.pop("installed")
                 receipt_path.write_bytes(setup.canonical(receipt))
 
                 contract = home / "AGENTS.md"

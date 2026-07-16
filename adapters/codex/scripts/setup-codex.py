@@ -17,6 +17,7 @@ from pathlib import Path, PurePosixPath
 
 PLUGIN_ID = "humans-md@humans-md"
 MARKETPLACE = "humans-md"
+RECEIPT_SCHEMA = 2
 RECEIPT_SCHEMAS = {2, 3}
 REQUIRED_MODELS = {"gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"}
 SCALAR_BEGIN = b"# >>> humans-md setup scalars >>>\n"
@@ -85,15 +86,7 @@ def atomic_write(path: Path, data: bytes, mode: int = 0o600) -> None:
     descriptor, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
     temporary_path = Path(temporary)
     try:
-        try:
-            stream = os.fdopen(descriptor, "wb")
-        except BaseException:
-            try:
-                os.close(descriptor)
-            except BaseException:
-                pass
-            raise
-        with stream:
+        with os.fdopen(descriptor, "wb") as stream:
             fchmod = getattr(os, "fchmod", None)
             if fchmod is not None:
                 fchmod(stream.fileno(), 0o600)
@@ -104,29 +97,26 @@ def atomic_write(path: Path, data: bytes, mode: int = 0o600) -> None:
             os.chmod(temporary_path, mode)
         os.replace(temporary_path, path)
     except BaseException:
+        try:
+            os.close(descriptor)
+        except OSError:
+            pass
         temporary_path.unlink(missing_ok=True)
         raise
 
 
-def command(args: list[str], environment: dict[str, str]) -> subprocess.CompletedProcess[bytes]:
-    return subprocess.run(args, env=environment, capture_output=True)
-
-
-def decoded(data: bytes, args: list[str]) -> str:
-    try:
-        return data.decode("utf-8", errors="strict")
-    except UnicodeDecodeError as error:
-        raise SetupError(f"command returned invalid UTF-8: {' '.join(args)}") from error
+def command(args: list[str], environment: dict[str, str]) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        args, env=environment, capture_output=True, text=True, encoding="utf-8", errors="strict"
+    )
 
 
 def checked(args: list[str], environment: dict[str, str]) -> str:
     result = command(args, environment)
-    stdout = decoded(result.stdout, args)
-    stderr = decoded(result.stderr, args)
     if result.returncode:
-        detail = stderr.strip() or stdout.strip() or "no diagnostic output"
+        detail = result.stderr.strip() or result.stdout.strip() or "no diagnostic output"
         raise SetupError(f"command failed ({result.returncode}): {' '.join(args)}: {detail}")
-    return stdout
+    return result.stdout
 
 
 def checked_json(args: list[str], environment: dict[str, str]) -> dict:
@@ -365,27 +355,9 @@ def snapshot(home: Path, paths: list[Path], destination: Path) -> list[dict]:
     return entries
 
 
-def receipt_relative(value: object, home: Path, known: list[Path]) -> Path:
-    if not isinstance(value, str) or not value:
-        raise SetupError("unsafe receipt path")
-    normalized = value.replace("\\", "/")
-    pure = PurePosixPath(normalized)
-    if (
-        pure.is_absolute()
-        or pure == PurePosixPath(".")
-        or ".." in pure.parts
-        or pure.parts[0].endswith(":")
-    ):
-        raise SetupError("unsafe receipt path")
-    relative = Path(*pure.parts)
-    if relative not in {path.relative_to(home) for path in known}:
-        raise SetupError("receipt path is outside the managed inventory")
-    return relative
-
-
-def restore(home: Path, source: Path, entries: list[dict], known: list[Path]) -> None:
+def restore(home: Path, source: Path, entries: list[dict]) -> None:
     for entry in entries:
-        relative = receipt_relative(entry.get("path"), home, known)
+        relative = Path(*PurePosixPath(entry["path"].replace("\\", "/")).parts)
         path = home / relative
         remove(path)
         if entry["existed"]:
@@ -468,10 +440,8 @@ def doctor(plan: dict) -> None:
         ],
         plan["environment"],
     )
-    stdout = decoded(result.stdout, [plan["executable"], "doctor"])
-    stderr = decoded(result.stderr, [plan["executable"], "doctor"])
-    if not re.search(r"\[ok\]\s+config\s+loaded", stdout + stderr):
-        raise SetupError(stderr.strip() or stdout.strip() or "config load failed")
+    if not re.search(r"\[ok\]\s+config\s+loaded", result.stdout + result.stderr):
+        raise SetupError(result.stderr.strip() or result.stdout.strip() or "config load failed")
 
 
 def verify_effective_catalog(plan: dict) -> None:
@@ -520,12 +490,11 @@ def install(plan: dict) -> dict:
         if config.read_bytes() != plan["config"]:
             raise SetupError("Codex changed config during verification")
         receipt = {
-            "schema_version": 3,
+            "schema_version": RECEIPT_SCHEMA,
             "status": "installed",
             "install_id": receipt_dir.name,
             "plugin_version": plan["version"],
             "before": before,
-            "installed": snapshot(home, paths, receipt_dir / "installed"),
             "remove_plugin": True,
             "remove_marketplace": True,
         }
@@ -536,7 +505,7 @@ def install(plan: dict) -> dict:
         atomic_write(pointer(home), canonical({"receipt": str(receipt_path)}))
         return {"status": "installed", "receipt": str(receipt_path), "restart_required": True}
     except BaseException as error:
-        restore(home, receipt_dir / "before", before, paths)
+        restore(home, receipt_dir / "before", before)
         pointer(home).unlink(missing_ok=True)
         atomic_write(
             receipt_dir / "failure.json",
@@ -545,20 +514,19 @@ def install(plan: dict) -> dict:
         raise SetupError(f"setup failed; rollback verified: {error}") from error
 
 
-def read_json(path: Path) -> tuple[dict, bytes]:
+def read_json(path: Path) -> dict:
     try:
-        data = path.read_bytes()
-        value = json.loads(data)
+        value = json.loads(path.read_bytes())
     except (OSError, json.JSONDecodeError) as error:
         raise SetupError(f"invalid receipt: {error}") from error
     if not isinstance(value, dict):
         raise SetupError("invalid receipt object")
-    return value, data
+    return value
 
 
 def receipt(home: Path, explicit: Path | None) -> tuple[Path, dict]:
     if explicit is None:
-        selected, _ = read_json(pointer(home))
+        selected = read_json(pointer(home))
         path = Path(selected.get("receipt", ""))
     else:
         path = explicit.expanduser().resolve(strict=True)
@@ -566,28 +534,23 @@ def receipt(home: Path, explicit: Path | None) -> tuple[Path, dict]:
     root = (home / "backups/humans-md").resolve()
     if root not in path.parents or path.name != "receipt.json":
         raise SetupError("receipt is outside the durable backup root")
-    value, _ = read_json(path)
+    value = read_json(path)
     if value.get("status") != "installed" or value.get("schema_version") not in RECEIPT_SCHEMAS:
         raise SetupError("receipt is not an installed receipt")
-    inventories = [value.get("before")]
-    if value["schema_version"] == 3:
-        inventories.append(value.get("installed"))
-    known = managed(home)
-    for inventory in inventories:
-        if not isinstance(inventory, list) or not inventory:
+    inventory = value.get("before")
+    if not isinstance(inventory, list) or not inventory:
+        raise SetupError("receipt backup inventory is invalid")
+    expected = [path.relative_to(home) for path in managed(home)]
+    if len(inventory) != len(expected):
+        raise SetupError("receipt backup inventory is incomplete")
+    for entry, relative in zip(inventory, expected, strict=True):
+        if not isinstance(entry, dict) or not isinstance(entry.get("path"), str) or not isinstance(
+            entry.get("existed"), bool
+        ):
             raise SetupError("receipt backup inventory is invalid")
-        paths = set()
-        for entry in inventory:
-            if not isinstance(entry, dict) or not isinstance(entry.get("path"), str) or not isinstance(
-                entry.get("existed"), bool
-            ):
-                raise SetupError("receipt backup inventory is invalid")
-            relative = receipt_relative(entry["path"], home, known)
-            if relative in paths:
-                raise SetupError("receipt backup inventory has duplicate paths")
-            paths.add(relative)
-        if paths != {item.relative_to(home) for item in known}:
-            raise SetupError("receipt backup inventory is incomplete")
+        normalized = entry["path"].replace("\\", "/")
+        if normalized != relative.as_posix():
+            raise SetupError("unsafe receipt path")
     if not isinstance(value.get("remove_plugin"), bool) or not isinstance(
         value.get("remove_marketplace"), bool
     ):
@@ -595,32 +558,7 @@ def receipt(home: Path, explicit: Path | None) -> tuple[Path, dict]:
     return path, value
 
 
-def uninstall_candidates(home: Path, path: Path, value: dict, temporary: Path) -> list[tuple[Path, Path]]:
-    current = managed(home)[:3]
-    before = {receipt_relative(item["path"], home, managed(home)): item for item in value["before"]}
-    source = path.parent / "before"
-    candidates = []
-    for target in current:
-        relative = target.relative_to(home)
-        candidate = temporary / relative
-        if target == current[0] and target.is_file():
-            data = unowned_config(target.read_bytes())
-            if data or before[relative]["existed"]:
-                candidate.parent.mkdir(parents=True, exist_ok=True)
-                candidate.write_bytes(data)
-        elif before[relative]["existed"]:
-            copy_path(source / relative, candidate)
-        candidates.append((target, candidate))
-    return candidates
-
-
-def uninstall_preview(home: Path, path: Path, value: dict) -> dict:
-    with tempfile.TemporaryDirectory(prefix="humans-md-uninstall-") as temporary:
-        changes = [
-            target
-            for target, candidate in uninstall_candidates(home, path, value, Path(temporary))
-            if not same_path(target, candidate)
-        ]
+def uninstall_preview(path: Path, value: dict) -> dict:
     return {
         "operation": "uninstall",
         "receipt": str(path),
@@ -629,28 +567,42 @@ def uninstall_preview(home: Path, path: Path, value: dict) -> dict:
         "preserve_unowned_config": True,
         "remove_plugin": value["remove_plugin"],
         "remove_marketplace": value["remove_marketplace"],
-        "modified_managed_files": [str(item) for item in changes],
+        "review": "git diffs for changed managed files follow",
     }
 
 
 def show_uninstall_diffs(home: Path, path: Path, value: dict) -> None:
+    current = managed(home)[:3]
+    before = {
+        Path(*PurePosixPath(item["path"].replace("\\", "/")).parts): item
+        for item in value["before"]
+    }
     with tempfile.TemporaryDirectory(prefix="humans-md-uninstall-") as temporary:
-        for current, candidate in uninstall_candidates(home, path, value, Path(temporary)):
-            if same_path(current, candidate):
-                continue
-            if not candidate.exists() and not candidate.is_symlink():
-                candidate.parent.mkdir(parents=True, exist_ok=True)
-                candidate.touch()
+        temporary = Path(temporary)
+        missing = temporary / "missing"
+        missing.touch()
+        for target in current:
+            relative = target.relative_to(home)
+            if target == current[0] and target.is_file():
+                restored = temporary / relative
+                restored.parent.mkdir(parents=True, exist_ok=True)
+                restored.write_bytes(unowned_config(target.read_bytes()))
+            elif before[relative]["existed"]:
+                restored = path.parent / "before" / relative
+            else:
+                restored = missing
+            existing = target if target.exists() or target.is_symlink() else missing
             result = subprocess.run(
-                ["git", "diff", "--no-index", "--", str(current), str(candidate)],
+                ["git", "diff", "--no-index", "--", str(existing), str(restored)],
                 capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="strict",
             )
-            output = decoded(result.stdout, ["git", "diff", "--no-index"])
-            error = decoded(result.stderr, ["git", "diff", "--no-index"])
             if result.returncode not in (0, 1):
-                raise SetupError(error.strip() or "git diff --no-index failed")
-            if output:
-                print(output, end="" if output.endswith("\n") else "\n")
+                raise SetupError(result.stderr.strip() or "git diff --no-index failed")
+            if result.stdout:
+                print(result.stdout, end="" if result.stdout.endswith("\n") else "\n")
 
 
 def uninstall(home: Path, executable: str, path: Path, value: dict) -> dict:
@@ -676,9 +628,9 @@ def uninstall(home: Path, executable: str, path: Path, value: dict) -> dict:
             snapshot_path = rollback_dir / "before" / target.relative_to(home)
             if not same_path(target, snapshot_path):
                 raise SetupError(f"managed file changed after uninstall snapshot: {target}")
-        restore(home, path.parent / "before", before[1:], current)
+        restore(home, path.parent / "before", before[1:])
         if restored_config is None:
-            restore(home, path.parent / "before", before[:1], current)
+            restore(home, path.parent / "before", before[:1])
         elif restored_config or before[0]["existed"]:
             atomic_write(config, restored_config, 0o600)
         else:
@@ -695,7 +647,7 @@ def uninstall(home: Path, executable: str, path: Path, value: dict) -> dict:
         atomic_write(rollback_dir / "receipt.json", canonical(result))
         return result
     except BaseException as error:
-        restore(home, rollback_dir / "before", rollback, rollback_paths)
+        restore(home, rollback_dir / "before", rollback)
         atomic_write(
             rollback_dir / "failure.json",
             canonical({"status": "failed", "error": str(error), "rollback_verified": True}),
@@ -731,7 +683,7 @@ def main() -> int:
             print(json.dumps(install(plan), indent=2, sort_keys=True))
             return 0
         receipt_path, value = receipt(home, arguments.receipt)
-        print(json.dumps(uninstall_preview(home, receipt_path, value), indent=2, sort_keys=True))
+        print(json.dumps(uninstall_preview(receipt_path, value), indent=2, sort_keys=True))
         show_uninstall_diffs(home, receipt_path, value)
         if not arguments.apply:
             print("preview only; no files changed")
