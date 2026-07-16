@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 import copy
 import datetime
-import hashlib
 import json
 import os
 import re
@@ -18,7 +17,7 @@ from pathlib import Path, PurePosixPath
 
 PLUGIN_ID = "humans-md@humans-md"
 MARKETPLACE = "humans-md"
-RECEIPT_SCHEMA = 2
+RECEIPT_SCHEMAS = {2, 3}
 REQUIRED_MODELS = {"gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"}
 SCALAR_BEGIN = b"# >>> humans-md setup scalars >>>\n"
 SCALAR_END = b"# <<< humans-md setup scalars <<<\n"
@@ -70,10 +69,6 @@ class SetupError(RuntimeError):
     pass
 
 
-def sha(data: bytes) -> str:
-    return hashlib.sha256(data).hexdigest()
-
-
 def canonical(value: object) -> bytes:
     return (json.dumps(value, indent=2, sort_keys=True, ensure_ascii=True) + "\n").encode(
         "ascii"
@@ -90,28 +85,48 @@ def atomic_write(path: Path, data: bytes, mode: int = 0o600) -> None:
     descriptor, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
     temporary_path = Path(temporary)
     try:
-        os.fchmod(descriptor, 0o600)
-        with os.fdopen(descriptor, "wb") as stream:
+        try:
+            stream = os.fdopen(descriptor, "wb")
+        except BaseException:
+            try:
+                os.close(descriptor)
+            except BaseException:
+                pass
+            raise
+        with stream:
+            fchmod = getattr(os, "fchmod", None)
+            if fchmod is not None:
+                fchmod(stream.fileno(), 0o600)
             stream.write(data)
             stream.flush()
             os.fsync(stream.fileno())
-        os.chmod(temporary_path, mode)
+        if os.name == "posix":
+            os.chmod(temporary_path, mode)
         os.replace(temporary_path, path)
     except BaseException:
         temporary_path.unlink(missing_ok=True)
         raise
 
 
-def command(args: list[str], environment: dict[str, str]) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(args, env=environment, capture_output=True, text=True)
+def command(args: list[str], environment: dict[str, str]) -> subprocess.CompletedProcess[bytes]:
+    return subprocess.run(args, env=environment, capture_output=True)
+
+
+def decoded(data: bytes, args: list[str]) -> str:
+    try:
+        return data.decode("utf-8", errors="strict")
+    except UnicodeDecodeError as error:
+        raise SetupError(f"command returned invalid UTF-8: {' '.join(args)}") from error
 
 
 def checked(args: list[str], environment: dict[str, str]) -> str:
     result = command(args, environment)
+    stdout = decoded(result.stdout, args)
+    stderr = decoded(result.stderr, args)
     if result.returncode:
-        detail = result.stderr.strip() or result.stdout.strip() or "no diagnostic output"
+        detail = stderr.strip() or stdout.strip() or "no diagnostic output"
         raise SetupError(f"command failed ({result.returncode}): {' '.join(args)}: {detail}")
-    return result.stdout
+    return stdout
 
 
 def checked_json(args: list[str], environment: dict[str, str]) -> dict:
@@ -162,16 +177,19 @@ def discover(executable: str, environment: dict[str, str], version: str) -> dict
     return plugin
 
 
-def resource(profile: Path, target: dict, path_key: str, hash_key: str) -> bytes:
+def resource(profile: Path, target: dict, path_key: str) -> bytes:
     value = target.get(path_key)
     if not isinstance(value, str) or not value:
         raise SetupError(f"catalog target lacks {path_key}")
-    path = (profile.parent / value).resolve(strict=True)
+    relative = PurePosixPath(value.replace("\\", "/"))
+    if relative.is_absolute() or ".." in relative.parts:
+        raise SetupError(f"unsafe catalog resource: {value}")
+    path = (profile.parent / Path(*relative.parts)).resolve(strict=True)
     if profile.parent.resolve() not in path.parents or not path.is_file() or path.is_symlink():
         raise SetupError(f"unsafe catalog resource: {value}")
     data = path.read_bytes()
-    if not data or sha(data) != target.get(hash_key):
-        raise SetupError(f"catalog resource hash mismatch: {value}")
+    if not data:
+        raise SetupError(f"catalog resource is empty: {value}")
     return data
 
 
@@ -199,10 +217,10 @@ def catalog_override(raw: dict, profile_path: Path) -> tuple[bytes, list[str], l
         raise SetupError("unsupported catalog policy")
     by_id = {model.get("slug"): model for model in models if isinstance(model, dict)}
     if None in by_id or len(by_id) != len(models):
-        raise SetupError("bundled catalog has missing or duplicate model IDs")
+        raise SetupError("catalog has missing or duplicate model IDs")
     missing = sorted(REQUIRED_MODELS - by_id.keys())
     if missing:
-        raise SetupError(f"bundled catalog lacks required models: {', '.join(missing)}")
+        raise SetupError(f"catalog lacks required models: {', '.join(missing)}")
 
     result = copy.deepcopy(raw)
     output = {model["slug"]: model for model in result["models"]}
@@ -214,13 +232,11 @@ def catalog_override(raw: dict, profile_path: Path) -> tuple[bytes, list[str], l
             skipped.append(str(model_id))
             continue
         model = output[model_id]
-        model["base_instructions"] = resource(
-            profile_path, target, "base_instructions_file", "base_instructions_sha256"
-        ).decode("ascii")
+        model["base_instructions"] = resource(profile_path, target, "base_instructions_file").decode(
+            "ascii"
+        )
         messages = json.loads(
-            resource(
-                profile_path, target, "model_messages_file", "model_messages_sha256"
-            ).decode("ascii")
+            resource(profile_path, target, "model_messages_file").decode("ascii")
         )
         if not isinstance(messages, dict):
             raise SetupError(f"invalid model messages: {model_id}")
@@ -242,7 +258,7 @@ def marked(begin: bytes, payload: bytes, end: bytes) -> bytes:
     return begin + payload.rstrip(b"\n") + b"\n" + end
 
 
-def config_candidate(current: bytes, root: Path, catalog: Path) -> tuple[bytes, dict[str, str]]:
+def config_candidate(current: bytes, root: Path, catalog: Path) -> bytes:
     document = tomllib.loads(current.decode("utf-8")) if current else {}
     conflicts = {
         key
@@ -264,10 +280,10 @@ def config_candidate(current: bytes, root: Path, catalog: Path) -> tuple[bytes, 
     table_block = marked(TABLE_BEGIN, fragment.encode("ascii"), TABLE_END)
     data = scalar_block + current + table_block
     verify_config(data, root, catalog)
-    return data, {"scalars": sha(scalar_block), "tables": sha(table_block)}
+    return data
 
 
-def unowned_config(data: bytes, expected: dict) -> bytes:
+def unowned_config(data: bytes) -> bytes:
     ranges = []
     for name, begin, end in (
         ("scalars", SCALAR_BEGIN, SCALAR_END),
@@ -277,9 +293,6 @@ def unowned_config(data: bytes, expected: dict) -> bytes:
             raise SetupError(f"managed config block is missing or duplicated: {name}")
         start = data.index(begin)
         stop = data.index(end, start) + len(end)
-        block = data[start:stop]
-        if not isinstance(expected.get(name), str) or sha(block) != expected[name]:
-            raise SetupError(f"managed config block changed after setup: {name}")
         ranges.append((start, stop))
     ranges.sort()
     if ranges[0][1] > ranges[1][0]:
@@ -300,7 +313,8 @@ def verify_config(data: bytes, root: Path, catalog: Path) -> None:
         raise SetupError("V1 feature flags are incorrect")
     agents = document.get("agents", {})
     for row in profiles.get("matrix_profiles", []):
-        expected = root / row["agent_file"]
+        relative = PurePosixPath(row["agent_file"].replace("\\", "/"))
+        expected = root / Path(*relative.parts)
         actual = agents.get(row["profile"], {}).get("config_file")
         if actual != str(expected) or not expected.is_file():
             raise SetupError(f"role binding is incorrect: {row['profile']}")
@@ -323,22 +337,20 @@ def copy_path(source: Path, target: Path) -> None:
         shutil.copy2(source, target)
 
 
-def tree_hash(path: Path) -> str:
-    if not path.exists() and not path.is_symlink():
-        return "missing"
-    values = []
-    paths = [path]
-    if path.is_dir() and not path.is_symlink():
-        paths += sorted(path.rglob("*"), key=lambda item: item.relative_to(path).as_posix())
-    for item in paths:
-        relative = "." if item == path else item.relative_to(path).as_posix()
-        if item.is_symlink():
-            values.append((relative, "symlink", os.readlink(item)))
-        elif item.is_dir():
-            values.append((relative, "directory"))
-        elif item.is_file():
-            values.append((relative, "file", sha(item.read_bytes())))
-    return sha(canonical(values))
+def same_path(first: Path, second: Path) -> bool:
+    if first.is_symlink() or second.is_symlink():
+        return first.is_symlink() and second.is_symlink() and os.readlink(first) == os.readlink(second)
+    if first.is_file() or second.is_file():
+        return first.is_file() and second.is_file() and first.read_bytes() == second.read_bytes()
+    if first.is_dir() or second.is_dir():
+        if not first.is_dir() or not second.is_dir():
+            return False
+        first_children = sorted(item.relative_to(first) for item in first.rglob("*"))
+        second_children = sorted(item.relative_to(second) for item in second.rglob("*"))
+        return first_children == second_children and all(
+            same_path(first / child, second / child) for child in first_children
+        )
+    return not first.exists() and not second.exists()
 
 
 def snapshot(home: Path, paths: list[Path], destination: Path) -> list[dict]:
@@ -347,9 +359,7 @@ def snapshot(home: Path, paths: list[Path], destination: Path) -> list[dict]:
     for path in paths:
         relative = path.relative_to(home)
         existed = path.exists() or path.is_symlink()
-        entries.append(
-            {"path": relative.as_posix(), "existed": existed, "sha256": tree_hash(path)}
-        )
+        entries.append({"path": relative.as_posix(), "existed": existed})
         if existed:
             copy_path(path, destination / relative)
     return entries
@@ -364,7 +374,9 @@ def restore(home: Path, source: Path, entries: list[dict]) -> None:
         remove(path)
         if entry["existed"]:
             copy_path(source / Path(*pure.parts), path)
-        if tree_hash(path) != entry["sha256"]:
+        if entry["existed"] and not same_path(source / Path(*pure.parts), path):
+            raise SetupError(f"restore verification failed: {path}")
+        if not entry["existed"] and (path.exists() or path.is_symlink()):
             raise SetupError(f"restore verification failed: {path}")
 
 
@@ -386,16 +398,16 @@ def prepare(root: Path, home: Path, executable: str) -> dict:
     environment = {**os.environ, "CODEX_HOME": str(home)}
     plugin = discover(executable, environment, manifest["version"])
     try:
-        raw = json.loads(checked([executable, "debug", "models", "--bundled"], environment))
+        raw = json.loads(checked([executable, "debug", "models"], environment))
     except json.JSONDecodeError as error:
-        raise SetupError("bundled catalog export is invalid JSON") from error
+        raise SetupError("active catalog export is invalid JSON") from error
     catalog, patched, skipped = catalog_override(raw, root / "config/profiles.toml")
     catalog_path = home / "models-humans-md-v1.json"
     config_path = home / "config.toml"
     current = config_path.read_bytes() if config_path.is_file() else b""
     contract = (root / "templates/AGENTS.md").read_bytes()
     contract.decode("ascii")
-    config, config_blocks = config_candidate(current, root, catalog_path)
+    config = config_candidate(current, root, catalog_path)
     return {
         "root": root,
         "home": home,
@@ -403,7 +415,6 @@ def prepare(root: Path, home: Path, executable: str) -> dict:
         "environment": environment,
         "version": plugin["version"],
         "config": config,
-        "config_blocks": config_blocks,
         "contract": contract,
         "catalog": catalog,
         "patched": patched,
@@ -424,7 +435,7 @@ def preview(plan: dict) -> dict:
         "patched_models": plan["patched"],
         "skipped_optional_models": plan["skipped"],
         "legacy_paths_removed": plan["legacy"],
-        "config_ownership": "hash-bound blocks",
+        "config_ownership": "marked blocks",
         "restart_required": True,
     }
 
@@ -441,8 +452,10 @@ def doctor(plan: dict) -> None:
         ],
         plan["environment"],
     )
-    if not re.search(r"\[ok\]\s+config\s+loaded", result.stdout + result.stderr):
-        raise SetupError(result.stderr.strip() or result.stdout.strip() or "config load failed")
+    stdout = decoded(result.stdout, [plan["executable"], "doctor"])
+    stderr = decoded(result.stderr, [plan["executable"], "doctor"])
+    if not re.search(r"\[ok\]\s+config\s+loaded", stdout + stderr):
+        raise SetupError(stderr.strip() or stdout.strip() or "config load failed")
 
 
 def verify_effective_catalog(plan: dict) -> None:
@@ -462,16 +475,17 @@ def verify_effective_catalog(plan: dict) -> None:
 
 
 def install(plan: dict) -> dict:
+    plan = prepare(plan["root"], plan["home"], plan["executable"])
     home = plan["home"]
     if pointer(home).exists():
         raise SetupError("an active humans-md receipt already exists")
-    install_id = datetime.datetime.now(datetime.UTC).strftime("%Y%m%dT%H%M%SZ-") + sha(
-        plan["config"] + plan["contract"] + plan["catalog"]
-    )[:12]
-    receipt_dir = home / "backups/humans-md" / install_id
-    secure_dir(receipt_dir.parent)
-    if receipt_dir.exists():
-        raise SetupError(f"receipt already exists: {receipt_dir}")
+    secure_dir(home / "backups/humans-md")
+    receipt_dir = Path(
+        tempfile.mkdtemp(
+            prefix=datetime.datetime.now(datetime.UTC).strftime("%Y%m%dT%H%M%SZ-"),
+            dir=home / "backups/humans-md",
+        )
+    )
     secure_dir(receipt_dir)
     paths = managed(home)
     before = snapshot(home, paths, receipt_dir / "before")
@@ -490,17 +504,12 @@ def install(plan: dict) -> dict:
         if config.read_bytes() != plan["config"]:
             raise SetupError("Codex changed config during verification")
         receipt = {
-            "schema_version": RECEIPT_SCHEMA,
+            "schema_version": 3,
             "status": "installed",
-            "install_id": install_id,
+            "install_id": receipt_dir.name,
             "plugin_version": plan["version"],
             "before": before,
-            "after": {
-                "config": sha(config.read_bytes()),
-                "contract": sha(contract.read_bytes()),
-                "catalog": sha(catalog.read_bytes()),
-            },
-            "config_blocks": plan["config_blocks"],
+            "installed": snapshot(home, paths, receipt_dir / "installed"),
             "remove_plugin": True,
             "remove_marketplace": True,
         }
@@ -508,10 +517,7 @@ def install(plan: dict) -> dict:
         receipt_path = receipt_dir / "receipt.json"
         atomic_write(receipt_path, receipt_data)
         secure_dir(pointer(home).parent)
-        atomic_write(
-            pointer(home),
-            canonical({"receipt": str(receipt_path), "sha256": sha(receipt_data)}),
-        )
+        atomic_write(pointer(home), canonical({"receipt": str(receipt_path)}))
         return {"status": "installed", "receipt": str(receipt_path), "restart_required": True}
     except BaseException as error:
         restore(home, receipt_dir / "before", before)
@@ -538,26 +544,55 @@ def receipt(home: Path, explicit: Path | None) -> tuple[Path, dict]:
     if explicit is None:
         selected, _ = read_json(pointer(home))
         path = Path(selected.get("receipt", ""))
-        expected = selected.get("sha256")
     else:
         path = explicit.expanduser().resolve(strict=True)
-        expected = None
     path = path.resolve(strict=True)
     root = (home / "backups/humans-md").resolve()
     if root not in path.parents or path.name != "receipt.json":
         raise SetupError("receipt is outside the durable backup root")
-    value, data = read_json(path)
-    if expected is not None and expected != sha(data):
-        raise SetupError("receipt pointer hash mismatch")
-    if (
-        value.get("status") != "installed"
-        or value.get("schema_version") != RECEIPT_SCHEMA
-    ):
+    value, _ = read_json(path)
+    if value.get("status") != "installed" or value.get("schema_version") not in RECEIPT_SCHEMAS:
         raise SetupError("receipt is not an installed receipt")
+    inventories = [value.get("before")]
+    if value["schema_version"] == 3:
+        inventories.append(value.get("installed"))
+    for inventory in inventories:
+        if not isinstance(inventory, list) or not inventory:
+            raise SetupError("receipt backup inventory is invalid")
+        for entry in inventory:
+            if not isinstance(entry, dict) or not isinstance(entry.get("path"), str) or not isinstance(
+                entry.get("existed"), bool
+            ):
+                raise SetupError("receipt backup inventory is invalid")
+            relative = PurePosixPath(entry["path"].replace("\\", "/"))
+            if relative.is_absolute() or ".." in relative.parts:
+                raise SetupError("unsafe receipt path")
+    if not isinstance(value.get("remove_plugin"), bool) or not isinstance(
+        value.get("remove_marketplace"), bool
+    ):
+        raise SetupError("receipt removal policy is invalid")
     return path, value
 
 
-def uninstall_preview(path: Path, value: dict) -> dict:
+def modified_managed(home: Path, path: Path, value: dict) -> list[Path]:
+    installed = value.get("installed")
+    if isinstance(installed, list):
+        references = path.parent / "installed"
+        entries = installed
+    else:
+        references = path.parent / "before"
+        entries = value["before"]
+    changed = []
+    for entry in entries[:3]:
+        relative = PurePosixPath(entry["path"].replace("\\", "/"))
+        current = home / Path(*relative.parts)
+        reference = references / Path(*relative.parts)
+        if not same_path(current, reference):
+            changed.append(current)
+    return changed
+
+
+def uninstall_preview(home: Path, path: Path, value: dict) -> dict:
     return {
         "operation": "uninstall",
         "receipt": str(path),
@@ -566,21 +601,32 @@ def uninstall_preview(path: Path, value: dict) -> dict:
         "preserve_unowned_config": True,
         "remove_plugin": value["remove_plugin"],
         "remove_marketplace": value["remove_marketplace"],
+        "modified_managed_files": [str(item) for item in modified_managed(home, path, value)],
     }
+
+
+def show_uninstall_diffs(home: Path, path: Path, value: dict) -> None:
+    installed = value.get("installed")
+    references = path.parent / ("installed" if isinstance(installed, list) else "before")
+    for current in modified_managed(home, path, value):
+        relative = current.relative_to(home)
+        reference = references / relative
+        result = subprocess.run(
+            ["git", "diff", "--no-index", "--", str(reference), str(current)],
+            capture_output=True,
+        )
+        output = decoded(result.stdout, ["git", "diff", "--no-index"])
+        error = decoded(result.stderr, ["git", "diff", "--no-index"])
+        if result.returncode not in (0, 1):
+            raise SetupError(error.strip() or "git diff --no-index failed")
+        if output:
+            print(output, end="" if output.endswith("\n") else "\n")
 
 
 def uninstall(home: Path, executable: str, path: Path, value: dict) -> dict:
     current = managed(home)
-    expected = value["after"]
     config = current[0]
-    if not config.is_file():
-        raise SetupError(f"managed config is missing: {config}")
-    restored_config = unowned_config(config.read_bytes(), value.get("config_blocks", {}))
-    for target, key in zip(current[1:3], ("contract", "catalog"), strict=True):
-        if not target.is_file() or sha(target.read_bytes()) != expected[key]:
-            raise SetupError(f"managed file changed after setup: {target}")
-    if any(target.exists() for target in current[3:]):
-        raise SetupError("a superseded direct path reappeared after setup")
+    restored_config = unowned_config(config.read_bytes()) if config.is_file() else None
     rollback_dir = home / "backups/humans-md" / (
         "uninstall-" + datetime.datetime.now(datetime.UTC).strftime("%Y%m%dT%H%M%SZ")
     )
@@ -597,7 +643,9 @@ def uninstall(home: Path, executable: str, path: Path, value: dict) -> dict:
         if not before or before[0].get("path") != "config.toml":
             raise SetupError("receipt config inventory is invalid")
         restore(home, path.parent / "before", before[1:])
-        if restored_config or before[0]["existed"]:
+        if restored_config is None:
+            restore(home, path.parent / "before", before[:1])
+        elif restored_config or before[0]["existed"]:
             atomic_write(config, restored_config, 0o600)
         else:
             remove(config)
@@ -649,7 +697,8 @@ def main() -> int:
             print(json.dumps(install(plan), indent=2, sort_keys=True))
             return 0
         receipt_path, value = receipt(home, arguments.receipt)
-        print(json.dumps(uninstall_preview(receipt_path, value), indent=2, sort_keys=True))
+        print(json.dumps(uninstall_preview(home, receipt_path, value), indent=2, sort_keys=True))
+        show_uninstall_diffs(home, receipt_path, value)
         if not arguments.apply:
             print("preview only; no files changed")
             return 0

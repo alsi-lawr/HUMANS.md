@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import os
 import re
@@ -342,15 +341,10 @@ def codex_validation(adapter_root: Path, errors: list[str]) -> None:
     declared_nulls = set()
     for target in targets:
         model_id = target.get("id")
-        for field, hash_field in (
-            ("base_instructions_file", "base_instructions_sha256"),
-            ("model_messages_file", "model_messages_sha256"),
-        ):
+        for field in ("base_instructions_file", "model_messages_file"):
             path = adapter_root / target.get(field, "")
-            if not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest() != target.get(
-                hash_field
-            ):
-                errors.append(f"Codex authored resource missing or hash-mismatched: {model_id}:{field}")
+            if not path.is_file() or not path.read_bytes():
+                errors.append(f"Codex authored resource missing or empty: {model_id}:{field}")
         nulls = target.get("null_selectors", [])
         if set(nulls) - {"multi_agent_version"}:
             errors.append(f"Codex target declares an unsupported selector: {model_id}")

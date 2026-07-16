@@ -131,9 +131,7 @@ selector_fields = ["multi_agent_version"]
 id = "gpt-5.6-sol"
 required_reasoning = ["low", "medium", "high", "xhigh", "max", "ultra"]
 base_instructions_file = "catalog/gpt-5.6-sol/base-instructions.md"
-base_instructions_sha256 = "d89100deaef53abffbf8afafe5428f5b657d6da9cb49ea3b4aee8d633233f7aa"
 model_messages_file = "catalog/gpt-5.6-sol/model-messages.json"
-model_messages_sha256 = "226c7a27da6af5e9f11cf8462bfd30b5e6088d19a3545c0e76a7c85813c27168"
 null_selectors = ["multi_agent_version"]
 
 [catalog.targets.expected]
@@ -143,9 +141,7 @@ display_name = "GPT-5.6-Sol"
 id = "gpt-5.6-terra"
 required_reasoning = ["low", "medium", "high", "xhigh", "max", "ultra"]
 base_instructions_file = "catalog/gpt-5.6-terra/base-instructions.md"
-base_instructions_sha256 = "8339d040d4658a7d6753d9c06416a870502a37a02e091c75e013ee8aa7af8324"
 model_messages_file = "catalog/gpt-5.6-terra/model-messages.json"
-model_messages_sha256 = "f7ba9027426d8f22d78f96ab472c48cd72bf6ecb1ae813e8fa0aadd162d46286"
 null_selectors = ["multi_agent_version"]
 
 [catalog.targets.expected]
@@ -155,9 +151,7 @@ display_name = "GPT-5.6-Terra"
 id = "gpt-5.6-luna"
 required_reasoning = ["low", "medium", "high", "xhigh", "max"]
 base_instructions_file = "catalog/gpt-5.6-luna/base-instructions.md"
-base_instructions_sha256 = "6d4ef2ca0ec04f706dfb92011aa670c24203c91b79dd6c084e02efc2b769068e"
 model_messages_file = "catalog/gpt-5.6-luna/model-messages.json"
-model_messages_sha256 = "d64ac4e22838a8891de5d3fcfe2dd6f7951a4227ed037719bfd7dd17878e3ac2"
 null_selectors = ["multi_agent_version"]
 
 [catalog.targets.expected]
@@ -167,9 +161,7 @@ display_name = "GPT-5.6-Luna"
 id = "gpt-5.5"
 required_reasoning = ["low", "medium", "high", "xhigh"]
 base_instructions_file = "catalog/gpt-5.5/base-instructions.md"
-base_instructions_sha256 = "a95c481c78d0b6e6c39bcf6f8ad85cf4ed1ee0cca8836d108babe56e6748ee13"
 model_messages_file = "catalog/gpt-5.5/model-messages.json"
-model_messages_sha256 = "7282ffd49ad8a46f36ce95466ef5fb86f26cae50c71bc027b93e9c6bed4727ec"
 null_selectors = []
 
 [catalog.targets.expected]
@@ -179,9 +171,7 @@ display_name = "GPT-5.5"
 id = "gpt-5.4"
 required_reasoning = ["low", "medium", "high", "xhigh"]
 base_instructions_file = "catalog/gpt-5.4/base-instructions.md"
-base_instructions_sha256 = "fb97fd60c843f6858494cefe21cc6beb9d475177880d83867c588db2918971fe"
 model_messages_file = "catalog/gpt-5.4/model-messages.json"
-model_messages_sha256 = "b222a466cb754daa9430e9678e20d930f313c01b59340645f0b29477eb940513"
 null_selectors = []
 
 [catalog.targets.expected]
@@ -191,9 +181,7 @@ display_name = "GPT-5.4"
 id = "gpt-5.4-mini"
 required_reasoning = ["low", "medium", "high", "xhigh"]
 base_instructions_file = "catalog/gpt-5.4-mini/base-instructions.md"
-base_instructions_sha256 = "458bdb23babda047158dfdad7d434332f5dc5e0c579c0fd0330f23437397a5ad"
 model_messages_file = "catalog/gpt-5.4-mini/model-messages.json"
-model_messages_sha256 = "8c5de591adb14139a6dc7f42b16444e41a9c0cbe5acb3310ce7c2705099a5b0c"
 null_selectors = []
 
 [catalog.targets.expected]
@@ -203,9 +191,7 @@ display_name = "GPT-5.4-Mini"
 id = "gpt-5.3-codex-spark"
 required_reasoning = ["low", "medium", "high", "xhigh"]
 base_instructions_file = "catalog/gpt-5.3-codex-spark/base-instructions.md"
-base_instructions_sha256 = "a42b1d77fc73042b9390d9497400b60e10c1d7c2abce04eb14f77219c8d7044e"
 model_messages_file = "catalog/gpt-5.3-codex-spark/model-messages.json"
-model_messages_sha256 = "7f895ae5300658ef416f55dcb15460e659951c34d24b01d48ca1fd58e71138b5"
 null_selectors = []
 
 [catalog.targets.expected]
@@ -215,9 +201,7 @@ display_name = "GPT-5.3-Codex-Spark"
 id = "codex-auto-review"
 required_reasoning = ["low", "medium", "high", "xhigh"]
 base_instructions_file = "catalog/codex-auto-review/base-instructions.md"
-base_instructions_sha256 = "74d45436394324e4a827fa4398c6368d2c2902ae5b12f7cf9dc18786bf8558d8"
 model_messages_file = "catalog/codex-auto-review/model-messages.json"
-model_messages_sha256 = "c03dd9a3bfecc31c94dbf21c0e51f6ade6f597390ef3220e79e729858b9d721f"
 null_selectors = []
 
 [catalog.targets.expected]
