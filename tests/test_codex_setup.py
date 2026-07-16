@@ -212,6 +212,7 @@ class CodexSetupTests(unittest.TestCase):
                     setup.show_uninstall_diffs(home, default_path, default)
                 self.assertIn("diff --git", output.getvalue())
                 self.assertIn("-# >>> humans-md setup scalars >>>", output.getvalue())
+                self.assertIn("# local change", output.getvalue())
                 setup.uninstall(home, "codex", default_path, default)
 
                 invalid = json.loads(receipt_path.read_bytes())

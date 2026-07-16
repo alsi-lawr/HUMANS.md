@@ -638,6 +638,9 @@ def show_uninstall_diffs(home: Path, path: Path, value: dict) -> None:
         for current, candidate in uninstall_candidates(home, path, value, Path(temporary)):
             if same_path(current, candidate):
                 continue
+            if not candidate.exists() and not candidate.is_symlink():
+                candidate.parent.mkdir(parents=True, exist_ok=True)
+                candidate.touch()
             result = subprocess.run(
                 ["git", "diff", "--no-index", "--", str(current), str(candidate)],
                 capture_output=True,
