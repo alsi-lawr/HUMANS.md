@@ -1,215 +1,131 @@
 schema_version = 1
-suite_id = "humans-md-casefile-v1"
+suite_id = "humans-md-casefile-v2"
 description = "Stable isolated trigger, hard-neighbour, and task-behaviour cases for every included source skill."
 
 [[cases]]
-id = "casefile-closeout-positive"
-skill = "casefile-closeout"
+id = "casefile-positive"
+skill = "casefile"
 partition = "positive_trigger"
-prompt = "prompts/casefile-closeout-positive.txt"
+prompt = "prompts/casefile-positive.txt"
 rubric = "rubrics/trigger.md"
 
 [[cases]]
-id = "casefile-closeout-near"
-skill = "casefile-closeout"
+id = "casefile-near"
+skill = "casefile"
 partition = "hard_non_trigger"
-prompt = "prompts/casefile-closeout-near.txt"
+prompt = "prompts/casefile-near.txt"
 rubric = "rubrics/trigger.md"
 
 [[cases]]
-id = "casefile-closeout-behavior"
-skill = "casefile-closeout"
+id = "casefile-behavior"
+skill = "casefile"
 partition = "task_behavior"
-prompt = "prompts/casefile-closeout-behavior.txt"
+prompt = "prompts/casefile-behavior.txt"
 rubric = "rubrics/behavior.md"
 
 [[cases]]
-id = "casefile-implement-ticket-batch-positive"
-skill = "casefile-implement-ticket-batch"
+id = "casefile-investigate-positive"
+skill = "casefile-investigate"
 partition = "positive_trigger"
-prompt = "prompts/casefile-implement-ticket-batch-positive.txt"
+prompt = "prompts/casefile-investigate-positive.txt"
 rubric = "rubrics/trigger.md"
 
 [[cases]]
-id = "casefile-implement-ticket-batch-near"
-skill = "casefile-implement-ticket-batch"
+id = "casefile-investigate-near"
+skill = "casefile-investigate"
 partition = "hard_non_trigger"
-prompt = "prompts/casefile-implement-ticket-batch-near.txt"
+prompt = "prompts/casefile-investigate-near.txt"
 rubric = "rubrics/trigger.md"
 
 [[cases]]
-id = "casefile-implement-ticket-batch-behavior"
-skill = "casefile-implement-ticket-batch"
+id = "casefile-investigate-behavior"
+skill = "casefile-investigate"
 partition = "task_behavior"
-prompt = "prompts/casefile-implement-ticket-batch-behavior.txt"
+prompt = "prompts/casefile-investigate-behavior.txt"
 rubric = "rubrics/behavior.md"
 
 [[cases]]
-id = "casefile-investigate-atomic-positive"
-skill = "casefile-investigate-atomic"
+id = "casefile-review-positive"
+skill = "casefile-review"
 partition = "positive_trigger"
-prompt = "prompts/casefile-investigate-atomic-positive.txt"
+prompt = "prompts/casefile-review-positive.txt"
 rubric = "rubrics/trigger.md"
 
 [[cases]]
-id = "casefile-investigate-atomic-near"
-skill = "casefile-investigate-atomic"
+id = "casefile-review-near"
+skill = "casefile-review"
 partition = "hard_non_trigger"
-prompt = "prompts/casefile-investigate-atomic-near.txt"
+prompt = "prompts/casefile-review-near.txt"
 rubric = "rubrics/trigger.md"
 
 [[cases]]
-id = "casefile-investigate-atomic-behavior"
-skill = "casefile-investigate-atomic"
+id = "casefile-review-behavior"
+skill = "casefile-review"
 partition = "task_behavior"
-prompt = "prompts/casefile-investigate-atomic-behavior.txt"
+prompt = "prompts/casefile-review-behavior.txt"
 rubric = "rubrics/behavior.md"
 
 [[cases]]
-id = "casefile-investigate-inspector-tree-positive"
-skill = "casefile-investigate-inspector-tree"
+id = "casefile-implement-positive"
+skill = "casefile-implement"
 partition = "positive_trigger"
-prompt = "prompts/casefile-investigate-inspector-tree-positive.txt"
+prompt = "prompts/casefile-implement-positive.txt"
 rubric = "rubrics/trigger.md"
 
 [[cases]]
-id = "casefile-investigate-inspector-tree-near"
-skill = "casefile-investigate-inspector-tree"
+id = "casefile-implement-near"
+skill = "casefile-implement"
 partition = "hard_non_trigger"
-prompt = "prompts/casefile-investigate-inspector-tree-near.txt"
+prompt = "prompts/casefile-implement-near.txt"
 rubric = "rubrics/trigger.md"
 
 [[cases]]
-id = "casefile-investigate-inspector-tree-behavior"
-skill = "casefile-investigate-inspector-tree"
+id = "casefile-implement-behavior"
+skill = "casefile-implement"
 partition = "task_behavior"
-prompt = "prompts/casefile-investigate-inspector-tree-behavior.txt"
+prompt = "prompts/casefile-implement-behavior.txt"
 rubric = "rubrics/behavior.md"
 
 [[cases]]
-id = "casefile-investigate-solo-positive"
-skill = "casefile-investigate-solo"
+id = "casefile-switch-positive"
+skill = "casefile-switch"
 partition = "positive_trigger"
-prompt = "prompts/casefile-investigate-solo-positive.txt"
+prompt = "prompts/casefile-switch-positive.txt"
 rubric = "rubrics/trigger.md"
 
 [[cases]]
-id = "casefile-investigate-solo-near"
-skill = "casefile-investigate-solo"
+id = "casefile-switch-near"
+skill = "casefile-switch"
 partition = "hard_non_trigger"
-prompt = "prompts/casefile-investigate-solo-near.txt"
+prompt = "prompts/casefile-switch-near.txt"
 rubric = "rubrics/trigger.md"
 
 [[cases]]
-id = "casefile-investigate-solo-behavior"
-skill = "casefile-investigate-solo"
+id = "casefile-switch-behavior"
+skill = "casefile-switch"
 partition = "task_behavior"
-prompt = "prompts/casefile-investigate-solo-behavior.txt"
+prompt = "prompts/casefile-switch-behavior.txt"
 rubric = "rubrics/behavior.md"
 
 [[cases]]
-id = "casefile-review-atomic-positive"
-skill = "casefile-review-atomic"
+id = "casefile-close-positive"
+skill = "casefile-close"
 partition = "positive_trigger"
-prompt = "prompts/casefile-review-atomic-positive.txt"
+prompt = "prompts/casefile-close-positive.txt"
 rubric = "rubrics/trigger.md"
 
 [[cases]]
-id = "casefile-review-atomic-near"
-skill = "casefile-review-atomic"
+id = "casefile-close-near"
+skill = "casefile-close"
 partition = "hard_non_trigger"
-prompt = "prompts/casefile-review-atomic-near.txt"
+prompt = "prompts/casefile-close-near.txt"
 rubric = "rubrics/trigger.md"
 
 [[cases]]
-id = "casefile-review-atomic-behavior"
-skill = "casefile-review-atomic"
+id = "casefile-close-behavior"
+skill = "casefile-close"
 partition = "task_behavior"
-prompt = "prompts/casefile-review-atomic-behavior.txt"
-rubric = "rubrics/behavior.md"
-
-[[cases]]
-id = "casefile-review-dialogue-positive"
-skill = "casefile-review-dialogue"
-partition = "positive_trigger"
-prompt = "prompts/casefile-review-dialogue-positive.txt"
-rubric = "rubrics/trigger.md"
-
-[[cases]]
-id = "casefile-review-dialogue-near"
-skill = "casefile-review-dialogue"
-partition = "hard_non_trigger"
-prompt = "prompts/casefile-review-dialogue-near.txt"
-rubric = "rubrics/trigger.md"
-
-[[cases]]
-id = "casefile-review-dialogue-behavior"
-skill = "casefile-review-dialogue"
-partition = "task_behavior"
-prompt = "prompts/casefile-review-dialogue-behavior.txt"
-rubric = "rubrics/behavior.md"
-
-[[cases]]
-id = "casefile-review-two-stage-positive"
-skill = "casefile-review-two-stage"
-partition = "positive_trigger"
-prompt = "prompts/casefile-review-two-stage-positive.txt"
-rubric = "rubrics/trigger.md"
-
-[[cases]]
-id = "casefile-review-two-stage-near"
-skill = "casefile-review-two-stage"
-partition = "hard_non_trigger"
-prompt = "prompts/casefile-review-two-stage-near.txt"
-rubric = "rubrics/trigger.md"
-
-[[cases]]
-id = "casefile-review-two-stage-behavior"
-skill = "casefile-review-two-stage"
-partition = "task_behavior"
-prompt = "prompts/casefile-review-two-stage-behavior.txt"
-rubric = "rubrics/behavior.md"
-
-[[cases]]
-id = "casefile-switch-strategy-positive"
-skill = "casefile-switch-strategy"
-partition = "positive_trigger"
-prompt = "prompts/casefile-switch-strategy-positive.txt"
-rubric = "rubrics/trigger.md"
-
-[[cases]]
-id = "casefile-switch-strategy-near"
-skill = "casefile-switch-strategy"
-partition = "hard_non_trigger"
-prompt = "prompts/casefile-switch-strategy-near.txt"
-rubric = "rubrics/trigger.md"
-
-[[cases]]
-id = "casefile-switch-strategy-behavior"
-skill = "casefile-switch-strategy"
-partition = "task_behavior"
-prompt = "prompts/casefile-switch-strategy-behavior.txt"
-rubric = "rubrics/behavior.md"
-
-[[cases]]
-id = "casefile-workflow-positive"
-skill = "casefile-workflow"
-partition = "positive_trigger"
-prompt = "prompts/casefile-workflow-positive.txt"
-rubric = "rubrics/trigger.md"
-
-[[cases]]
-id = "casefile-workflow-near"
-skill = "casefile-workflow"
-partition = "hard_non_trigger"
-prompt = "prompts/casefile-workflow-near.txt"
-rubric = "rubrics/trigger.md"
-
-[[cases]]
-id = "casefile-workflow-behavior"
-skill = "casefile-workflow"
-partition = "task_behavior"
-prompt = "prompts/casefile-workflow-behavior.txt"
+prompt = "prompts/casefile-close-behavior.txt"
 rubric = "rubrics/behavior.md"
 
 [[cases]]

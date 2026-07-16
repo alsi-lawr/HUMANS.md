@@ -12,6 +12,14 @@ from pathlib import Path
 
 
 CASEFILE_SKILLS = {
+    "casefile",
+    "casefile-investigate",
+    "casefile-review",
+    "casefile-implement",
+    "casefile-switch",
+    "casefile-close",
+}
+SUPERSEDED_SKILL_DIRS = {
     "casefile-workflow",
     "casefile-investigate-solo",
     "casefile-investigate-atomic",
@@ -56,6 +64,11 @@ OLD_PUBLIC_NAMES = {
     )
 }
 TEXT_SUFFIXES = {".json", ".md", ".py", ".toml", ".txt", ".yaml", ".yml", ".in"}
+LEGACY_CLEANUP_FILES = {
+    "adapters/codex/scripts/setup-codex.py",
+    "scripts/setup-codex.py",
+    "tests/test_codex_setup.py",
+}
 EXPECTED_BINDINGS = {
     "codex": {
         "inspector": ("gpt-5.6-terra", "xhigh"),
@@ -76,10 +89,14 @@ EXPECTED_BINDINGS = {
         "implementation-writer": ("sonnet", "medium-high"),
     },
 }
-EXPECTED_MATRIX_IDS = CASEFILE_SKILLS - {
-    "casefile-workflow",
-    "casefile-switch-strategy",
-    "casefile-closeout",
+EXPECTED_MATRIX_IDS = {
+    "casefile-investigate-solo",
+    "casefile-investigate-atomic",
+    "casefile-investigate-inspector-tree",
+    "casefile-review-atomic",
+    "casefile-review-dialogue",
+    "casefile-review-two-stage",
+    "casefile-implement-ticket-batch",
 }
 
 
@@ -130,7 +147,7 @@ def common_validation(root: Path, kind: str, errors: list[str]) -> None:
     for name in sorted(CASEFILE_SKILLS | REUSABLE_SKILLS):
         if not (skills / name / "SKILL.md").is_file():
             errors.append(f"missing included skill: {name}")
-    for old in OLD_PUBLIC_NAMES:
+    for old in OLD_PUBLIC_NAMES | SUPERSEDED_SKILL_DIRS:
         if (skills / old).exists():
             errors.append(f"superseded skill directory remains: {old}")
     if kind == "source" and (
@@ -167,9 +184,11 @@ def common_validation(root: Path, kind: str, errors: list[str]) -> None:
         except UnicodeError:
             errors.append(f"non-ASCII active text: {path.relative_to(root)}")
             continue
-        for old in OLD_PUBLIC_NAMES:
-            if old in text:
-                errors.append(f"superseded public name {old!r} in {path.relative_to(root)}")
+        relative = path.relative_to(root).as_posix()
+        if relative not in LEGACY_CLEANUP_FILES:
+            for old in OLD_PUBLIC_NAMES:
+                if old in text:
+                    errors.append(f"superseded public name {old!r} in {relative}")
 
     for role in ROLES | {"orchestrator"}:
         if not (workflow / "roles" / f"{role}.md").is_file():
@@ -231,6 +250,18 @@ def codex_validation(adapter_root: Path, errors: list[str]) -> None:
     package_root = adapter_root.parent if adapter_root.name == "config" else None
     matrix_dir = package_root / "matrices" if package_root else adapter_root / "matrices"
     agent_dir = package_root / "agents" if package_root else adapter_root / "agents"
+    skill_dir = package_root / "skills" if package_root else adapter_root / "skills"
+    for name in ("codex-setup", "codex-uninstall"):
+        if not (skill_dir / name / "SKILL.md").is_file():
+            errors.append(f"Codex lifecycle skill is missing: {name}")
+    for name in (
+        "casefile-codex-setup",
+        "casefile-codex-cutover",
+        "casefile-codex-catalog-profile",
+        "casefile-codex-uninstall",
+    ):
+        if (skill_dir / name).exists():
+            errors.append(f"superseded Codex lifecycle skill remains: {name}")
     workers = matrix_validation("codex", matrix_dir, errors)
     profiles = load_toml(adapter_root / "profiles.toml", errors)
     if (profiles.get("root", {}).get("model"), profiles.get("root", {}).get("reasoning")) != (
@@ -309,7 +340,7 @@ def codex_validation(adapter_root: Path, errors: list[str]) -> None:
         git_reference = adapter_root / "skills/git-contribution/references/codex-github-cli.md"
     if not git_reference.is_file() or "first attempt" not in git_reference.read_text(encoding="ascii"):
         errors.append("Codex Git contribution elevation reference is missing")
-    for script in ("profile-codex-catalog.py", "cutover-codex.py", "prepare-setup.py"):
+    for script in ("setup-codex.py",):
         path = adapter_root.parent / "scripts" / script if adapter_root.name == "config" else adapter_root / "scripts" / script
         if not path.is_file() or not os.access(path, os.X_OK):
             errors.append(f"Codex adapter script missing or non-executable: {script}")
@@ -318,6 +349,11 @@ def codex_validation(adapter_root: Path, errors: list[str]) -> None:
 def claude_validation(adapter_root: Path, errors: list[str]) -> None:
     package_root = adapter_root.parent if adapter_root.name == "config" else None
     matrix_dir = package_root / "matrices" if package_root else adapter_root / "matrices"
+    skill_dir = package_root / "skills" if package_root else adapter_root / "skills"
+    if not (skill_dir / "claude-setup/SKILL.md").is_file():
+        errors.append("Claude setup skill is missing: claude-setup")
+    if (skill_dir / "casefile-claude-setup").exists():
+        errors.append("superseded Claude setup skill remains: casefile-claude-setup")
     matrix_validation("claude", matrix_dir, errors)
     profiles = load_toml(adapter_root / "profiles.toml", errors)
     workers = {
@@ -357,7 +393,7 @@ def manifest_validation(root: Path, errors: list[str]) -> None:
     manifest = load_toml(manifests[0], errors)
     expected_identity = {
         "name": "humans-md",
-        "version": "0.1.2",
+        "version": "0.1.3",
         "publisher": "alsi-lawr",
         "repository": "alsi-lawr/HUMANS.md",
         "license": "MIT",
@@ -386,7 +422,7 @@ def package_metadata(root: Path, vendor: str, errors: list[str]) -> None:
     manifest = load_json(manifest_path, errors)
     expected = {
         "name": "humans-md",
-        "version": "0.1.2",
+        "version": "0.1.3",
         "repository": "https://github.com/alsi-lawr/HUMANS.md",
         "license": "MIT",
     }

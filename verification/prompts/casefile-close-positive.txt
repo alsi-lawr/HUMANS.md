@@ -1,0 +1,1 @@
+Close this completed Casefile task and promote its resolved evidence through the configured durable-store adapter.

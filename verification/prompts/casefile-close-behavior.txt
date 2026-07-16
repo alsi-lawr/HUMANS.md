@@ -1,0 +1,1 @@
+This task is finished and its notes are under `.agent-workspace/session-42/`. Preserve useful evidence in our planning repository and close the work. I do not remember whether this project is mapped there.

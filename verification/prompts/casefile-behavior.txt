@@ -1,0 +1,1 @@
+Start governed work on this repository reliability problem. Preserve evidence, decisions, reviewed tickets, implementation, and verification, but do not choose phase strategies for me.

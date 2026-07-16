@@ -1,1 +1,0 @@
-Investigate the single failing configuration parser under the already selected solo strategy and preserve any accepted finding as a Casefile ticket. The issue appears confined to one file and one schema.

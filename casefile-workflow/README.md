@@ -10,6 +10,15 @@ request remains the root orchestrator. The human selects a compatible strategy
 for each phase, and the selected vendor adapter supplies the concrete agent
 profiles and runtime bindings.
 
+## Skill surface
+
+- `casefile` starts or resumes governed work.
+- `casefile-investigate` selects solo, atomic, or inspector-tree investigation.
+- `casefile-review` selects atomic, dialogue, or two-stage review.
+- `casefile-implement` runs accepted ticket batches with exclusive ownership.
+- `casefile-switch` changes strategy without losing work or root authority.
+- `casefile-close` promotes resolved evidence and reports what remains.
+
 ## Lifecycle
 
 ```mermaid
@@ -150,7 +159,7 @@ ticket only after its recorded review flow accepts it.
    verification records to configured durable storage. Keep active or failed
    work in task scratch.
 
-Strategies may change during any phase through `casefile-switch-strategy`.
+Strategies may change during any phase through the `casefile-switch` skill.
 Before switching, Casefile inventories active work and ownership, requires a
 new explicit selection, and refuses unavailable capabilities, changed root
 authority, lost work, or overlapping active writers.
@@ -185,7 +194,7 @@ this portable core.
 
 ## Start a Casefile
 
-Invoke the installed `casefile-workflow` skill with a bounded investigation
+Invoke the installed `casefile` skill with a bounded investigation
 request:
 
 ```text

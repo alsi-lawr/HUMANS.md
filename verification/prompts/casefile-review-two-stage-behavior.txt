@@ -1,1 +1,0 @@
-Apply the selected two-stage review to this ticket set. The primary reviewer has returned three concrete findings and an acceptance verdict; use the second stage to decide whether those findings are actually supported without restarting the whole review.

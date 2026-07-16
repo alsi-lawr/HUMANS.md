@@ -1,6 +1,6 @@
 schema_version = 1
 name = "humans-md"
-version = "0.1.2"
+version = "0.1.3"
 publisher = "alsi-lawr"
 repository = "alsi-lawr/HUMANS.md"
 repository_url = "https://github.com/alsi-lawr/HUMANS.md"
@@ -36,44 +36,28 @@ source = "scripts/validate-casefile.py"
 destination = "scripts/validate-casefile.py"
 
 [[shared]]
-source = "skills/casefile-workflow"
-destination = "skills/casefile-workflow"
+source = "skills/casefile"
+destination = "skills/casefile"
 
 [[shared]]
-source = "skills/casefile-investigate-solo"
-destination = "skills/casefile-investigate-solo"
+source = "skills/casefile-investigate"
+destination = "skills/casefile-investigate"
 
 [[shared]]
-source = "skills/casefile-investigate-atomic"
-destination = "skills/casefile-investigate-atomic"
+source = "skills/casefile-review"
+destination = "skills/casefile-review"
 
 [[shared]]
-source = "skills/casefile-investigate-inspector-tree"
-destination = "skills/casefile-investigate-inspector-tree"
+source = "skills/casefile-implement"
+destination = "skills/casefile-implement"
 
 [[shared]]
-source = "skills/casefile-review-atomic"
-destination = "skills/casefile-review-atomic"
+source = "skills/casefile-switch"
+destination = "skills/casefile-switch"
 
 [[shared]]
-source = "skills/casefile-review-dialogue"
-destination = "skills/casefile-review-dialogue"
-
-[[shared]]
-source = "skills/casefile-review-two-stage"
-destination = "skills/casefile-review-two-stage"
-
-[[shared]]
-source = "skills/casefile-implement-ticket-batch"
-destination = "skills/casefile-implement-ticket-batch"
-
-[[shared]]
-source = "skills/casefile-switch-strategy"
-destination = "skills/casefile-switch-strategy"
-
-[[shared]]
-source = "skills/casefile-closeout"
-destination = "skills/casefile-closeout"
+source = "skills/casefile-close"
+destination = "skills/casefile-close"
 
 [[shared]]
 source = "skills/contract-bootstrap"

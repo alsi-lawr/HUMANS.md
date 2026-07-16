@@ -4,83 +4,84 @@
 
 **Give coding agents boundaries, not a manual.**
 
-Portable behaviour contracts, task-shaped skills, and governed Casefile
-workflows for Codex and Claude.
+Portable behaviour contracts and governed Casefile workflows for Codex and
+Claude.
 
-`v0.1.2` | `Codex` | `Claude` | `MIT`
+`v0.1.3` | `MIT`
 
 </div>
 
-## Install
-
-### Codex
+## Install for Codex
 
 ```sh
-codex plugin marketplace add alsi-lawr/humans-md-marketplace --ref v0.1.2
+codex plugin marketplace add alsi-lawr/humans-md-marketplace --ref v0.1.3
 codex plugin add humans-md@humans-md
 ```
 
-**Immediately start a new Codex thread and invoke the setup skill:**
+Then immediately invoke the setup skill in Codex:
 
 ```text
-Use $humans-md:casefile-codex-setup to complete setup. Preview every change and tell me what requires approval.
+Use $humans-md:codex-setup. Preview the setup, then ask me once before applying it.
 ```
 
-Installing the plugin exposes its skills. The setup skill prepares, but does
-not silently apply, the Codex configuration. Its approved cutover keeps a
-bound backup and install record for recovery.
+Setup is one deterministic transaction. It installs the global contract,
+Casefile roles, V1 feature flags, and a generated model-catalog override; it
+also backs up everything it replaces. After setup succeeds, fully restart the
+Codex host and start a new root thread.
 
-To uninstall and restore that selected pre-install state, invoke:
+Uninstall removes only hash-bound humans-md configuration and preserves later
+unrelated config changes.
+
+To restore the backed-up state and remove the plugin and marketplace:
 
 ```text
-Use $humans-md:casefile-codex-uninstall to preview uninstall using my successful install record and its backup. Do not apply it yet.
+Use $humans-md:codex-uninstall. Preview the uninstall, then ask me once before applying it.
 ```
 
-### Claude
+## Install for Claude
 
 ```sh
-claude plugin marketplace add alsi-lawr/humans-md-marketplace@v0.1.2
+claude plugin marketplace add alsi-lawr/humans-md-marketplace@v0.1.3
 claude plugin install humans-md@humans-md
 ```
 
-Then invoke:
+Then run `/humans-md:claude-setup`. Claude packaging is strictly validated,
+but its runtime behaviour has not been forward-tested by this project.
+
+## Use Casefile
+
+Start or resume governed repository work with:
 
 ```text
-/humans-md:casefile-claude-setup
+Use $humans-md:casefile to investigate this repository. Show me the compatible strategies and wait for my selection.
 ```
 
-This validates and inspects the package. Claude runtime behaviour has not yet
-been forward-tested by this project.
-
-## Use it
-
-Start governed work with:
+Casefile routes work through six discoverable skills:
 
 ```text
-Use $humans-md:casefile-workflow to investigate this repository. Show me the compatible strategies and wait for my selection.
+casefile
+  -> casefile-investigate
+  -> casefile-review
+  -> casefile-implement
+  -> casefile-close
 ```
 
-Casefile then moves through:
+Invoke `casefile-switch` when the selected strategy needs to change.
 
-```text
-request -> investigate -> tickets -> review -> implement -> closeout
-```
-
-Implement accepted tickets with:
-
-```text
-Use $humans-md:casefile-implement-ticket-batch to implement the accepted tickets with exclusive write ownership and review.
-```
-
-Preview the repository contract with:
+To preview the repository behaviour contract without changing it:
 
 ```text
 Use $humans-md:contract-bootstrap to preview the packaged AGENTS.md contract against this repository. Do not apply it yet.
 ```
 
-Installation never replaces standing instructions or active configuration
-automatically. Planning storage remains user-configured.
+Planning storage remains user-configured. Plugin installation alone never
+replaces standing instructions or active configuration.
 
-## Read more
+## Project
 
-[Casefile guide](casefile-workflow/README.md) | [Thesis](HUMANS.md) | [Migration evidence](docs/2026-07-15-casefile-plugin-workflow.md) | [Research and citation](docs/research-use.md) | [Packages](https://github.com/alsi-lawr/humans-md-marketplace) | [MIT licence](LICENSE)
+[Casefile guide](casefile-workflow/README.md) |
+[Thesis](HUMANS.md) |
+[Migration evidence](docs/2026-07-15-casefile-plugin-workflow.md) |
+[Research and citation](docs/research-use.md) |
+[Generated marketplace](https://github.com/alsi-lawr/humans-md-marketplace) |
+[MIT licence](LICENSE)

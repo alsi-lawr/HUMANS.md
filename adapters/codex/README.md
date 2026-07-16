@@ -1,7 +1,29 @@
-# Codex Adapter
+# Codex adapter
 
-This directory binds portable Casefile contracts to matrix-qualified Codex profiles and selectable matrices. Runtime model IDs, reasoning levels, feature flags, marketplace metadata, setup/cutover, a Codex-only GitHub CLI reference, and catalog policy live here and nowhere in portable source.
+The generated Codex plugin binds the portable Casefile workflow to Sol/xhigh
+at the root and matrix-specific Terra profiles for delegated roles.
 
-Version 0.1.2 requires the root profile on Sol/xhigh, 11 exact matrix-qualified worker bindings from `profiles.toml`, `multi_agent = true`, `multi_agent_v2 = false`, and declared `multi_agent_version` selectors set to JSON null. The canonical profile also binds eight authored instruction/message resource pairs without storing a full catalog. The exact fresh-process inspector model and effort remain a release gate.
+After marketplace installation, invoke `codex-setup`. The skill only runs
+`scripts/setup-codex.py`: first as a preview, then once with `--apply` after
+human approval. The script owns catalog export, allowlisted model profiling,
+configuration, the global contract, legacy removal, backup, rollback, and
+mechanical verification. It does not ask an agent to construct or edit a
+cutover plan.
 
-Installation is opt-in through a marketplace. `casefile-codex-setup` orchestrates reviewed candidates and routes active changes through `casefile-codex-cutover`. The cutover plan separates marketplace source from installed plugin root, explicitly adds, upgrades, or reuses existing state, and preserves a bound recovery manifest. `casefile-codex-uninstall` restores the selected pre-install inventory, performs only declared plugin or marketplace removals, and rolls back to a fresh pre-uninstall backup on failure. `casefile-codex-catalog-profile` accepts a caller-asserted fresh export, never a cache path, and restores prior bytes and metadata on failure. Runtime claims still require strict, discovery, fresh V1, root, and inspector gates.
+The generated `models-humans-md-v1.json` is essential. Codex 0.144.1 bundles
+Sol and Terra with `multi_agent_version = "v2"`; feature flags alone do not
+replace those selectors. Setup points `model_catalog_json` at a preserved copy
+of the fresh bundled catalog with the declared Sol and Terra selectors set to
+JSON null. It never reads or writes `models_cache.json`.
+
+Successful setup records an immutable receipt beneath
+`~/.codex/backups/humans-md/` and a hash-bound active pointer beneath
+`~/.codex/state/humans-md/`. Invoke `codex-uninstall` to restore that receipt
+and remove the plugin and marketplace transactionally. Setup-owned config is
+kept in two hash-bound marked blocks. Uninstall removes only those blocks,
+preserves unrelated later config edits, and refuses changes inside owned
+configuration.
+
+Fully restart the Codex host and start a new root thread after setup. Exact
+fresh-process child model, effort, and API behaviour remain runtime checks;
+deterministic package and configuration checks do not substitute for them.
