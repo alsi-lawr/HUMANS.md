@@ -40,7 +40,7 @@ class FakeCodex:
                 [
                     {
                         "pluginId": "humans-md@humans-md",
-                        "version": "0.1.3",
+                        "version": "0.1.4",
                         "installed": True,
                         "enabled": True,
                     }
@@ -63,7 +63,7 @@ class CodexSetupTests(unittest.TestCase):
         plugin = root / "plugin"
         (plugin / ".codex-plugin").mkdir(parents=True)
         (plugin / ".codex-plugin/plugin.json").write_text(
-            '{"name":"humans-md","version":"0.1.3"}\n', encoding="ascii"
+            '{"name":"humans-md","version":"0.1.4"}\n', encoding="ascii"
         )
         (plugin / "config").mkdir()
         for name in ("config-fragment.toml.in", "profiles.toml"):
@@ -142,6 +142,7 @@ source = "fixture"
                 selected = {item["slug"]: item for item in profiled["models"]}
                 self.assertIsNone(selected["gpt-5.6-sol"]["multi_agent_version"])
                 self.assertIsNone(selected["gpt-5.6-terra"]["multi_agent_version"])
+                self.assertIsNone(selected["gpt-5.6-luna"]["multi_agent_version"])
                 self.assertTrue(profiled["unrelated"]["preserved"])
                 self.assertFalse(legacy.exists())
                 self.assertTrue(unrelated_agent.is_file())

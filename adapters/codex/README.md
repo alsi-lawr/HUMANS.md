@@ -3,7 +3,8 @@
 The agent that receives the request remains the orchestrator with its existing
 model and reasoning effort. The generated Codex plugin does not select or
 replace either value. It binds only delegated Casefile roles to matrix-specific
-Terra profiles.
+profiles: Terra for implementation and review, and Luna only for the optional
+read-only pipeline look-ahead.
 
 After marketplace installation, invoke `codex-setup`. The skill only runs
 `scripts/setup-codex.py`: first as a preview, then once with `--apply` after
@@ -13,10 +14,10 @@ mechanical verification. It does not ask an agent to construct or edit a
 cutover plan.
 
 The generated `models-humans-md-v1.json` is essential. Codex 0.144.1 bundles
-Sol and Terra with `multi_agent_version = "v2"`; feature flags alone do not
-replace those selectors. Setup points `model_catalog_json` at a preserved copy
-of the fresh bundled catalog with the declared Sol and Terra selectors set to
-JSON null. It never reads or writes `models_cache.json`.
+Sol, Terra, and Luna with `multi_agent_version = "v2"`; feature flags alone do
+not replace those selectors. Setup points `model_catalog_json` at a preserved
+copy of the fresh bundled catalog with the declared Sol, Terra, and Luna
+selectors set to JSON null. It never reads or writes `models_cache.json`.
 
 Successful setup records an immutable receipt beneath
 `~/.codex/backups/humans-md/` and a hash-bound active pointer beneath

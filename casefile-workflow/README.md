@@ -15,7 +15,7 @@ selected vendor adapter supplies concrete bindings only for delegated roles.
 - `casefile` starts or resumes governed work.
 - `casefile-investigate` selects solo, atomic, or inspector-tree investigation.
 - `casefile-review` selects atomic, dialogue, or two-stage review.
-- `casefile-implement` runs accepted ticket batches with exclusive ownership.
+- `casefile-implement` selects serial batches or a bounded implementation pipeline.
 - `casefile-switch` changes strategy without losing work or root authority.
 - `casefile-close` promotes resolved evidence and reports what remains.
 
@@ -36,7 +36,7 @@ flowchart TB
     D -->|Accepted| P[Dependency-safe implementation plan]
     P --> SM{Select implementation strategy}
     SM --> W[Exclusive implementation writer]
-    W --> Q[Review and focused verification]
+    W --> Q[Exact-commit review and focused verification]
     Q -->|Correction| W
     Q -->|Accepted| O[Closeout and durable evidence]
 ```
@@ -122,18 +122,28 @@ flowchart TB
     AR --> ACCEPT[Accepted tickets]
     DR --> ACCEPT
     TR --> ACCEPT
-    ACCEPT --> IW[Implementation writer]
-    IW --> IR[Ticket review]
+    ACCEPT --> IS{Implementation strategy}
+    IS -->|Ticket batch| IW[Implementation writer]
+    IS -->|Pipeline| LA[Read-only look-ahead]
+    LA --> IW
+    IW --> IC[Immutable ticket commit]
+    IC --> IR[Ticket review]
     IR --> IV[Focused verification]
-    IV -->|Correction| IW
+    IV -->|Correction| FIX[Same writer correction]
     IV -->|Accepted| DONE[Root completes ticket]
+    IC -->|Pipeline only| PG{Next ticket independent and disjoint?}
+    PG -->|Yes, while review runs| NEXT[Same writer starts next ticket]
+    PG -->|No| WAIT[Wait for accepted review]
 ```
 
 Reviewers write evidence only; they do not edit source or tickets. The root
 reconciles reports, routes corrections, records human decisions, and escalates
 unresolved contention. During implementation, one writer owns every set of
-overlapping paths. Corrections return to that writer, and the root completes a
-ticket only after its recorded review flow accepts it.
+overlapping paths. The optional pipeline keeps at most two tickets active: one
+under exact-commit review and one in read-only look-ahead or implementation.
+It overlaps only dependency-independent tickets with disjoint write paths.
+Corrections preempt forward work and return to the same writer. The root
+completes a ticket only after its recorded review flow accepts it.
 
 ## How it works
 
@@ -152,9 +162,12 @@ ticket only after its recorded review flow accepts it.
 5. **Plan accepted work.** Order accepted tickets by dependency, assign one
    owner to overlapping mutations, and preserve the selected review flow in
    the implementation plan.
-6. **Implement and verify.** Writers return immutable commits and focused
-   evidence. Review and verification findings route back as bounded
-   corrections; accepted tickets close only after the recorded gates pass.
+6. **Implement and verify.** Choose serial batches or the bounded pipeline.
+   Writers return one immutable commit per ticket and focused evidence. The
+   pipeline may preflight one next ticket and begin it while the prior commit
+   is reviewed only when dependency and ownership gates pass. Review and
+   verification findings route back as bounded corrections; accepted tickets
+   close only after the recorded gates pass.
 7. **Close out.** Promote resolved evidence, decisions, tickets, matrices, and
    verification records to configured durable storage. Keep active or failed
    work in task scratch.

@@ -72,6 +72,7 @@ jobs:
           models = {model["slug"]: model for model in catalog["models"]}
           assert models["gpt-5.6-sol"]["multi_agent_version"] is None
           assert models["gpt-5.6-terra"]["multi_agent_version"] is None
+          assert models["gpt-5.6-luna"]["multi_agent_version"] is None
           path = home / "config.toml"
           marker = "# <<< humans-md setup scalars <<<\n"
           text = path.read_text(encoding="ascii")

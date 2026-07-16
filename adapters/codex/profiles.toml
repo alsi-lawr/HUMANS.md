@@ -26,6 +26,38 @@ reasoning = "medium"
 agent_file = "agents/casefile-implement-ticket-batch-verification-reviewer.toml"
 
 [[matrix_profiles]]
+strategy_id = "casefile-implement-pipeline"
+role = "implementation-writer"
+profile = "casefile-implement-pipeline-implementation-writer"
+model = "gpt-5.6-terra"
+reasoning = "high"
+agent_file = "agents/casefile-implement-pipeline-implementation-writer.toml"
+
+[[matrix_profiles]]
+strategy_id = "casefile-implement-pipeline"
+role = "look-ahead-investigator"
+profile = "casefile-implement-pipeline-look-ahead-investigator"
+model = "gpt-5.6-luna"
+reasoning = "medium"
+agent_file = "agents/casefile-implement-pipeline-look-ahead-investigator.toml"
+
+[[matrix_profiles]]
+strategy_id = "casefile-implement-pipeline"
+role = "atomic-ticket-reviewer"
+profile = "casefile-implement-pipeline-atomic-ticket-reviewer"
+model = "gpt-5.6-terra"
+reasoning = "xhigh"
+agent_file = "agents/casefile-implement-pipeline-atomic-ticket-reviewer.toml"
+
+[[matrix_profiles]]
+strategy_id = "casefile-implement-pipeline"
+role = "verification-reviewer"
+profile = "casefile-implement-pipeline-verification-reviewer"
+model = "gpt-5.6-terra"
+reasoning = "medium"
+agent_file = "agents/casefile-implement-pipeline-verification-reviewer.toml"
+
+[[matrix_profiles]]
 strategy_id = "casefile-investigate-atomic"
 role = "detective"
 profile = "casefile-investigate-atomic-detective"

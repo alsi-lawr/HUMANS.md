@@ -19,7 +19,7 @@ from pathlib import Path, PurePosixPath
 PLUGIN_ID = "humans-md@humans-md"
 MARKETPLACE = "humans-md"
 RECEIPT_SCHEMA = 2
-REQUIRED_MODELS = {"gpt-5.6-sol", "gpt-5.6-terra"}
+REQUIRED_MODELS = {"gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"}
 SCALAR_BEGIN = b"# >>> humans-md setup scalars >>>\n"
 SCALAR_END = b"# <<< humans-md setup scalars <<<\n"
 TABLE_BEGIN = b"\n# >>> humans-md setup tables >>>\n"

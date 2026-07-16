@@ -121,6 +121,27 @@ def validate_matrix(path: Path, profiles: set[str] | None = None) -> list[str]:
     for key in ("batch_when_capacity_exceeded", "candidate_review_before_ticket", "shared_ticket_storage_required"):
         if not isinstance(document.get("coordination", {}).get(key), bool):
             errors.append(f"{path}: coordination {key} must be boolean")
+    pipeline = document.get("coordination", {}).get("pipeline")
+    if pipeline is not None:
+        required_pipeline = {
+            "maximum_active_tickets",
+            "look_ahead_read_only",
+            "require_dependency_independence",
+            "require_disjoint_write_paths",
+            "immutable_review_commits",
+            "corrections_preempt_forward_work",
+        }
+        if not isinstance(pipeline, dict) or set(pipeline) != required_pipeline:
+            errors.append(f"{path}: invalid pipeline coordination fields")
+        else:
+            active = pipeline["maximum_active_tickets"]
+            if type(active) is not int or active < 2:
+                errors.append(f"{path}: pipeline active-ticket limit must be at least two")
+            for key in required_pipeline - {"maximum_active_tickets"}:
+                if not isinstance(pipeline[key], bool):
+                    errors.append(f"{path}: pipeline {key} must be boolean")
+        if document.get("phase") != "implementation":
+            errors.append(f"{path}: pipeline coordination requires implementation phase")
     return errors
 
 

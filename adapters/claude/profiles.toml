@@ -45,3 +45,9 @@ role = "implementation-writer"
 model = "sonnet"
 policy_tier = "medium-high"
 frontmatter_effort = "high"
+
+[[workers]]
+role = "look-ahead-investigator"
+model = "haiku"
+policy_tier = "medium"
+frontmatter_effort = "medium"

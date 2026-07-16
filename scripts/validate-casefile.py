@@ -46,6 +46,7 @@ ROLES = {
     "atomic-ticket-reviewer",
     "verification-reviewer",
     "implementation-writer",
+    "look-ahead-investigator",
 }
 OLD_PUBLIC_NAMES = {
     "-".join(parts)
@@ -78,6 +79,7 @@ EXPECTED_BINDINGS = {
         "atomic-ticket-reviewer": ("gpt-5.6-terra", "xhigh"),
         "verification-reviewer": ("gpt-5.6-terra", "medium"),
         "implementation-writer": ("gpt-5.6-terra", "high"),
+        "look-ahead-investigator": ("gpt-5.6-luna", "medium"),
     },
     "claude": {
         "inspector": ("opus", "high"),
@@ -87,6 +89,7 @@ EXPECTED_BINDINGS = {
         "atomic-ticket-reviewer": ("sonnet", "medium-high"),
         "verification-reviewer": ("haiku", "medium"),
         "implementation-writer": ("sonnet", "medium-high"),
+        "look-ahead-investigator": ("haiku", "medium"),
     },
 }
 EXPECTED_MATRIX_IDS = {
@@ -97,6 +100,16 @@ EXPECTED_MATRIX_IDS = {
     "casefile-review-dialogue",
     "casefile-review-two-stage",
     "casefile-implement-ticket-batch",
+    "casefile-implement-pipeline",
+}
+
+PIPELINE_COORDINATION = {
+    "maximum_active_tickets": 2,
+    "look_ahead_read_only": True,
+    "require_dependency_independence": True,
+    "require_disjoint_write_paths": True,
+    "immutable_review_commits": True,
+    "corrections_preempt_forward_work": True,
 }
 
 
@@ -236,13 +249,29 @@ def matrix_validation(
             errors.append(f"matrix identity mismatch: {path}")
         if document.get("orchestrator", {}).get("binding") != "root":
             errors.append(f"matrix root mismatch: {path}")
+        matrix_roles = set()
         for worker in document.get("workers", []):
             role = worker.get("role")
+            matrix_roles.add(role)
             if role not in EXPECTED_BINDINGS[adapter] or (
                 worker.get("model"), worker.get("reasoning")
             ) != EXPECTED_BINDINGS[adapter][role]:
                 errors.append(f"matrix binding mismatch: {path.name}:{role}")
             workers.append((document, worker))
+        pipeline = document.get("coordination", {}).get("pipeline")
+        if path.stem == "casefile-implement-pipeline":
+            expected_roles = {
+                "implementation-writer",
+                "look-ahead-investigator",
+                "atomic-ticket-reviewer",
+                "verification-reviewer",
+            }
+            if matrix_roles != expected_roles:
+                errors.append(f"pipeline worker set mismatch: {path}")
+            if pipeline != PIPELINE_COORDINATION:
+                errors.append(f"pipeline coordination mismatch: {path}")
+        elif pipeline is not None:
+            errors.append(f"pipeline coordination on non-pipeline matrix: {path}")
     return workers
 
 
@@ -327,7 +356,7 @@ def codex_validation(adapter_root: Path, errors: list[str]) -> None:
             errors.append(f"Codex target declares an unsupported selector: {model_id}")
         if "multi_agent_version" in nulls:
             declared_nulls.add(model_id)
-    if not {"gpt-5.6-sol", "gpt-5.6-terra"} <= declared_nulls:
+    if not {"gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"} <= declared_nulls:
         errors.append("Codex V1 models must null multi_agent_version")
 
     git_reference = adapter_root.parent / "skills/git-contribution/references/codex-github-cli.md"
@@ -390,7 +419,7 @@ def manifest_validation(root: Path, errors: list[str]) -> None:
     manifest = load_toml(manifests[0], errors)
     expected_identity = {
         "name": "humans-md",
-        "version": "0.1.3",
+        "version": "0.1.4",
         "publisher": "alsi-lawr",
         "repository": "alsi-lawr/HUMANS.md",
         "license": "MIT",
@@ -419,7 +448,7 @@ def package_metadata(root: Path, vendor: str, errors: list[str]) -> None:
     manifest = load_json(manifest_path, errors)
     expected = {
         "name": "humans-md",
-        "version": "0.1.3",
+        "version": "0.1.4",
         "repository": "https://github.com/alsi-lawr/HUMANS.md",
         "license": "MIT",
     }

@@ -1,1 +1,1 @@
-Implement accepted tickets APP-14 and APP-15 using the selected implementation matrix. Both change the source templates and the same generated package tree. Keep unrelated edits intact and return reviewable history.
+Implement accepted tickets APP-14, APP-15, and APP-16 using the selected `casefile-implement-pipeline` matrix. APP-14 changes the parser, APP-15 changes an unrelated documentation generator, and APP-16 depends on APP-14 and changes its parser tests. Keep unrelated edits intact and return reviewable history.

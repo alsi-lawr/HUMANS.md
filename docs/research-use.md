@@ -12,9 +12,12 @@ Live use of version `0.1.2` exposed a missing active model-catalog override: its
 feature flags loaded, but fresh Sol sessions retained the bundled V2 agent API.
 Version `0.1.3` replaces that setup path with a deterministic transaction that
 generates and activates the V1 catalog override and has isolated mechanical
-coverage. A fresh-process behavioural replication is still required. No claim
-of general effectiveness, causal improvement, or cross-model replication is
-made.
+coverage. Version `0.1.4` adds bounded implementation look-ahead and ticket
+pipelining with adapter-specific low-tier workers; its source and package
+contracts are mechanically validated, but its behavioural speed and quality
+effects are unverified. A fresh-process behavioural replication is still
+required. No claim of general effectiveness, causal improvement, or
+cross-model replication is made.
 
 ## Research surfaces
 
@@ -82,7 +85,7 @@ artifact statement.
 Suggested human-readable citation:
 
 > alsi-lawr. (2026). *humans-md: Portable Behaviour Contracts and Casefile
-> Workflows for Coding Agents* (Version 0.1.3) [Computer software]. GitHub.
+> Workflows for Coding Agents* (Version 0.1.4) [Computer software]. GitHub.
 > https://github.com/alsi-lawr/HUMANS.md
 
 The MIT licence governs software reuse. Citation records provenance and credit;

@@ -21,6 +21,26 @@ description = "Casefile casefile-implement-ticket-batch verification-reviewer."
 config_file = "__HUMANS_MD_PLUGIN_ROOT__/agents/casefile-implement-ticket-batch-verification-reviewer.toml"
 nickname_candidates = ["Verifier", "Checker"]
 
+[agents.casefile-implement-pipeline-implementation-writer]
+description = "Casefile pipeline implementation writer."
+config_file = "__HUMANS_MD_PLUGIN_ROOT__/agents/casefile-implement-pipeline-implementation-writer.toml"
+nickname_candidates = ["Builder", "Implementer"]
+
+[agents.casefile-implement-pipeline-look-ahead-investigator]
+description = "Casefile pipeline read-only look-ahead investigator."
+config_file = "__HUMANS_MD_PLUGIN_ROOT__/agents/casefile-implement-pipeline-look-ahead-investigator.toml"
+nickname_candidates = ["Scout", "Pathfinder"]
+
+[agents.casefile-implement-pipeline-atomic-ticket-reviewer]
+description = "Casefile pipeline exact-commit reviewer."
+config_file = "__HUMANS_MD_PLUGIN_ROOT__/agents/casefile-implement-pipeline-atomic-ticket-reviewer.toml"
+nickname_candidates = ["Reviewer", "Auditor"]
+
+[agents.casefile-implement-pipeline-verification-reviewer]
+description = "Casefile pipeline focused verifier."
+config_file = "__HUMANS_MD_PLUGIN_ROOT__/agents/casefile-implement-pipeline-verification-reviewer.toml"
+nickname_candidates = ["Verifier", "Checker"]
+
 [agents.casefile-investigate-atomic-detective]
 description = "Casefile casefile-investigate-atomic detective."
 config_file = "__HUMANS_MD_PLUGIN_ROOT__/agents/casefile-investigate-atomic-detective.toml"

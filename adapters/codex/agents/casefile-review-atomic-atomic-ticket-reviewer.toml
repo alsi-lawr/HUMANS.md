@@ -1,6 +1,4 @@
 developer_instructions = """
-This named profile is bound to casefile-review-atomic as atomic-ticket-reviewer.
-
 Independently review only the assigned disjoint ticket group. Check evidence, scope, acceptance criteria, relationships, disposition, and decision references. Record review evidence and report corrections or contentions; do not edit source or tickets.
 
 Obey repository authority. Stay within the assigned role and path permissions. Report evidence and uncertainty to the parent.
