@@ -10,22 +10,20 @@ After marketplace installation, invoke `codex-setup`. The skill only runs
 `scripts/setup-codex.py`: first as a preview, then once with `--apply` after
 human approval. The script owns catalog export, allowlisted model profiling,
 configuration, the global contract, legacy removal, backup, rollback, and
-mechanical verification. It does not ask an agent to construct or edit a
-cutover plan.
+mechanical verification.
 
 The generated `models-humans-md-v1.json` is essential. Codex 0.144.1 bundles
 Sol, Terra, and Luna with `multi_agent_version = "v2"`; feature flags alone do
 not replace those selectors. Setup points `model_catalog_json` at a preserved
-copy of the fresh bundled catalog with the declared Sol, Terra, and Luna
+copy of the active catalog with the declared Sol, Terra, and Luna
 selectors set to JSON null. It never reads or writes `models_cache.json`.
 
-Successful setup records an immutable receipt beneath
-`~/.codex/backups/humans-md/` and a hash-bound active pointer beneath
-`~/.codex/state/humans-md/`. Invoke `codex-uninstall` to restore that receipt
-and remove the plugin and marketplace transactionally. Setup-owned config is
-kept in two hash-bound marked blocks. Uninstall removes only those blocks,
-preserves unrelated later config edits, and refuses changes inside owned
-configuration.
+Successful setup records a durable receipt beneath `~/.codex/backups/humans-md/`
+and an active pointer beneath `~/.codex/state/humans-md/`. Invoke
+`codex-uninstall` to restore that receipt and remove the plugin and marketplace
+transactionally. Setup-owned config is kept in two marked blocks. Uninstall
+removes only those blocks, preserves unrelated later config edits, and shows a
+per-file Git diff before replacing modified managed files.
 
 Fully restart the Codex host and start a new root thread after setup. Exact
 fresh-process child model, effort, and API behaviour remain runtime checks;

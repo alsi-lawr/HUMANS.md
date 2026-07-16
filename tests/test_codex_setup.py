@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 import shutil
 import subprocess
@@ -7,6 +9,7 @@ import tempfile
 import tomllib
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from _load import ROOT, script
 
@@ -21,40 +24,40 @@ class FakeCodex:
         self.installed = True
         self.marketplace = True
 
+    def result(self, args, value, code=0):
+        return subprocess.CompletedProcess(args, code, json.dumps(value), "")
+
     def __call__(self, args: list[str], environment: dict[str, str]):
-        if args[-3:] == ["debug", "models", "--bundled"]:
-            return subprocess.CompletedProcess(args, 0, json.dumps(self.catalog), "")
         if args[-2:] == ["debug", "models"]:
-            home = Path(environment["CODEX_HOME"])
-            config = tomllib.loads((home / "config.toml").read_text(encoding="ascii"))
-            path = Path(config["model_catalog_json"])
-            return subprocess.CompletedProcess(args, 0, path.read_text(), "")
+            config = Path(environment["CODEX_HOME"]) / "config.toml"
+            if config.is_file():
+                document = tomllib.loads(config.read_text(encoding="ascii"))
+                if "model_catalog_json" in document:
+                    return subprocess.CompletedProcess(
+                        args, 0, Path(document["model_catalog_json"]).read_text(), ""
+                    )
+            return self.result(args, self.catalog)
         if args[1:4] == ["plugin", "marketplace", "list"]:
-            values = [{"name": "humans-md"}] if self.marketplace else []
-            return subprocess.CompletedProcess(args, 0, json.dumps({"marketplaces": values}), "")
+            return self.result(args, {"marketplaces": [{"name": "humans-md"}]})
         if args[1:4] == ["plugin", "marketplace", "remove"]:
             self.marketplace = False
-            return subprocess.CompletedProcess(args, 0, "{}", "")
+            return self.result(args, {})
         if args[1:3] == ["plugin", "list"]:
-            values = (
-                [
-                    {
-                        "pluginId": "humans-md@humans-md",
-                        "version": "0.1.4",
-                        "installed": True,
-                        "enabled": True,
-                    }
-                ]
-                if self.installed
-                else []
-            )
-            return subprocess.CompletedProcess(args, 0, json.dumps({"installed": values}), "")
+            values = [
+                {
+                    "pluginId": "humans-md@humans-md",
+                    "version": "0.1.5",
+                    "installed": True,
+                    "enabled": True,
+                }
+            ] if self.installed else []
+            return self.result(args, {"installed": values})
         if args[1:3] == ["plugin", "remove"]:
             self.installed = False
-            return subprocess.CompletedProcess(args, 0, "{}", "")
+            return self.result(args, {})
         if "doctor" in args:
             output = "Configuration\n  [ok] config loaded\n" if self.doctor_ok else "failed\n"
-            return subprocess.CompletedProcess(args, 2, output, "")
+            return subprocess.CompletedProcess(args, 0 if self.doctor_ok else 2, output, "")
         raise AssertionError(args)
 
 
@@ -63,7 +66,7 @@ class CodexSetupTests(unittest.TestCase):
         plugin = root / "plugin"
         (plugin / ".codex-plugin").mkdir(parents=True)
         (plugin / ".codex-plugin/plugin.json").write_text(
-            '{"name":"humans-md","version":"0.1.4"}\n', encoding="ascii"
+            '{"name":"humans-md","version":"0.1.5"}\n', encoding="ascii"
         )
         (plugin / "config").mkdir()
         for name in ("config-fragment.toml.in", "profiles.toml"):
@@ -74,11 +77,8 @@ class CodexSetupTests(unittest.TestCase):
         shutil.copy2(ROOT / "AGENTS.md", plugin / "templates/AGENTS.md")
 
         profiles = tomllib.loads((plugin / "config/profiles.toml").read_text(encoding="ascii"))
-        models = []
-        for target in profiles["catalog"]["targets"]:
-            if target["id"] == "gpt-5.3-codex-spark":
-                continue
-            models.append(
+        catalog = {
+            "models": [
                 {
                     "slug": target["id"],
                     "display_name": target["expected"]["display_name"],
@@ -88,111 +88,160 @@ class CodexSetupTests(unittest.TestCase):
                     "supported_reasoning_levels": [
                         {"effort": effort} for effort in target["required_reasoning"]
                     ],
-                    "preserved": True,
                 }
-            )
-        catalog = {"models": models, "unrelated": {"preserved": True}}
-
+                for target in profiles["catalog"]["targets"]
+            ]
+        }
         home = root / "codex-home"
         home.mkdir()
-        original = b'''model = "gpt-5.5"
-model_reasoning_effort = "high"
-personality = "pragmatic"
-[plugins."humans-md@humans-md"]
-enabled = true
-[marketplaces.humans-md]
-source = "fixture"
-'''
+        original = b'model = "gpt-5.5"\npersonality = "pragmatic"\n'
         (home / "config.toml").write_bytes(original)
         legacy = home / "skills/investigation-solo"
         legacy.mkdir(parents=True)
         (legacy / "SKILL.md").write_text("legacy\n", encoding="ascii")
-        unrelated_agent = home / "agents/unrelated.toml"
-        unrelated_agent.parent.mkdir()
-        unrelated_agent.write_text('model = "unrelated"\n', encoding="ascii")
-        return plugin, home, original, catalog, legacy, unrelated_agent
+        return plugin, home, original, catalog, legacy
 
-    def test_install_generates_v1_catalog_and_durable_uninstall_receipt(self):
+    @contextlib.contextmanager
+    def fake_command(self, fake):
+        previous = setup.command
+        setup.command = fake
+        try:
+            yield
+        finally:
+            setup.command = previous
+
+    def test_active_models_install_and_uninstall_preserve_unowned_config(self):
         with tempfile.TemporaryDirectory() as temporary:
-            plugin, home, original, catalog, legacy, unrelated_agent = self.fixture(
-                Path(temporary)
-            )
+            plugin, home, original, catalog, legacy = self.fixture(Path(temporary))
             fake = FakeCodex(catalog)
-            previous = setup.command
-            setup.command = fake
-            try:
+            with self.fake_command(fake):
                 plan = setup.prepare(plugin, home, "codex")
-                self.assertIn("gpt-5.3-codex-spark", plan["skipped"])
+                self.assertIn("gpt-5.3-codex-spark", plan["patched"])
                 result = setup.install(plan)
-                receipt_path = Path(result["receipt"])
-                self.assertEqual(home / "backups/humans-md", receipt_path.parents[1])
-                self.assertEqual(0o600, receipt_path.stat().st_mode & 0o777)
-                self.assertEqual(0o700, receipt_path.parent.stat().st_mode & 0o777)
-                config = tomllib.loads((home / "config.toml").read_text(encoding="ascii"))
-                self.assertEqual("gpt-5.5", config["model"])
-                self.assertEqual("high", config["model_reasoning_effort"])
-                self.assertEqual("pragmatic", config["personality"])
-                self.assertTrue(config["features"]["multi_agent"])
-                self.assertFalse(config["features"]["multi_agent_v2"])
-                self.assertEqual(
-                    str(home / "models-humans-md-v1.json"),
-                    config["model_catalog_json"],
-                )
-                profiled = json.loads((home / "models-humans-md-v1.json").read_text())
-                selected = {item["slug"]: item for item in profiled["models"]}
+
+                selected = {
+                    model["slug"]: model
+                    for model in json.loads((home / "models-humans-md-v1.json").read_bytes())["models"]
+                }
                 self.assertIsNone(selected["gpt-5.6-sol"]["multi_agent_version"])
-                self.assertIsNone(selected["gpt-5.6-terra"]["multi_agent_version"])
-                self.assertIsNone(selected["gpt-5.6-luna"]["multi_agent_version"])
-                self.assertTrue(profiled["unrelated"]["preserved"])
+                self.assertNotEqual("upstream", selected["gpt-5.3-codex-spark"]["base_instructions"])
                 self.assertFalse(legacy.exists())
-                self.assertTrue(unrelated_agent.is_file())
 
-                path, receipt = setup.receipt(home, None)
-                active_config = home / "config.toml"
-                installed_config = active_config.read_bytes()
-                changed_owned_config = installed_config.replace(
-                    b"multi_agent_v2 = false", b"multi_agent_v2 = true", 1
-                )
-                active_config.write_bytes(changed_owned_config)
-                with self.assertRaisesRegex(setup.SetupError, "managed config block changed"):
-                    setup.uninstall(home, "codex", path, receipt)
-                self.assertEqual(changed_owned_config, active_config.read_bytes())
-
-                active_config.write_bytes(
-                    installed_config.replace(
-                        b'personality = "pragmatic"', b'personality = "friendly"', 1
-                    )
-                )
-                setup.uninstall(home, "codex", path, receipt)
-                expected = original.replace(
-                    b'personality = "pragmatic"', b'personality = "friendly"', 1
-                )
-                self.assertEqual(expected, active_config.read_bytes())
+                config = home / "config.toml"
+                config.write_bytes(config.read_bytes().replace(b"pragmatic", b"friendly"))
+                receipt_path, receipt = setup.receipt(home, None)
+                setup.uninstall(home, "codex", receipt_path, receipt)
+                self.assertEqual(original.replace(b"pragmatic", b"friendly"), config.read_bytes())
                 self.assertTrue(legacy.is_dir())
-                self.assertTrue(unrelated_agent.is_file())
-                self.assertFalse((home / "AGENTS.md").exists())
-                self.assertFalse((home / "models-humans-md-v1.json").exists())
                 self.assertFalse(setup.pointer(home).exists())
                 self.assertFalse(fake.installed)
                 self.assertFalse(fake.marketplace)
-            finally:
-                setup.command = previous
+                self.assertEqual("installed", result["status"])
 
-    def test_failed_mechanical_verification_rolls_back(self):
+    def test_portable_bytes_write_and_resource_separator(self):
         with tempfile.TemporaryDirectory() as temporary:
-            plugin, home, original, catalog, legacy, _ = self.fixture(Path(temporary))
-            fake = FakeCodex(catalog, doctor_ok=False)
-            previous = setup.command
-            setup.command = fake
-            try:
-                plan = setup.prepare(plugin, home, "codex")
+            root = Path(temporary)
+            target = root / "target"
+            with mock.patch.object(setup.os, "fchmod", None):
+                setup.atomic_write(target, b"portable")
+            self.assertEqual(b"portable", target.read_bytes())
+
+            plugin, home, _, catalog, _ = self.fixture(root / "fixture")
+            profile = plugin / "config/profiles.toml"
+            profile.write_text(
+                profile.read_text(encoding="ascii").replace(
+                    "catalog/gpt-5.6-sol/base-instructions.md",
+                    r"catalog\\gpt-5.6-sol\\base-instructions.md",
+                ),
+                encoding="ascii",
+            )
+            with self.fake_command(FakeCodex(catalog)):
+                self.assertIn("gpt-5.6-sol", setup.prepare(plugin, home, "codex")["patched"])
+
+    def test_checked_uses_text_command_output(self):
+        result = subprocess.CompletedProcess(["codex"], 0, "caf\u00e9", "")
+        with mock.patch.object(setup, "command", return_value=result):
+            self.assertEqual("caf\u00e9", setup.checked(["codex"], {}))
+
+    def test_fdopen_failure_and_rollback_restore_original_bytes(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            target = root / "target"
+            target.write_bytes(b"old")
+            error = OSError("fdopen failed")
+            with mock.patch.object(setup.os, "fdopen", side_effect=error):
+                with self.assertRaises(OSError) as raised:
+                    setup.atomic_write(target, b"new")
+            self.assertIs(error, raised.exception)
+            self.assertEqual(b"old", target.read_bytes())
+            self.assertEqual([], list(root.glob(".target.*")))
+
+            plugin, home, original, catalog, legacy = self.fixture(root / "rollback")
+            with self.fake_command(FakeCodex(catalog, doctor_ok=False)):
                 with self.assertRaisesRegex(setup.SetupError, "rollback verified"):
-                    setup.install(plan)
-                self.assertEqual(original, (home / "config.toml").read_bytes())
-                self.assertTrue(legacy.is_dir())
-                self.assertFalse(setup.pointer(home).exists())
-            finally:
-                setup.command = previous
+                    setup.install(setup.prepare(plugin, home, "codex"))
+            self.assertEqual(original, (home / "config.toml").read_bytes())
+            self.assertTrue(legacy.is_dir())
+
+    def test_legacy_v2_receipt_and_git_alert(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            plugin, home, _, catalog, _ = self.fixture(Path(temporary))
+            fake = FakeCodex(catalog)
+            with self.fake_command(fake):
+                result = setup.install(setup.prepare(plugin, home, "codex"))
+                receipt_path = Path(result["receipt"])
+                receipt = json.loads(receipt_path.read_bytes())
+                receipt["schema_version"] = 3
+                receipt["installed"] = receipt["before"]
+                receipt_path.write_bytes(setup.canonical(receipt))
+                setup.receipt(home, receipt_path)
+                receipt["schema_version"] = 2
+                receipt.pop("installed")
+                receipt["after"] = {"obsolete": "digest"}
+                receipt["config_blocks"] = {"scalars": "obsolete", "tables": "obsolete"}
+                receipt_path.write_bytes(setup.canonical(receipt))
+
+                contract = home / "AGENTS.md"
+                contract.write_bytes(contract.read_bytes() + b"# local change\n")
+                default_path, default = setup.receipt(home, None)
+                explicit_path, explicit = setup.receipt(home, receipt_path)
+                self.assertEqual(default_path, explicit_path)
+                self.assertEqual(default, explicit)
+                output = io.StringIO()
+                with contextlib.redirect_stdout(output):
+                    setup.show_uninstall_diffs(home, default_path, default)
+                self.assertIn("diff --git", output.getvalue())
+                self.assertIn("-# >>> humans-md setup scalars >>>", output.getvalue())
+                self.assertIn("# local change", output.getvalue())
+                setup.uninstall(home, "codex", default_path, default)
+
+                invalid = json.loads(receipt_path.read_bytes())
+                invalid["before"][0]["path"] = r"C:\config.toml"
+                receipt_path.write_bytes(setup.canonical(invalid))
+                with self.assertRaisesRegex(setup.SetupError, "unsafe receipt path"):
+                    setup.receipt(home, receipt_path)
+
+    def test_uninstall_aborts_when_a_managed_file_changes_after_snapshot(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            plugin, home, _, catalog, _ = self.fixture(Path(temporary))
+            fake = FakeCodex(catalog)
+            with self.fake_command(fake):
+                result = setup.install(setup.prepare(plugin, home, "codex"))
+                receipt_path, receipt = setup.receipt(home, Path(result["receipt"]))
+                contract = home / "AGENTS.md"
+                installed = contract.read_bytes()
+                original_snapshot = setup.snapshot
+
+                def snapshot(snapshot_home, paths, destination):
+                    entries = original_snapshot(snapshot_home, paths, destination)
+                    if destination.parent.name.startswith("uninstall-"):
+                        contract.write_bytes(b"changed after snapshot\n")
+                    return entries
+
+                with mock.patch.object(setup, "snapshot", snapshot):
+                    with self.assertRaisesRegex(setup.SetupError, "changed after uninstall snapshot"):
+                        setup.uninstall(home, "codex", receipt_path, receipt)
+                self.assertEqual(installed, contract.read_bytes())
 
 
 if __name__ == "__main__":

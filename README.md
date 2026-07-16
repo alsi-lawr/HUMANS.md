@@ -7,14 +7,14 @@
 Portable behaviour contracts and governed Casefile workflows for Codex and
 Claude.
 
-`v0.1.4` | `MIT`
+`v0.1.5` | `MIT`
 
 </div>
 
 ## Install for Codex
 
 ```sh
-codex plugin marketplace add alsi-lawr/humans-md-marketplace --ref v0.1.4
+codex plugin marketplace add alsi-lawr/humans-md-marketplace --ref v0.1.5
 codex plugin add humans-md@humans-md
 ```
 
@@ -32,8 +32,8 @@ Codex host and start a new root thread.
 The model and reasoning effort of the agent invoking Casefile remain yours;
 setup does not select or replace them.
 
-Uninstall removes only hash-bound humans-md configuration and preserves later
-unrelated config changes.
+Uninstall previews focused diffs for modified managed files, then after approval
+removes or restores humans-md-managed state while preserving unrelated config changes.
 
 To restore the backed-up state and remove the plugin and marketplace:
 
@@ -44,12 +44,20 @@ Use $humans-md:codex-uninstall. Preview the uninstall, then ask me once before a
 ## Install for Claude
 
 ```sh
-claude plugin marketplace add alsi-lawr/humans-md-marketplace@v0.1.4
-claude plugin install humans-md@humans-md
+claude plugin marketplace add alsi-lawr/humans-md-marketplace@v0.1.5
+claude plugin install humans-md@humans-md --scope user
 ```
 
-Then run `/humans-md:claude-setup`. Claude packaging is strictly validated,
-but its runtime behaviour has not been forward-tested by this project.
+Then run `/humans-md:claude-setup`. It previews the packaged contract against
+the global `${CLAUDE_CONFIG_DIR:-~/.claude}/CLAUDE.md`, asks before replacing
+it, and retains the exact prior file for recovery. Restart Claude Code after a
+successful setup.
+
+To restore that prior `CLAUDE.md` state and invoke Claude's canonical plugin
+uninstall, run `/humans-md:claude-uninstall`.
+
+Claude packaging is strictly validated, but its runtime behaviour has not been
+forward-tested by this project.
 
 ## Use Casefile
 
@@ -73,7 +81,7 @@ Invoke `casefile-switch` when the selected strategy needs to change.
 Implementation can remain serial or use the bounded pipeline to preflight one
 independent next ticket and begin it while the prior commit is reviewed.
 
-To preview the repository behaviour contract without changing it:
+In Codex, to preview the repository behaviour contract without changing it:
 
 ```text
 Use $humans-md:contract-bootstrap to preview the packaged AGENTS.md contract against this repository. Do not apply it yet.

@@ -4,28 +4,30 @@ from __future__ import annotations
 
 import argparse
 import difflib
-import hashlib
 import os
 import tempfile
 from pathlib import Path
-
-
-def digest(data: bytes) -> str:
-    return hashlib.sha256(data).hexdigest()
 
 
 def atomic_write(path: Path, data: bytes, mode: int = 0o644) -> None:
     descriptor, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
     temporary_path = Path(temporary)
     try:
-        os.fchmod(descriptor, 0o600)
         with os.fdopen(descriptor, "wb") as stream:
+            fchmod = getattr(os, "fchmod", None)
+            if fchmod is not None:
+                fchmod(stream.fileno(), 0o600)
             stream.write(data)
             stream.flush()
             os.fsync(stream.fileno())
-        os.chmod(temporary_path, mode)
+        if os.name == "posix":
+            os.chmod(temporary_path, mode)
         os.replace(temporary_path, path)
     except BaseException:
+        try:
+            os.close(descriptor)
+        except OSError:
+            pass
         temporary_path.unlink(missing_ok=True)
         raise
 
@@ -54,11 +56,18 @@ def install(source: Path, destination: Path, replace: bool) -> str:
         raise ValueError(f"destination directory does not exist: {destination.parent}")
 
     if destination_bytes is not None:
-        backup = destination.with_name(f"{destination.name}.backup-{digest(destination_bytes)}")
-        if backup.exists() and backup.read_bytes() != destination_bytes:
-            raise ValueError(f"conflicting backup: {backup}")
-        if not backup.exists():
-            atomic_write(backup, destination_bytes, 0o600)
+        descriptor, backup = tempfile.mkstemp(
+            prefix=f"{destination.name}.backup-", dir=destination.parent
+        )
+        backup_path = Path(backup)
+        try:
+            os.close(descriptor)
+            atomic_write(backup_path, destination_bytes, 0o600)
+            if backup_path.read_bytes() != destination_bytes:
+                raise RuntimeError(f"backup verification failed: {backup_path}")
+        except BaseException:
+            backup_path.unlink(missing_ok=True)
+            raise
 
     atomic_write(destination, source_bytes)
     if destination.read_bytes() != source_bytes:
@@ -76,10 +85,8 @@ def main() -> int:
 
     source = arguments.source.resolve(strict=True)
     destination = arguments.destination.expanduser().absolute()
-    source_bytes, destination_bytes, diff = preview(source, destination)
+    _, _, diff = preview(source, destination)
     print(f"destination: {destination}")
-    print(f"source_sha256: {digest(source_bytes)}")
-    print(f"destination_sha256: {digest(destination_bytes) if destination_bytes is not None else 'missing'}")
     print(diff or "no changes")
     if not arguments.apply:
         print("preview only; no files changed")

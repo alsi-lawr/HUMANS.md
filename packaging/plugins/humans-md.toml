@@ -1,6 +1,6 @@
 schema_version = 1
 name = "humans-md"
-version = "0.1.4"
+version = "0.1.5"
 publisher = "alsi-lawr"
 repository = "alsi-lawr/HUMANS.md"
 repository_url = "https://github.com/alsi-lawr/HUMANS.md"
@@ -60,10 +60,6 @@ source = "skills/casefile-close"
 destination = "skills/casefile-close"
 
 [[shared]]
-source = "skills/contract-bootstrap"
-destination = "skills/contract-bootstrap"
-
-[[shared]]
 source = "skills/skill-generator"
 destination = "skills/skill-generator"
 
@@ -115,6 +111,10 @@ destination = "scripts"
 source = "adapters/codex/skills"
 destination = "skills"
 
+[[vendors.codex.copy]]
+source = "skills/contract-bootstrap"
+destination = "skills/contract-bootstrap"
+
 [vendors.claude]
 output = "build/marketplace/plugins/claude/humans-md"
 
@@ -142,6 +142,10 @@ destination = "config/profiles.toml"
 [[vendors.claude.copy]]
 source = "adapters/claude/skills"
 destination = "skills"
+
+[[vendors.claude.copy]]
+source = "skills/contract-bootstrap/scripts/bootstrap-contract.py"
+destination = "scripts/bootstrap-contract.py"
 
 [[vendors.claude.copy]]
 source = "skills/git-contribution"
