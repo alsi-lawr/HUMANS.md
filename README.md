@@ -29,6 +29,9 @@ Casefile roles, V1 feature flags, and a generated model-catalog override; it
 also backs up everything it replaces. After setup succeeds, fully restart the
 Codex host and start a new root thread.
 
+The model and reasoning effort of the agent invoking Casefile remain yours;
+setup does not select or replace them.
+
 Uninstall removes only hash-bound humans-md configuration and preserves later
 unrelated config changes.
 

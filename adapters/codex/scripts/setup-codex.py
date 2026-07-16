@@ -20,8 +20,8 @@ PLUGIN_ID = "humans-md@humans-md"
 MARKETPLACE = "humans-md"
 RECEIPT_SCHEMA = 2
 REQUIRED_MODELS = {"gpt-5.6-sol", "gpt-5.6-terra"}
-ROOT_BEGIN = b"# >>> humans-md setup root >>>\n"
-ROOT_END = b"# <<< humans-md setup root <<<\n"
+SCALAR_BEGIN = b"# >>> humans-md setup scalars >>>\n"
+SCALAR_END = b"# <<< humans-md setup scalars <<<\n"
 TABLE_BEGIN = b"\n# >>> humans-md setup tables >>>\n"
 TABLE_END = b"# <<< humans-md setup tables <<<\n"
 LEGACY_PATHS = (
@@ -134,7 +134,6 @@ def plugin_root(path: Path) -> tuple[Path, dict]:
         raise SetupError("installed plugin identity is not humans-md")
     for relative in (
         "config/config-fragment.toml.in",
-        "config/root.config.toml",
         "config/profiles.toml",
         "templates/AGENTS.md",
     ):
@@ -247,36 +246,31 @@ def config_candidate(current: bytes, root: Path, catalog: Path) -> tuple[bytes, 
     document = tomllib.loads(current.decode("utf-8")) if current else {}
     conflicts = {
         key
-        for key in ("model", "model_reasoning_effort", "model_catalog_json", "features", "agents")
+        for key in ("model_catalog_json", "features", "agents")
         if key in document
     }
     if conflicts:
         raise SetupError(
             "managed config already exists; clean it before setup: " + ", ".join(sorted(conflicts))
         )
-    root_config = tomllib.loads((root / "config/root.config.toml").read_text(encoding="ascii"))
     fragment = (root / "config/config-fragment.toml.in").read_text(encoding="ascii").replace(
         "__HUMANS_MD_PLUGIN_ROOT__", str(root).replace("\\", "/")
     )
-    root_block = marked(
-        ROOT_BEGIN,
-        (
-            f"model = {json.dumps(root_config['model'])}\n"
-            f"model_reasoning_effort = {json.dumps(root_config['model_reasoning_effort'])}\n"
-            f"model_catalog_json = {json.dumps(str(catalog))}\n"
-        ).encode("utf-8"),
-        ROOT_END,
+    scalar_block = marked(
+        SCALAR_BEGIN,
+        f"model_catalog_json = {json.dumps(str(catalog))}\n".encode("utf-8"),
+        SCALAR_END,
     )
     table_block = marked(TABLE_BEGIN, fragment.encode("ascii"), TABLE_END)
-    data = root_block + current + table_block
+    data = scalar_block + current + table_block
     verify_config(data, root, catalog)
-    return data, {"root": sha(root_block), "tables": sha(table_block)}
+    return data, {"scalars": sha(scalar_block), "tables": sha(table_block)}
 
 
 def unowned_config(data: bytes, expected: dict) -> bytes:
     ranges = []
     for name, begin, end in (
-        ("root", ROOT_BEGIN, ROOT_END),
+        ("scalars", SCALAR_BEGIN, SCALAR_END),
         ("tables", TABLE_BEGIN, TABLE_END),
     ):
         if data.count(begin) != 1 or data.count(end) != 1:
@@ -298,12 +292,7 @@ def unowned_config(data: bytes, expected: dict) -> bytes:
 
 def verify_config(data: bytes, root: Path, catalog: Path) -> None:
     document = tomllib.loads(data.decode("utf-8"))
-    expected_root = tomllib.loads((root / "config/root.config.toml").read_text(encoding="ascii"))
     profiles = tomllib.loads((root / "config/profiles.toml").read_text(encoding="ascii"))
-    if document.get("model") != expected_root.get("model"):
-        raise SetupError("root model is incorrect")
-    if document.get("model_reasoning_effort") != expected_root.get("model_reasoning_effort"):
-        raise SetupError("root reasoning is incorrect")
     if document.get("model_catalog_json") != str(catalog):
         raise SetupError("catalog path is incorrect")
     features = document.get("features", {})

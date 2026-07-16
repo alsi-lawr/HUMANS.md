@@ -264,11 +264,8 @@ def codex_validation(adapter_root: Path, errors: list[str]) -> None:
             errors.append(f"superseded Codex lifecycle skill remains: {name}")
     workers = matrix_validation("codex", matrix_dir, errors)
     profiles = load_toml(adapter_root / "profiles.toml", errors)
-    if (profiles.get("root", {}).get("model"), profiles.get("root", {}).get("reasoning")) != (
-        "gpt-5.6-sol",
-        "xhigh",
-    ):
-        errors.append("Codex root profile must bind Sol/xhigh")
+    if "root" in profiles or (adapter_root / "root.config.toml").exists():
+        errors.append("Codex must not bind the request-receiving orchestrator model")
     canonical = {
         (item.get("strategy_id"), item.get("role")): item
         for item in profiles.get("matrix_profiles", [])

@@ -391,6 +391,12 @@ Introduce these reusable interfaces:
 
 </details>
 
+**Superseded requirement.** The verbatim implementation prompt above records
+the then-selected Sol/xhigh root preset. That choice was later rejected as an
+installation requirement: the request-receiving agent is the orchestrator with
+whatever model and effort the human invoked. Current packages bind models only
+for delegated roles.
+
 **Agent-turn summary.** The agent reconciled the supplied plan with the repository and found that the earlier investigation artifacts were not available in the fresh context. It imported the accepted requirements into a governed Casefile, selected the named investigation, review, and implementation matrices, reserved HMD-001 through HMD-006, and gave HMD-001 through HMD-005 to one exclusive implementation writer while retaining HMD-006 for root closeout. Host checks established Python 3.14.6, Codex 0.144.1, V1 feature state, and the pre-existing unrelated untracked code-skill directories.
 
 The writer produced the first implementation commit. The matrix-declared atomic reviewer then rejected that commit with concrete P0/P1 findings, including the manifest architecture, V1 selector, governed-switch transaction, package-layout validation, profile binding, live cutover, and missing behavioural evidence. The agent routed those findings back for correction rather than treating mechanical checks as acceptance.
@@ -434,7 +440,7 @@ The writer produced the first implementation commit. The matrix-declared atomic 
 
 **Agent-turn summary.** The agent reported that the delay was the focused verification agent reading the 188-file correction commit, not further test authoring. Root-side checking had already exposed two integration defects: Claude strict validation rejected an unsupported manifest field, and the installed Codex CLI used `plugin add` rather than `plugin install`. The slow verifier was stopped and its missing verdict was recorded instead of inferred.
 
-The agent fixed those defects in `fb9beda`, corrected exported-null handling and cutover transaction ordering in `8f742d5`, and ran the compact local gates. It then performed the guarded personal Codex cutover only after a complete preview and rollback inventory. Fresh processes reported V1, Sol/xhigh for the root, and Terra/xhigh for the inspector; fifteen superseded direct paths were removed after all gates passed. The governed record was promoted and the repository closeout was recorded in `8c34b74`.
+The agent fixed those defects in `fb9beda`, corrected exported-null handling and cutover transaction ordering in `8f742d5`, and ran the compact local gates. It then performed the guarded personal Codex cutover only after a complete preview and rollback inventory. Fresh processes reported V1, the then-configured Sol/xhigh root, and Terra/xhigh for the inspector; the root result was incidental and is not a current package requirement. Fifteen superseded direct paths were removed after all gates passed. The governed record was promoted and the repository closeout was recorded in `8c34b74`.
 
 **Evidence.**
 
@@ -580,7 +586,7 @@ The primary atomic review's verdict on `9c3f998` was **reject - corrections requ
 | Source/package validation | 17 source skills; both standalone package validators; all Casefile surfaces passed | Mechanical structure and metadata, not behaviour. |
 | Claude | `claude plugin validate --strict` passed with Claude Code 2.1.204 | No install, loading, triggering, routing, or behavioural run. |
 | Isolated Codex | Marketplace add, plugin add, discovery, and installed-byte parity passed with Codex CLI 0.144.1 | Separate from personal live state. |
-| Personal Codex cutover | Strict config, discovery, V1, Sol/xhigh root, Terra/xhigh inspector, selective removal, and byte parity passed | Machine-local runtime evidence preserved in the private Casefile. |
+| Personal Codex cutover | Strict config, discovery, V1, the then-configured Sol/xhigh root, Terra/xhigh inspector, selective removal, and byte parity passed | Historical machine-local evidence; the root model was incidental and is no longer a package requirement. |
 | Balanced skill suite | Strategy, suite, prompts, and rubrics exist | Candidate/baseline runs were not executed and remain `unverified`. |
 | Forge publication | Issue #1 and open PR #2 exist on the feature branch | State at the report cutoff; later distribution maintenance is outside the transcript boundary. |
 

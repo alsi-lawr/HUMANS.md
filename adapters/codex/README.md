@@ -1,7 +1,9 @@
 # Codex adapter
 
-The generated Codex plugin binds the portable Casefile workflow to Sol/xhigh
-at the root and matrix-specific Terra profiles for delegated roles.
+The agent that receives the request remains the orchestrator with its existing
+model and reasoning effort. The generated Codex plugin does not select or
+replace either value. It binds only delegated Casefile roles to matrix-specific
+Terra profiles.
 
 After marketplace installation, invoke `codex-setup`. The skill only runs
 `scripts/setup-codex.py`: first as a preview, then once with `--apply` after

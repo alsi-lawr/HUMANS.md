@@ -6,9 +6,9 @@ review. It keeps the human-selected strategy, root-agent authority, write
 ownership, decisions, and verification visible throughout the task.
 
 It is not a fixed chain of autonomous agents. The agent that receives the
-request remains the root orchestrator. The human selects a compatible strategy
-for each phase, and the selected vendor adapter supplies the concrete agent
-profiles and runtime bindings.
+request remains the root orchestrator, using whatever model and effort the
+human invoked. The human selects a compatible strategy for each phase, and the
+selected vendor adapter supplies concrete bindings only for delegated roles.
 
 ## Skill surface
 

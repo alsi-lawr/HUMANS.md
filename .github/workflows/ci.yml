@@ -46,6 +46,10 @@ jobs:
           npm install --global @openai/codex
           export CODEX_HOME="$RUNNER_TEMP/codex-home"
           mkdir -p "$CODEX_HOME"
+          cat > "$CODEX_HOME/config.toml" <<'TOML'
+          model = "gpt-5.5"
+          model_reasoning_effort = "high"
+          TOML
           codex plugin marketplace add "$GITHUB_WORKSPACE/build/marketplace" --json
           codex plugin add humans-md@humans-md --json
           codex plugin list --available --json | python scripts/check-codex-discovery.py
@@ -60,6 +64,8 @@ jobs:
 
           home = pathlib.Path(os.environ["CODEX_HOME"])
           config = tomllib.loads((home / "config.toml").read_text(encoding="ascii"))
+          assert config["model"] == "gpt-5.5"
+          assert config["model_reasoning_effort"] == "high"
           catalog_path = home / "models-humans-md-v1.json"
           assert config["model_catalog_json"] == str(catalog_path)
           catalog = json.loads(catalog_path.read_text(encoding="ascii"))
@@ -67,7 +73,7 @@ jobs:
           assert models["gpt-5.6-sol"]["multi_agent_version"] is None
           assert models["gpt-5.6-terra"]["multi_agent_version"] is None
           path = home / "config.toml"
-          marker = "# <<< humans-md setup root <<<\n"
+          marker = "# <<< humans-md setup scalars <<<\n"
           text = path.read_text(encoding="ascii")
           assert text.count(marker) == 1
           path.write_text(
@@ -83,5 +89,7 @@ jobs:
 
           home = pathlib.Path(os.environ["CODEX_HOME"])
           config = tomllib.loads((home / "config.toml").read_text(encoding="ascii"))
+          assert config["model"] == "gpt-5.5"
+          assert config["model_reasoning_effort"] == "high"
           assert config["personality"] == "pragmatic"
           PY

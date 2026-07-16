@@ -104,10 +104,6 @@ source = "adapters/codex/config-fragment.toml.in"
 destination = "config/config-fragment.toml.in"
 
 [[vendors.codex.copy]]
-source = "adapters/codex/root.config.toml"
-destination = "config/root.config.toml"
-
-[[vendors.codex.copy]]
 source = "adapters/codex/profiles.toml"
 destination = "config/profiles.toml"
 

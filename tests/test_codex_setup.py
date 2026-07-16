@@ -66,7 +66,7 @@ class CodexSetupTests(unittest.TestCase):
             '{"name":"humans-md","version":"0.1.3"}\n', encoding="ascii"
         )
         (plugin / "config").mkdir()
-        for name in ("config-fragment.toml.in", "root.config.toml", "profiles.toml"):
+        for name in ("config-fragment.toml.in", "profiles.toml"):
             shutil.copy2(ROOT / "adapters/codex" / name, plugin / "config" / name)
         shutil.copytree(ROOT / "adapters/codex/catalog", plugin / "config/catalog")
         shutil.copytree(ROOT / "adapters/codex/agents", plugin / "agents")
@@ -95,7 +95,9 @@ class CodexSetupTests(unittest.TestCase):
 
         home = root / "codex-home"
         home.mkdir()
-        original = b'''personality = "pragmatic"
+        original = b'''model = "gpt-5.5"
+model_reasoning_effort = "high"
+personality = "pragmatic"
 [plugins."humans-md@humans-md"]
 enabled = true
 [marketplaces.humans-md]
@@ -127,6 +129,8 @@ source = "fixture"
                 self.assertEqual(0o600, receipt_path.stat().st_mode & 0o777)
                 self.assertEqual(0o700, receipt_path.parent.stat().st_mode & 0o777)
                 config = tomllib.loads((home / "config.toml").read_text(encoding="ascii"))
+                self.assertEqual("gpt-5.5", config["model"])
+                self.assertEqual("high", config["model_reasoning_effort"])
                 self.assertEqual("pragmatic", config["personality"])
                 self.assertTrue(config["features"]["multi_agent"])
                 self.assertFalse(config["features"]["multi_agent_v2"])
