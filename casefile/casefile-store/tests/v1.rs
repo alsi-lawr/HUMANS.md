@@ -1,5 +1,5 @@
 use casefile_core::{ChangeRequest, Classification, Kind, RecordDraft};
-use casefile_store::Store;
+use casefile_store::{ActivationState, Store};
 use std::{fs, path::Path, process::Command};
 use tempfile::TempDir;
 
@@ -113,6 +113,38 @@ fn scans_each_v1_kind_and_preserves_raw_material() {
             .iter()
             .find(|entry| entry.path.ends_with("legacy.txt"))
             .map(|entry| entry.classification)
+    );
+}
+
+#[test]
+fn activation_state_distinguishes_unactivated_and_invalid_roots() {
+    let root = fixture();
+    let store = Store::open(root.path()).expect("store");
+    assert_eq!(
+        ActivationState::Active,
+        store.scan().expect("scan").activation
+    );
+
+    fs::remove_file(root.path().join("casefile.toml")).expect("remove activation");
+    let unactivated = store.scan().expect("unactivated scan");
+    assert_eq!(ActivationState::Unactivated, unactivated.activation);
+    assert!(unactivated.diagnostics.is_empty());
+    assert!(
+        unactivated
+            .snapshot
+            .entries
+            .iter()
+            .all(|entry| entry.classification == Classification::Ungoverned)
+    );
+
+    fs::write(root.path().join("casefile.toml"), "not = [valid").expect("bad activation");
+    let invalid = store.scan().expect("invalid scan");
+    assert_eq!(ActivationState::Invalid, invalid.activation);
+    assert!(
+        invalid
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.code == "invalid_activation")
     );
 }
 

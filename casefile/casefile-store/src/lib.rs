@@ -28,8 +28,17 @@ pub enum StoreError {
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct ScanResult {
+    pub activation: ActivationState,
     pub snapshot: CasefileSnapshot,
     pub diagnostics: Vec<Diagnostic>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ActivationState {
+    Unactivated,
+    Active,
+    Invalid,
 }
 
 #[derive(Clone, Debug)]
@@ -74,7 +83,7 @@ impl Store {
             }
             ChangeRequest::Delete { .. } => existing.and_then(|entry| entry.kind),
         };
-        let path_kind = kind_for_path(&path, &activation(&self.root)?.0);
+        let path_kind = kind_for_path(&path, &activation(&self.root)?.1);
         if !matches!(writable, Some(Kind::Ticket | Kind::Epic | Kind::Board))
             || path_kind != writable
         {
@@ -242,18 +251,15 @@ struct Project {
     investigations: Vec<String>,
 }
 
-fn activation(root: &Path) -> Result<(Activation, Vec<Diagnostic>), StoreError> {
+fn activation(root: &Path) -> Result<(ActivationState, Activation, Vec<Diagnostic>), StoreError> {
     let path = root.join("casefile.toml");
     let text = match fs::read_to_string(&path) {
         Ok(text) => text,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
             return Ok((
+                ActivationState::Unactivated,
                 Activation::default(),
-                vec![Diagnostic::new(
-                    "casefile.toml",
-                    "missing_activation",
-                    "casefile.toml is required for governed v1 records",
-                )],
+                Vec::new(),
             ));
         }
         Err(error) => return Err(error.into()),
@@ -262,6 +268,7 @@ fn activation(root: &Path) -> Result<(Activation, Vec<Diagnostic>), StoreError> 
         Ok(value) => value,
         Err(error) => {
             return Ok((
+                ActivationState::Invalid,
                 Activation::default(),
                 vec![Diagnostic::new(
                     "casefile.toml",
@@ -299,7 +306,12 @@ fn activation(root: &Path) -> Result<(Activation, Vec<Diagnostic>), StoreError> 
             }
         }
     }
-    Ok((activation, stable(diagnostics)))
+    let state = if diagnostics.is_empty() {
+        ActivationState::Active
+    } else {
+        ActivationState::Invalid
+    };
+    Ok((state, activation, stable(diagnostics)))
 }
 
 use regex::Regex;
@@ -308,7 +320,7 @@ fn scan(
     root: &Path,
     overlay: &BTreeMap<String, Option<Vec<u8>>>,
 ) -> Result<ScanResult, StoreError> {
-    let (active, mut diagnostics) = activation(root)?;
+    let (activation, active, mut diagnostics) = activation(root)?;
     let mut files = BTreeMap::new();
     let mut unsafe_paths = BTreeSet::new();
     collect(root, root, &mut files, &mut unsafe_paths)?;
@@ -324,16 +336,19 @@ fn scan(
     }
     let mut entries = Vec::new();
     for (path, bytes) in files {
-        let (classification, kind, identity, summary, mut found) = if unsafe_paths.contains(&path) {
-            invalid(
-                &path,
-                kind_for_path(&path, &active),
-                "unsafe_path",
-                "governed paths cannot be symlinks",
-            )
-        } else {
-            classify(&path, &bytes, &active)
-        };
+        let (classification, kind, identity, summary, mut found) =
+            if activation == ActivationState::Unactivated {
+                (Classification::Ungoverned, None, None, None, Vec::new())
+            } else if unsafe_paths.contains(&path) {
+                invalid(
+                    &path,
+                    kind_for_path(&path, &active),
+                    "unsafe_path",
+                    "governed paths cannot be symlinks",
+                )
+            } else {
+                classify(&path, &bytes, &active)
+            };
         diagnostics.append(&mut found);
         entries.push(EntrySnapshot {
             path: path.clone(),
@@ -355,6 +370,7 @@ fn scan(
         input.push(0);
     }
     Ok(ScanResult {
+        activation,
         snapshot: CasefileSnapshot {
             revision: digest(&input),
             entries,

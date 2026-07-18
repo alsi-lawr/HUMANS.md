@@ -13,10 +13,38 @@ selected vendor adapter supplies concrete bindings only for delegated roles.
 ## V1 record boundary
 
 The adjacent `casefile/` Cargo workspace scans the compact governed-record v1
-shape and provides JSON snapshot, preview, and one-path create/replace/delete
+shape and provides JSON `scan`, `check`, `preview`, and one-path `apply`
 operations for complete ticket, epic, and board drafts. It uses Git only for
 reviewable diffs and never stages changes; workflow skills remain responsible
 for human authority and the planning process.
+
+`casefile check` emits only `{ activation, valid, revision, diagnostics }`.
+An unactivated root has `activation: "unactivated"` and `valid: null`; it exits
+zero unless `--require-activation` is supplied. Active invalid records and an
+invalid activation exit nonzero. `preview` and `apply` exchange their existing
+JSON protocol: they are a routed, validated writer, not interception of native
+writes.
+
+### CI and optional local invocation
+
+Installed Casefile plugins do not bundle the Cargo workspace or `casefile`
+binary. Users must separately provision the CLI. The following Cargo and binary
+paths are from a source checkout, not a plugin installation; build that source
+and run the gate from a CI job that has the planning store as its root:
+
+```sh
+cargo build --manifest-path casefile/Cargo.toml --release -p casefile-cli
+casefile/target/release/casefile --root "$CASEFILE_ROOT" check --require-activation
+```
+
+This is authoritative only when the hosting provider configures that job as a
+required merge check. A local hook maintained by its user may invoke the same
+already-built command manually; Casefile does not install, replace, back up, or
+uninstall hooks.
+
+Neither native writes nor shell commands are fail-closed. Plugin trust,
+disable, load, and timeout failures, hosted or specialized tools, and local
+hooks are likewise outside this command's enforcement guarantee.
 
 ## Skill surface
 
