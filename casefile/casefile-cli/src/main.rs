@@ -32,6 +32,7 @@ enum Command {
         #[arg(long)]
         preview: PathBuf,
     },
+    Tui,
 }
 
 #[derive(Serialize)]
@@ -89,6 +90,10 @@ fn run() -> Result<ExitCode> {
         Command::Apply { preview } => {
             let preview: Preview = read_json(&preview)?;
             print_json(&store.apply(preview)?)?;
+            Ok(ExitCode::SUCCESS)
+        }
+        Command::Tui => {
+            casefile_tui::run(store.scan()?)?;
             Ok(ExitCode::SUCCESS)
         }
     }
