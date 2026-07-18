@@ -24,10 +24,11 @@ jobs:
       - name: Run package-local and shared tests
         run: python scripts/test-all.py
       - name: Check Casefile Rust workspace
+        working-directory: casefile
         run: |
-          cargo fmt --manifest-path casefile/Cargo.toml --check
-          cargo clippy --manifest-path casefile/Cargo.toml --workspace --all-targets -- -D warnings
-          cargo test --manifest-path casefile/Cargo.toml --workspace
+          cargo fmt --check
+          cargo clippy --workspace --all-targets -- -D warnings
+          cargo test --workspace
       - name: Validate source roots
         run: |
           python scripts/validate-package-roots.py
