@@ -109,3 +109,33 @@ class ClaudeReceiptSafetyTests(unittest.TestCase):
             marker.mkdir()
             with self.assertRaisesRegex(claude.MigrationError, "unsafe or ambiguous"):
                 claude.preview(config, plugin)
+
+    def test_legacy_migration_rejects_non_regular_live_target_without_mutation(self):
+        for kind in ("symlink", "directory"):
+            with self.subTest(kind=kind), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                plugin = self.plugin(root)
+                config = root / "claude"
+                legacy = config / "backups/humans-md/claude"
+                legacy.mkdir(parents=True)
+                (legacy / "CLAUDE.md.before").write_text("# original\n", encoding="ascii")
+                target = config / "CLAUDE.md"
+                if kind == "symlink":
+                    referent = root / "outside.md"
+                    referent.write_text("# live\n", encoding="ascii")
+                    target.symlink_to(referent)
+                else:
+                    target.mkdir()
+                before_receipt = (legacy / "CLAUDE.md.before").read_bytes()
+                with self.assertRaisesRegex(claude.MigrationError, "unsafe live Claude target"):
+                    claude.preview(config, plugin)
+                with self.assertRaisesRegex(claude.MigrationError, "unsafe live Claude target"):
+                    claude.apply(config, plugin, "any-fingerprint")
+                self.assertEqual(before_receipt, (legacy / "CLAUDE.md.before").read_bytes())
+                self.assertFalse((config / "backups/humans-md/claude-v0.1.5-retired").exists())
+                self.assertFalse(claude_setup.pointer(config).exists())
+                if kind == "symlink":
+                    self.assertTrue(target.is_symlink())
+                    self.assertEqual("# live\n", referent.read_text(encoding="ascii"))
+                else:
+                    self.assertTrue(target.is_dir())

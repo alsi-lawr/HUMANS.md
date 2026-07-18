@@ -23,6 +23,9 @@ class MigrationError(RuntimeError): pass
 
 def legacy_receipt(config: Path) -> tuple[Path, Path | None]:
     root=config/"backups/humans-md/claude"; before=root/"CLAUDE.md.before"; missing=root/"CLAUDE.md.was-missing"
+    current=config/"CLAUDE.md"
+    if current.is_symlink() or (current.exists() and not current.is_file()):
+        raise MigrationError("unsafe live Claude target")
     if core.pointer(config).exists(): raise MigrationError("fresh v0.2.0 Claude state is not a migratable v0.1.5 receipt")
     if root.is_symlink() or not root.is_dir() or before.exists()==missing.exists() or (root/"receipt.json").exists():
         raise MigrationError("no supported humans-md 0.1.5 Claude recovery receipt; run legacy recovery first")
