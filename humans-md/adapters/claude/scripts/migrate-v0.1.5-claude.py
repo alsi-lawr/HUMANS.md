@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import argparse
-import datetime
+import hashlib
+import importlib.util
 import json
 import os
 import shutil
@@ -12,124 +13,91 @@ import tempfile
 from pathlib import Path
 
 
-class MigrationError(RuntimeError):
-    pass
+def lifecycle():
+    path=Path(__file__).with_name("setup-claude.py"); spec=importlib.util.spec_from_file_location("claude_core_setup",path)
+    if spec is None or spec.loader is None: raise RuntimeError("cannot load Claude core lifecycle")
+    module=importlib.util.module_from_spec(spec); spec.loader.exec_module(module); return module
+core=lifecycle()
 
+class MigrationError(RuntimeError): pass
 
-def atomic_write(path: Path, data: bytes) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    descriptor, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
-    temporary_path = Path(temporary)
-    try:
-        with os.fdopen(descriptor, "wb") as stream:
-            fchmod = getattr(os, "fchmod", None)
-            if fchmod is not None:
-                fchmod(stream.fileno(), 0o600)
-            stream.write(data)
-            stream.flush()
-            os.fsync(stream.fileno())
-        if os.name == "posix":
-            os.chmod(temporary_path, 0o600)
-        os.replace(temporary_path, path)
-    except BaseException:
-        try:
-            os.close(descriptor)
-        except OSError:
-            pass
-        temporary_path.unlink(missing_ok=True)
-        raise
-
-
-def receipt(config: Path) -> tuple[Path, Path | None]:
-    root = config / "backups/humans-md/claude"
-    before = root / "CLAUDE.md.before"
-    missing = root / "CLAUDE.md.was-missing"
-    if root.is_symlink() or not root.is_dir() or before.exists() == missing.exists():
+def legacy_receipt(config: Path) -> tuple[Path, Path | None]:
+    root=config/"backups/humans-md/claude"; before=root/"CLAUDE.md.before"; missing=root/"CLAUDE.md.was-missing"
+    if core.pointer(config).exists(): raise MigrationError("fresh v0.2.0 Claude state is not a migratable v0.1.5 receipt")
+    if root.is_symlink() or not root.is_dir() or before.exists()==missing.exists() or (root/"receipt.json").exists():
         raise MigrationError("no supported humans-md 0.1.5 Claude recovery receipt; run legacy recovery first")
-    if before.exists() and (before.is_symlink() or not before.is_file()):
-        raise MigrationError("unsafe legacy Claude receipt")
+    entries={item.name for item in root.iterdir()}
+    allowed={"CLAUDE.md.before"} if before.exists() else {"CLAUDE.md.was-missing"}
+    if entries != allowed or (before.exists() and (before.is_symlink() or not before.is_file())):
+        raise MigrationError("unsafe or ambiguous legacy Claude receipt")
     return root, before if before.exists() else None
 
+def fingerprint(path: Path) -> str:
+    digest=hashlib.sha256()
+    def add(current: Path, relative: str) -> None:
+        if current.is_symlink(): digest.update(f"L {relative} ".encode()); digest.update(os.readlink(current).encode()); return
+        if current.is_file(): digest.update(f"F {relative} ".encode()); digest.update(current.read_bytes()); return
+        if current.is_dir():
+            digest.update(f"D {relative}\\n".encode())
+            for child in sorted(current.iterdir(),key=lambda item:item.name): add(child,f"{relative}/{child.name}")
+            return
+        digest.update(f"M {relative}\\n".encode())
+    add(path,"."); return digest.hexdigest()
+
+def approval_fingerprint(config: Path, root: Path) -> str:
+    return hashlib.sha256(core.canonical({"CLAUDE.md":fingerprint(config/"CLAUDE.md"),"legacy-receipt":fingerprint(root)})).hexdigest()
 
 def show_diff(current: Path, baseline: Path | None) -> None:
     with tempfile.TemporaryDirectory(prefix="humans-md-claude-migration-") as temporary:
-        missing = Path(temporary) / "missing"
-        missing.touch()
-        left = current if current.exists() else missing
-        right = baseline if baseline is not None else missing
-        result = subprocess.run(["git", "diff", "--no-index", "--", str(left), str(right)], capture_output=True, text=True, encoding="utf-8", errors="strict")
-        if result.returncode not in (0, 1):
-            raise MigrationError(result.stderr.strip() or "git diff --no-index failed")
-        if result.stdout:
-            print(result.stdout, end="" if result.stdout.endswith("\n") else "\n")
+        missing=Path(temporary)/"missing"; missing.touch(); left=current if current.exists() else missing; right=baseline if baseline is not None else missing
+        result=subprocess.run(["git","diff","--no-index","--",str(left),str(right)],capture_output=True,text=True,encoding="utf-8",errors="strict")
+        if result.returncode not in (0,1): raise MigrationError(result.stderr.strip() or "git diff --no-index failed")
+        if result.stdout: print(result.stdout,end="" if result.stdout.endswith("\n") else "\n")
 
+def preview(config: Path, plugin_root: Path) -> tuple[dict, Path, Path | None]:
+    root,before=legacy_receipt(config); source=core.plugin_source(plugin_root)
+    plan={"operation":"migrate-v0.1.5-to-v0.2.0","legacy_receipt":str(root),"restore":str(before) if before else "prior absence","fresh_core_receipt_root":str(core.config_root(config)),"approval_fingerprint":approval_fingerprint(config,root),"marketplace_preserved":True,"install_siblings":False,"source_sha256":hashlib.sha256(source).hexdigest()}
+    return plan,root,before
 
-def preview(config: Path, plugin_root: Path) -> tuple[dict, Path, Path | None, bytes]:
-    root, before = receipt(config)
-    source = plugin_root.resolve(strict=True) / "templates/AGENTS.md"
-    if not source.is_file() or source.is_symlink():
-        raise MigrationError("core plugin lacks a safe CLAUDE.md contract template")
-    return ({"operation": "migrate-v0.1.5-to-v0.2.0", "legacy_receipt": str(root), "restore": str(before) if before else "prior absence", "fresh_core_receipt": str(root), "marketplace_preserved": True, "install_siblings": False}, root, before, source.read_bytes())
-
-
-def apply(config: Path, plugin_root: Path) -> dict:
-    _, root, before, source = preview(config, plugin_root)
-    # Validate all state again after human approval and before mutation.
-    _, root, before, source = preview(config, plugin_root)
-    current = config / "CLAUDE.md"
-    rollback = Path(tempfile.mkdtemp(prefix="migration-", dir=config / "backups/humans-md"))
-    prior_current = rollback / "CLAUDE.md"
-    prior_root = rollback / "legacy-receipt"
-    had_current = current.exists()
-    if had_current:
-        shutil.copy2(current, prior_current)
-    shutil.copytree(root, prior_root)
+def apply(config: Path, plugin_root: Path, approval: str) -> dict:
+    plan,root,before=preview(config,plugin_root)
+    if approval != plan["approval_fingerprint"]:
+        show_diff(config/"CLAUDE.md",before); raise MigrationError("stale approval: managed state changed; review the recomputed diff")
+    # Immediate pre-mutation validation includes the managed file and the complete legacy receipt.
+    plan,root,before=preview(config,plugin_root)
+    if approval != plan["approval_fingerprint"]:
+        show_diff(config/"CLAUDE.md",before); raise MigrationError("stale approval: managed state changed; review the recomputed diff")
+    current=config/"CLAUDE.md"; parent=root.parent; rollback=Path(tempfile.mkdtemp(prefix="migration-",dir=parent)); prior_root=rollback/"legacy-receipt"; prior_current=rollback/"CLAUDE.md"; had_current=current.exists(); retired: Path|None=None
+    if had_current: core.atomic_write(prior_current,current.read_bytes())
+    shutil.copytree(root,prior_root)
     try:
-        if before is None:
-            current.unlink(missing_ok=True)
-        else:
-            atomic_write(current, before.read_bytes())
-        retired = root.parent / ("claude-v0.1.5-retired-" + datetime.datetime.now(datetime.UTC).strftime("%Y%m%dT%H%M%SZ"))
-        os.replace(root, retired)
-        root.mkdir(mode=0o700)
-        if current.exists():
-            atomic_write(root / "CLAUDE.md.before", current.read_bytes())
-        else:
-            (root / "CLAUDE.md.was-missing").write_text("\n", encoding="ascii")
-        atomic_write(current, source)
-        if current.read_bytes() != source:
-            raise MigrationError("fresh contract write verification failed")
-        return {"status": "migrated", "retired_legacy_receipt": str(retired), "marketplace_preserved": True, "siblings_installed": False}
+        if before is None: current.unlink(missing_ok=True)
+        else: core.atomic_write(current,before.read_bytes())
+        retired=parent/"claude-v0.1.5-retired"
+        if retired.exists(): raise MigrationError("prior retired legacy receipt requires recovery")
+        os.replace(root,retired)
+        # Fresh setup owns a distinct versioned receipt and state pointer.
+        result=core.install(config,plugin_root)
+        return {"status":"migrated","retired_legacy_receipt":str(retired),"fresh_receipt":result["receipt"],"marketplace_preserved":True,"siblings_installed":False}
     except BaseException as error:
         current.unlink(missing_ok=True)
-        if had_current:
-            atomic_write(current, prior_current.read_bytes())
-        if root.exists():
-            shutil.rmtree(root)
-        shutil.copytree(prior_root, root)
+        if had_current: core.atomic_write(current,prior_current.read_bytes())
+        if core.config_root(config).exists(): shutil.rmtree(core.config_root(config))
+        core.pointer(config).unlink(missing_ok=True)
+        if root.exists(): shutil.rmtree(root)
+        if retired is not None and retired.exists(): shutil.rmtree(retired)
+        shutil.copytree(prior_root,root)
+        if not root.is_dir() or (retired is not None and retired.exists()): raise MigrationError("migration rollback left receipt state incomplete") from error
         raise MigrationError(f"migration failed; legacy state rollback verified: {error}") from error
 
-
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--plugin-root", type=Path, required=True)
-    parser.add_argument("--config-dir", type=Path, default=Path(os.environ.get("CLAUDE_CONFIG_DIR", "~/.claude")))
-    parser.add_argument("--apply", action="store_true")
-    arguments = parser.parse_args()
+    parser=argparse.ArgumentParser(description=__doc__); parser.add_argument("--plugin-root",type=Path,required=True); parser.add_argument("--config-dir",type=Path,default=Path(os.environ.get("CLAUDE_CONFIG_DIR","~/.claude"))); parser.add_argument("--apply",action="store_true"); parser.add_argument("--approval")
+    args=parser.parse_args()
     try:
-        config = arguments.config_dir.expanduser().resolve(strict=True)
-        plan, _, before, _ = preview(config, arguments.plugin_root)
-        print(json.dumps(plan, indent=2, sort_keys=True))
-        show_diff(config / "CLAUDE.md", before)
-        if arguments.apply:
-            print(json.dumps(apply(config, arguments.plugin_root), indent=2, sort_keys=True))
-        else:
-            print("preview only; no files changed")
-        return 0
-    except (OSError, UnicodeError, MigrationError) as error:
-        print(f"migration failed: {error}")
-        return 1
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
+        config=args.config_dir.expanduser().resolve(strict=True); plan,_,before=preview(config,args.plugin_root); print(json.dumps(plan,indent=2,sort_keys=True)); show_diff(config/"CLAUDE.md",before)
+        if not args.apply: print("preview only; no files changed"); return 0
+        if not args.approval: raise MigrationError("--approval must equal the preview approval_fingerprint")
+        print(json.dumps(apply(config,args.plugin_root,args.approval),indent=2,sort_keys=True)); return 0
+    except (OSError,UnicodeError,MigrationError,core.SetupError) as error:
+        print(f"migration failed: {error}"); return 1
+if __name__=="__main__": raise SystemExit(main())

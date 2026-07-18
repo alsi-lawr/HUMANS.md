@@ -13,4 +13,8 @@ class PackageRootTests(unittest.TestCase):
    self.assertEqual(expected,roots)
   core=ROOT/"build/marketplace/plugins/codex/humans-md"
   self.assertFalse((core/"casefile-workflow").exists()); self.assertFalse((core/"skills/git-contribution").exists())
+  metadata=(core/".codex-plugin/plugin.json").read_text(encoding="ascii")
+  self.assertNotIn("Casefile workflow",metadata); self.assertNotIn("Create a skill",metadata)
+  claude=ROOT/"build/marketplace/plugins/claude/humans-md"
+  self.assertEqual(["bootstrap-contract.py"],sorted(path.name for path in claude.rglob("bootstrap-contract.py")))
 if __name__ == "__main__": unittest.main()

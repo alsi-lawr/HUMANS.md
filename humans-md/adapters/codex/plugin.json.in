@@ -12,9 +12,8 @@
     ],
     "category": "Coding",
     "defaultPrompt": [
-      "Investigate this repository with the Casefile workflow.",
-      "Implement accepted Casefile tickets with explicit ownership.",
-      "Create a skill and choose its verification strategy."
+      "Preview or recover the standing repository behaviour contract.",
+      "Migrate a supported humans-md 0.1.5 installation before installing optional siblings."
     ],
     "developerName": ${publisher_json},
     "displayName": ${name_json},

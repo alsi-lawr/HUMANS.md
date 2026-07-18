@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import datetime
+import hashlib
 import importlib.util
 import json
 import os
@@ -66,6 +67,29 @@ def legacy_receipt(home: Path) -> tuple[Path, dict]:
     return path, value
 
 
+def path_fingerprint(path: Path) -> str:
+    digest = hashlib.sha256()
+    def add(current: Path, relative: str) -> None:
+        if current.is_symlink():
+            digest.update(f"L {relative} ".encode("utf-8")); digest.update(os.readlink(current).encode("utf-8")); return
+        if current.is_file():
+            digest.update(f"F {relative} ".encode("utf-8")); digest.update(current.read_bytes()); return
+        if current.is_dir():
+            digest.update(f"D {relative}\n".encode("utf-8"))
+            for child in sorted(current.iterdir(), key=lambda item: item.name): add(child, f"{relative}/{child.name}")
+            return
+        digest.update(f"M {relative}\n".encode("utf-8"))
+    add(path, ".")
+    return digest.hexdigest()
+
+
+def approval_fingerprint(home: Path, receipt_path: Path) -> str:
+    values = {relative: path_fingerprint(home / relative) for relative in LEGACY_PATHS}
+    values["state/humans-md/current.json"] = path_fingerprint(core.pointer(home))
+    values["legacy-receipt"] = path_fingerprint(receipt_path)
+    values["legacy-before"] = path_fingerprint(receipt_path.parent / "before")
+    return hashlib.sha256(core.canonical(values)).hexdigest()
+
 def unowned_config(data: bytes) -> bytes:
     ranges = []
     for name, begin, end in (("scalars", SCALAR_BEGIN, SCALAR_END), ("tables", TABLE_BEGIN, TABLE_END)):
@@ -110,7 +134,7 @@ def show_diffs(home: Path, receipt_path: Path, receipt: dict) -> None:
 def preview(home: Path, plugin_root: Path, executable: str) -> dict:
     receipt_path, receipt = legacy_receipt(home)
     plan = core.prepare(plugin_root, home, executable)
-    return {"operation": "migrate-v0.1.5-to-v0.2.0", "legacy_receipt": str(receipt_path), "restore_snapshot": str(receipt_path.parent / "before"), "legacy_managed_path_count": len(LEGACY_PATHS), "fresh_core_setup": core.preview(plan), "marketplace_preserved": True, "install_siblings": False}, receipt_path, receipt, plan
+    return {"operation": "migrate-v0.1.5-to-v0.2.0", "legacy_receipt": str(receipt_path), "restore_snapshot": str(receipt_path.parent / "before"), "legacy_managed_path_count": len(LEGACY_PATHS), "fresh_core_setup": core.preview(plan), "approval_fingerprint": approval_fingerprint(home, receipt_path), "marketplace_preserved": True, "install_siblings": False}, receipt_path, receipt, plan
 
 
 def restore_legacy_baseline(home: Path, receipt_path: Path, receipt: dict) -> None:
@@ -126,11 +150,16 @@ def restore_legacy_baseline(home: Path, receipt_path: Path, receipt: dict) -> No
         core.remove(config)
 
 
-def apply(home: Path, plugin_root: Path, executable: str) -> dict:
-    _, receipt, plan_preview, _ = preview(home, plugin_root, executable)
-    # Re-read all mutable state immediately before writing; preview never authorises stale state.
-    receipt_path, receipt = legacy_receipt(home)
-    plan = core.prepare(plugin_root, home, executable)
+def apply(home: Path, plugin_root: Path, executable: str, approval: str) -> dict:
+    reviewed, receipt_path, receipt, plan = preview(home, plugin_root, executable)
+    if approval != reviewed["approval_fingerprint"]:
+        show_diffs(home, receipt_path, receipt)
+        raise MigrationError("stale approval: managed state changed; review the recomputed diff")
+    # Re-read all mutable state immediately before writing; the approval binds every target.
+    reviewed, receipt_path, receipt, plan = preview(home, plugin_root, executable)
+    if approval != reviewed["approval_fingerprint"]:
+        show_diffs(home, receipt_path, receipt)
+        raise MigrationError("stale approval: managed state changed; review the recomputed diff")
     rollback_dir = Path(tempfile.mkdtemp(prefix="migration-" + datetime.datetime.now(datetime.UTC).strftime("%Y%m%dT%H%M%SZ-"), dir=core.backup_root(home)))
     rollback_paths = [home / item for item in LEGACY_PATHS] + [core.pointer(home)]
     rollback = core.snapshot(home, rollback_paths, rollback_dir / "before")
@@ -156,6 +185,7 @@ def main() -> int:
     parser.add_argument("--codex-home", type=Path, default=Path(os.environ.get("CODEX_HOME", "~/.codex")))
     parser.add_argument("--codex-executable", default="codex")
     parser.add_argument("--apply", action="store_true")
+    parser.add_argument("--approval")
     arguments = parser.parse_args()
     try:
         home = arguments.codex_home.expanduser().resolve(strict=True)
@@ -165,7 +195,9 @@ def main() -> int:
         if not arguments.apply:
             print("preview only; no files changed")
             return 0
-        print(json.dumps(apply(home, arguments.plugin_root, arguments.codex_executable), indent=2, sort_keys=True))
+        if not arguments.approval:
+            raise MigrationError("--approval must equal the preview approval_fingerprint")
+        print(json.dumps(apply(home, arguments.plugin_root, arguments.codex_executable, arguments.approval), indent=2, sort_keys=True))
         return 0
     except (OSError, UnicodeError, ValueError, MigrationError, core.SetupError) as error:
         print(f"migration failed: {error}")

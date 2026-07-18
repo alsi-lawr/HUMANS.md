@@ -43,8 +43,8 @@ marketplace or another plugin.
 Do **not** install `casefile` or `coding` yet. Update the existing `humans-md`
 plugin to `v0.2.0`, restart the host, then invoke its `migrations` skill. It
 supports only `0.1.5 -> 0.2.0`: it previews restoration of the old managed
-baseline, shows focused Git diffs for managed files, asks once, revalidates, and
-then reseeds a fresh contract-only core receipt. It preserves the marketplace.
+baseline, shows focused Git diffs for managed files, records a preview fingerprint for the
+approval, revalidates that every managed target still matches it, and then reseeds a fresh contract-only core receipt. It preserves the marketplace.
 
 After that succeeds, install optional sibling plugins and run their own setup
 skills where needed. Missing, altered, unsafe, or ambiguous legacy receipts stop
