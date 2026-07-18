@@ -66,3 +66,46 @@ class ClaudeMigrationTests(unittest.TestCase):
   with tempfile.TemporaryDirectory() as td:
    plugin,config=self.fixture(Path(td),False); plan,*_=claude.preview(config,plugin); result=claude.apply(config,plugin,plan["approval_fingerprint"]); receipt=json.loads(Path(result["fresh_receipt"]).read_bytes()); self.assertEqual("missing",receipt["before"])
 if __name__=="__main__": unittest.main()
+
+class ClaudeReceiptSafetyTests(unittest.TestCase):
+    def plugin(self, root: Path) -> Path:
+        plugin = root / "plugin"
+        (plugin / "templates").mkdir(parents=True)
+        (plugin / "templates/AGENTS.md").write_text("# core\n", encoding="ascii")
+        return plugin
+
+    def test_core_setup_rejects_symlink_target_without_receipt_mutation(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            plugin = self.plugin(root)
+            config = root / "claude"
+            config.mkdir()
+            referent = root / "outside.md"
+            referent.write_text("# original\n", encoding="ascii")
+            (config / "CLAUDE.md").symlink_to(referent)
+            with self.assertRaisesRegex(claude_setup.SetupError, "symbolic-link"):
+                claude_setup.preview(config, plugin)
+            with self.assertRaisesRegex(claude_setup.SetupError, "symbolic-link"):
+                claude_setup.install(config, plugin, "any-fingerprint")
+            self.assertTrue((config / "CLAUDE.md").is_symlink())
+            self.assertEqual("# original\n", referent.read_text(encoding="ascii"))
+            self.assertFalse(claude_setup.config_root(config).exists())
+            self.assertFalse(claude_setup.pointer(config).exists())
+
+    def test_legacy_missing_marker_must_be_regular_non_symlink_file(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            plugin = self.plugin(root)
+            config = root / "claude"
+            legacy = config / "backups/humans-md/claude"
+            legacy.mkdir(parents=True)
+            marker = legacy / "CLAUDE.md.was-missing"
+            target = root / "marker-target"
+            target.write_text("\n", encoding="ascii")
+            marker.symlink_to(target)
+            with self.assertRaisesRegex(claude.MigrationError, "unsafe or ambiguous"):
+                claude.preview(config, plugin)
+            marker.unlink()
+            marker.mkdir()
+            with self.assertRaisesRegex(claude.MigrationError, "unsafe or ambiguous"):
+                claude.preview(config, plugin)

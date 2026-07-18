@@ -44,8 +44,8 @@ def atomic_write(path: Path, data: bytes) -> None:
 
 def path_fingerprint(path: Path) -> str:
     digest = hashlib.sha256()
-    if path.is_symlink(): digest.update(b"link "); digest.update(os.readlink(path).encode("utf-8"))
-    elif path.is_file(): digest.update(b"file "); digest.update(path.read_bytes())
+    if path.is_symlink(): raise SetupError(f"symbolic-link managed target is unsupported: {path}")
+    if path.is_file(): digest.update(b"file "); digest.update(path.read_bytes())
     elif path.exists(): raise SetupError(f"unsafe managed target: {path}")
     else: digest.update(b"missing")
     return digest.hexdigest()

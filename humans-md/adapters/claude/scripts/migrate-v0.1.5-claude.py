@@ -28,7 +28,10 @@ def legacy_receipt(config: Path) -> tuple[Path, Path | None]:
         raise MigrationError("no supported humans-md 0.1.5 Claude recovery receipt; run legacy recovery first")
     entries={item.name for item in root.iterdir()}
     allowed={"CLAUDE.md.before"} if before.exists() else {"CLAUDE.md.was-missing"}
-    if entries != allowed or (before.exists() and (before.is_symlink() or not before.is_file())):
+    if entries != allowed:
+        raise MigrationError("unsafe or ambiguous legacy Claude receipt")
+    record = before if before.exists() else missing
+    if record.is_symlink() or not record.is_file():
         raise MigrationError("unsafe or ambiguous legacy Claude receipt")
     return root, before if before.exists() else None
 
