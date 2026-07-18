@@ -10,6 +10,14 @@ request remains the root orchestrator, using whatever model and effort the
 human invoked. The human selects a compatible strategy for each phase, and the
 selected vendor adapter supplies concrete bindings only for delegated roles.
 
+## V1 record boundary
+
+The adjacent `casefile/` Cargo workspace scans the compact governed-record v1
+shape and provides JSON snapshot, preview, and one-path create/replace/delete
+operations for complete ticket, epic, and board drafts. It uses Git only for
+reviewable diffs and never stages changes; workflow skills remain responsible
+for human authority and the planning process.
+
 ## Skill surface
 
 - `casefile` starts or resumes governed work.

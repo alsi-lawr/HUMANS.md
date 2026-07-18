@@ -10,3 +10,6 @@ __pycache__/
 
 # Generated marketplace staging tree
 /build/
+
+# Local Rust workspace output
+/casefile/target/
