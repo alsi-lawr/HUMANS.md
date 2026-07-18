@@ -220,7 +220,7 @@ impl App {
         Paragraph::new(format!(
             " {} | / filter{filter}: {} | t switch | j/k move | c clear | q quit ",
             self.view.title(),
-            self.filter
+            escape_terminal(&self.filter)
         ))
         .block(
             Block::default()
@@ -281,12 +281,15 @@ fn list_label(entry: &EntrySnapshot, view: View) -> Line<'static> {
                 rank,
             }),
         ) => Line::from(format!(
-            "{id} | {title} | {status}{}",
+            "{} | {} | {}{}",
+            escape_terminal(id),
+            escape_terminal(title),
+            escape_terminal(status),
             rank.map(|rank| format!(" | #{rank}")).unwrap_or_default()
         )),
         _ => Line::from(format!(
             "{} | {} | {}",
-            entry.path,
+            escape_terminal(&entry.path),
             classification_name(entry.classification),
             entry.kind.map(kind_name).unwrap_or("unknown")
         ))
@@ -296,7 +299,7 @@ fn list_label(entry: &EntrySnapshot, view: View) -> Line<'static> {
 
 fn detail(entry: &EntrySnapshot, diagnostics: &[casefile_core::Diagnostic]) -> Vec<Line<'static>> {
     let mut lines = vec![
-        Line::from(format!("Path: {}", entry.path)),
+        Line::from(format!("Path: {}", escape_terminal(&entry.path))),
         Line::from(format!(
             "Classification: {}",
             classification_name(entry.classification)
@@ -308,18 +311,24 @@ fn detail(entry: &EntrySnapshot, diagnostics: &[casefile_core::Diagnostic]) -> V
         )),
     ];
     if let Some(identity) = &entry.identity {
-        lines.push(Line::from(format!("Identity: {identity}")));
+        lines.push(Line::from(format!(
+            "Identity: {}",
+            escape_terminal(identity)
+        )));
     }
     match entry.summary.as_ref() {
         Some(RecordSummary::Markdown { title }) => {
-            lines.push(Line::from(format!("Title: {title}")))
+            lines.push(Line::from(format!("Title: {}", escape_terminal(title))))
         }
         Some(RecordSummary::Strategy {
             strategy_id,
             phase,
             adapter,
         }) => lines.push(Line::from(format!(
-            "Strategy: {strategy_id} | {phase} | {adapter}"
+            "Strategy: {} | {} | {}",
+            escape_terminal(strategy_id),
+            escape_terminal(phase),
+            escape_terminal(adapter)
         ))),
         Some(RecordSummary::WorkItem {
             id,
@@ -327,17 +336,33 @@ fn detail(entry: &EntrySnapshot, diagnostics: &[casefile_core::Diagnostic]) -> V
             status,
             rank,
         }) => lines.push(Line::from(format!(
-            "Work item: {id} | {title} | status: {status}{}",
+            "Work item: {} | {} | status: {}{}",
+            escape_terminal(id),
+            escape_terminal(title),
+            escape_terminal(status),
             rank.map(|rank| format!(" | rank: {rank}"))
                 .unwrap_or_default()
         ))),
         Some(RecordSummary::Board { id, title, columns }) => lines.push(Line::from(format!(
-            "Board: {id} | {title} | columns: {}",
-            columns.join(", ")
+            "Board: {} | {} | columns: {}",
+            escape_terminal(id),
+            escape_terminal(title),
+            columns
+                .iter()
+                .map(|column| escape_terminal(column))
+                .collect::<Vec<_>>()
+                .join(", ")
         ))),
         Some(RecordSummary::Activation { projects })
         | Some(RecordSummary::ProjectMap { projects }) => {
-            lines.push(Line::from(format!("Projects: {}", projects.join(", "))));
+            lines.push(Line::from(format!(
+                "Projects: {}",
+                projects
+                    .iter()
+                    .map(|project| escape_terminal(project))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )));
         }
         None => {}
     }
@@ -348,7 +373,31 @@ fn detail(entry: &EntrySnapshot, diagnostics: &[casefile_core::Diagnostic]) -> V
     if !matching.is_empty() {
         lines.push(Line::from("Diagnostics:".bold()));
         lines.extend(matching.into_iter().map(|diagnostic| {
-            Line::from(format!("- {}: {}", diagnostic.code, diagnostic.message))
+            let context = [
+                diagnostic
+                    .field
+                    .as_deref()
+                    .map(|field| format!("field={}", escape_terminal(field))),
+                diagnostic
+                    .section
+                    .as_deref()
+                    .map(|section| format!("section={}", escape_terminal(section))),
+            ]
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>()
+            .join(", ");
+            Line::from(format!(
+                "- {}: {}{}: {}",
+                escape_terminal(&diagnostic.path),
+                escape_terminal(&diagnostic.code),
+                if context.is_empty() {
+                    String::new()
+                } else {
+                    format!(" ({context})")
+                },
+                escape_terminal(&diagnostic.message)
+            ))
         }));
     }
     lines.push(Line::from("Original content:".bold()));
@@ -359,11 +408,7 @@ fn detail(entry: &EntrySnapshot, diagnostics: &[casefile_core::Diagnostic]) -> V
 fn safe_content(bytes: &[u8]) -> String {
     match std::str::from_utf8(bytes) {
         Ok(text) => {
-            let escaped: String = text
-                .chars()
-                .take(TEXT_LIMIT)
-                .flat_map(char::escape_default)
-                .collect();
+            let escaped = escape_terminal(&text.chars().take(TEXT_LIMIT).collect::<String>());
             if text.chars().count() > TEXT_LIMIT {
                 format!("{escaped}... [truncated at {TEXT_LIMIT} characters]")
             } else {
@@ -384,6 +429,10 @@ fn safe_content(bytes: &[u8]) -> String {
             }
         }
     }
+}
+
+fn escape_terminal(text: &str) -> String {
+    text.chars().flat_map(char::escape_default).collect()
 }
 
 fn classification_name(classification: Classification) -> &'static str {
@@ -521,7 +570,11 @@ mod tests {
     }
 
     fn render(app: &App) -> String {
-        let backend = TestBackend::new(110, 30);
+        render_with_size(app, 110, 30)
+    }
+
+    fn render_with_size(app: &App, width: u16, height: u16) -> String {
+        let backend = TestBackend::new(width, height);
         let mut terminal = Terminal::new(backend).expect("terminal");
         terminal
             .draw(|frame| app.render(frame.area(), frame.buffer_mut()))
@@ -533,6 +586,65 @@ mod tests {
             .iter()
             .map(|cell| cell.symbol())
             .collect()
+    }
+
+    #[test]
+    fn record_metadata_and_diagnostics_escape_terminal_controls() {
+        let path = "\x1b]0;path\x07-ticket.md";
+        let metadata = "\x1b]0;metadata\x07";
+        let scan = ScanResult {
+            activation: ActivationState::Active,
+            snapshot: CasefileSnapshot {
+                revision: Revision("sha256:controls".into()),
+                entries: vec![
+                    entry(
+                        path,
+                        Classification::Governed,
+                        Some(Kind::Ticket),
+                        Some(RecordSummary::WorkItem {
+                            id: format!("HMD-{metadata}"),
+                            title: format!("title-{metadata}"),
+                            status: format!("status-{metadata}"),
+                            rank: None,
+                        }),
+                        b"content",
+                    ),
+                    entry(
+                        "board.toml",
+                        Classification::Governed,
+                        Some(Kind::Board),
+                        Some(RecordSummary::Board {
+                            id: format!("board-{metadata}"),
+                            title: format!("board-title-{metadata}"),
+                            columns: vec![format!("column-{metadata}")],
+                        }),
+                        b"content",
+                    ),
+                ],
+            },
+            diagnostics: vec![
+                Diagnostic::new(
+                    path,
+                    &format!("code-{metadata}"),
+                    format!("message-{metadata}"),
+                )
+                .field(&format!("field-{metadata}"))
+                .section(&format!("section-{metadata}")),
+            ],
+        };
+        let mut app = App::new(scan);
+        let output = render_with_size(&app, 240, 30);
+        assert!(output.contains(r"\u{1b}]0;path\u{7}-ticket.md"));
+        assert!(output.contains(r"HMD-\u{1b}]0;metadata\u{7}"));
+        assert!(output.contains(r"field=field-\u{1b}]0;metadata\u{7}"));
+        assert!(output.contains(r"section=section-\u{1b}]0;metadata\u{7}"));
+        assert!(!output.chars().any(char::is_control));
+
+        app.handle(KeyCode::Tab);
+        app.handle(KeyCode::Down);
+        let output = render_with_size(&app, 240, 30);
+        assert!(output.contains(r"column-\u{1b}]0;metadata\u{7}"));
+        assert!(!output.chars().any(char::is_control));
     }
 
     #[test]
