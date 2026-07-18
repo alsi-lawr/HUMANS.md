@@ -301,6 +301,7 @@ def build(output: Path, files: dict[Path, FileSpec]) -> None:
 def manifests(arguments: argparse.Namespace, root: Path) -> list[Path]:
     if arguments.all:
         paths = sorted((root / "packaging/plugins").glob("*.toml"))
+        paths += sorted(root.glob("*/packaging/plugin.toml"))
         if not paths:
             raise PackageError("no plugin manifests found")
         return paths

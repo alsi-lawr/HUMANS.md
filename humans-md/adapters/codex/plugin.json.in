@@ -1,0 +1,28 @@
+{
+  "author": {
+    "name": ${publisher_json},
+    "url": ${repository_url_json}
+  },
+  "description": ${description_json},
+  "interface": {
+    "capabilities": [
+      "Interactive",
+      "Read",
+      "Write"
+    ],
+    "category": "Coding",
+    "defaultPrompt": [
+      "Preview or recover the standing repository behaviour contract.",
+      "Migrate a supported humans-md 0.1.5 installation before installing optional siblings."
+    ],
+    "developerName": ${publisher_json},
+    "displayName": ${name_json},
+    "longDescription": ${description_json},
+    "shortDescription": ${description_json},
+    "websiteURL": ${repository_url_json}
+  },
+  "license": ${license_json},
+  "name": ${name_json},
+  "repository": ${repository_url_json},
+  "version": ${version_json}
+}

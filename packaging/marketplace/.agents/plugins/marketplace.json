@@ -6,6 +6,30 @@
   "plugins": [
     {
       "category": "Coding",
+      "name": "casefile",
+      "policy": {
+        "authentication": "ON_INSTALL",
+        "installation": "AVAILABLE"
+      },
+      "source": {
+        "path": "./plugins/codex/casefile",
+        "source": "local"
+      }
+    },
+    {
+      "category": "Coding",
+      "name": "coding",
+      "policy": {
+        "authentication": "ON_INSTALL",
+        "installation": "AVAILABLE"
+      },
+      "source": {
+        "path": "./plugins/codex/coding",
+        "source": "local"
+      }
+    },
+    {
+      "category": "Coding",
       "name": "humans-md",
       "policy": {
         "authentication": "ON_INSTALL",

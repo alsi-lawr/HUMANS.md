@@ -1,5 +1,5 @@
 {
-  "description": "Portable behaviour contracts and governed Casefile workflows.",
+  "description": "Split humans-md plugins for standing contracts, Casefile, and coding guidance.",
   "name": "humans-md",
   "owner": {
     "name": "alsi-lawr"
@@ -9,7 +9,29 @@
       "author": {
         "name": "alsi-lawr"
       },
-      "description": "Portable behavioural contracts and governed Casefile workflows for coding agents.",
+      "description": "Governed Casefile workflows and optional Casefile agent integration.",
+      "license": "MIT",
+      "name": "casefile",
+      "repository": "https://github.com/alsi-lawr/HUMANS.md",
+      "source": "./plugins/claude/casefile",
+      "strict": true
+    },
+    {
+      "author": {
+        "name": "alsi-lawr"
+      },
+      "description": "Reusable Git, README, and skill-generation guidance with generic verification assets.",
+      "license": "MIT",
+      "name": "coding",
+      "repository": "https://github.com/alsi-lawr/HUMANS.md",
+      "source": "./plugins/claude/coding",
+      "strict": true
+    },
+    {
+      "author": {
+        "name": "alsi-lawr"
+      },
+      "description": "Standing behaviour-contract lifecycle and recovery for coding agents.",
       "license": "MIT",
       "name": "humans-md",
       "repository": "https://github.com/alsi-lawr/HUMANS.md",

@@ -1,0 +1,44 @@
+schema_version = 1
+name = "humans-md"
+version = "0.2.0"
+publisher = "alsi-lawr"
+repository = "alsi-lawr/HUMANS.md"
+repository_url = "https://github.com/alsi-lawr/HUMANS.md"
+license = "MIT"
+description = "Standing behaviour-contract lifecycle and recovery for coding agents."
+[[shared]]
+source = "humans-md/LICENSE"
+destination = "LICENSE"
+[[shared]]
+source = "humans-md/AGENTS.md"
+destination = "templates/AGENTS.md"
+[[shared]]
+source = "humans-md/skills/contract-bootstrap"
+destination = "skills/contract-bootstrap"
+[[shared]]
+source = "humans-md/skills/migrations"
+destination = "skills/migrations"
+[vendors.codex]
+output = "build/marketplace/plugins/codex/humans-md"
+[[vendors.codex.template]]
+source = "humans-md/adapters/codex/plugin.json.in"
+destination = ".codex-plugin/plugin.json"
+format = "json"
+[[vendors.codex.copy]]
+source = "humans-md/adapters/codex/skills"
+destination = "skills"
+[[vendors.codex.copy]]
+source = "humans-md/adapters/codex/scripts"
+destination = "scripts"
+[vendors.claude]
+output = "build/marketplace/plugins/claude/humans-md"
+[[vendors.claude.template]]
+source = "humans-md/adapters/claude/plugin.json.in"
+destination = ".claude-plugin/plugin.json"
+format = "json"
+[[vendors.claude.copy]]
+source = "humans-md/adapters/claude/skills"
+destination = "skills"
+[[vendors.claude.copy]]
+source = "humans-md/adapters/claude/scripts"
+destination = "scripts"
