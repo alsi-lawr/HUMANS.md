@@ -1,19 +1,22 @@
 #!/usr/bin/env python3
-"""Confirm isolated Codex marketplace JSON contains humans-md."""
+"""Confirm isolated Codex marketplace JSON contains the exact split plugin inventory."""
 from __future__ import annotations
 
 import json
 import sys
 
+EXPECTED = {"humans-md", "casefile", "coding"}
 
-def contains(value: object) -> bool:
+
+def names(value: object) -> set[str]:
     if isinstance(value, dict):
-        if value.get("name") == "humans-md" or value.get("pluginName") == "humans-md":
-            return True
-        return any(contains(item) for item in value.values())
+        found = {item for key in ("name", "pluginName") if isinstance((item := value.get(key)), str)}
+        for child in value.values():
+            found |= names(child)
+        return found
     if isinstance(value, list):
-        return any(contains(item) for item in value)
-    return value == "humans-md"
+        return set().union(*(names(item) for item in value)) if value else set()
+    return set()
 
 
 def main() -> int:
@@ -22,10 +25,11 @@ def main() -> int:
     except json.JSONDecodeError as error:
         print(f"invalid Codex discovery JSON: {error}")
         return 1
-    if not contains(document):
-        print("humans-md was not discovered")
+    missing = EXPECTED - names(document)
+    if missing:
+        print("missing Codex marketplace identities: " + ", ".join(sorted(missing)))
         return 1
-    print("isolated Codex marketplace discovered humans-md")
+    print("isolated Codex marketplace discovered: " + ", ".join(sorted(EXPECTED)))
     return 0
 
 

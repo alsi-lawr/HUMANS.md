@@ -20,77 +20,51 @@ jobs:
           node-version: "lts/*"
       - name: Check ASCII source
         run: python scripts/strip-non-ascii.py --check .
-      - name: Run stdlib tests
-        run: python -m unittest discover -s tests -v
-      - name: Validate source
+      - name: Run package-local and shared tests
+        run: python scripts/test-all.py
+      - name: Validate source roots
         run: |
-          python scripts/validate-skill.py --all --root .
-          python scripts/validate-casefile.py --source .
-      - name: Build and validate packages
+          python scripts/validate-package-roots.py
+          python casefile/scripts/validate-casefile.py --source casefile
+          python coding/scripts/validate-skill.py --all --root coding
+      - name: Build and validate package inventory
         run: |
           python scripts/package-plugin.py build --all
+          python scripts/build-marketplace-catalog.py
           cp -R packaging/marketplace/. build/marketplace/
           cp LICENSE build/marketplace/LICENSE
           python scripts/package-plugin.py check --all
-          python scripts/validate-skill.py --root . --package build/marketplace/plugins/codex/humans-md --package build/marketplace/plugins/claude/humans-md
-          python build/marketplace/plugins/codex/humans-md/scripts/validate-skill.py --all --root build/marketplace/plugins/codex/humans-md
-          python build/marketplace/plugins/codex/humans-md/scripts/validate-casefile.py --source build/marketplace/plugins/codex/humans-md
-          python build/marketplace/plugins/claude/humans-md/scripts/validate-skill.py --all --root build/marketplace/plugins/claude/humans-md
-          python build/marketplace/plugins/claude/humans-md/scripts/validate-casefile.py --source build/marketplace/plugins/claude/humans-md
+          python scripts/validate-package-roots.py
+          python casefile/scripts/validate-casefile.py --source build/marketplace/plugins/codex/casefile
+          python casefile/scripts/validate-casefile.py --source build/marketplace/plugins/claude/casefile
+          python coding/scripts/validate-skill.py --all --root build/marketplace/plugins/codex/coding
+          python coding/scripts/validate-skill.py --all --root build/marketplace/plugins/claude/coding
       - name: Strict Claude package validation
         run: |
           npm install --global @anthropic-ai/claude-code
-          claude plugin validate build/marketplace/plugins/claude/humans-md --strict
-      - name: Isolated Codex marketplace install and discovery
+          for package in build/marketplace/plugins/claude/*; do claude plugin validate "$package" --strict; done
+      - name: Isolated Codex sibling lifecycle smoke
         run: |
           npm install --global @openai/codex
           export CODEX_HOME="$RUNNER_TEMP/codex-home"
           mkdir -p "$CODEX_HOME"
-          cat > "$CODEX_HOME/config.toml" <<'TOML'
-          model = "gpt-5.5"
-          model_reasoning_effort = "high"
-          TOML
           codex plugin marketplace add "$GITHUB_WORKSPACE/build/marketplace" --json
-          codex plugin add humans-md@humans-md --json
+          for plugin in humans-md casefile coding; do codex plugin add "$plugin@humans-md" --json; done
           codex plugin list --available --json | python scripts/check-codex-discovery.py
-          SETUP="$GITHUB_WORKSPACE/build/marketplace/plugins/codex/humans-md/scripts/setup-codex.py"
-          PLUGIN_ROOT="$GITHUB_WORKSPACE/build/marketplace/plugins/codex/humans-md"
-          python "$SETUP" install --plugin-root "$PLUGIN_ROOT" --apply
-          python - <<'PY'
-          import json
-          import os
-          import pathlib
-          import tomllib
-
-          home = pathlib.Path(os.environ["CODEX_HOME"])
-          config = tomllib.loads((home / "config.toml").read_text(encoding="ascii"))
-          assert config["model"] == "gpt-5.5"
-          assert config["model_reasoning_effort"] == "high"
-          catalog_path = home / "models-humans-md-v1.json"
-          assert config["model_catalog_json"] == str(catalog_path)
-          catalog = json.loads(catalog_path.read_text(encoding="ascii"))
-          models = {model["slug"]: model for model in catalog["models"]}
-          assert models["gpt-5.6-sol"]["multi_agent_version"] is None
-          assert models["gpt-5.6-terra"]["multi_agent_version"] is None
-          assert models["gpt-5.6-luna"]["multi_agent_version"] is None
-          path = home / "config.toml"
-          marker = "# <<< humans-md setup scalars <<<\n"
-          text = path.read_text(encoding="ascii")
-          assert text.count(marker) == 1
-          path.write_text(
-              text.replace(marker, marker + 'personality = "pragmatic"\n'),
-              encoding="ascii",
-          )
-          PY
-          python "$SETUP" uninstall --apply
-          python - <<'PY'
-          import os
-          import pathlib
-          import tomllib
-
-          home = pathlib.Path(os.environ["CODEX_HOME"])
-          config = tomllib.loads((home / "config.toml").read_text(encoding="ascii"))
-          assert config["model"] == "gpt-5.5"
-          assert config["model_reasoning_effort"] == "high"
-          assert config["personality"] == "pragmatic"
-          PY
+          codex plugin list --json | python scripts/check-plugin-state.py --expected humans-md,casefile,coding
+          for plugin in coding casefile humans-md; do
+            codex plugin remove "$plugin@humans-md" --json
+            remaining="humans-md,casefile,coding"; remaining="${remaining/$plugin,}"; remaining="${remaining/,$plugin/}"; remaining="${remaining/$plugin/}"
+            codex plugin list --json | python scripts/check-plugin-state.py --expected "$remaining"
+            codex plugin marketplace list --json | grep -q '"humans-md"'
+          done
+      - name: Isolated Claude sibling lifecycle smoke
+        run: |
+          export CLAUDE_CONFIG_DIR="$RUNNER_TEMP/claude-config"
+          mkdir -p "$CLAUDE_CONFIG_DIR"
+          claude plugin marketplace add "$GITHUB_WORKSPACE/build/marketplace"
+          for plugin in humans-md casefile coding; do claude plugin install "$plugin@humans-md" --scope user; done
+          for plugin in coding casefile humans-md; do
+            claude plugin uninstall "$plugin@humans-md" --scope user
+            claude plugin marketplace list | grep -q 'humans-md'
+          done

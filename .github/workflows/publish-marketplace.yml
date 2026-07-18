@@ -1,20 +1,16 @@
 name: Publish marketplace
-
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: Plugin version to publish
+        description: Synchronized plugin version to publish
         required: true
         type: string
-
 concurrency:
   group: humans-md-marketplace-release
   cancel-in-progress: false
-
 permissions:
   contents: read
-
 jobs:
   publish:
     runs-on: ubuntu-latest
@@ -23,33 +19,27 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.14"
-      - name: Match the requested version
+      - name: Match the requested version to package inventory
         env:
           VERSION: ${{ inputs.version }}
         run: |
           python - <<'PY'
-          import os
-          import pathlib
-          import tomllib
-
-          manifest = tomllib.loads(
-              pathlib.Path("packaging/plugins/humans-md.toml").read_text(encoding="ascii")
-          )
-          requested = os.environ["VERSION"]
-          if requested != manifest["version"]:
-              raise SystemExit(
-                  f"requested version {requested!r} differs from manifest {manifest['version']!r}"
-              )
+          import os, pathlib, tomllib
+          versions={tomllib.loads(path.read_text(encoding="ascii"))["version"] for path in pathlib.Path(".").glob("*/packaging/plugin.toml")}
+          if versions != {os.environ["VERSION"]}: raise SystemExit(f"requested version does not match synchronized inventory: {sorted(versions)}")
           PY
-      - name: Build the marketplace tree
+      - name: Build and validate the marketplace tree
         run: |
           python scripts/package-plugin.py build --all
+          python scripts/build-marketplace-catalog.py
           cp -R packaging/marketplace/. build/marketplace/
           cp LICENSE build/marketplace/LICENSE
           python scripts/package-plugin.py check --all
-          python scripts/validate-skill.py --root . --package build/marketplace/plugins/codex/humans-md --package build/marketplace/plugins/claude/humans-md
-          python build/marketplace/plugins/codex/humans-md/scripts/validate-casefile.py --source build/marketplace/plugins/codex/humans-md
-          python build/marketplace/plugins/claude/humans-md/scripts/validate-casefile.py --source build/marketplace/plugins/claude/humans-md
+          python scripts/validate-package-roots.py
+          python casefile/scripts/validate-casefile.py --source build/marketplace/plugins/codex/casefile
+          python casefile/scripts/validate-casefile.py --source build/marketplace/plugins/claude/casefile
+          python coding/scripts/validate-skill.py --all --root build/marketplace/plugins/codex/coding
+          python coding/scripts/validate-skill.py --all --root build/marketplace/plugins/claude/coding
       - name: Check out the marketplace repository
         uses: actions/checkout@v4
         with:
@@ -61,20 +51,12 @@ jobs:
         env:
           VERSION: ${{ inputs.version }}
         run: |
-          if git -C marketplace-repository show-ref --verify --quiet "refs/tags/v$VERSION"; then
-            echo "marketplace tag v$VERSION already exists" >&2
-            exit 1
-          fi
+          if git -C marketplace-repository show-ref --verify --quiet "refs/tags/v$VERSION"; then echo "marketplace tag v$VERSION already exists" >&2; exit 1; fi
           rsync -a --delete --exclude .git build/marketplace/ marketplace-repository/
           git -C marketplace-repository config user.name alsi-lawr
           git -C marketplace-repository config user.email 177320313+alsi-lawr@users.noreply.github.com
           git -C marketplace-repository add --all
-          if git -C marketplace-repository diff --cached --quiet; then
-            echo "generated marketplace contains no changes" >&2
-            exit 1
-          fi
-          git -C marketplace-repository commit \
-            -m "release: humans-md v$VERSION" \
-            -m "Source-Commit: $GITHUB_SHA"
+          if git -C marketplace-repository diff --cached --quiet; then echo "generated marketplace contains no changes" >&2; exit 1; fi
+          git -C marketplace-repository commit -m "release: humans-md v$VERSION" -m "Source-Commit: $GITHUB_SHA"
           git -C marketplace-repository tag -a "v$VERSION" -m "humans-md v$VERSION"
           git -C marketplace-repository push --atomic origin HEAD:main "refs/tags/v$VERSION"

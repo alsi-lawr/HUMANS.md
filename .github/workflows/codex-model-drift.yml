@@ -30,9 +30,9 @@ jobs:
         id: drift
         continue-on-error: true
         run: |
-          python scripts/check-codex-model-drift.py \
+          python casefile/scripts/check-codex-model-drift.py \
             --catalog "$RUNNER_TEMP/codex-models.json" \
-            --profiles adapters/codex/profiles.toml \
+            --profiles casefile/adapters/codex/profiles.toml \
             --output "$RUNNER_TEMP/codex-model-drift.md"
       - name: Maintain one labelled drift issue
         env:

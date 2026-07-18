@@ -1,0 +1,68 @@
+schema_version = 1
+name = "casefile"
+version = "0.2.0"
+publisher = "alsi-lawr"
+repository = "alsi-lawr/HUMANS.md"
+repository_url = "https://github.com/alsi-lawr/HUMANS.md"
+license = "MIT"
+description = "Governed Casefile workflows and optional Casefile agent integration."
+[[shared]]
+source = "casefile/LICENSE"
+destination = "LICENSE"
+[[shared]]
+source = "casefile/casefile-workflow"
+destination = "casefile-workflow"
+[[shared]]
+source = "casefile/skills"
+destination = "skills"
+[[shared]]
+source = "casefile/verification"
+destination = "verification"
+[[shared]]
+source = "casefile/scripts/validate-casefile.py"
+destination = "scripts/validate-casefile.py"
+[vendors.codex]
+output = "build/marketplace/plugins/codex/casefile"
+[[vendors.codex.template]]
+source = "casefile/adapters/codex/metadata/plugin.json.in"
+destination = ".codex-plugin/plugin.json"
+format = "json"
+[[vendors.codex.copy]]
+source = "casefile/adapters/codex/agents"
+destination = "agents"
+[[vendors.codex.copy]]
+source = "casefile/adapters/codex/matrices"
+destination = "matrices"
+[[vendors.codex.copy]]
+source = "casefile/adapters/codex/instructions"
+destination = "config/instructions"
+[[vendors.codex.copy]]
+source = "casefile/adapters/codex/catalog"
+destination = "config/catalog"
+[[vendors.codex.copy]]
+source = "casefile/adapters/codex/config-fragment.toml.in"
+destination = "config/config-fragment.toml.in"
+[[vendors.codex.copy]]
+source = "casefile/adapters/codex/profiles.toml"
+destination = "config/profiles.toml"
+[[vendors.codex.copy]]
+source = "casefile/adapters/codex/scripts"
+destination = "scripts"
+[[vendors.codex.copy]]
+source = "casefile/adapters/codex/skills"
+destination = "skills"
+[vendors.claude]
+output = "build/marketplace/plugins/claude/casefile"
+[[vendors.claude.template]]
+source = "casefile/adapters/claude/metadata/plugin.json.in"
+destination = ".claude-plugin/plugin.json"
+format = "json"
+[[vendors.claude.copy]]
+source = "casefile/adapters/claude/agents"
+destination = "agents"
+[[vendors.claude.copy]]
+source = "casefile/adapters/claude/matrices"
+destination = "matrices"
+[[vendors.claude.copy]]
+source = "casefile/adapters/claude/profiles.toml"
+destination = "config/profiles.toml"

@@ -28,7 +28,7 @@ effectiveness, causal improvement, or cross-model replication is made.
 | [`HUMANS.md`](../HUMANS.md) | Thesis, design vocabulary, and cited motivation. |
 | [`AGENTS.md`](../AGENTS.md) | The standing behaviour contract under study. |
 | [`skills/`](../skills/) | Portable task models that can be compared or revised independently. |
-| [`casefile-workflow/`](../casefile-workflow/) | Roles, schemas, and governance machinery for traced work. |
+| [`casefile-workflow/`](../casefile/casefile-workflow/) | Roles, schemas, and governance machinery for traced work. |
 | [`verification/`](../verification/) | Stable prompts, hidden rubrics, suites, and strategy presets. |
 | [`packaging/`](../packaging/) | Product manifests and marketplace catalogs used to reproduce releases. |
 | [`humans-md-marketplace`](https://github.com/alsi-lawr/humans-md-marketplace) | Tagged Codex and Claude release trees generated from this source. |
