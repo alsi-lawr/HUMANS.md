@@ -19,6 +19,9 @@ use std::io::{self, Stdout};
 
 const TEXT_LIMIT: usize = 2_048;
 const BINARY_LIMIT: usize = 256;
+const BOARD_COLUMN_LIMIT: usize = 12;
+const BOARD_COLUMN_TEXT_LIMIT: usize = 72;
+const BOARD_COLUMNS_TEXT_LIMIT: usize = 360;
 
 /// Starts the read-only navigator for an already scanned snapshot.
 pub fn run(scan: ScanResult) -> io::Result<()> {
@@ -347,11 +350,7 @@ fn detail(entry: &EntrySnapshot, diagnostics: &[casefile_core::Diagnostic]) -> V
             "Board: {} | {} | columns: {}",
             escape_terminal(id),
             escape_terminal(title),
-            columns
-                .iter()
-                .map(|column| escape_terminal(column))
-                .collect::<Vec<_>>()
-                .join(", ")
+            board_columns(columns)
         ))),
         Some(RecordSummary::Activation { projects })
         | Some(RecordSummary::ProjectMap { projects }) => {
@@ -433,6 +432,52 @@ fn safe_content(bytes: &[u8]) -> String {
 
 fn escape_terminal(text: &str) -> String {
     text.chars().flat_map(char::escape_default).collect()
+}
+
+fn board_columns(columns: &[String]) -> String {
+    let mut displayed: Vec<_> = columns
+        .iter()
+        .take(BOARD_COLUMN_LIMIT)
+        .map(|column| bounded_terminal_text(column, BOARD_COLUMN_TEXT_LIMIT))
+        .collect();
+    while !displayed.is_empty()
+        && board_columns_text(&displayed, columns.len() - displayed.len())
+            .chars()
+            .count()
+            > BOARD_COLUMNS_TEXT_LIMIT
+    {
+        displayed.pop();
+    }
+    board_columns_text(&displayed, columns.len() - displayed.len())
+}
+
+fn board_columns_text(columns: &[String], omitted: usize) -> String {
+    let mut text = columns.join(", ");
+    if omitted > 0 {
+        if !text.is_empty() {
+            text.push_str(", ");
+        }
+        text.push_str(&format!("... +{omitted} columns omitted"));
+    }
+    text
+}
+
+fn bounded_terminal_text(text: &str, limit: usize) -> String {
+    let mut characters = text.chars().peekable();
+    let mut output = String::new();
+    let mut length = 0;
+    while let Some(character) = characters.next() {
+        let escaped = character.escape_default().to_string();
+        let marker_length = usize::from(characters.peek().is_some()) * 3;
+        let escaped_length = escaped.chars().count();
+        if length + escaped_length + marker_length > limit {
+            output.push_str("...");
+            break;
+        }
+        length += escaped_length;
+        output.push_str(&escaped);
+    }
+    output
 }
 
 fn classification_name(classification: Classification) -> &'static str {
@@ -645,6 +690,40 @@ mod tests {
         let output = render_with_size(&app, 240, 30);
         assert!(output.contains(r"column-\u{1b}]0;metadata\u{7}"));
         assert!(!output.chars().any(char::is_control));
+    }
+
+    #[test]
+    fn board_columns_are_bounded_with_an_omission_marker() {
+        let columns: Vec<_> = (0..BOARD_COLUMN_LIMIT + 4)
+            .map(|index| format!("column-{index}-{}", "x".repeat(BOARD_COLUMN_TEXT_LIMIT * 2)))
+            .collect();
+        let scan = ScanResult {
+            activation: ActivationState::Active,
+            snapshot: CasefileSnapshot {
+                revision: Revision("sha256:board".into()),
+                entries: vec![entry(
+                    "board.toml",
+                    Classification::Governed,
+                    Some(Kind::Board),
+                    Some(RecordSummary::Board {
+                        id: "HMD-board".into(),
+                        title: "Long board".into(),
+                        columns: columns.clone(),
+                    }),
+                    b"content",
+                )],
+            },
+            diagnostics: Vec::new(),
+        };
+        let mut app = App::new(scan);
+        app.handle(KeyCode::Tab);
+        let output = render_with_size(&app, 600, 30);
+        let rendered_columns = board_columns(&columns);
+        assert!(output.contains("columns: column-0-"));
+        assert!(output.contains("... +"));
+        assert!(!output.contains(&columns[0]));
+        assert!(rendered_columns.ends_with("columns omitted"));
+        assert!(rendered_columns.chars().count() <= BOARD_COLUMNS_TEXT_LIMIT);
     }
 
     #[test]
