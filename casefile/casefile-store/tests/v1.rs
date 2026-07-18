@@ -47,6 +47,25 @@ fn ticket(root: &Path) -> RecordDraft {
     let text = fs::read_to_string(root.join(path)).expect("ticket");
     casefile_core::parse_draft(path, Kind::Ticket, &text).expect("draft")
 }
+fn path(root: &Path, name: &str) -> std::path::PathBuf {
+    if matches!(name, "casefile.toml" | "projects.toml") {
+        root.join(name)
+    } else {
+        root.join("projects/demo/investigations/sample").join(name)
+    }
+}
+fn scan_has(root: &Path, code: &str) {
+    assert!(
+        Store::open(root)
+            .expect("store")
+            .scan()
+            .expect("scan")
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.code == code),
+        "missing {code}"
+    );
+}
 
 #[test]
 fn scans_each_v1_kind_and_preserves_raw_material() {
@@ -115,6 +134,17 @@ fn structural_faults_are_deterministic_and_drafts_round_trip() {
         ),
         Ok(RecordDraft::Ticket(_))
     ));
+    let mut injected = draft;
+    if let RecordDraft::Ticket(item) = &mut injected {
+        item.impact = "safe\n\n## Verification\n\ninjected".into();
+    }
+    assert!(
+        casefile_core::render_draft(
+            "projects/demo/investigations/sample/tickets/accepted/HMD-011.md",
+            &injected
+        )
+        .is_err()
+    );
     fs::write(root.path().join("projects/demo/investigations/sample/boards/main.toml"), "schema_version = 1\nid = 'HMD-board'\ntitle = 'bad'\n[[columns]]\nname = 'same'\nstatuses = ['accepted']\n[[columns]]\nname = 'same'\nstatuses = ['accepted']\n").expect("bad board");
     let result = store.scan().expect("scan");
     let first = result.diagnostics.clone();
@@ -126,6 +156,131 @@ fn structural_faults_are_deterministic_and_drafts_round_trip() {
             .any(|diagnostic| diagnostic.code == "invalid_board_column"
                 || diagnostic.code == "overlapping_board_status")
     );
+}
+
+#[test]
+fn table_rows_and_review_faults_are_structural() {
+    let faults = [
+        (
+            "casefile.toml",
+            "schema_version = 2\n",
+            "invalid_schema_version",
+        ),
+        (
+            "projects.toml",
+            "[projects]\nother = 'x'\n",
+            "invalid_project_map",
+        ),
+        ("request.md", "# Requests\n\n## Boundary\n", "request_shape"),
+        (
+            "decision-log/HMD-D-001-scope.md",
+            "# Other\n\n## Status\n\nok\n\n## Decision\n\nok\n",
+            "decision_filename_identity",
+        ),
+        ("evidence/observation.md", "no heading\n", "h1_count"),
+        ("review/round-1.md", "no heading\n", "h1_count"),
+        ("implementation-plan/PLAN.md", "# Plan\n", "missing_section"),
+        ("final-disposition.md", "# Close\n", "missing_section"),
+        (
+            "strategy/review.toml",
+            "schema_version = 1\nstrategy_id = 'x'\nphase = 'wrong'\nadapter = 'x'\n",
+            "strategy_phase",
+        ),
+        (
+            "tickets/accepted/HMD-011.md",
+            "# no frontmatter\n",
+            "missing_frontmatter",
+        ),
+        (
+            "epics/accepted/HMD-E-001.md",
+            "# no frontmatter\n",
+            "missing_frontmatter",
+        ),
+        (
+            "boards/main.toml",
+            "schema_version = 1\nid = 'HMD-board'\ntitle = 'bad'\n",
+            "missing_columns",
+        ),
+    ];
+    for (relative, text, code) in faults {
+        let root = fixture();
+        fs::write(path(root.path(), relative), text).expect("fault");
+        scan_has(root.path(), code);
+    }
+    let root = fixture();
+    fs::write(
+        root.path().join("projects.toml"),
+        "[projects]\ndemo = 'x'\nlegacy = 'keep'\n",
+    )
+    .expect("extra map");
+    assert!(
+        Store::open(root.path())
+            .expect("store")
+            .scan()
+            .expect("scan")
+            .diagnostics
+            .is_empty()
+    );
+}
+
+#[test]
+fn reference_cycle_attachment_prefix_symlink_and_json_diagnostics_are_checked() {
+    let root = fixture();
+    let ticket_path = path(root.path(), "tickets/accepted/HMD-011.md");
+    let original = fs::read_to_string(&ticket_path).expect("ticket");
+    fs::write(
+        &ticket_path,
+        original.replace("decision_refs: [HMD-D-001]", "decision_refs: [MISSING]"),
+    )
+    .expect("references");
+    scan_has(root.path(), "unresolved_reference");
+    fs::write(
+        &ticket_path,
+        original.replace("supersedes: []", "supersedes: [HMD-012, HMD-E-001]"),
+    )
+    .expect("cycle start");
+    fs::write(
+        path(root.path(), "tickets/accepted/HMD-012.md"),
+        original.replace("HMD-011", "HMD-012"),
+    )
+    .expect("cycle branch");
+    let epic = fs::read_to_string(path(root.path(), "epics/accepted/HMD-E-001.md")).expect("epic");
+    fs::write(
+        path(root.path(), "epics/accepted/HMD-E-001.md"),
+        epic.replace("supersedes: []", "supersedes: [HMD-011]"),
+    )
+    .expect("second edge");
+    scan_has(root.path(), "supersession_cycle");
+    fs::write(
+        path(root.path(), "evidence/observation.md"),
+        "---\nattachments: [missing.txt]\n---\n\n# Evidence\n",
+    )
+    .expect("attachment");
+    scan_has(root.path(), "missing_attachment");
+    fs::write(root.path().join("casefile.toml"), "schema_version = 1\n[projects.demo]\nprefix = 'NEW'\ninvestigations = ['projects/demo/investigations/sample']\n").expect("prefix");
+    scan_has(root.path(), "project_prefix");
+    let first = Store::open(root.path())
+        .expect("store")
+        .scan()
+        .expect("scan")
+        .diagnostics;
+    let second = Store::open(root.path())
+        .expect("store")
+        .scan()
+        .expect("scan")
+        .diagnostics;
+    assert_eq!(
+        serde_json::to_vec(&first).expect("JSON"),
+        serde_json::to_vec(&second).expect("JSON")
+    );
+    #[cfg(unix)]
+    {
+        let root = fixture();
+        let request = path(root.path(), "request.md");
+        fs::remove_file(&request).expect("remove");
+        std::os::unix::fs::symlink("elsewhere", &request).expect("symlink");
+        scan_has(root.path(), "unsafe_path");
+    }
 }
 
 #[test]
@@ -150,8 +305,9 @@ fn previews_and_applies_one_path_without_touching_index() {
         .expect("preview");
     assert!(preview.diagnostics.is_empty(), "{:#?}", preview.diagnostics);
     assert!(preview.diff.contains("new file mode"));
-    store.apply(preview).expect("create");
+    let create_result = store.apply(preview).expect("create");
     assert!(root.path().join(&create_path).is_file());
+    assert_headers(&create_result.diff, &create_path, false, true);
     assert_eq!(
         index,
         fs::read(root.path().join(".git/index")).expect("index preserved")
@@ -175,12 +331,55 @@ fn previews_and_applies_one_path_without_touching_index() {
     fs::write(root.path().join(&replace_path), "changed outside preview").expect("external change");
     assert!(store.apply(stale).is_err());
     fs::write(root.path().join(&replace_path), original).expect("restore fixture");
+    let mut replacement = ticket(root.path());
+    if let RecordDraft::Ticket(item) = &mut replacement {
+        item.title = "Applied replacement".into();
+    }
+    let replace = store
+        .preview(ChangeRequest::Replace {
+            path: replace_path.clone(),
+            draft: replacement,
+        })
+        .expect("replace");
+    assert_headers(&replace.diff, &replace_path, true, true);
+    let replace_result = store.apply(replace).expect("apply replacement");
+    assert_headers(&replace_result.diff, &replace_path, true, true);
+    assert_eq!(
+        index,
+        fs::read(root.path().join(".git/index")).expect("index after replace")
+    );
     let delete = store
         .preview(ChangeRequest::Delete {
             path: create_path.clone(),
         })
         .expect("delete preview");
     assert!(delete.diagnostics.is_empty());
-    store.apply(delete).expect("delete");
+    assert_headers(&delete.diff, &create_path, true, false);
+    let delete_result = store.apply(delete).expect("delete");
+    assert_headers(&delete_result.diff, &create_path, true, false);
+    assert_eq!(
+        index,
+        fs::read(root.path().join(".git/index")).expect("index after delete")
+    );
     assert!(!root.path().join(create_path).exists());
+}
+
+fn assert_headers(diff: &str, path: &str, before: bool, after: bool) {
+    let old = if before {
+        format!("--- a/{path}")
+    } else {
+        "--- /dev/null".into()
+    };
+    let new = if after {
+        format!("+++ b/{path}")
+    } else {
+        "+++ /dev/null".into()
+    };
+    assert!(
+        diff.contains(&format!("diff --git a/{path} b/{path}")),
+        "{diff}"
+    );
+    assert!(diff.contains(&old), "{diff}");
+    assert!(diff.contains(&new), "{diff}");
+    assert!(!diff.contains(".tmp") && !diff.contains("/tmp/"), "{diff}");
 }

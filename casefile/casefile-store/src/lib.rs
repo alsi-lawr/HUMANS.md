@@ -454,10 +454,7 @@ fn classify(
                     }),
                 ),
             }),
-        Kind::Request => {
-            casefile_core::validate_markdown(path, text, &["Boundary"], Some("Request"))
-                .map(|summary| (None, Some(summary)))
-        }
+        Kind::Request => request(path, text).map(|summary| (None, Some(summary))),
         Kind::Decision => decision(path, text),
         Kind::Evidence | Kind::Review => casefile_core::validate_markdown(path, text, &[], None)
             .and_then(|summary| metadata_arrays(path, text).map(|_| summary))
@@ -586,10 +583,8 @@ fn project_map_entry(
         });
     match projects {
         Some(projects)
-            if projects.len() == active.projects.len()
-                && projects.iter().all(|(key, value)| {
-                    value.as_str().is_some() && active.projects.contains_key(key)
-                }) =>
+            if projects.values().all(toml::Value::is_str)
+                && active.projects.keys().all(|key| projects.contains_key(key)) =>
         {
             (
                 Classification::Governed,
@@ -685,12 +680,50 @@ fn decision(
             "decision needs status and decision in frontmatter or H2 sections",
         )]);
     }
+    let stem = path
+        .rsplit('/')
+        .next()
+        .and_then(|name| name.strip_suffix(".md"))
+        .unwrap_or_default();
+    if !stem
+        .strip_prefix(&h1[0])
+        .is_some_and(|suffix| suffix.starts_with('-') && suffix.len() > 1)
+    {
+        return Err(vec![Diagnostic::new(
+            path,
+            "decision_filename_identity",
+            "decision filename must begin with the H1 ID and a suffix",
+        )]);
+    }
     Ok((
         Some(h1[0].clone()),
         Some(RecordSummary::Markdown {
             title: h1[0].clone(),
         }),
     ))
+}
+
+#[derive(Deserialize)]
+struct Metadata {
+    refs: Option<Vec<String>>,
+    attachments: Option<Vec<String>>,
+    status: Option<String>,
+    decision: Option<String>,
+}
+
+fn request(path: &str, text: &str) -> Result<RecordSummary, Vec<Diagnostic>> {
+    let (h1, h2) =
+        casefile_core::markdown_headings(path, text).map_err(|diagnostic| vec![diagnostic])?;
+    if h1[0] != "Request" || !h2.iter().any(|heading| heading == "Boundary") {
+        return Err(vec![Diagnostic::new(
+            path,
+            "request_shape",
+            "request needs H1 Request and H2 Boundary",
+        )]);
+    }
+    Ok(RecordSummary::Markdown {
+        title: h1[0].clone(),
+    })
 }
 
 fn metadata_arrays(path: &str, text: &str) -> Result<(Vec<String>, Vec<String>), Vec<Diagnostic>> {
@@ -700,58 +733,26 @@ fn metadata_arrays(path: &str, text: &str) -> Result<(Vec<String>, Vec<String>),
     }) else {
         return Ok((Vec::new(), Vec::new()));
     };
-    let value: serde_yaml::Value = serde_yaml::from_str(frontmatter).map_err(|error| {
+    let value: Metadata = serde_saphyr::from_str(frontmatter).map_err(|error| {
         vec![Diagnostic::new(
             path,
             "invalid_frontmatter",
             error.to_string(),
         )]
     })?;
-    let map = value.as_mapping().ok_or_else(|| {
-        vec![Diagnostic::new(
-            path,
-            "invalid_frontmatter",
-            "frontmatter must be a mapping",
-        )]
-    })?;
-    let strings = |name: &str| -> Result<Vec<String>, Vec<Diagnostic>> {
-        match map.get(serde_yaml::Value::String(name.into())) {
-            None => Ok(Vec::new()),
-            Some(serde_yaml::Value::Sequence(values)) => values
-                .iter()
-                .map(|value| {
-                    value.as_str().map(str::to_owned).ok_or_else(|| {
-                        vec![
-                            Diagnostic::new(
-                                path,
-                                "invalid_frontmatter_array",
-                                "optional references and attachments must be string arrays",
-                            )
-                            .field(name),
-                        ]
-                    })
-                })
-                .collect(),
-            _ => Err(vec![
-                Diagnostic::new(
-                    path,
-                    "invalid_frontmatter_array",
-                    "optional references and attachments must be string arrays",
-                )
-                .field(name),
-            ]),
-        }
-    };
-    Ok((strings("refs")?, strings("attachments")?))
+    Ok((
+        value.refs.unwrap_or_default(),
+        value.attachments.unwrap_or_default(),
+    ))
 }
 fn metadata_value(text: &str, key: &str) -> Option<String> {
     let frontmatter = text.strip_prefix("---\n")?.split_once("\n---\n")?.0;
-    let value: serde_yaml::Value = serde_yaml::from_str(frontmatter).ok()?;
-    value
-        .as_mapping()?
-        .get(serde_yaml::Value::String(key.into()))?
-        .as_str()
-        .map(str::to_owned)
+    let value: Metadata = serde_saphyr::from_str(frontmatter).ok()?;
+    match key {
+        "status" => value.status,
+        "decision" => value.decision,
+        _ => None,
+    }
 }
 
 fn invalid(
@@ -935,18 +936,17 @@ fn cross_validate(entries: &[EntrySnapshot], active: &Activation) -> Vec<Diagnos
         }
     }
     for start in supersedes.keys() {
-        let mut seen = BTreeSet::new();
-        let mut current = start.as_str();
-        while let Some(next) = supersedes.get(current).and_then(|values| values.first()) {
-            if !seen.insert(current) || next == start {
-                diagnostics.push(Diagnostic::new(
-                    identities[start.as_str()].path.clone(),
-                    "supersession_cycle",
-                    "supersession references must not form a cycle",
-                ));
-                break;
-            }
-            current = next;
+        if has_cycle(
+            start,
+            &supersedes,
+            &mut BTreeSet::new(),
+            &mut BTreeSet::new(),
+        ) {
+            diagnostics.push(Diagnostic::new(
+                identities[start.as_str()].path.clone(),
+                "supersession_cycle",
+                "supersession references must not form a cycle",
+            ));
         }
     }
     diagnostics
@@ -961,6 +961,28 @@ fn scope_for<'a>(path: &str, active: &'a Activation) -> Option<&'a str> {
             path.strip_prefix(&(base.to_owned() + "/"))
                 .map(|_| base.as_str())
         })
+}
+
+fn has_cycle(
+    node: &str,
+    graph: &BTreeMap<String, Vec<String>>,
+    visiting: &mut BTreeSet<String>,
+    checked: &mut BTreeSet<String>,
+) -> bool {
+    if !visiting.insert(node.into()) {
+        return true;
+    }
+    if checked.contains(node) {
+        visiting.remove(node);
+        return false;
+    }
+    let result = graph.get(node).is_some_and(|next| {
+        next.iter()
+            .any(|id| has_cycle(id, graph, visiting, checked))
+    });
+    visiting.remove(node);
+    checked.insert(node.into());
+    result
 }
 
 fn checked_path(path: &str) -> Result<String, StoreError> {
@@ -1038,14 +1060,37 @@ fn git_diff(
             String::from_utf8_lossy(&output.stderr).into(),
         ));
     }
-    let mut diff = String::from_utf8_lossy(&output.stdout).into_owned();
-    if let Some(file) = &old {
-        diff = diff.replace(&file.path().display().to_string(), &format!("a/{path}"));
-    }
-    if let Some(file) = &new {
-        diff = diff.replace(&file.path().display().to_string(), &format!("b/{path}"));
-    }
-    Ok(diff)
+    Ok(canonical_diff(
+        String::from_utf8_lossy(&output.stdout).as_ref(),
+        path,
+        before.is_some(),
+        after.is_some(),
+    ))
+}
+fn canonical_diff(diff: &str, path: &str, before: bool, after: bool) -> String {
+    diff.lines()
+        .map(|line| {
+            if line.starts_with("diff --git ") {
+                format!("diff --git a/{path} b/{path}")
+            } else if line.starts_with("--- ") {
+                if before {
+                    format!("--- a/{path}")
+                } else {
+                    "--- /dev/null".into()
+                }
+            } else if line.starts_with("+++ ") {
+                if after {
+                    format!("+++ b/{path}")
+                } else {
+                    "+++ /dev/null".into()
+                }
+            } else {
+                line.into()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+        + if diff.ends_with('\n') { "\n" } else { "" }
 }
 fn temp(root: &Path, bytes: &[u8]) -> Result<NamedTempFile, StoreError> {
     let mut file = NamedTempFile::new_in(root)?;

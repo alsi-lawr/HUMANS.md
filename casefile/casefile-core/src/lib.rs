@@ -287,6 +287,18 @@ pub fn render_draft(path: &str, draft: &RecordDraft) -> Result<Vec<u8>, Diagnost
         RecordDraft::Ticket(item) | RecordDraft::Epic(item) => render_work_item(item),
         RecordDraft::Board(board) => render_board(board),
     };
+    let parsed = parse_draft(path, draft.kind(), &rendered).map_err(|errors| {
+        errors.into_iter().next().unwrap_or_else(|| {
+            Diagnostic::new(path, "render_invalid", "rendered record did not validate")
+        })
+    })?;
+    if &parsed != draft {
+        return Err(Diagnostic::new(
+            path,
+            "render_round_trip",
+            "rendered record did not round-trip",
+        ));
+    }
     Ok(rendered.into_bytes())
 }
 
@@ -437,7 +449,7 @@ pub fn validate_draft(path: &str, draft: &RecordDraft) -> Result<(), Diagnostic>
 
 fn parse_work_item(path: &str, kind: Kind, text: &str) -> Result<RecordDraft, Vec<Diagnostic>> {
     let (frontmatter, body) = split_frontmatter(path, text)?;
-    let wire: WorkItemWire = serde_yaml::from_str(frontmatter).map_err(|error| {
+    let wire: WorkItemWire = serde_saphyr::from_str(frontmatter).map_err(|error| {
         vec![Diagnostic::new(
             path,
             "invalid_frontmatter",
@@ -714,7 +726,7 @@ fn render_work_item(item: &WorkItemDraft) -> String {
 }
 
 fn yaml_string(value: &str) -> String {
-    serde_yaml::to_string(value)
+    serde_saphyr::to_string(&value)
         .expect("strings serialize")
         .trim()
         .to_owned()
