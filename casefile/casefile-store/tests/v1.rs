@@ -364,6 +364,37 @@ fn previews_and_applies_one_path_without_touching_index() {
     assert!(!root.path().join(create_path).exists());
 }
 
+#[test]
+fn binary_delete_preview_has_canonical_paths() {
+    let root = fixture();
+    let target = "projects/demo/investigations/sample/tickets/accepted/HMD-011.md";
+    fs::write(root.path().join(target), [0xff, 0x00]).expect("binary ticket");
+    let preview = Store::open(root.path())
+        .expect("store")
+        .preview(ChangeRequest::Delete {
+            path: target.into(),
+        })
+        .expect("preview");
+    assert!(preview.diagnostics.is_empty(), "{:#?}", preview.diagnostics);
+    assert!(
+        preview
+            .diff
+            .contains(&format!("diff --git a/{target} b/{target}"))
+    );
+    assert!(
+        preview
+            .diff
+            .contains(&format!("Binary files a/{target} and /dev/null differ")),
+        "{}",
+        preview.diff
+    );
+    assert!(
+        !preview.diff.contains(".tmp") && !preview.diff.contains("/tmp/"),
+        "{}",
+        preview.diff
+    );
+}
+
 fn assert_headers(diff: &str, path: &str, before: bool, after: bool) {
     let old = if before {
         format!("--- a/{path}")

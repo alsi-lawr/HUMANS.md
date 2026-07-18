@@ -685,18 +685,20 @@ fn decision(
         .next()
         .and_then(|name| name.strip_suffix(".md"))
         .unwrap_or_default();
-    if !stem
-        .strip_prefix(&h1[0])
-        .is_some_and(|suffix| suffix.starts_with('-') && suffix.len() > 1)
-    {
+    let parts: Vec<_> = stem.split('-').collect();
+    let id = (1..parts.len())
+        .map(|count| parts[..count].join("-"))
+        .filter(|candidate| h1[0].contains(candidate))
+        .max_by_key(String::len);
+    let Some(id) = id else {
         return Err(vec![Diagnostic::new(
             path,
             "decision_filename_identity",
-            "decision filename must begin with the H1 ID and a suffix",
+            "decision H1 must contain the filename ID prefix",
         )]);
-    }
+    };
     Ok((
-        Some(h1[0].clone()),
+        Some(id),
         Some(RecordSummary::Markdown {
             title: h1[0].clone(),
         }),
@@ -1084,6 +1086,18 @@ fn canonical_diff(diff: &str, path: &str, before: bool, after: bool) -> String {
                 } else {
                     "+++ /dev/null".into()
                 }
+            } else if line.starts_with("Binary files ") {
+                let old = if before {
+                    format!("a/{path}")
+                } else {
+                    "/dev/null".into()
+                };
+                let new = if after {
+                    format!("b/{path}")
+                } else {
+                    "/dev/null".into()
+                };
+                format!("Binary files {old} and {new} differ")
             } else {
                 line.into()
             }
