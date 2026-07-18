@@ -1,6 +1,6 @@
 schema_version = 1
 name = "casefile"
-version = "0.2.0"
+version = "0.2.1"
 publisher = "alsi-lawr"
 repository = "alsi-lawr/HUMANS.md"
 repository_url = "https://github.com/alsi-lawr/HUMANS.md"

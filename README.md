@@ -7,17 +7,17 @@
 Three independently installable plugins for standing contracts, governed
 Casefile work, and reusable coding guidance.
 
-`v0.2.0` | `MIT`
+`v0.2.1` | `MIT`
 
 </div>
 
 ## Install
 
-Add the `humans-md` marketplace at `v0.2.0`, then install the identities you
+Add the `humans-md` marketplace at `v0.2.1`, then install the identities you
 need. Start with core; Casefile and coding remain optional siblings.
 
 ```sh
-codex plugin marketplace add alsi-lawr/humans-md-marketplace --ref v0.2.0
+codex plugin marketplace add alsi-lawr/humans-md-marketplace --ref v0.2.1
 codex plugin add humans-md@humans-md
 # optional after core setup or migration succeeds
 codex plugin add casefile@humans-md
@@ -25,7 +25,7 @@ codex plugin add coding@humans-md
 ```
 
 ```sh
-claude plugin marketplace add alsi-lawr/humans-md-marketplace@v0.2.0
+claude plugin marketplace add alsi-lawr/humans-md-marketplace@v0.2.1
 claude plugin install humans-md@humans-md --scope user
 # optional after core setup or migration succeeds
 claude plugin install casefile@humans-md --scope user
