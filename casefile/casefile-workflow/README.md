@@ -27,8 +27,10 @@ writes.
 
 ### CI and optional local invocation
 
-Build the checked-in source and run the gate from a CI job that has the planning
-store as its root:
+Installed Casefile plugins do not bundle the Cargo workspace or `casefile`
+binary. Users must separately provision the CLI. The following Cargo and binary
+paths are from a source checkout, not a plugin installation; build that source
+and run the gate from a CI job that has the planning store as its root:
 
 ```sh
 cargo build --manifest-path casefile/Cargo.toml --release -p casefile-cli
