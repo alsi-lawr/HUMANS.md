@@ -19,6 +19,8 @@ jobs:
         with:
           node-version: "lts/*"
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
       - name: Check ASCII source
         run: python scripts/strip-non-ascii.py --check .
       - name: Run package-local and shared tests
