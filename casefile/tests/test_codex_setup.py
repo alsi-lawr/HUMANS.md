@@ -28,7 +28,15 @@ class FakeCodex:
         return subprocess.CompletedProcess(args, code, json.dumps(value), "")
 
     def __call__(self, args: list[str], environment: dict[str, str]):
-        if args[-2:] == ["debug", "models"]:
+        if args[1:3] == ["debug", "models"]:
+            if "-c" in args:
+                override = args[args.index("-c") + 1]
+                key, value = override.split("=", 1)
+                if key != "model_catalog_json":
+                    raise AssertionError(args)
+                return subprocess.CompletedProcess(
+                    args, 0, Path(json.loads(value)).read_text(encoding="utf-8"), ""
+                )
             config = Path(environment["CODEX_HOME"]) / "config.toml"
             if config.is_file():
                 document = tomllib.loads(config.read_text(encoding="ascii"))
@@ -137,6 +145,22 @@ class CodexSetupTests(unittest.TestCase):
                 self.assertFalse(fake.installed)
                 self.assertTrue(fake.marketplace)
                 self.assertEqual("installed", result["status"])
+
+    def test_model_cache_includes_active_optional_models_missing_from_fallback(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            plugin, home, _, catalog, _ = self.fixture(Path(temporary))
+            fallback = {
+                "models": [
+                    model
+                    for model in catalog["models"]
+                    if model["slug"] != "gpt-5.3-codex-spark"
+                ]
+            }
+            (home / "models_cache.json").write_bytes(setup.canonical(catalog))
+            with self.fake_command(FakeCodex(fallback)):
+                plan = setup.prepare(plugin, home, "codex")
+            self.assertIn("gpt-5.3-codex-spark", plan["patched"])
+            self.assertNotIn("gpt-5.3-codex-spark", plan["skipped"])
 
     def test_portable_bytes_write_and_resource_separator(self):
         with tempfile.TemporaryDirectory() as temporary:
