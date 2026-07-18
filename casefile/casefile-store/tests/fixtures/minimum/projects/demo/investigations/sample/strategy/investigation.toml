@@ -1,0 +1,4 @@
+schema_version = 1
+strategy_id = "solo"
+phase = "investigation"
+adapter = "test"

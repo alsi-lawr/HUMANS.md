@@ -1,0 +1,9 @@
+schema_version = 1
+id = "HMD-board"
+title = "Main"
+filter_statuses = ["accepted"]
+filter_kinds = ["ticket"]
+
+[[columns]]
+name = "Accepted"
+statuses = ["accepted"]

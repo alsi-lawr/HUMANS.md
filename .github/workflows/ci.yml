@@ -18,10 +18,16 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "lts/*"
+      - uses: dtolnay/rust-toolchain@stable
       - name: Check ASCII source
         run: python scripts/strip-non-ascii.py --check .
       - name: Run package-local and shared tests
         run: python scripts/test-all.py
+      - name: Check Casefile Rust workspace
+        run: |
+          cargo fmt --manifest-path casefile/Cargo.toml --check
+          cargo clippy --manifest-path casefile/Cargo.toml --workspace --all-targets -- -D warnings
+          cargo test --manifest-path casefile/Cargo.toml --workspace
       - name: Validate source roots
         run: |
           python scripts/validate-package-roots.py
