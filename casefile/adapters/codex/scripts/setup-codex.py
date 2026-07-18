@@ -344,8 +344,15 @@ def prepare(root: Path, home: Path, executable: str) -> dict:
     root, manifest = plugin_root(root)
     environment = {**os.environ, "CODEX_HOME": str(home)}
     plugin = discover(executable, environment, manifest["version"])
+    catalog_command = [executable, "debug", "models"]
+    model_cache = home / "models_cache.json"
+    if model_cache.is_file():
+        catalog_command += [
+            "-c",
+            f"model_catalog_json={json.dumps(str(model_cache))}",
+        ]
     try:
-        raw = json.loads(checked([executable, "debug", "models"], environment))
+        raw = json.loads(checked(catalog_command, environment))
     except json.JSONDecodeError as error:
         raise SetupError("active catalog export is invalid JSON") from error
     catalog, patched, skipped = catalog_override(raw, root / "config/profiles.toml")
