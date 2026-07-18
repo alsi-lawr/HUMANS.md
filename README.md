@@ -56,3 +56,21 @@ with recovery guidance rather than being adopted.
 [Thesis](HUMANS.md) |
 [Generated marketplace](https://github.com/alsi-lawr/humans-md-marketplace) |
 [MIT licence](LICENSE)
+
+## Development
+
+Enter the pinned development environment from the repository root:
+
+```sh
+nix develop
+```
+
+It provides the Rust, Python, Node.js, workflow, GitHub, Docker-client, and PTY
+tools used by the repository checks. Docker itself remains an external service.
+Run `nix flake check` to evaluate the flake. Replay CI with a cached runner
+image from inside the shell:
+
+```sh
+act pull_request -j validate --pull=false \
+  -P ubuntu-latest=catthehacker/ubuntu:act-latest
+```
