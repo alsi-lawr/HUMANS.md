@@ -19,7 +19,10 @@ use ratatui::{
         Tabs, Widget, Wrap,
     },
 };
-use std::io::{self, Stdout};
+use std::{
+    cell::Cell,
+    io::{self, Stdout},
+};
 
 const TEXT_LIMIT: usize = 8_192;
 const BINARY_LIMIT: usize = 256;
@@ -150,6 +153,7 @@ struct App {
     entering_filter: bool,
     show_help: bool,
     detail_scroll: u16,
+    detail_rows: Cell<u16>,
     quit: bool,
 }
 
@@ -165,6 +169,7 @@ impl App {
             entering_filter: false,
             show_help: false,
             detail_scroll: 0,
+            detail_rows: Cell::new(1),
             quit: false,
         };
         app.normalise_selection();
@@ -375,16 +380,7 @@ impl App {
     }
 
     fn max_detail_scroll(&self) -> u16 {
-        self.detail_line_count()
-            .saturating_sub(1)
-            .min(usize::from(u16::MAX)) as u16
-    }
-
-    fn detail_line_count(&self) -> usize {
-        self.selected()
-            .map(|entry| detail_lines(entry, &self.scan.diagnostics, self.detail_tab).len())
-            .unwrap_or(1)
-            .max(1)
+        self.detail_rows.get().saturating_sub(1)
     }
 
     fn render(&self, area: Rect, buffer: &mut Buffer) {
@@ -531,10 +527,30 @@ impl App {
     }
 
     fn render_detail(&self, area: Rect, buffer: &mut Buffer) {
-        let line_count = self.detail_line_count();
-        let position = usize::from(self.detail_scroll)
-            .saturating_add(1)
-            .min(line_count);
+        let inner = panel("", self.focus == Focus::Detail).inner(area);
+        if inner.height == 0 || inner.width == 0 {
+            self.detail_rows.set(1);
+            return;
+        }
+        let [tabs, content] = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Length(2), Constraint::Min(1)])
+            .areas(inner);
+        let titles = DetailTab::ALL.map(|tab| Line::from(format!(" {} ", tab.title())));
+        let text = self.selected().map_or_else(
+            || Text::from("Select a record to inspect it."),
+            |entry| Text::from(detail_lines(entry, &self.scan.diagnostics, self.detail_tab)),
+        );
+        let paragraph = Paragraph::new(text)
+            .style(Style::default().fg(Color::White))
+            .wrap(Wrap { trim: false });
+        let line_count = paragraph
+            .line_count(content.width)
+            .max(1)
+            .min(usize::from(u16::MAX)) as u16;
+        self.detail_rows.set(line_count);
+        let scroll = self.detail_scroll.min(line_count.saturating_sub(1));
+        let position = scroll.saturating_add(1);
         let title = self.selected().map_or_else(
             || " Detail ".to_owned(),
             |entry| {
@@ -544,32 +560,14 @@ impl App {
                 )
             },
         );
-        let block = panel(title, self.focus == Focus::Detail);
-        let inner = block.inner(area);
-        block.render(area, buffer);
-        if inner.height == 0 || inner.width == 0 {
-            return;
-        }
-        let [tabs, content] = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([Constraint::Length(2), Constraint::Min(1)])
-            .areas(inner);
-        let titles = DetailTab::ALL.map(|tab| Line::from(format!(" {} ", tab.title())));
+        panel(title, self.focus == Focus::Detail).render(area, buffer);
         Tabs::new(titles)
             .select(self.detail_tab.index())
             .divider(" ")
             .style(Style::default().fg(MUTED))
             .highlight_style(Style::default().fg(ACCENT).bold())
             .render(tabs, buffer);
-        let text = self.selected().map_or_else(
-            || Text::from("Select a record to inspect it."),
-            |entry| Text::from(detail_lines(entry, &self.scan.diagnostics, self.detail_tab)),
-        );
-        Paragraph::new(text)
-            .style(Style::default().fg(Color::White))
-            .scroll((self.detail_scroll, 0))
-            .wrap(Wrap { trim: false })
-            .render(content, buffer);
+        paragraph.scroll((scroll, 0)).render(content, buffer);
     }
 
     fn render_help(&self, area: Rect, buffer: &mut Buffer) {
@@ -785,6 +783,9 @@ fn overview_lines(entry: &EntrySnapshot, diagnostics: &[Diagnostic]) -> Vec<Line
 fn content_lines(bytes: &[u8]) -> Vec<Line<'static>> {
     match std::str::from_utf8(bytes) {
         Ok(text) => {
+            if text.is_empty() {
+                return vec![Line::from("Empty text record.").style(Style::default().fg(MUTED))];
+            }
             let (safe, truncated) = safe_multiline(text, TEXT_LIMIT);
             let mut lines: Vec<_> = safe
                 .split('\n')
@@ -796,9 +797,6 @@ fn content_lines(bytes: &[u8]) -> Vec<Line<'static>> {
                     Line::from(format!("... truncated at {TEXT_LIMIT} characters"))
                         .style(Style::default().fg(WARN)),
                 );
-            }
-            if lines.is_empty() {
-                lines.push(Line::from("Empty text record.").style(Style::default().fg(MUTED)));
             }
             lines
         }
@@ -1188,6 +1186,7 @@ mod tests {
         assert_eq!(safe, "first\nsecond    \\u{1b}");
         assert!(!truncated);
         assert_eq!(safe_inline("caf\u{e9}\x1b"), "caf\u{e9}\\u{1b}");
+        assert_eq!(content_lines(b"")[0].to_string(), "Empty text record.");
         let mut app = App::new(scan());
         app.handle(KeyCode::Right);
         let output = render(&app, 120, 32);
@@ -1283,14 +1282,11 @@ mod tests {
     #[test]
     fn focus_page_navigation_detail_scrolling_and_help_are_visible() {
         let mut source = scan();
-        source.snapshot.entries[0].original_bytes = (0..40)
-            .map(|line| format!("line {line}"))
-            .collect::<Vec<_>>()
-            .join("\n")
-            .into_bytes();
+        source.snapshot.entries[0].original_bytes = "wrapped content ".repeat(300).into_bytes();
         let mut app = App::new(source);
-        app.handle(KeyCode::Tab);
         app.handle(KeyCode::Right);
+        render(&app, 70, 24);
+        app.handle(KeyCode::Tab);
         app.handle(KeyCode::PageDown);
         assert!(app.detail_scroll > 0);
         app.handle(KeyCode::Char('?'));
