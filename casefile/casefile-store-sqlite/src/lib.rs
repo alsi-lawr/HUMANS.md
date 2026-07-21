@@ -1,7 +1,7 @@
-use casefile_core::Revision;
+use casefile_core::{Diagnostic, Revision};
 use casefile_store::{
     DerivedBoard, DerivedIndex, DerivedRecord, DerivedRelationship, DerivedSnapshot, Indexed,
-    RecordScope, ScopedIdentity,
+    RecordScope, RevisionSource, ScopedIdentity, StoreError,
 };
 use rusqlite::{Connection, params};
 use std::{
@@ -21,6 +21,10 @@ pub enum SqliteIndexError {
     Json(#[from] serde_json::Error),
     #[error("index path must be outside the planning root")]
     InsidePlanningRoot,
+    #[error("invalid index schema")]
+    InvalidSchema,
+    #[error("canonical revision check failed: {0}")]
+    Revision(#[from] StoreError),
 }
 
 pub struct SqliteIndex {
@@ -42,39 +46,42 @@ impl SqliteIndex {
         Ok(Self { path })
     }
 
-    fn revision(&self) -> Result<Option<Revision>, SqliteIndexError> {
-        if !self.path.exists() {
-            return Ok(None);
-        }
-        let connection = Connection::open(&self.path)?;
-        Ok(Some(Revision(connection.query_row(
-            "SELECT source_revision FROM metadata LIMIT 1",
-            [],
-            |row| row.get(0),
-        )?)))
-    }
-
     fn checked<T>(
         &self,
         current: &Revision,
         read: impl FnOnce(&Connection) -> Result<T, SqliteIndexError>,
-    ) -> Result<Indexed<T>, SqliteIndexError> {
-        match self.state(current)? {
-            Indexed::Current {
-                source_revision, ..
-            } => Ok(Indexed::Current {
-                source_revision,
-                value: read(&Connection::open(&self.path)?)?,
-            }),
-            Indexed::Missing => Ok(Indexed::Missing),
-            Indexed::Stale {
-                indexed_revision,
-                current_revision,
-            } => Ok(Indexed::Stale {
-                indexed_revision,
-                current_revision,
-            }),
-            Indexed::Corrupt { message } => Ok(Indexed::Corrupt { message }),
+    ) -> Indexed<T> {
+        if !self.path.exists() {
+            return Indexed::Missing;
+        }
+        let result = Connection::open(&self.path)
+            .map_err(Into::into)
+            .and_then(|connection| {
+                let (schema, source): (i64, String) = connection.query_row(
+                    "SELECT schema_version, source_revision FROM metadata LIMIT 1",
+                    [],
+                    |row| Ok((row.get(0)?, row.get(1)?)),
+                )?;
+                if schema != 1 {
+                    return Err(SqliteIndexError::InvalidSchema);
+                }
+                let indexed = Revision(source);
+                if indexed != *current {
+                    return Ok(Indexed::Stale {
+                        indexed_revision: indexed,
+                        current_revision: current.clone(),
+                    });
+                }
+                read(&connection).map(|value| Indexed::Current {
+                    source_revision: indexed,
+                    value,
+                })
+            });
+        match result {
+            Ok(indexed) => indexed,
+            Err(error) => Indexed::Corrupt {
+                message: error.to_string(),
+            },
         }
     }
 }
@@ -91,13 +98,14 @@ impl DerivedIndex for SqliteIndex {
         let file = NamedTempFile::new_in(parent)?;
         let mut connection = Connection::open(file.path())?;
         connection.execute_batch("PRAGMA journal_mode=DELETE;
-            CREATE TABLE metadata (source_revision TEXT NOT NULL);
+            CREATE TABLE metadata (schema_version INTEGER NOT NULL, source_revision TEXT NOT NULL);
             CREATE TABLE records (path TEXT PRIMARY KEY, project TEXT, investigation TEXT, identity TEXT, classification TEXT NOT NULL, kind TEXT, title TEXT NOT NULL, search_text TEXT NOT NULL, document TEXT NOT NULL);
             CREATE TABLE relationships (source_project TEXT NOT NULL, source_investigation TEXT, source_identity TEXT NOT NULL, target_project TEXT NOT NULL, target_investigation TEXT, target_identity TEXT NOT NULL, kind TEXT NOT NULL, document TEXT NOT NULL);
-            CREATE TABLE boards (project TEXT NOT NULL, investigation TEXT, identity TEXT NOT NULL, title TEXT NOT NULL, document TEXT NOT NULL);")?;
+            CREATE TABLE boards (project TEXT NOT NULL, investigation TEXT, identity TEXT NOT NULL, title TEXT NOT NULL, document TEXT NOT NULL);
+            CREATE TABLE diagnostics (path TEXT NOT NULL, code TEXT NOT NULL, document TEXT NOT NULL);")?;
         let transaction = connection.transaction()?;
         transaction.execute(
-            "INSERT INTO metadata VALUES (?)",
+            "INSERT INTO metadata VALUES (1, ?)",
             [&snapshot.source_revision.0],
         )?;
         for record in &snapshot.records {
@@ -152,6 +160,16 @@ impl DerivedIndex for SqliteIndex {
                 ],
             )?;
         }
+        for diagnostic in &snapshot.diagnostics {
+            transaction.execute(
+                "INSERT INTO diagnostics VALUES (?, ?, ?)",
+                params![
+                    diagnostic.path,
+                    diagnostic.code,
+                    serde_json::to_string(diagnostic)?
+                ],
+            )?;
+        }
         transaction.commit()?;
         drop(connection);
         Ok((file, snapshot.source_revision.clone()))
@@ -160,12 +178,13 @@ impl DerivedIndex for SqliteIndex {
     fn publish(
         &self,
         prepared: Self::Prepared,
-        current: &Revision,
+        source: &dyn RevisionSource,
     ) -> Result<Indexed<()>, SqliteIndexError> {
-        if &prepared.1 != current {
+        let current = source.current_revision()?;
+        if prepared.1 != current {
             return Ok(Indexed::Stale {
                 indexed_revision: prepared.1,
-                current_revision: current.clone(),
+                current_revision: current,
             });
         }
         prepared
@@ -173,26 +192,13 @@ impl DerivedIndex for SqliteIndex {
             .persist(&self.path)
             .map_err(|error| error.error)?;
         Ok(Indexed::Current {
-            source_revision: current.clone(),
+            source_revision: current,
             value: (),
         })
     }
 
     fn state(&self, current: &Revision) -> Result<Indexed<()>, SqliteIndexError> {
-        match self.revision() {
-            Ok(None) => Ok(Indexed::Missing),
-            Ok(Some(indexed)) if indexed == *current => Ok(Indexed::Current {
-                source_revision: indexed,
-                value: (),
-            }),
-            Ok(Some(indexed)) => Ok(Indexed::Stale {
-                indexed_revision: indexed,
-                current_revision: current.clone(),
-            }),
-            Err(error) => Ok(Indexed::Corrupt {
-                message: error.to_string(),
-            }),
-        }
+        Ok(self.checked(current, |_| Ok(())))
     }
 
     fn record(
@@ -200,11 +206,11 @@ impl DerivedIndex for SqliteIndex {
         current: &Revision,
         identity: &ScopedIdentity,
     ) -> Result<Indexed<Option<DerivedRecord>>, SqliteIndexError> {
-        self.checked(current, |connection| {
+        Ok(self.checked(current, |connection| {
             let mut statement = connection.prepare("SELECT document FROM records WHERE project = ? AND investigation IS ? AND identity = ?")?;
             let mut rows = statement.query(params![identity.scope.project, identity.scope.investigation, identity.identity])?;
             rows.next()?.map(|row| serde_json::from_str(&row.get::<_, String>(0)?).map_err(Into::into)).transpose()
-        })
+        }))
     }
 
     fn records(
@@ -213,7 +219,7 @@ impl DerivedIndex for SqliteIndex {
         scope: Option<&RecordScope>,
         search: Option<&str>,
     ) -> Result<Indexed<Vec<DerivedRecord>>, SqliteIndexError> {
-        self.checked(current, |connection| {
+        Ok(self.checked(current, |connection| {
             let mut statement = connection.prepare("SELECT document FROM records ORDER BY path")?;
             let rows = statement.query_map([], |row| row.get::<_, String>(0))?;
             let mut records = rows
@@ -233,7 +239,7 @@ impl DerivedIndex for SqliteIndex {
                 })
             });
             Ok(records)
-        })
+        }))
     }
 
     fn relationships(
@@ -241,22 +247,35 @@ impl DerivedIndex for SqliteIndex {
         current: &Revision,
         identity: &ScopedIdentity,
     ) -> Result<Indexed<Vec<DerivedRelationship>>, SqliteIndexError> {
-        self.checked(current, |connection| {
+        Ok(self.checked(current, |connection| {
             let mut statement = connection.prepare("SELECT document FROM relationships WHERE (source_project = ? AND source_investigation IS ? AND source_identity = ?) OR (target_project = ? AND target_investigation IS ? AND target_identity = ?) ORDER BY kind, source_identity, target_identity")?;
             let rows = statement.query_map(params![identity.scope.project, identity.scope.investigation, identity.identity, identity.scope.project, identity.scope.investigation, identity.identity], |row| row.get::<_, String>(0))?;
             rows.map(|row| Ok(serde_json::from_str(&row?)?)).collect::<Result<Vec<_>, SqliteIndexError>>()
-        })
+        }))
+    }
+
+    fn diagnostics(
+        &self,
+        current: &Revision,
+    ) -> Result<Indexed<Vec<Diagnostic>>, SqliteIndexError> {
+        Ok(self.checked(current, |connection| {
+            let mut statement =
+                connection.prepare("SELECT document FROM diagnostics ORDER BY path, code")?;
+            let rows = statement.query_map([], |row| row.get::<_, String>(0))?;
+            rows.map(|row| Ok(serde_json::from_str(&row?)?))
+                .collect::<Result<Vec<_>, SqliteIndexError>>()
+        }))
     }
 
     fn boards(
         &self,
         current: &Revision,
-        scope: &ScopedIdentity,
+        scope: &RecordScope,
     ) -> Result<Indexed<Vec<DerivedBoard>>, SqliteIndexError> {
-        self.checked(current, |connection| {
+        Ok(self.checked(current, |connection| {
             let mut statement = connection.prepare("SELECT document FROM boards WHERE project = ? AND investigation IS ? ORDER BY identity")?;
-            let rows = statement.query_map(params![scope.scope.project, scope.scope.investigation], |row| row.get::<_, String>(0))?;
+            let rows = statement.query_map(params![scope.project, scope.investigation], |row| row.get::<_, String>(0))?;
             rows.map(|row| Ok(serde_json::from_str(&row?)?)).collect::<Result<Vec<_>, SqliteIndexError>>()
-        })
+        }))
     }
 }

@@ -137,6 +137,10 @@ pub enum Indexed<T> {
     },
 }
 
+pub trait RevisionSource {
+    fn current_revision(&self) -> Result<Revision, StoreError>;
+}
+
 pub trait DerivedIndex {
     type Prepared;
     type Error;
@@ -144,7 +148,7 @@ pub trait DerivedIndex {
     fn publish(
         &self,
         prepared: Self::Prepared,
-        current: &Revision,
+        source: &dyn RevisionSource,
     ) -> Result<Indexed<()>, Self::Error>;
     fn state(&self, current: &Revision) -> Result<Indexed<()>, Self::Error>;
     fn record(
@@ -163,10 +167,11 @@ pub trait DerivedIndex {
         current: &Revision,
         identity: &ScopedIdentity,
     ) -> Result<Indexed<Vec<DerivedRelationship>>, Self::Error>;
+    fn diagnostics(&self, current: &Revision) -> Result<Indexed<Vec<Diagnostic>>, Self::Error>;
     fn boards(
         &self,
         current: &Revision,
-        scope: &ScopedIdentity,
+        scope: &RecordScope,
     ) -> Result<Indexed<Vec<DerivedBoard>>, Self::Error>;
 }
 
@@ -360,6 +365,12 @@ impl Store {
             resulting_store_revision: resulting.snapshot.revision,
             diff: preview.diff,
         })
+    }
+}
+
+impl RevisionSource for Store {
+    fn current_revision(&self) -> Result<Revision, StoreError> {
+        Ok(self.scan()?.snapshot.revision)
     }
 }
 

@@ -1,6 +1,7 @@
 use casefile_core::{Classification, Kind};
 use casefile_store::{DerivedIndex, Indexed, RecordScope, ScopedIdentity, Store};
 use casefile_store_sqlite::SqliteIndex;
+use rusqlite::Connection;
 use std::{fs, path::Path};
 use tempfile::TempDir;
 
@@ -32,10 +33,7 @@ fn current(index: &SqliteIndex, store: &Store) -> casefile_store::DerivedSnapsho
     let snapshot = store.derived_snapshot().expect("snapshot");
     assert!(matches!(
         index
-            .publish(
-                index.prepare(&snapshot).expect("prepare"),
-                &store.scan().expect("scan").snapshot.revision
-            )
+            .publish(index.prepare(&snapshot).expect("prepare"), store)
             .expect("publish"),
         Indexed::Current { .. }
     ));
@@ -108,6 +106,25 @@ fn replacement_index_is_revision_bound_repairable_and_queryable() {
             .any(|record| record.kind == Some(Kind::Decision)
                 && matches!(record.classification, Classification::Invalid))
     );
+    let expected = snapshot
+        .diagnostics
+        .iter()
+        .find(|diagnostic| diagnostic.path.ends_with("HMD-D-200-bad.md"))
+        .expect("snapshot diagnostic");
+    let Indexed::Current { value, .. } = index
+        .diagnostics(&snapshot.source_revision)
+        .expect("diagnostics")
+    else {
+        panic!("current diagnostics");
+    };
+    let actual = value
+        .iter()
+        .find(|diagnostic| diagnostic.path == expected.path)
+        .expect("indexed diagnostic");
+    assert_eq!(
+        (&actual.code, &actual.message, &actual.path),
+        (&expected.code, &expected.message, &expected.path)
+    );
     assert!(
         snapshot
             .records
@@ -153,8 +170,34 @@ fn replacement_index_is_revision_bound_repairable_and_queryable() {
         matches!(index.relationships(&snapshot.source_revision, &ticket).expect("relationships"), Indexed::Current { value, .. } if value.iter().any(|relationship| relationship.target.scope.investigation.is_none()))
     );
     assert!(
-        matches!(index.boards(&snapshot.source_revision, &ticket).expect("boards"), Indexed::Current { value, .. } if value[0].columns[0].cards.iter().map(|card| card.rank).collect::<Vec<_>>() == vec![Some(1), Some(2)])
+        matches!(index.boards(&snapshot.source_revision, &scope).expect("boards"), Indexed::Current { value, .. } if value[0].columns[0].cards.iter().map(|card| card.rank).collect::<Vec<_>>() == vec![Some(1), Some(2)])
     );
+
+    Connection::open(&path)
+        .expect("database")
+        .execute(
+            "UPDATE records SET document = '{' WHERE identity = 'HMD-011'",
+            [],
+        )
+        .expect("corrupt record");
+    assert!(matches!(
+        index
+            .records(&snapshot.source_revision, None, None)
+            .expect("corrupt query"),
+        Indexed::Corrupt { .. }
+    ));
+    current(&index, &store);
+    Connection::open(&path)
+        .expect("database")
+        .execute("UPDATE metadata SET schema_version = 2", [])
+        .expect("invalid schema");
+    assert!(matches!(
+        index
+            .state(&snapshot.source_revision)
+            .expect("invalid schema state"),
+        Indexed::Corrupt { .. }
+    ));
+    current(&index, &store);
 
     let prepared = index.prepare(&snapshot).expect("prepare old");
     fs::write(
@@ -163,13 +206,11 @@ fn replacement_index_is_revision_bound_repairable_and_queryable() {
         "changed",
     )
     .expect("canonical change");
+    let published = index.publish(prepared, &store).expect("stale publish");
     let changed = store.derived_snapshot().expect("changed snapshot");
-    assert!(matches!(
-        index
-            .publish(prepared, &changed.source_revision)
-            .expect("stale publish"),
-        Indexed::Stale { .. }
-    ));
+    assert!(
+        matches!(published, Indexed::Stale { indexed_revision, current_revision } if indexed_revision == snapshot.source_revision && current_revision == changed.source_revision)
+    );
     assert_eq!(first_bytes, fs::read(&path).expect("atomic replacement"));
     assert!(matches!(
         index
@@ -183,6 +224,12 @@ fn replacement_index_is_revision_bound_repairable_and_queryable() {
         index
             .state(&changed.source_revision)
             .expect("corrupt state"),
+        Indexed::Corrupt { .. }
+    ));
+    assert!(matches!(
+        index
+            .records(&changed.source_revision, None, None)
+            .expect("corrupt query"),
         Indexed::Corrupt { .. }
     ));
     current(&index, &store);
