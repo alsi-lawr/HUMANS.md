@@ -93,3 +93,15 @@ fn tui_help_scroll_and_quit_work_in_a_pty_and_restore_the_screen() {
     assert!(transcript.windows(8).any(|bytes| bytes == b"\x1b[?1049h"));
     assert!(transcript.windows(8).any(|bytes| bytes == b"\x1b[?1049l"));
 }
+
+#[test]
+fn tui_help_discovers_editor_flags() {
+    let output = Command::new(env!("CARGO_BIN_EXE_casefile"))
+        .args(["tui", "--help"])
+        .output()
+        .expect("tui help");
+    assert!(output.status.success());
+    let help = String::from_utf8(output.stdout).expect("UTF-8 help");
+    assert!(help.contains("--editor <PROGRAM>"));
+    assert!(help.contains("--editor-arg <ARG>"));
+}

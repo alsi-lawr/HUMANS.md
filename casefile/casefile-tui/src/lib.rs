@@ -1,4 +1,4 @@
-//! Read-only terminal workbench for an already scanned Casefile snapshot.
+//! Terminal interaction and rendering for an already scanned Casefile snapshot.
 
 use casefile_core::{Classification, Diagnostic, EntrySnapshot, Kind, RecordSummary};
 use casefile_store::{ActivationState, ScanResult};
@@ -41,12 +41,44 @@ const WARN: Color = Color::Rgb(229, 192, 123);
 const BAD: Color = Color::Rgb(224, 108, 117);
 const RAW: Color = Color::Rgb(198, 120, 221);
 
-/// Starts the read-only workbench for an already scanned snapshot.
-pub fn run(scan: ScanResult) -> io::Result<()> {
+/// A request to edit one supported governed record.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct EditIntent {
+    pub path: String,
+    pub kind: Kind,
+}
+
+/// The result of one workbench interaction.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum Interaction {
+    Quit,
+    Edit(EditIntent),
+}
+
+/// A decision made after inspecting a proposed Store diff.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ReviewDecision {
+    Apply,
+    Cancel,
+}
+
+/// Starts the workbench for an already scanned snapshot.
+pub fn run(scan: ScanResult) -> io::Result<Interaction> {
     let _guard = TerminalGuard::enter()?;
     let backend = CrosstermBackend::new(io::stdout());
     let mut terminal = Terminal::new(backend)?;
     let mut app = App::new(scan);
+    let result = app.run(&mut terminal);
+    terminal.show_cursor()?;
+    result
+}
+
+/// Shows the Store-provided diff and returns an explicit apply or cancel decision.
+pub fn review(diff: &str) -> io::Result<ReviewDecision> {
+    let _guard = TerminalGuard::enter()?;
+    let backend = CrosstermBackend::new(io::stdout());
+    let mut terminal = Terminal::new(backend)?;
+    let mut app = ReviewApp::new(diff);
     let result = app.run(&mut terminal);
     terminal.show_cursor()?;
     result
@@ -154,7 +186,8 @@ struct App {
     show_help: bool,
     detail_scroll: u16,
     detail_rows: Cell<u16>,
-    quit: bool,
+    feedback: Option<String>,
+    interaction: Option<Interaction>,
 }
 
 impl App {
@@ -170,14 +203,18 @@ impl App {
             show_help: false,
             detail_scroll: 0,
             detail_rows: Cell::new(1),
-            quit: false,
+            feedback: None,
+            interaction: None,
         };
         app.normalise_selection();
         app
     }
 
-    fn run(&mut self, terminal: &mut Terminal<CrosstermBackend<Stdout>>) -> io::Result<()> {
-        while !self.quit {
+    fn run(
+        &mut self,
+        terminal: &mut Terminal<CrosstermBackend<Stdout>>,
+    ) -> io::Result<Interaction> {
+        while self.interaction.is_none() {
             terminal.draw(|frame| self.render(frame.area(), frame.buffer_mut()))?;
             if let Event::Key(key) = event::read()?
                 && key.kind == KeyEventKind::Press
@@ -185,13 +222,13 @@ impl App {
                 self.handle(key.code);
             }
         }
-        Ok(())
+        Ok(self.interaction.take().unwrap_or(Interaction::Quit))
     }
 
     fn handle(&mut self, key: KeyCode) {
         if self.show_help {
             match key {
-                KeyCode::Char('q') => self.quit = true,
+                KeyCode::Char('q') => self.interaction = Some(Interaction::Quit),
                 KeyCode::Char('?') | KeyCode::Esc | KeyCode::Enter => self.show_help = false,
                 _ => {}
             }
@@ -212,8 +249,9 @@ impl App {
             }
             return;
         }
+        self.feedback = None;
         match key {
-            KeyCode::Char('q') | KeyCode::Esc => self.quit = true,
+            KeyCode::Char('q') | KeyCode::Esc => self.interaction = Some(Interaction::Quit),
             KeyCode::Char('?') => self.show_help = true,
             KeyCode::Char('1') => self.set_view(View::WorkQueue),
             KeyCode::Char('2') => self.set_view(View::Records),
@@ -232,7 +270,26 @@ impl App {
             KeyCode::PageUp => self.move_focus(-PAGE_SIZE),
             KeyCode::Home => self.move_to_edge(false),
             KeyCode::End => self.move_to_edge(true),
+            KeyCode::Char('e') => self.request_edit(),
             _ => {}
+        }
+    }
+
+    fn request_edit(&mut self) {
+        let Some(entry) = self.selected() else {
+            self.feedback = Some("No selected record to edit.".into());
+            return;
+        };
+        if entry.classification == Classification::Governed
+            && matches!(entry.kind, Some(Kind::Ticket | Kind::Epic | Kind::Board))
+        {
+            self.interaction = Some(Interaction::Edit(EditIntent {
+                path: entry.path.clone(),
+                kind: entry.kind.expect("matched supported kind"),
+            }));
+        } else {
+            self.feedback =
+                Some("Read-only: e edits governed tickets, epics, and boards only.".into());
         }
     }
 
@@ -415,8 +472,10 @@ impl App {
 
         let footer_text = if self.entering_filter {
             " Type to filter  Enter accept  Esc close "
+        } else if let Some(feedback) = &self.feedback {
+            feedback
         } else {
-            " 1/2 view  Tab focus  j/k move  PgUp/PgDn page  h/l detail  / filter  ? help  q quit "
+            " 1/2 view  Tab focus  j/k move  PgUp/PgDn page  h/l detail  e edit  / filter  ? help  q quit "
         };
         Paragraph::new(footer_text)
             .style(Style::default().fg(MUTED))
@@ -588,6 +647,7 @@ impl App {
             ),
             help_line("/", "Enter filter mode"),
             help_line("c", "Clear the active filter"),
+            help_line("e", "Edit selected governed ticket, epic, or board"),
             Line::from(""),
             help_line("? / Esc / Enter", "Close this help"),
             help_line("q", "Quit Casefile"),
@@ -603,6 +663,132 @@ impl App {
             )
             .wrap(Wrap { trim: false })
             .render(popup, buffer);
+    }
+}
+
+struct ReviewApp {
+    diff: String,
+    scroll: u16,
+    rows: Cell<u16>,
+    decision: Option<ReviewDecision>,
+}
+
+impl ReviewApp {
+    fn new(diff: &str) -> Self {
+        Self {
+            diff: diff.into(),
+            scroll: 0,
+            rows: Cell::new(1),
+            decision: None,
+        }
+    }
+
+    fn run(
+        &mut self,
+        terminal: &mut Terminal<CrosstermBackend<Stdout>>,
+    ) -> io::Result<ReviewDecision> {
+        while self.decision.is_none() {
+            terminal.draw(|frame| self.render(frame.area(), frame.buffer_mut()))?;
+            if let Event::Key(key) = event::read()?
+                && key.kind == KeyEventKind::Press
+            {
+                self.handle(key.code);
+            }
+        }
+        Ok(self.decision.unwrap_or(ReviewDecision::Cancel))
+    }
+
+    fn handle(&mut self, key: KeyCode) {
+        match key {
+            KeyCode::Char('a') => self.decision = Some(ReviewDecision::Apply),
+            KeyCode::Char('c') | KeyCode::Esc => self.decision = Some(ReviewDecision::Cancel),
+            KeyCode::Down | KeyCode::Char('j') => self.scroll(1),
+            KeyCode::Up | KeyCode::Char('k') => self.scroll(-1),
+            KeyCode::PageDown => self.scroll(PAGE_SIZE),
+            KeyCode::PageUp => self.scroll(-PAGE_SIZE),
+            KeyCode::Home => self.scroll = 0,
+            KeyCode::End => self.scroll = self.max_scroll(),
+            _ => {}
+        }
+    }
+
+    fn scroll(&mut self, amount: isize) {
+        self.scroll = (self.scroll as isize + amount).clamp(0, self.max_scroll() as isize) as u16;
+    }
+
+    fn max_scroll(&self) -> u16 {
+        self.rows.get().saturating_sub(1)
+    }
+
+    fn render(&self, area: Rect, buffer: &mut Buffer) {
+        let [header, content, footer] = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(2),
+                Constraint::Min(3),
+                Constraint::Length(1),
+            ])
+            .areas(area);
+        Paragraph::new(Line::from(vec![
+            Span::styled(" REVIEW CHANGES ", Style::default().fg(ACCENT).bold()),
+            Span::styled(
+                "Store preview; canonical files are unchanged",
+                Style::default().fg(MUTED),
+            ),
+        ]))
+        .block(
+            Block::default()
+                .borders(Borders::BOTTOM)
+                .border_style(Style::default().fg(BORDER)),
+        )
+        .render(header, buffer);
+
+        let paragraph = Paragraph::new(diff_lines(&self.diff))
+            .block(panel(" Changes ", true))
+            .wrap(Wrap { trim: false });
+        let inner = panel("", true).inner(content);
+        let rows = paragraph
+            .line_count(inner.width)
+            .max(1)
+            .min(usize::from(u16::MAX)) as u16;
+        self.rows.set(rows);
+        let scroll = self.scroll.min(rows.saturating_sub(1));
+        paragraph.scroll((scroll, 0)).render(content, buffer);
+        Paragraph::new(format!(
+            " line {}/{}  j/k scroll  PgUp/PgDn page  Home/End edge  a Apply  c Cancel ",
+            scroll.saturating_add(1),
+            rows
+        ))
+        .style(Style::default().fg(MUTED))
+        .render(footer, buffer);
+    }
+}
+
+fn diff_lines(diff: &str) -> Vec<Line<'static>> {
+    let (safe, _) = safe_multiline(diff, usize::MAX);
+    let mut lines: Vec<_> = safe
+        .split('\n')
+        .map(|line| Line::from(Span::styled(safe_inline(line), diff_style(line))))
+        .collect();
+    if lines.is_empty() {
+        lines.push(Line::from("No Store diff was produced.").style(Style::default().fg(MUTED)));
+    }
+    lines
+}
+
+fn diff_style(line: &str) -> Style {
+    if line.starts_with("+++")
+        || line.starts_with("---")
+        || line.starts_with("diff --git")
+        || line.starts_with("@@")
+    {
+        Style::default().fg(ACCENT).add_modifier(Modifier::BOLD)
+    } else if line.starts_with('+') {
+        Style::default().fg(GOOD)
+    } else if line.starts_with('-') {
+        Style::default().fg(BAD)
+    } else {
+        Style::default().fg(Color::White)
     }
 }
 
@@ -1326,5 +1512,52 @@ mod tests {
         let output = render(&app, 100, 28);
         assert!(output.contains("No records in this Casefile root"));
         assert!(output.contains("UNACTIVATED"));
+    }
+
+    #[test]
+    fn edit_yields_an_intent_only_for_supported_governed_records() {
+        let mut app = App::new(scan());
+        app.handle(KeyCode::Char('e'));
+        assert_eq!(
+            app.interaction,
+            Some(Interaction::Edit(EditIntent {
+                path: "a-ticket.md".into(),
+                kind: Kind::Ticket,
+            }))
+        );
+
+        let mut read_only = App::new(scan());
+        read_only.handle(KeyCode::Char('2'));
+        read_only.handle(KeyCode::Down);
+        read_only.handle(KeyCode::Down);
+        read_only.handle(KeyCode::Char('e'));
+        assert_eq!(read_only.interaction, None);
+        assert!(render(&read_only, 120, 32).contains("Read-only: e edits governed tickets"));
+    }
+
+    #[test]
+    fn review_scrolls_store_diff_and_colours_additions_and_removals() {
+        let diff = format!(
+            "diff --git a/a.md b/a.md\n--- a/a.md\n+++ b/a.md\n@@ -1 +1 @@\n-old\n+new\n{}",
+            "+more\n".repeat(200)
+        );
+        let mut app = ReviewApp::new(&diff);
+        let backend = TestBackend::new(70, 18);
+        let mut terminal = Terminal::new(backend).expect("terminal");
+        terminal
+            .draw(|frame| app.render(frame.area(), frame.buffer_mut()))
+            .expect("draw");
+        app.handle(KeyCode::PageDown);
+        assert!(app.scroll > 0);
+        let buffer = terminal.backend().buffer();
+        assert!(
+            buffer
+                .content()
+                .iter()
+                .any(|cell| cell.symbol() == "+" && cell.fg == GOOD)
+        );
+        assert_eq!(diff_style("-old").fg, Some(BAD));
+        assert_eq!(diff_style("+new").fg, Some(GOOD));
+        assert_eq!(diff_style("@@ -1 +1 @@").fg, Some(ACCENT));
     }
 }
