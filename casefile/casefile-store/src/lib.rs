@@ -132,9 +132,6 @@ pub enum Indexed<T> {
         indexed_revision: Revision,
         current_revision: Revision,
     },
-    Corrupt {
-        message: String,
-    },
 }
 
 pub trait RevisionSource {

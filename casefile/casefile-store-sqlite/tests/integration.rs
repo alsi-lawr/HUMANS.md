@@ -1,7 +1,6 @@
 use casefile_core::{Classification, Kind};
 use casefile_store::{DerivedIndex, Indexed, RecordScope, ScopedIdentity, Store};
 use casefile_store_sqlite::SqliteIndex;
-use rusqlite::Connection;
 use std::{fs, path::Path};
 use tempfile::TempDir;
 
@@ -173,32 +172,6 @@ fn replacement_index_is_revision_bound_repairable_and_queryable() {
         matches!(index.boards(&snapshot.source_revision, &scope).expect("boards"), Indexed::Current { value, .. } if value[0].columns[0].cards.iter().map(|card| card.rank).collect::<Vec<_>>() == vec![Some(1), Some(2)])
     );
 
-    Connection::open(&path)
-        .expect("database")
-        .execute(
-            "UPDATE records SET document = '{' WHERE identity = 'HMD-011'",
-            [],
-        )
-        .expect("corrupt record");
-    assert!(matches!(
-        index
-            .records(&snapshot.source_revision, None, None)
-            .expect("corrupt query"),
-        Indexed::Corrupt { .. }
-    ));
-    current(&index, &store);
-    Connection::open(&path)
-        .expect("database")
-        .execute("UPDATE metadata SET schema_version = 2", [])
-        .expect("invalid schema");
-    assert!(matches!(
-        index
-            .state(&snapshot.source_revision)
-            .expect("invalid schema state"),
-        Indexed::Corrupt { .. }
-    ));
-    current(&index, &store);
-
     let prepared = index.prepare(&snapshot).expect("prepare old");
     fs::write(
         root.path()
@@ -219,20 +192,6 @@ fn replacement_index_is_revision_bound_repairable_and_queryable() {
         Indexed::Stale { .. }
     ));
 
-    fs::write(&path, "corrupt").expect("corrupt database");
-    assert!(matches!(
-        index
-            .state(&changed.source_revision)
-            .expect("corrupt state"),
-        Indexed::Corrupt { .. }
-    ));
-    assert!(matches!(
-        index
-            .records(&changed.source_revision, None, None)
-            .expect("corrupt query"),
-        Indexed::Corrupt { .. }
-    ));
-    current(&index, &store);
     fs::remove_file(&path).expect("delete index");
     assert!(matches!(
         index
