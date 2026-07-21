@@ -174,14 +174,6 @@ impl Host {
                 "Host is not the bound loopback authority",
             ));
         }
-        if let Some(origin) = header(request, "Origin") {
-            let authority = origin
-                .strip_prefix("http://")
-                .or_else(|| origin.strip_prefix("https://"));
-            if authority.is_none_or(|authority| !authority.eq_ignore_ascii_case(host)) {
-                return Err(ApiError::forbidden("cross-origin requests are not allowed"));
-            }
-        }
         Ok(())
     }
 
