@@ -12,8 +12,8 @@
     ],
     "category": "Coding",
     "defaultPrompt": [
-      "Investigate this repository with the Casefile workflow.",
-      "Implement accepted Casefile tickets with explicit ownership.",
+      "Implement a code change without speculative validation or recovery machinery.",
+      "Constrain tests to behavior owned by the supported API.",
       "Create a skill and choose its verification strategy."
     ],
     "developerName": ${publisher_json},

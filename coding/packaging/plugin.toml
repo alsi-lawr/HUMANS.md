@@ -5,13 +5,16 @@ publisher = "alsi-lawr"
 repository = "alsi-lawr/HUMANS.md"
 repository_url = "https://github.com/alsi-lawr/HUMANS.md"
 license = "MIT"
-description = "Reusable Git, README, and skill-generation guidance with generic verification assets."
+description = "Reusable code-writing, Git, README, and skill-generation guidance with generic verification assets."
 [[shared]]
 source = "coding/LICENSE"
 destination = "LICENSE"
 [[shared]]
 source = "coding/skills/readme-generator"
 destination = "skills/readme-generator"
+[[shared]]
+source = "coding/skills/code-writing"
+destination = "skills/code-writing"
 [[shared]]
 source = "coding/skills/skill-generator"
 destination = "skills/skill-generator"
