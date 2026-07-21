@@ -19,7 +19,13 @@ PLUGIN_ID = "casefile@humans-md"
 MARKETPLACE = "humans-md"
 RECEIPT_SCHEMA = 4
 RECEIPT_SCHEMAS = {4}
-REQUIRED_MODELS = {"gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"}
+REQUIRED_MODELS = {
+    "gpt-5.6-sol",
+    "gpt-5.6-terra",
+    "gpt-5.6-luna",
+    "gpt-5.3-codex-spark",
+}
+V1_MODELS = {"gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"}
 SCALAR_BEGIN = b"# >>> casefile setup scalars >>>\n"
 SCALAR_END = b"# <<< casefile setup scalars <<<\n"
 TABLE_BEGIN = b"\n# >>> casefile setup tables >>>\n"
@@ -199,7 +205,7 @@ def catalog_override(raw: dict, profile_path: Path) -> tuple[bytes, list[str], l
         patched.append(model_id)
     if not REQUIRED_MODELS <= set(patched):
         raise SetupError("required models were not patched")
-    if any(output[model].get("multi_agent_version") is not None for model in REQUIRED_MODELS):
+    if any(output[model].get("multi_agent_version") is not None for model in V1_MODELS):
         raise SetupError("required V1 selectors were not cleared")
     return canonical(result), sorted(patched), sorted(skipped)
 
@@ -415,7 +421,12 @@ def verify_effective_catalog(plan: dict) -> None:
     selected = {
         model.get("slug"): model for model in models if isinstance(model, dict)
     }
-    for model_id in REQUIRED_MODELS:
+    missing = sorted(REQUIRED_MODELS - selected.keys())
+    if missing:
+        raise SetupError(
+            f"effective catalog lacks required models: {', '.join(missing)}"
+        )
+    for model_id in V1_MODELS:
         model = selected.get(model_id)
         if not isinstance(model, dict) or model.get("multi_agent_version") is not None:
             raise SetupError(f"effective catalog did not activate V1 for {model_id}")

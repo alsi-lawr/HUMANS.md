@@ -146,7 +146,7 @@ class CodexSetupTests(unittest.TestCase):
                 self.assertTrue(fake.marketplace)
                 self.assertEqual("installed", result["status"])
 
-    def test_model_cache_includes_active_optional_models_missing_from_fallback(self):
+    def test_model_cache_includes_required_spark_missing_from_fallback(self):
         with tempfile.TemporaryDirectory() as temporary:
             plugin, home, _, catalog, _ = self.fixture(Path(temporary))
             fallback = {
@@ -161,6 +161,43 @@ class CodexSetupTests(unittest.TestCase):
                 plan = setup.prepare(plugin, home, "codex")
             self.assertIn("gpt-5.3-codex-spark", plan["patched"])
             self.assertNotIn("gpt-5.3-codex-spark", plan["skipped"])
+
+    def test_missing_required_spark_is_rejected_without_cache(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            plugin, home, _, catalog, _ = self.fixture(Path(temporary))
+            fallback = {
+                "models": [
+                    model
+                    for model in catalog["models"]
+                    if model["slug"] != "gpt-5.3-codex-spark"
+                ]
+            }
+            with self.fake_command(FakeCodex(fallback)):
+                with self.assertRaisesRegex(
+                    setup.SetupError,
+                    "catalog lacks required models: gpt-5.3-codex-spark",
+                ):
+                    setup.prepare(plugin, home, "codex")
+
+    def test_effective_catalog_must_retain_required_spark(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            _, home, _, catalog, _ = self.fixture(Path(temporary))
+            catalog["models"] = [
+                model
+                for model in catalog["models"]
+                if model["slug"] != "gpt-5.3-codex-spark"
+            ]
+            with self.fake_command(FakeCodex(catalog)):
+                with self.assertRaisesRegex(
+                    setup.SetupError,
+                    "effective catalog lacks required models: gpt-5.3-codex-spark",
+                ):
+                    setup.verify_effective_catalog(
+                        {
+                            "executable": "codex",
+                            "environment": {"CODEX_HOME": str(home)},
+                        }
+                    )
 
     def test_portable_bytes_write_and_resource_separator(self):
         with tempfile.TemporaryDirectory() as temporary:
