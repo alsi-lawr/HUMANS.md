@@ -195,7 +195,18 @@ fn default_opener_ignores_editor_prompts_for_enter_and_cancels() {
         ("CASEFILE_LOG", log.as_os_str().to_owned()),
     ];
     let mut pty = Pty::start(&fixture, &[], &environment);
-    begin_edit(&mut pty);
+    pty.wait_for("q quit");
+    pty.send(b"?");
+    pty.wait_for("Keyboard help");
+    pty.send(b"?");
+    thread::sleep(Duration::from_millis(100));
+    pty.send(b"\t");
+    thread::sleep(Duration::from_millis(100));
+    pty.send(b"l");
+    thread::sleep(Duration::from_millis(100));
+    pty.send(&[b'j'; 35]);
+    pty.wait_for("Verification");
+    pty.send(b"e");
     pty.wait_for("press Enter to continue");
     let opened = fs::read_to_string(&log).expect("opener log");
     let lines: Vec<_> = opened.lines().collect();
@@ -215,6 +226,8 @@ fn default_opener_ignores_editor_prompts_for_enter_and_cancels() {
             .contains("Minimum epic")
     );
     assert!(!draft.exists());
+    assert!(String::from_utf8_lossy(&transcript).contains("Keyboard help"));
+    assert!(String::from_utf8_lossy(&transcript).contains("Verification"));
     assert!(restored(&transcript));
 }
 
