@@ -1,0 +1,24 @@
+schema_version = 1
+suite_id = "coding-code-writing-v1"
+description = "Isolated trigger, hard-neighbour, and defensive-scope cases for the generic code-writing skill."
+
+[[cases]]
+id = "code-writing-positive"
+skill = "code-writing"
+partition = "positive_trigger"
+prompt = "prompts/code-writing-positive.txt"
+rubric = "rubrics/trigger.md"
+
+[[cases]]
+id = "code-writing-near"
+skill = "code-writing"
+partition = "hard_non_trigger"
+prompt = "prompts/code-writing-near.txt"
+rubric = "rubrics/trigger.md"
+
+[[cases]]
+id = "code-writing-behavior"
+skill = "code-writing"
+partition = "task_behavior"
+prompt = "prompts/code-writing-behavior.txt"
+rubric = "rubrics/behavior.md"

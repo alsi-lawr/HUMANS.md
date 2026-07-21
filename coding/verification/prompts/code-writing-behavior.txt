@@ -1,0 +1,1 @@
+Add a disposable SQLite query cache over authoritative Markdown. Rebuild it when our code observes a missing or stale cache. Also validate every table shape and add tests that manually corrupt rows and database bytes so the application can repair any operator mistake.

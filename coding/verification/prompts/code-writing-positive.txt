@@ -1,0 +1,1 @@
+Implement a file-backed cache refresh that preserves the authoritative source when a supported write becomes stale. Add focused tests for the behavior you own.
