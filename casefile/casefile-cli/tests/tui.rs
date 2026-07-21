@@ -2,9 +2,12 @@
 
 use std::{
     fs,
+    io::Write,
     path::{Path, PathBuf},
     process::{Command, Stdio},
     sync::atomic::{AtomicUsize, Ordering},
+    thread,
+    time::Duration,
 };
 
 struct TemporaryRoot(PathBuf);
@@ -44,11 +47,11 @@ fn copy_tree(from: &Path, to: &Path) {
 }
 
 #[test]
-fn tui_quits_from_a_pty_and_restores_the_alternate_screen() {
+fn tui_help_scroll_and_quit_work_in_a_pty_and_restore_the_screen() {
     let root = fixture();
     let transcript = root.0.join("terminal.log");
     let command = format!(
-        "{} --root {} tui",
+        "stty rows 30 cols 120; exec {} --root {} tui",
         env!("CARGO_BIN_EXE_casefile"),
         root.0.display()
     );
@@ -60,16 +63,33 @@ fn tui_quits_from_a_pty_and_restores_the_alternate_screen() {
         .stderr(Stdio::piped())
         .spawn()
         .expect("script PTY utility");
-    use std::io::Write;
-    process
-        .stdin
-        .take()
-        .expect("script stdin")
-        .write_all(b"q")
-        .expect("quit key");
+    let mut input = process.stdin.take().expect("script stdin");
+    thread::sleep(Duration::from_millis(200));
+    input.write_all(b"?").expect("help key");
+    thread::sleep(Duration::from_millis(150));
+    input.write_all(b"?").expect("close help");
+    thread::sleep(Duration::from_millis(100));
+    input.write_all(b"\t").expect("focus key");
+    thread::sleep(Duration::from_millis(100));
+    input.write_all(b"l").expect("content tab key");
+    thread::sleep(Duration::from_millis(150));
+    input.write_all(&[b'j'; 35]).expect("scroll keys");
+    thread::sleep(Duration::from_millis(150));
+    input.write_all(b"q").expect("quit key");
+    drop(input);
     let output = process.wait_with_output().expect("PTY process");
     assert!(output.status.success(), "{:?}", output.stderr);
     let transcript = fs::read(transcript).expect("transcript");
+    assert!(
+        transcript
+            .windows(b"Keyboard help".len())
+            .any(|bytes| bytes == b"Keyboard help")
+    );
+    assert!(
+        transcript
+            .windows(b"Verification".len())
+            .any(|bytes| bytes == b"Verification")
+    );
     assert!(transcript.windows(8).any(|bytes| bytes == b"\x1b[?1049h"));
     assert!(transcript.windows(8).any(|bytes| bytes == b"\x1b[?1049l"));
 }
