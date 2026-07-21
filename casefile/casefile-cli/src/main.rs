@@ -47,7 +47,7 @@ enum Command {
         #[arg(long, value_name = "PROGRAM")]
         editor: Option<PathBuf>,
         /// Add one argument to --editor; repeat this option to preserve argument boundaries.
-        #[arg(long, value_name = "ARG")]
+        #[arg(long, value_name = "ARG", requires = "editor")]
         editor_arg: Vec<OsString>,
     },
 }
@@ -200,11 +200,18 @@ fn edit_selected(
             if let Err(error) = store.apply(preview) {
                 return Err(retained_draft(error.into(), &draft_path));
             }
-            let cleanup = discard_draft(&draft_path);
-            let scan = store.scan()?;
-            if let Err(error) = cleanup {
-                return Err(retained_draft(error, &draft_path));
-            }
+            let scan = store.scan().map_err(|error| {
+                anyhow::Error::new(error).context(format!(
+                    "canonical change applied; post-apply rescan failed; draft retained at {}",
+                    draft_path.display()
+                ))
+            })?;
+            discard_draft(&draft_path).with_context(|| {
+                format!(
+                    "canonical change applied and rescanned; draft cleanup failed at {}",
+                    draft_path.display()
+                )
+            })?;
             println!(
                 "Applied {} and rescanned revision {}.",
                 intent.path, scan.snapshot.revision.0
@@ -226,15 +233,26 @@ fn create_draft(root: &Path, entry: &EntrySnapshot) -> Result<PathBuf> {
     let parent = target
         .parent()
         .context("selected record has no parent directory")?;
-    let mut draft = Builder::new()
+    let extension = target
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .map(|extension| format!(".{extension}"))
+        .context("selected record has no usable extension")?;
+    let directory = Builder::new()
         .prefix(".casefile-draft-")
-        .tempfile_in(parent)
+        .tempdir_in(parent)
+        .with_context(|| format!("create secure draft directory beside {}", entry.path))?;
+    let mut draft = Builder::new()
+        .prefix("draft-")
+        .suffix(&extension)
+        .tempfile_in(directory.path())
         .with_context(|| format!("create secure draft beside {}", entry.path))?;
     draft
         .write_all(&entry.original_bytes)
         .with_context(|| format!("write draft for {}", entry.path))?;
     draft.flush()?;
     let (_, path) = draft.keep().context("retain draft")?;
+    let _directory = directory.keep();
     Ok(path)
 }
 
@@ -297,7 +315,10 @@ fn retained_draft(error: anyhow::Error, draft_path: &Path) -> anyhow::Error {
 }
 
 fn discard_draft(path: &Path) -> Result<()> {
-    fs::remove_file(path).with_context(|| format!("discard draft {}", path.display()))
+    fs::remove_file(path).with_context(|| format!("discard draft {}", path.display()))?;
+    let directory = path.parent().context("draft has no parent directory")?;
+    fs::remove_dir(directory)
+        .with_context(|| format!("discard draft directory {}", directory.display()))
 }
 
 fn format_diagnostics(diagnostics: &[Diagnostic]) -> String {
