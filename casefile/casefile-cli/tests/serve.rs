@@ -300,7 +300,10 @@ fn serve_preserves_preview_and_gates_apply_with_origin_and_capability() {
         &server.authority("localhost"),
         &[
             ("Content-Type", "application/json"),
-            ("Origin", &server.origin("localhost")),
+            (
+                "Origin",
+                &format!("https://{}", server.authority("localhost")),
+            ),
         ],
         &serde_json::to_string(&change).expect("change JSON"),
     );
@@ -329,7 +332,7 @@ fn serve_preserves_preview_and_gates_apply_with_origin_and_capability() {
             &server.authority("127.0.0.1"),
             &[
                 ("Content-Type", "application/json"),
-                ("Origin", "http://example.test"),
+                ("Origin", &server.origin("localhost")),
                 ("X-Casefile-Write-Capability", &server.capability)
             ],
             &preview_json
