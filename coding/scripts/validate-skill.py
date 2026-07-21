@@ -31,15 +31,26 @@ def frontmatter(path: Path) -> tuple[dict[str, str], str]:
     if not text.startswith("---\n") or "\n---\n" not in text[4:]:
         raise ValueError("missing delimited frontmatter")
     header, body = text[4:].split("\n---\n", 1)
-    metadata: dict[str, str] = {}
+    fields: dict[str, list[str]] = {}
+    current_key: str | None = None
     for line in header.splitlines():
+        if line[:1].isspace():
+            if current_key is None:
+                raise ValueError(f"invalid frontmatter continuation: {line!r}")
+            fields[current_key].append(line.strip())
+            continue
         if ":" not in line:
             raise ValueError(f"invalid frontmatter line: {line!r}")
         key, value = line.split(":", 1)
-        value = value.strip()
+        current_key = key.strip()
+        fields[current_key] = [value.strip()]
+
+    metadata: dict[str, str] = {}
+    for key, parts in fields.items():
+        value = " ".join(part for part in parts if part)
         if len(value) >= 2 and value[0] == value[-1] == '"':
             value = value[1:-1]
-        metadata[key.strip()] = value
+        metadata[key] = value
     return metadata, body.lstrip("\n")
 
 

@@ -7,6 +7,14 @@ from pathlib import Path
 
 SKILLS = {"casefile", "casefile-investigate", "casefile-review", "casefile-implement", "casefile-switch", "casefile-close"}
 FORBIDDEN = {"validator", "writer", "hook", "mcp", "tui", "react", "sqlite"}
+EXCLUDED_DIRECTORIES = {".agent-workspace", "build", "node_modules", "target"}
+
+def owned_markdown(root: Path):
+    return (
+        path
+        for path in root.rglob("*.md")
+        if EXCLUDED_DIRECTORIES.isdisjoint(path.relative_to(root).parts)
+    )
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -15,7 +23,7 @@ def main() -> int:
     root = args.source.resolve()
     skills = root / "skills"
     errors = [f"missing Casefile skill: {name}" for name in sorted(SKILLS) if not (skills / name / "SKILL.md").is_file()]
-    text = "\n".join(path.read_text(encoding="ascii") for path in root.rglob("*.md"))
+    text = "\n".join(path.read_text(encoding="ascii") for path in owned_markdown(root))
     found = sorted(word for word in FORBIDDEN if f"{word} server" in text or f"{word} placeholder" in text)
     if found:
         errors.append("future Casefile tooling appears in this ticket: " + ", ".join(found))

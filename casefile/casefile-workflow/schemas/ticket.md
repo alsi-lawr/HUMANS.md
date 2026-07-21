@@ -20,4 +20,7 @@ superseded_by: []
 ---
 ```
 
-The body contains: applicable requirement or invariant; evidence; finding; impact; recommended resolution boundary; acceptance criteria; verification; relationships and duplicate analysis; review and disposition history. Directory and frontmatter status must agree. Rejected tickets are resolved records and require rationale plus decision links where applicable.
+The body contains: applicable requirement or invariant; evidence; finding; impact; recommended
+resolution boundary; acceptance criteria; verification; relationships and duplicate analysis; review
+and disposition history. Directory and frontmatter status must agree. Rejected tickets are resolved
+records and require rationale plus decision links where applicable.

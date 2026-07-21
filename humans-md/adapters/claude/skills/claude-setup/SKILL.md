@@ -1,10 +1,18 @@
 ---
 name: claude-setup
-description: "Use immediately after installing humans-md for Claude to preview and install the global CLAUDE.md standing contract with a versioned recovery receipt."
+description:
+  "Use immediately after installing humans-md for Claude to preview and install the global CLAUDE.md
+  standing contract with a versioned recovery receipt."
 ---
 
 # Claude setup
 
-Run `${CLAUDE_PLUGIN_ROOT}/scripts/setup-claude.py --plugin-root ${CLAUDE_PLUGIN_ROOT}`. Review its focused preview and record `approval_fingerprint`; after one approval rerun with `--apply --approval <fingerprint>`. The script rechecks `CLAUDE.md` immediately before replacement and refuses stale approval.
+Run `${CLAUDE_PLUGIN_ROOT}/scripts/setup-claude.py --plugin-root ${CLAUDE_PLUGIN_ROOT}`. Review its
+focused preview and record `approval_fingerprint`; after one approval rerun with
+`--apply --approval <fingerprint>`. The script rechecks `CLAUDE.md` immediately before replacement
+and refuses stale approval.
 
-Fresh `0.2.0` state is recorded beneath `<config>/backups/humans-md/claude-v0.2.0/` with an active pointer at `<config>/state/humans-md/claude-v0.2.0.json`. That shape is deliberately distinct from the supported `0.1.5` migration backup at `<config>/backups/humans-md/claude`. This setup owns only the standing contract; it does not install or configure Casefile.
+Fresh `0.2.0` state is recorded beneath `<config>/backups/humans-md/claude-v0.2.0/` with an active
+pointer at `<config>/state/humans-md/claude-v0.2.0.json`. That shape is deliberately distinct from
+the supported `0.1.5` migration backup at `<config>/backups/humans-md/claude`. This setup owns only
+the standing contract; it does not install or configure Casefile.

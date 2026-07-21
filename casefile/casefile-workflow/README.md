@@ -1,50 +1,46 @@
 # Casefile workflow
 
-Casefile is a governed workflow for investigating repository work, turning
-evidence into reviewable tickets, and implementing only the tickets that pass
-review. It keeps the human-selected strategy, root-agent authority, write
-ownership, decisions, and verification visible throughout the task.
+Casefile is a governed workflow for investigating repository work, turning evidence into reviewable
+tickets, and implementing only the tickets that pass review. It keeps the human-selected strategy,
+root-agent authority, write ownership, decisions, and verification visible throughout the task.
 
-It is not a fixed chain of autonomous agents. The agent that receives the
-request remains the root orchestrator, using whatever model and effort the
-human invoked. The human selects a compatible strategy for each phase, and the
-selected vendor adapter supplies concrete bindings only for delegated roles.
+It is not a fixed chain of autonomous agents. The agent that receives the request remains the root
+orchestrator, using whatever model and effort the human invoked. The human selects a compatible
+strategy for each phase, and the selected vendor adapter supplies concrete bindings only for
+delegated roles.
 
 ## V1 record boundary
 
-The adjacent `casefile/` Cargo workspace scans the compact governed-record v1
-shape and provides JSON `scan`, `check`, `preview`, and one-path `apply`
-operations for complete ticket, epic, and board drafts. It uses Git only for
-reviewable diffs and never stages changes; workflow skills remain responsible
-for human authority and the planning process.
+The adjacent `casefile/` Cargo workspace scans the compact governed-record v1 shape and provides
+JSON `scan`, `check`, `preview`, and one-path `apply` operations for complete ticket, epic, and
+board drafts. It uses Git only for reviewable diffs and never stages changes; workflow skills remain
+responsible for human authority and the planning process.
 
-`casefile check` emits only `{ activation, valid, revision, diagnostics }`.
-An unactivated root has `activation: "unactivated"` and `valid: null`; it exits
-zero unless `--require-activation` is supplied. Active invalid records and an
-invalid activation exit nonzero. `preview` and `apply` exchange their existing
-JSON protocol: they are a routed, validated writer, not interception of native
-writes.
+`casefile check` emits only `{ activation, valid, revision, diagnostics }`. An unactivated root has
+`activation: "unactivated"` and `valid: null`; it exits zero unless `--require-activation` is
+supplied. Active invalid records and an invalid activation exit nonzero. `preview` and `apply`
+exchange their existing JSON protocol: they are a routed, validated writer, not interception of
+native writes.
 
 ### CI and optional local invocation
 
-Installed Casefile plugins do not bundle the Cargo workspace or `casefile`
-binary. Users must separately provision the CLI. The following Cargo and binary
-paths are from a source checkout, not a plugin installation; build that source
-and run the gate from a CI job that has the planning store as its root:
+Installed Casefile plugins do not bundle the Cargo workspace or `casefile` binary. Users must
+separately provision the CLI. The following Cargo and binary paths are from a source checkout, not a
+plugin installation; build that source and run the gate from a CI job that has the planning store as
+its root:
 
 ```sh
 cargo build --manifest-path casefile/Cargo.toml --release -p casefile-cli
 casefile/target/release/casefile --root "$CASEFILE_ROOT" check --require-activation
 ```
 
-This is authoritative only when the hosting provider configures that job as a
-required merge check. A local hook maintained by its user may invoke the same
-already-built command manually; Casefile does not install, replace, back up, or
-uninstall hooks.
+This is authoritative only when the hosting provider configures that job as a required merge check.
+A local hook maintained by its user may invoke the same already-built command manually; Casefile
+does not install, replace, back up, or uninstall hooks.
 
-Neither native writes nor shell commands are fail-closed. Plugin trust,
-disable, load, and timeout failures, hosted or specialized tools, and local
-hooks are likewise outside this command's enforcement guarantee.
+Neither native writes nor shell commands are fail-closed. Plugin trust, disable, load, and timeout
+failures, hosted or specialized tools, and local hooks are likewise outside this command's
+enforcement guarantee.
 
 ## Skill surface
 
@@ -79,8 +75,8 @@ flowchart TB
 
 ## Investigation agent graphs
 
-The human chooses one compatible investigation shape. Casefile never silently
-falls back to another strategy.
+The human chooses one compatible investigation shape. Casefile never silently falls back to another
+strategy.
 
 ```mermaid
 flowchart TB
@@ -115,16 +111,15 @@ flowchart TB
     end
 ```
 
-- **Solo** keeps investigation and disposition at the root for narrow,
-  inseparable work.
-- **Atomic** assigns disjoint questions or source surfaces to independent
-  detectives. Detectives cannot spawn children.
-- **Inspector tree** gives each inspector a bounded domain. Inspectors may
-  delegate disjoint questions to detectives and recommend dispositions, but
-  the root retains cross-domain duplicate and final ticket authority.
+- **Solo** keeps investigation and disposition at the root for narrow, inseparable work.
+- **Atomic** assigns disjoint questions or source surfaces to independent detectives. Detectives
+  cannot spawn children.
+- **Inspector tree** gives each inspector a bounded domain. Inspectors may delegate disjoint
+  questions to detectives and recommend dispositions, but the root retains cross-domain duplicate
+  and final ticket authority.
 
-All delegated investigation is source-read-only. Investigators report a
-candidate before the root reserves a ticket ID and path.
+All delegated investigation is source-read-only. Investigators report a candidate before the root
+reserves a ticket ID and path.
 
 ## Review and implementation agent graphs
 
@@ -172,46 +167,40 @@ flowchart TB
     PG -->|No| WAIT[Wait for accepted review]
 ```
 
-Reviewers write evidence only; they do not edit source or tickets. The root
-reconciles reports, routes corrections, records human decisions, and escalates
-unresolved contention. During implementation, one writer owns every set of
-overlapping paths. The optional pipeline keeps at most two tickets active: one
-under exact-commit review and one in read-only look-ahead or implementation.
-It overlaps only dependency-independent tickets with disjoint write paths.
-Corrections preempt forward work and return to the same writer. The root
-completes a ticket only after its recorded review flow accepts it.
+Reviewers write evidence only; they do not edit source or tickets. The root reconciles reports,
+routes corrections, records human decisions, and escalates unresolved contention. During
+implementation, one writer owns every set of overlapping paths. The optional pipeline keeps at most
+two tickets active: one under exact-commit review and one in read-only look-ahead or implementation.
+It overlaps only dependency-independent tickets with disjoint write paths. Corrections preempt
+forward work and return to the same writer. The root completes a ticket only after its recorded
+review flow accepts it.
 
 ## How it works
 
-1. **Open the casefile.** Resolve the configured planning store, map the
-   project namespace to its absolute source directory in `projects.toml`, and
-   validate the map before creating project records.
-2. **Select a strategy.** Enumerate compatible matrices for the current phase,
-   explain their requirements, and wait for the human to choose. Copy and
-   validate the exact selected matrix in the casefile.
-3. **Investigate without writes.** Give every worker a disjoint scope. Workers
-   return evidence-backed candidates; the root arbitrates duplicates and alone
-   reserves ticket IDs, paths, and dispositions.
-4. **Review the tickets.** Apply the selected evidence-only review graph.
-   Rejected tickets retain rationale. Non-obvious decisions return to the human
-   and are recorded before disposition.
-5. **Plan accepted work.** Order accepted tickets by dependency, assign one
-   owner to overlapping mutations, and preserve the selected review flow in
-   the implementation plan.
-6. **Implement and verify.** Choose serial batches or the bounded pipeline.
-   Writers return one immutable commit per ticket and focused evidence. The
-   pipeline may preflight one next ticket and begin it while the prior commit
-   is reviewed only when dependency and ownership gates pass. Review and
-   verification findings route back as bounded corrections; accepted tickets
-   close only after the recorded gates pass.
-7. **Close out.** Promote resolved evidence, decisions, tickets, matrices, and
-   verification records to configured durable storage. Keep active or failed
-   work in task scratch.
+1. **Open the casefile.** Resolve the configured planning store, map the project namespace to its
+   absolute source directory in `projects.toml`, and validate the map before creating project
+   records.
+2. **Select a strategy.** Enumerate compatible matrices for the current phase, explain their
+   requirements, and wait for the human to choose. Copy and validate the exact selected matrix in
+   the casefile.
+3. **Investigate without writes.** Give every worker a disjoint scope. Workers return
+   evidence-backed candidates; the root arbitrates duplicates and alone reserves ticket IDs, paths,
+   and dispositions.
+4. **Review the tickets.** Apply the selected evidence-only review graph. Rejected tickets retain
+   rationale. Non-obvious decisions return to the human and are recorded before disposition.
+5. **Plan accepted work.** Order accepted tickets by dependency, assign one owner to overlapping
+   mutations, and preserve the selected review flow in the implementation plan.
+6. **Implement and verify.** Choose serial batches or the bounded pipeline. Writers return one
+   immutable commit per ticket and focused evidence. The pipeline may preflight one next ticket and
+   begin it while the prior commit is reviewed only when dependency and ownership gates pass. Review
+   and verification findings route back as bounded corrections; accepted tickets close only after
+   the recorded gates pass.
+7. **Close out.** Promote resolved evidence, decisions, tickets, matrices, and verification records
+   to configured durable storage. Keep active or failed work in task scratch.
 
-Strategies may change during any phase through the `casefile-switch` skill.
-Before switching, Casefile inventories active work and ownership, requires a
-new explicit selection, and refuses unavailable capabilities, changed root
-authority, lost work, or overlapping active writers.
+Strategies may change during any phase through the `casefile-switch` skill. Before switching,
+Casefile inventories active work and ownership, requires a new explicit selection, and refuses
+unavailable capabilities, changed root authority, lost work, or overlapping active writers.
 
 ## Durable record
 
@@ -233,18 +222,15 @@ projects/<project>/investigations/<date>-<slug>/
 The portable core contains:
 
 - [`roles/`](roles/) for agent responsibilities and authority boundaries;
-- [`schemas/`](schemas/) for project maps, matrices, transitions, tickets,
-  decisions, and verification records;
-- [`scripts/`](scripts/) for deterministic project-map and strategy-transition
-  checks.
+- [`schemas/`](schemas/) for project maps, matrices, transitions, tickets, decisions, and
+  verification records;
+- [`scripts/`](scripts/) for deterministic project-map and strategy-transition checks.
 
-Runtime-specific matrices and agent profiles live in vendor adapters, not in
-this portable core.
+Runtime-specific matrices and agent profiles live in vendor adapters, not in this portable core.
 
 ## Start a Casefile
 
-Invoke the installed `casefile` skill with a bounded investigation
-request:
+Invoke the installed `casefile` skill with a bounded investigation request:
 
 ```text
 Investigate this repository with Casefile. Preserve accepted findings as governed tickets, show me the compatible investigation strategies, and wait for my selection.

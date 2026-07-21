@@ -11,11 +11,11 @@ jobs:
   validate:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.14"
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: "lts/*"
       - uses: oven-sh/setup-bun@v2
@@ -27,6 +27,8 @@ jobs:
       - name: Install Casefile web dependencies
         working-directory: casefile/web
         run: bun install --frozen-lockfile
+      - name: Check source formatting
+        run: scripts/format-source.sh --check
       - name: Check ASCII source
         run: python scripts/strip-non-ascii.py --check .
       - name: Run package-local and shared tests
