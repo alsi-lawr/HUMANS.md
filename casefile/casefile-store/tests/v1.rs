@@ -1,5 +1,5 @@
 use casefile_core::{ChangeRequest, Classification, Kind, RecordDraft};
-use casefile_store::{ActivationState, Store};
+use casefile_store::{ActivationState, RelationshipKind, Store};
 use std::{fs, path::Path, process::Command};
 use tempfile::TempDir;
 
@@ -350,6 +350,45 @@ fn project_decisions_resolve_within_the_project_only() {
     fs::write(&ticket_path, ticket.replace("HMD-D-100", "OTH-D-001"))
         .expect("cross-project reference");
     scan_has(root.path(), "unresolved_reference");
+}
+
+#[test]
+fn derived_relationships_are_unique_and_directed() {
+    let root = fixture();
+    let ticket_path = path(root.path(), "tickets/accepted/HMD-011.md");
+    let ticket = fs::read_to_string(&ticket_path).expect("ticket");
+    fs::write(
+        &ticket_path,
+        ticket.replace(
+            "related_tickets: []",
+            "related_tickets: [HMD-E-001, HMD-E-001]",
+        ),
+    )
+    .expect("duplicate ticket relationships");
+    let epic_path = path(root.path(), "epics/accepted/HMD-E-001.md");
+    let epic = fs::read_to_string(&epic_path).expect("epic");
+    fs::write(
+        &epic_path,
+        epic.replace("related_tickets: []", "related_tickets: [HMD-011]"),
+    )
+    .expect("reciprocal epic relationship");
+
+    let relationships = Store::open(root.path())
+        .expect("store")
+        .derived_snapshot()
+        .expect("derived snapshot")
+        .relationships
+        .into_iter()
+        .filter(|relationship| relationship.kind == RelationshipKind::Related)
+        .collect::<Vec<_>>();
+
+    assert_eq!(relationships.len(), 2);
+    assert!(relationships.iter().any(|relationship| {
+        relationship.source.identity == "HMD-011" && relationship.target.identity == "HMD-E-001"
+    }));
+    assert!(relationships.iter().any(|relationship| {
+        relationship.source.identity == "HMD-E-001" && relationship.target.identity == "HMD-011"
+    }));
 }
 
 #[test]

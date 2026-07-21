@@ -18,13 +18,25 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "lts/*"
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
+      - name: Install Casefile web dependencies
+        working-directory: casefile/web
+        run: bun install --frozen-lockfile
       - name: Check ASCII source
         run: python scripts/strip-non-ascii.py --check .
       - name: Run package-local and shared tests
         run: python scripts/test-all.py
+      - name: Check Casefile web workbench
+        working-directory: casefile/web
+        run: |
+          bun run typecheck
+          bun run test
+          bun run build
       - name: Check Casefile Rust workspace
         working-directory: casefile
         run: |
