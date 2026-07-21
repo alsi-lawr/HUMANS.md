@@ -41,6 +41,15 @@ enum Command {
         #[arg(long)]
         preview: PathBuf,
     },
+    /// Serve the fixed planning root on an IPv4 loopback socket.
+    Serve {
+        #[arg(long, default_value_t = 0)]
+        port: u16,
+        #[arg(long)]
+        index: Option<PathBuf>,
+        #[arg(long)]
+        write: bool,
+    },
     /// Open the interactive workbench.
     Tui {
         /// Run this editor program and wait for it to exit instead of using the OS file opener.
@@ -78,6 +87,10 @@ fn main() -> ExitCode {
 fn run() -> Result<ExitCode> {
     let cli = Cli::parse();
     let root = cli.root;
+    if let Command::Serve { port, index, write } = &cli.command {
+        casefile_server::serve(&root, *port, index.as_deref(), *write)?;
+        return Ok(ExitCode::SUCCESS);
+    }
     let store = Store::open(&root)?;
     match cli.command {
         Command::Scan => {
@@ -115,6 +128,7 @@ fn run() -> Result<ExitCode> {
             print_json(&store.apply(preview)?)?;
             Ok(ExitCode::SUCCESS)
         }
+        Command::Serve { .. } => unreachable!("serve handled before opening the store"),
         Command::Tui { editor, editor_arg } => run_tui(
             &store,
             &root,
