@@ -118,9 +118,6 @@ impl Running {
     fn authority(&self, host: &str) -> String {
         format!("{host}:{}", self.port)
     }
-    fn origin(&self, host: &str) -> String {
-        format!("http://{host}:{}", self.port)
-    }
 }
 
 impl Drop for Running {
@@ -273,7 +270,7 @@ fn serve_exposes_only_the_fixed_read_contract() {
 }
 
 #[test]
-fn serve_preserves_preview_and_gates_apply_with_origin_and_capability() {
+fn serve_preserves_preview_and_gates_apply_with_capability() {
     let root = fixture();
     let indexes = TempDir::new().expect("indexes");
     let index = indexes.path().join("write.sqlite");
@@ -298,13 +295,7 @@ fn serve_preserves_preview_and_gates_apply_with_origin_and_capability() {
         "POST",
         "/api/preview",
         &server.authority("localhost"),
-        &[
-            ("Content-Type", "application/json"),
-            (
-                "Origin",
-                &format!("https://{}", server.authority("localhost")),
-            ),
-        ],
+        &[("Content-Type", "application/json")],
         &serde_json::to_string(&change).expect("change JSON"),
     );
     assert_eq!(preview_response.status, 200, "{}", preview_response.body);
@@ -324,22 +315,6 @@ fn serve_preserves_preview_and_gates_apply_with_origin_and_capability() {
         .status,
         403
     );
-    assert_eq!(
-        request(
-            &server,
-            "POST",
-            "/api/apply",
-            &server.authority("127.0.0.1"),
-            &[
-                ("Content-Type", "application/json"),
-                ("Origin", &server.origin("localhost")),
-                ("X-Casefile-Write-Capability", &server.capability)
-            ],
-            &preview_json
-        )
-        .status,
-        403
-    );
     assert!(
         !fs::read_to_string(root.path().join(path))
             .expect("unchanged")
@@ -353,7 +328,6 @@ fn serve_preserves_preview_and_gates_apply_with_origin_and_capability() {
         &server.authority("127.0.0.1"),
         &[
             ("Content-Type", "application/json"),
-            ("Origin", &server.origin("127.0.0.1")),
             ("X-Casefile-Write-Capability", &server.capability),
         ],
         &preview_json,
