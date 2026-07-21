@@ -129,6 +129,7 @@ selector_fields = ["multi_agent_version"]
 
 [[catalog.targets]]
 id = "gpt-5.6-sol"
+required = true
 required_reasoning = ["low", "medium", "high", "xhigh", "max", "ultra"]
 base_instructions_file = "catalog/gpt-5.6-sol/base-instructions.md"
 model_messages_file = "catalog/gpt-5.6-sol/model-messages.json"
@@ -139,6 +140,7 @@ display_name = "GPT-5.6-Sol"
 
 [[catalog.targets]]
 id = "gpt-5.6-terra"
+required = true
 required_reasoning = ["low", "medium", "high", "xhigh", "max", "ultra"]
 base_instructions_file = "catalog/gpt-5.6-terra/base-instructions.md"
 model_messages_file = "catalog/gpt-5.6-terra/model-messages.json"
@@ -149,6 +151,7 @@ display_name = "GPT-5.6-Terra"
 
 [[catalog.targets]]
 id = "gpt-5.6-luna"
+required = true
 required_reasoning = ["low", "medium", "high", "xhigh", "max"]
 base_instructions_file = "catalog/gpt-5.6-luna/base-instructions.md"
 model_messages_file = "catalog/gpt-5.6-luna/model-messages.json"
@@ -189,6 +192,7 @@ display_name = "GPT-5.4-Mini"
 
 [[catalog.targets]]
 id = "gpt-5.3-codex-spark"
+required = true
 required_reasoning = ["low", "medium", "high", "xhigh"]
 base_instructions_file = "catalog/gpt-5.3-codex-spark/base-instructions.md"
 model_messages_file = "catalog/gpt-5.3-codex-spark/model-messages.json"

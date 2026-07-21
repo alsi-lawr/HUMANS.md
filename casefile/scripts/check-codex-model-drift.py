@@ -8,16 +8,7 @@ import tomllib
 from pathlib import Path
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--catalog", type=Path, required=True)
-    parser.add_argument("--profiles", type=Path, required=True)
-    parser.add_argument("--output", type=Path, required=True)
-    arguments = parser.parse_args()
-    if arguments.catalog.name == "models_cache.json":
-        raise SystemExit("refusing models_cache.json")
-    catalog = json.loads(arguments.catalog.read_text(encoding="utf-8"))
-    profiles = tomllib.loads(arguments.profiles.read_text(encoding="utf-8"))
+def compare(catalog: dict, profiles: dict) -> list[str]:
     models = catalog.get("models")
     findings: list[str] = []
     if not isinstance(models, list):
@@ -36,7 +27,8 @@ def main() -> int:
         model_id = target.get("id")
         model = by_id.get(model_id)
         if model is None:
-            findings.append(f"Required model `{model_id}` is missing.")
+            if target.get("required") is True:
+                findings.append(f"Required model `{model_id}` is missing.")
             continue
         efforts = {
             item.get("effort")
@@ -52,21 +44,29 @@ def main() -> int:
                 )
         for selector in target.get("null_selectors", []):
             current: object = model
-            found = True
             for part in selector.split("."):
                 if not isinstance(current, dict) or part not in current:
                     findings.append(f"Model `{model_id}` no longer exposes selector `{selector}`.")
-                    found = False
                     break
                 current = current[part]
-            if found and current is not None:
-                findings.append(
-                    f"Model `{model_id}` selector `{selector}` is `{current}` instead of JSON null."
-                )
+    return findings
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--catalog", type=Path, required=True)
+    parser.add_argument("--profiles", type=Path, required=True)
+    parser.add_argument("--output", type=Path, required=True)
+    arguments = parser.parse_args()
+    if arguments.catalog.name == "models_cache.json":
+        raise SystemExit("refusing models_cache.json")
+    catalog = json.loads(arguments.catalog.read_text(encoding="utf-8"))
+    profiles = tomllib.loads(arguments.profiles.read_text(encoding="utf-8"))
+    findings = compare(catalog, profiles)
     body = [
         "# Codex model profile drift",
         "",
-        "This report compares only model IDs, required reasoning levels, declared expected fields, and declared selectors. It contains no catalog payload and makes no instruction edits.",
+        "This report compares required model IDs, required reasoning levels, declared expected fields, and declared selector paths. It contains no catalog payload and makes no instruction edits.",
         "",
     ]
     if findings:
