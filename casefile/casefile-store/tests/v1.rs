@@ -316,6 +316,43 @@ fn reference_cycle_attachment_prefix_symlink_and_json_diagnostics_are_checked() 
 }
 
 #[test]
+fn project_decisions_resolve_within_the_project_only() {
+    let root = fixture();
+    let ticket_path = path(root.path(), "tickets/accepted/HMD-011.md");
+    fs::create_dir_all(root.path().join("projects/demo/decision-log")).expect("project decisions");
+    fs::write(
+        root.path()
+            .join("projects/demo/decision-log/HMD-D-100-project.md"),
+        "# HMD-D-100 - Project\n\n## Status\n\naccepted\n\n## Decision\n\nProject scope.\n",
+    )
+    .expect("project decision");
+    let ticket = fs::read_to_string(&ticket_path).expect("ticket");
+    fs::write(&ticket_path, ticket.replace("HMD-D-001", "HMD-D-100")).expect("project reference");
+    let scan = Store::open(root.path())
+        .expect("store")
+        .scan()
+        .expect("scan");
+    assert!(scan.diagnostics.is_empty(), "{:#?}", scan.diagnostics);
+    assert!(scan.snapshot.entries.iter().any(|entry| entry.path
+        == "projects/demo/decision-log/HMD-D-100-project.md"
+        && entry.kind == Some(Kind::Decision)
+        && entry.classification == Classification::Governed));
+
+    fs::write(root.path().join("casefile.toml"), "schema_version = 1\n[projects.demo]\nprefix = 'HMD'\ninvestigations = ['projects/demo/investigations/sample']\n[projects.other]\nprefix = 'OTH'\ninvestigations = []\n").expect("second project");
+    fs::create_dir_all(root.path().join("projects/other/decision-log")).expect("other decisions");
+    fs::write(
+        root.path()
+            .join("projects/other/decision-log/OTH-D-001-other.md"),
+        "# OTH-D-001 - Other\n\n## Status\n\naccepted\n\n## Decision\n\nOther scope.\n",
+    )
+    .expect("other decision");
+    let ticket = fs::read_to_string(&ticket_path).expect("ticket");
+    fs::write(&ticket_path, ticket.replace("HMD-D-100", "OTH-D-001"))
+        .expect("cross-project reference");
+    scan_has(root.path(), "unresolved_reference");
+}
+
+#[test]
 fn previews_and_applies_one_path_without_touching_index() {
     let root = fixture();
     let store = Store::open(root.path()).expect("store");
