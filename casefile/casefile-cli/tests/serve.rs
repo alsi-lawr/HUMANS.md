@@ -1,5 +1,5 @@
 use casefile_core::{ChangeRequest, Kind, Preview, RecordDraft};
-use casefile_store::Store;
+use casefile_store::{DerivedRecord, Indexed, Store};
 use serde_json::{Value, json};
 use std::{
     fs,
@@ -31,6 +31,15 @@ fn fixture() -> TempDir {
             .as_path(),
         root.path(),
     );
+    let decision = root
+        .path()
+        .join("projects/demo/decision-log/HMD-D-002-project.md");
+    fs::create_dir_all(decision.parent().expect("decision parent")).expect("decision directory");
+    fs::write(
+        decision,
+        "# HMD-D-002 - Project\n\n## Status\n\naccepted\n\n## Decision\n\nProject scope.\n",
+    )
+    .expect("project decision");
     for args in [
         &["init", "-q"][..],
         &["config", "user.email", "casefile@example.test"],
@@ -190,7 +199,23 @@ fn serve_exposes_only_the_fixed_read_contract() {
     let static_page = request(&server, "GET", "/", &server.authority("localhost"), &[], "");
     assert_eq!(static_page.status, 200);
     assert!(static_page.headers.contains("content-type: text/html"));
-    assert!(static_page.body.contains("Casefile loopback host"));
+    assert!(static_page.body.contains("Casefile Workbench"));
+    for (path, content_type) in [
+        ("/assets/app.js", "text/javascript"),
+        ("/assets/app.css", "text/css"),
+    ] {
+        let asset = request(
+            &server,
+            "GET",
+            path,
+            &server.authority("127.0.0.1"),
+            &[],
+            "",
+        );
+        assert_eq!(asset.status, 200);
+        assert!(asset.headers.contains(content_type));
+        assert!(!asset.body.is_empty());
+    }
     assert_eq!(
         request(
             &server,
@@ -240,8 +265,39 @@ fn serve_exposes_only_the_fixed_read_contract() {
         415
     );
 
+    let records = json_request(
+        &server,
+        "/api/query",
+        &json!({"query":"records", "scope":{"project":"demo", "investigation":"sample"}}),
+    );
+    let Indexed::Current { value, .. } =
+        serde_json::from_str::<Indexed<Vec<DerivedRecord>>>(&records.body).expect("record query")
+    else {
+        panic!("current records")
+    };
+    assert!(value.iter().any(|record| {
+        record
+            .board
+            .as_ref()
+            .is_some_and(|board| board.id == "HMD-board")
+    }));
+    let project_records = json_request(
+        &server,
+        "/api/query",
+        &json!({"query":"records", "scope":{"project":"demo"}}),
+    );
+    let project_records: Value =
+        serde_json::from_str(&project_records.body).expect("project records JSON");
+    let project_decision = project_records["Current"]["value"]
+        .as_array()
+        .expect("current records")
+        .iter()
+        .find(|record| record["identity"]["identity"] == "HMD-D-002")
+        .expect("project decision");
+    assert_eq!(project_decision["scope"]["project"], "demo");
+    assert!(project_decision["scope"].get("investigation").is_none());
+
     for query in [
-        json!({"query":"records", "scope":{"project":"demo", "investigation":"sample"}, "search":"Minimum"}),
         json!({"query":"relationships", "identity":{"scope":{"project":"demo", "investigation":"sample"}, "identity":"HMD-011"}}),
         json!({"query":"boards", "scope":{"project":"demo", "investigation":"sample"}}),
         json!({"query":"diagnostics"}),
@@ -360,6 +416,9 @@ fn serve_preserves_preview_and_gates_apply_with_capability() {
         ],
         &preview_json,
     );
-    assert_eq!(stale.status, 400);
-    assert!(stale.body.contains("stale store revision"));
+    assert_eq!(stale.status, 409);
+    assert_eq!(
+        serde_json::from_str::<Value>(&stale.body).expect("stale JSON"),
+        json!({"error":"stale store revision", "code":"stale_revision"})
+    );
 }

@@ -14,6 +14,9 @@ projects/<project>/investigations/<YYYYMMDD>-<slug>/
   implementation-plan/tickets/
 ```
 
-`projects.toml` follows `project-map.md` and must contain the project mapping before `projects/<project>/` or any records beneath it are added.
+`projects.toml` follows `project-map.md` and must contain the project mapping before
+`projects/<project>/` or any records beneath it are added.
 
-A task-local mirror uses the same shape beneath `<source>/.agent-workspace/<session-id>/agent-planning/`, including `projects.toml`. The root alone synchronises it to durable storage.
+A task-local mirror uses the same shape beneath
+`<source>/.agent-workspace/<session-id>/agent-planning/`, including `projects.toml`. The root alone
+synchronises it to durable storage.

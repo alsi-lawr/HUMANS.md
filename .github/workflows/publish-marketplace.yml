@@ -15,10 +15,20 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.14"
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Build Casefile web assets
+        working-directory: casefile/web
+        run: |
+          bun install --frozen-lockfile
+          bun run typecheck
+          bun run test
+          bun run build
       - name: Match the requested version to package inventory
         env:
           VERSION: ${{ inputs.version }}
@@ -41,7 +51,7 @@ jobs:
           python coding/scripts/validate-skill.py --all --root build/marketplace/plugins/codex/coding
           python coding/scripts/validate-skill.py --all --root build/marketplace/plugins/claude/coding
       - name: Check out the marketplace repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: alsi-lawr/humans-md-marketplace
           ssh-key: ${{ secrets.MARKETPLACE_DEPLOY_KEY }}

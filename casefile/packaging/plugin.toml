@@ -10,6 +10,30 @@ description = "Governed Casefile workflows and optional Casefile agent integrati
 source = "casefile/LICENSE"
 destination = "LICENSE"
 [[shared]]
+source = "casefile/Cargo.toml"
+destination = "Cargo.toml"
+[[shared]]
+source = "casefile/Cargo.lock"
+destination = "Cargo.lock"
+[[shared]]
+source = "casefile/casefile-core"
+destination = "casefile-core"
+[[shared]]
+source = "casefile/casefile-store"
+destination = "casefile-store"
+[[shared]]
+source = "casefile/casefile-store-sqlite"
+destination = "casefile-store-sqlite"
+[[shared]]
+source = "casefile/casefile-server"
+destination = "casefile-server"
+[[shared]]
+source = "casefile/casefile-tui"
+destination = "casefile-tui"
+[[shared]]
+source = "casefile/casefile-cli"
+destination = "casefile-cli"
+[[shared]]
 source = "casefile/casefile-workflow"
 destination = "casefile-workflow"
 [[shared]]

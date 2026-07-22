@@ -28,7 +28,17 @@ def files(paths: list[Path]):
             continue
         for current, directories, names in os.walk(supplied):
             directories[:] = sorted(
-                name for name in directories if name not in {".git", ".agent-workspace", "__pycache__"}
+                name
+                for name in directories
+                if name
+                not in {
+                    ".agent-workspace",
+                    ".git",
+                    "__pycache__",
+                    "build",
+                    "node_modules",
+                    "target",
+                }
             )
             for name in sorted(names):
                 path = Path(current) / name

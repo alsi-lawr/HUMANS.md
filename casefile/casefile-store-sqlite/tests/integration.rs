@@ -130,6 +130,13 @@ fn replacement_index_is_revision_bound_repairable_and_queryable() {
             .iter()
             .any(|record| record.path.ends_with("legacy.txt"))
     );
+    assert!(snapshot.records.iter().any(|record| {
+        record.kind == Some(Kind::Board)
+            && record
+                .board
+                .as_ref()
+                .is_some_and(|board| board.id == "HMD-board")
+    }));
 
     let ticket = snapshot
         .records
