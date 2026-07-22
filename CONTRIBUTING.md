@@ -72,6 +72,53 @@ semantics. The SQLite adapter is a disposable derived index. The loopback server
 root at launch and embeds the tracked browser build; the browser does not parse or write planning
 files directly.
 
+### Strategies and writer bindings
+
+Each investigation keeps the selected phase matrices in `strategy/<phase>.toml`. A complete matrix
+uses schema version 1 and declares its identity, phase, adapter, root binding, limits, required
+capabilities, worker rows, and coordination rules. Pipeline gates are an optional coordination
+table. The request-receiving orchestrator is always `root`; a matrix describes delegated roles but
+does not select the root model or effort. Validate the complete preset before copying it into the
+Casefile and leave that selected source unchanged.
+
+`strategy/bindings.toml` is a separate schema-version-1 overlay for the Casefile-wide Codex
+implementation writer. It declares `adapter`, the literal `role = "implementation-writer"`, `model`,
+`reasoning_effort`, and a `[resolution]` table recording the adapter resolution mode and value. It
+never changes reviewer, verifier, look-ahead, or root bindings. The Rust parser is the single schema
+authority and projects these client-visible states:
+
+- `absent`: no overlay exists and the single matrix writer pair is effective;
+- `pending`: a valid overlay exists before an implementation strategy is selected;
+- `resolved`: the overlay adapter matches a selected implementation matrix with exactly one writer;
+- `unresolved`: the overlay or matrix cannot identify one applicable effective writer; and
+- `invalid`: the binding source failed canonical validation.
+
+Historical Casefiles without `bindings.toml` remain valid and use the matrix writer pair. A present
+invalid or unresolved overlay never falls back silently. The TUI, server, and browser consume the
+Rust-owned typed projection and diagnostics; do not add another TOML parser to a client.
+
+### Codex offer and spawn resolution
+
+`casefile/adapters/codex/scripts/resolve-writer-binding.py` reads the active effective catalog from
+the configured Codex home. It offers only visible model/effort pairs that match the selected
+multi-agent runtime and have a verified packaged resolution for both implementation strategies. V1
+requires an exact generated named profile for the pair. V2 requires each strategy's runtime wrapper,
+a positive fork context, and explicit model and effort overrides at spawn.
+
+Sol/high is a recommendation, not a default. The offer reports whether it is available and always
+requires an explicit exact selection. If it is unavailable, present the remaining offered pairs
+without recommending a substitute. Before ticket-batch, pipeline, resumed, or correction work,
+resolve the canonical projection and revalidate the pair against a fresh offer. Stop before
+delegation for pending, unresolved, invalid, or newly unavailable state; obtain explicit reselection
+while implementation is inactive.
+
+Binding replacement uses the Casefile CLI's `replace-strategy-binding` operation. It validates the
+candidate and atomically replaces only `strategy/bindings.toml` with a temporary-file rename. It
+must be refused while implementation or correction work is active. Git history is the only history
+boundary: do not add an archive, journal, second state file, or client-side write path.
+
+### Workbench development
+
 Build and inspect the browser workbench against a planning root with:
 
 ```sh
@@ -86,6 +133,19 @@ cargo run -p casefile-cli -- --root ~/dev/agent-planning serve --write
 Read-only browsing works immediately. Supply the printed, non-persisted write capability only when
 testing governed ticket, epic, or board replacement.
 
+The TUI's `Strategies` view is investigation-scoped and available through key `5` or the `t` view
+cycle. It shows matrices and `bindings.toml` with Overview, exact Source, and Diagnostics panes.
+Strategy records remain read-only even when other governed record editing is available.
+
+The browser's `Strategies` panel receives the same typed projection from the server. Its graph has
+one canonical root node and one node per declared worker, in declaration order. Draw only
+root-to-worker connectors: the matrix has no worker dependency or live-execution relation to render.
+Keep root-only, legacy, invalid, pending, unresolved, and empty states explicit rather than
+inventing a graph. Node controls must remain native keyboard-operable buttons with visible focus,
+pressed state, labelled regions, and a polite detail announcement. Selection reveals declared and
+effective runtime facts plus limits, requirements, coordination, and pipeline constraints; it does
+not edit a strategy or binding.
+
 The Codex adapter owns the selected Casefile model catalog and multi-agent runtime. Setup defaults
 to V1; V2 requires Codex 0.145.0 or newer. The Claude adapter supplies workflow skills, matrices,
 and role agents without owning the standing contract. Neither adapter removes the shared marketplace
@@ -97,6 +157,20 @@ The source CLI is optional infrastructure, not part of installed plugin setup:
 cargo build --manifest-path casefile/Cargo.toml --release -p casefile-cli
 casefile/target/release/casefile --root "$CASEFILE_ROOT" check --require-activation
 ```
+
+### Focused and release-candidate verification
+
+During feature work, run the narrowest checks for the owned surface: the relevant Rust package
+tests, focused Python setup/binding tests, or browser format/type/test/build commands. Rebuild and
+review embedded browser assets when the web source changes. Do not repeatedly spend the full
+workspace, package, or authenticated smoke gate on a local correction.
+
+For a release candidate, pin one exact source commit and run the complete commands in
+[Development environment](#development-environment), followed by the generated-marketplace checks
+below. Inspect all six generated vendor metadata manifests, both regenerated catalogs, generated
+Codex and Claude Casefile validation, and embedded-asset cleanliness. Run authenticated,
+configuration-isolated runtime smoke only when the release ticket requires it, and retain sanitized
+evidence without credentials, caches, or raw session logs.
 
 ## Packages and generated assets
 

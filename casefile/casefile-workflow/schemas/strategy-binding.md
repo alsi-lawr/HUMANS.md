@@ -14,5 +14,5 @@ unresolved state and no effective writer pair. Before implementation is selected
 is pending.
 
 Replacing a binding is an adapter/runtime operation, never a client edit. It must be refused while
-an implementation writer or correction is active, archive the previous exact source, and commit the
-new selected source and archive atomically.
+an implementation writer or correction is active and atomically replace only `bindings.toml`.
+Repository Git history is the history authority; no binding archive or journal is maintained.
