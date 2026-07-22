@@ -3,10 +3,11 @@ use crate::{
     scanning::ScanResult,
 };
 use casefile_core::{
-    BoardDraft, Classification, Diagnostic, Kind, RecordDraft, RecordSummary, Revision,
-    StrategyBinding, StrategyProjection, WorkItemDraft, parse_strategy_projection,
+    BoardDraft, Classification, Diagnostic, EntrySnapshot, Kind, RecordDraft, RecordSummary,
+    Revision, StrategyBinding, StrategyProjection, WorkItemDraft, parse_strategy_projection,
 };
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
 pub struct RecordScope {
@@ -135,12 +136,65 @@ pub struct DerivedCard {
     pub rank: Option<u64>,
 }
 
+#[derive(Default)]
+struct StrategyMetadata<'a> {
+    binding_selected: bool,
+    binding: Option<&'a StrategyBinding>,
+    binding_invalid: bool,
+    implementation_selected: bool,
+    implementation_projection: Option<(&'a str, StrategyProjection)>,
+}
+
+fn strategy_metadata_by_scope<'a>(
+    entries: impl IntoIterator<Item = (&'a EntrySnapshot, Option<RecordScope>)>,
+) -> BTreeMap<Option<RecordScope>, StrategyMetadata<'a>> {
+    let mut metadata_by_scope: BTreeMap<Option<RecordScope>, StrategyMetadata<'a>> =
+        BTreeMap::new();
+    for (entry, scope) in entries {
+        let metadata = metadata_by_scope.entry(scope).or_default();
+        if !metadata.binding_selected && entry.kind == Some(Kind::StrategyBinding) {
+            metadata.binding_selected = true;
+            metadata.binding = match &entry.summary {
+                Some(RecordSummary::StrategyBinding { binding }) => Some(binding),
+                _ => None,
+            };
+            metadata.binding_invalid = entry.classification == Classification::Invalid;
+        }
+        if !metadata.implementation_selected
+            && entry.classification == Classification::Governed
+            && matches!(&entry.summary, Some(RecordSummary::Strategy { phase, .. }) if phase == "implementation")
+        {
+            metadata.implementation_selected = true;
+            metadata.implementation_projection = (|| {
+                let Some(RecordSummary::Strategy { adapter, .. }) = &entry.summary else {
+                    return None;
+                };
+                let text = std::str::from_utf8(&entry.original_bytes).ok()?;
+                parse_strategy_projection(&entry.path, text)
+                    .ok()
+                    .flatten()
+                    .map(|matrix| (adapter.as_str(), matrix))
+            })();
+        }
+    }
+    metadata_by_scope
+}
+
 pub(super) fn derive_snapshot(scan: &ScanResult, active: &Activation) -> DerivedSnapshot {
+    let scopes = scan
+        .snapshot
+        .entries
+        .iter()
+        .map(|entry| record_scope(&entry.path, active))
+        .collect::<Vec<_>>();
+    let strategy_metadata =
+        strategy_metadata_by_scope(scan.snapshot.entries.iter().zip(scopes.iter().cloned()));
     let records = scan
         .snapshot
         .entries
         .iter()
-        .map(|entry| {
+        .zip(scopes)
+        .map(|(entry, scope)| {
             let content = String::from_utf8(entry.original_bytes.clone()).ok();
             let rendered_markdown = content
                 .as_deref()
@@ -168,26 +222,9 @@ pub(super) fn derive_snapshot(scan: &ScanResult, active: &Activation) -> Derived
                 Some(RecordDraft::Board(board)) => (None, Some(board)),
                 None => (None, None),
             };
-            let scope = record_scope(&entry.path, active);
-            let scoped = |candidate: &casefile_core::EntrySnapshot| record_scope(&candidate.path, active) == scope;
-            let binding_entry = scan.snapshot.entries.iter().find(|candidate| {
-                candidate.kind == Some(Kind::StrategyBinding) && scoped(candidate)
-            });
-            let binding = binding_entry.and_then(|candidate| match &candidate.summary {
-                Some(RecordSummary::StrategyBinding { binding }) => Some(binding),
-                _ => None,
-            });
-            let binding_invalid = binding_entry.is_some_and(|candidate| candidate.classification == Classification::Invalid);
-            let implementation_entry = scan.snapshot.entries.iter().find(|candidate| {
-                candidate.classification == Classification::Governed && scoped(candidate)
-                    && matches!(&candidate.summary, Some(RecordSummary::Strategy { phase, .. }) if phase == "implementation")
-            });
-            let implementation_selected = implementation_entry.is_some();
-            let implementation_projection = implementation_entry.and_then(|candidate| {
-                let RecordSummary::Strategy { adapter, .. } = candidate.summary.as_ref()? else { return None; };
-                let text = std::str::from_utf8(&candidate.original_bytes).ok()?;
-                parse_strategy_projection(&candidate.path, text).ok().flatten().map(|matrix| (adapter.as_str(), matrix))
-            });
+            let metadata = strategy_metadata
+                .get(&scope)
+                .expect("strategy metadata exists for every record scope");
             let strategy = match (&entry.summary, content.as_deref()) {
                 (Some(RecordSummary::Strategy { phase, adapter, .. }), Some(text)) => {
                     parse_strategy_projection(&entry.path, text)
@@ -195,7 +232,13 @@ pub(super) fn derive_snapshot(scan: &ScanResult, active: &Activation) -> Derived
                         .flatten()
                         .map(|matrix| DerivedStrategy {
                             binding: (phase == "implementation").then(|| {
-                                resolve_binding(phase, adapter, &matrix, binding, binding_invalid)
+                                resolve_binding(
+                                    phase,
+                                    adapter,
+                                    &matrix,
+                                    metadata.binding,
+                                    metadata.binding_invalid,
+                                )
                             }),
                             matrix,
                         })
@@ -207,8 +250,11 @@ pub(super) fn derive_snapshot(scan: &ScanResult, active: &Activation) -> Derived
                     binding: binding.clone(),
                     state: binding_state(
                         binding,
-                        implementation_selected,
-                        implementation_projection.as_ref().map(|(adapter, matrix)| (*adapter, matrix)),
+                        metadata.implementation_selected,
+                        metadata
+                            .implementation_projection
+                            .as_ref()
+                            .map(|(adapter, matrix)| (*adapter, matrix)),
                     ),
                 }),
                 _ => None,
