@@ -392,22 +392,16 @@ def prepare(root: Path, home: Path, executable: str, version: str = "v1") -> dic
     plugin = discover(executable, environment, manifest["version"])
     if version == "v2":
         require_v2(executable, environment)
-    catalog_command = [executable, "debug", "models"]
-    model_cache = home / "models_cache.json"
-    if model_cache.is_file():
-        catalog_command += [
-            "-c",
-            f"model_catalog_json={json.dumps(str(model_cache))}",
-        ]
-    try:
-        raw = json.loads(checked(catalog_command, environment))
-    except json.JSONDecodeError as error:
-        raise SetupError("active catalog export is invalid JSON") from error
-    catalog, patched, skipped = catalog_override(raw, root / "config/profiles.toml", version)
     catalog_path = home / f"models-casefile-{version}.json"
     config_path = home / "config.toml"
     current = config_path.read_bytes() if config_path.is_file() else b""
+    # Refuse a managed configuration before asking Codex to refresh its authenticated catalog.
     config = config_candidate(current, root, catalog_path, version)
+    try:
+        raw = json.loads(checked([executable, "debug", "models"], environment))
+    except json.JSONDecodeError as error:
+        raise SetupError("active catalog export is invalid JSON") from error
+    catalog, patched, skipped = catalog_override(raw, root / "config/profiles.toml", version)
     return {
         "root": root,
         "home": home,

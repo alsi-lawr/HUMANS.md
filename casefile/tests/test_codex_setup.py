@@ -28,23 +28,22 @@ class FakeCodex:
         self.version = version
         self.installed = True
         self.marketplace = True
+        self.calls: list[list[str]] = []
+        self.debug_models_with_config: list[bool] = []
 
     def result(self, args, value, code=0):
         return subprocess.CompletedProcess(args, code, json.dumps(value), "")
 
     def __call__(self, args: list[str], environment: dict[str, str]):
+        self.calls.append(args)
         if args[1:] == ["--version"]:
             return subprocess.CompletedProcess(args, 0, f"codex-cli {self.version}\n", "")
         if args[1:3] == ["debug", "models"]:
-            if "-c" in args:
-                override = args[args.index("-c") + 1]
-                key, value = override.split("=", 1)
-                if key != "model_catalog_json":
-                    raise AssertionError(args)
-                return subprocess.CompletedProcess(
-                    args, 0, Path(json.loads(value)).read_text(encoding="utf-8"), ""
-                )
             config = Path(environment["CODEX_HOME"]) / "config.toml"
+            self.debug_models_with_config.append(
+                config.is_file()
+                and "model_catalog_json" in tomllib.loads(config.read_text(encoding="ascii"))
+            )
             if config.is_file():
                 document = tomllib.loads(config.read_text(encoding="ascii"))
                 if "model_catalog_json" in document:
@@ -153,6 +152,7 @@ class CodexSetupTests(unittest.TestCase):
                 self.assertFalse(fake.installed)
                 self.assertTrue(fake.marketplace)
                 self.assertEqual("installed", result["status"])
+                self.assertEqual([False, False, True], fake.debug_models_with_config)
 
     def test_v1_and_v2_lifecycle_record_selected_catalog_and_preserve_other_variant(self):
         for version in ("v1", "v2"):
@@ -236,23 +236,17 @@ class CodexSetupTests(unittest.TestCase):
                 self.assertEqual(1, setup.main())
             self.assertIn("at most once", output.getvalue())
 
-    def test_model_cache_includes_required_spark_missing_from_fallback(self):
+    def test_catalog_export_is_unflagged_and_ignores_models_cache(self):
         with tempfile.TemporaryDirectory() as temporary:
             plugin, home, _, catalog, _ = self.fixture(Path(temporary))
-            fallback = {
-                "models": [
-                    model
-                    for model in catalog["models"]
-                    if model["slug"] != "gpt-5.3-codex-spark"
-                ]
-            }
-            (home / "models_cache.json").write_bytes(setup.canonical(catalog))
-            with self.fake_command(FakeCodex(fallback)):
+            (home / "models_cache.json").write_bytes(b"not JSON\n")
+            fake = FakeCodex(catalog)
+            with self.fake_command(fake):
                 plan = setup.prepare(plugin, home, "codex")
             self.assertIn("gpt-5.3-codex-spark", plan["patched"])
-            self.assertNotIn("gpt-5.3-codex-spark", plan["skipped"])
+            self.assertEqual([["codex", "debug", "models"]], [call for call in fake.calls if call[1:3] == ["debug", "models"]])
 
-    def test_missing_required_spark_is_rejected_without_cache(self):
+    def test_missing_required_spark_is_rejected(self):
         with tempfile.TemporaryDirectory() as temporary:
             plugin, home, _, catalog, _ = self.fixture(Path(temporary))
             fallback = {
@@ -268,6 +262,22 @@ class CodexSetupTests(unittest.TestCase):
                     "catalog lacks required models: gpt-5.3-codex-spark",
                 ):
                     setup.prepare(plugin, home, "codex")
+
+    def test_config_conflict_rejects_before_model_export(self):
+        conflicts = {
+            "model_catalog_json": 'model_catalog_json = "other.json"\n',
+            "features": "[features]\nmulti_agent = true\n",
+            "agents": "[agents]\nmax_threads = 1\n",
+        }
+        for name, config in conflicts.items():
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as temporary:
+                plugin, home, _, catalog, _ = self.fixture(Path(temporary))
+                (home / "config.toml").write_text(config, encoding="ascii")
+                fake = FakeCodex(catalog)
+                with self.fake_command(fake):
+                    with self.assertRaisesRegex(setup.SetupError, "managed config already exists"):
+                        setup.prepare(plugin, home, "codex")
+                self.assertFalse(any(call[1:3] == ["debug", "models"] for call in fake.calls))
 
     def test_effective_catalog_must_retain_required_spark(self):
         with tempfile.TemporaryDirectory() as temporary:
