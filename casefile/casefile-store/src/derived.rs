@@ -1,5 +1,5 @@
 use crate::{
-    activation::{Activation, project_for, scope_for},
+    activation::{Activation, investigation_identity, project_for, scope_for},
     scanning::ScanResult,
 };
 use casefile_core::{
@@ -43,6 +43,8 @@ pub struct DerivedRecord {
     pub title: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub content: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rendered_markdown: Option<String>,
     pub search_text: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub work_item: Option<WorkItemDraft>,
@@ -98,6 +100,10 @@ pub(super) fn derive_snapshot(scan: &ScanResult, active: &Activation) -> Derived
         .iter()
         .map(|entry| {
             let content = String::from_utf8(entry.original_bytes.clone()).ok();
+            let rendered_markdown = content
+                .as_deref()
+                .filter(|_| entry.path.ends_with(".md"))
+                .map(casefile_core::render_markdown_html);
             let title = entry.summary.as_ref().map_or_else(
                 || entry.identity.clone().unwrap_or_else(|| entry.path.clone()),
                 summary_title,
@@ -138,6 +144,7 @@ pub(super) fn derive_snapshot(scan: &ScanResult, active: &Activation) -> Derived
                 title: title.clone(),
                 search_text: format!("{title}\n{}", content.as_deref().unwrap_or_default()),
                 content,
+                rendered_markdown,
                 work_item,
                 board,
             }
@@ -166,10 +173,12 @@ fn summary_title(summary: &RecordSummary) -> String {
 }
 
 fn record_scope(path: &str, active: &Activation) -> Option<RecordScope> {
+    let project = project_for(path, active)?;
     Some(RecordScope {
-        project: project_for(path, active)?.into(),
+        project: project.into(),
         investigation: scope_for(path, active)
-            .map(|value| value.rsplit('/').next().unwrap_or(value).into()),
+            .and_then(|value| investigation_identity(project, value))
+            .map(Into::into),
     })
 }
 

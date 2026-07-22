@@ -79,6 +79,7 @@ export type Record = Readonly<{
   identity: Identity | undefined;
   title: string;
   content: string | undefined;
+  rendered_markdown: string | undefined;
   work_item: WorkItemDraft | undefined;
   board: BoardDraft | undefined;
 }>;

@@ -158,6 +158,9 @@ const decodeRecord = (value: unknown): Record => {
     identity: optional(input.identity, decodeIdentity),
     title: string(input.title, "record title"),
     content: optional(input.content, (item) => string(item, "record content")),
+    rendered_markdown: optional(input.rendered_markdown, (item) =>
+      string(item, "rendered Markdown"),
+    ),
     work_item: optional(input.work_item, decodeWorkItem),
     board: optional(input.board, decodeBoardDraft),
   };

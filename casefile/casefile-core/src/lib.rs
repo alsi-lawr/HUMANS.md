@@ -8,6 +8,7 @@ mod markdown;
 mod metadata;
 mod project_map;
 mod record;
+mod rendering;
 mod request;
 mod snapshot;
 mod strategy;
@@ -24,6 +25,7 @@ pub use metadata::arrays as parse_metadata_arrays;
 #[doc(hidden)]
 pub use project_map::parse as parse_project_map;
 pub use record::{Classification, Kind, RecordDraft, RecordSummary};
+pub use rendering::render_markdown_html;
 #[doc(hidden)]
 pub use request::parse as parse_request;
 pub use snapshot::{CasefileSnapshot, EntrySnapshot, Revision};

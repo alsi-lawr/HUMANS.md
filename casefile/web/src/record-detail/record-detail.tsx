@@ -1,12 +1,10 @@
-import { type ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 import {
-  type Board,
   type Draft,
   type Identity,
   type Preview,
   type Record,
   type Relationship,
-  sameIdentity,
   scopeLabel,
 } from "../model";
 import { Badge, classificationTone, identityKey, kindTone } from "../ui/badge";
@@ -16,7 +14,6 @@ import { Editor } from "./editor";
 export type DetailProps = Readonly<{
   record: Record | undefined;
   relationships: ReadonlyArray<Relationship>;
-  boards: ReadonlyArray<Board>;
   draft: Draft | undefined;
   preview: Preview | undefined;
   capability: string;
@@ -31,7 +28,6 @@ export type DetailProps = Readonly<{
 export const DetailPanel = ({
   record,
   relationships,
-  boards,
   draft,
   preview,
   capability,
@@ -67,31 +63,91 @@ export const DetailPanel = ({
     </div>
     {record === undefined ? undefined : (
       <div className="space-y-6 p-4">
-        <RelationshipList identity={record.identity} relationships={relationships} />
-        <RecordFacts record={record} boards={boards} />
-        {draft === undefined ? <ReadOnlyNotice /> : <Editor draft={draft} onChange={onDraft} />}
-        {draft === undefined ? (
-          <RecordContent title="Content" content={record.content} />
-        ) : undefined}
-        {draft !== undefined && status === "conflict" ? (
-          <RecordContent title="Current canonical content" content={record.content} />
-        ) : undefined}
-        {draft === undefined ? undefined : (
-          <ChangeControls
-            capability={capability}
-            status={status}
-            message={message}
-            onCapability={onCapability}
-            onPreview={onPreview}
-            onApply={onApply}
-            onReconcile={onReconcile}
-            preview={preview}
-          />
-        )}
+        <RecordTabs
+          record={record}
+          relationships={relationships}
+          draft={draft}
+          preview={preview}
+          capability={capability}
+          status={status}
+          message={message}
+          onCapability={onCapability}
+          onDraft={onDraft}
+          onPreview={onPreview}
+          onApply={onApply}
+          onReconcile={onReconcile}
+        />
       </div>
     )}
   </aside>
 );
+
+type DetailTab = "overview" | "rendered" | "source";
+
+const RecordTabs = ({
+  record,
+  relationships,
+  draft,
+  preview,
+  capability,
+  status,
+  message,
+  onCapability,
+  onDraft,
+  onPreview,
+  onApply,
+  onReconcile,
+}: Omit<DetailProps, "record"> & Readonly<{ record: Record }>): ReactNode => {
+  const [tab, setTab] = useState<DetailTab>("overview");
+  return (
+    <>
+      <nav aria-label="Record detail tabs" className="flex gap-1 border-b border-slate-800 pb-3">
+        {detailTabs.map(({ id, label }) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => setTab(id)}
+            className={tab === id ? activeTabClass : inactiveTabClass}
+          >
+            {label}
+          </button>
+        ))}
+      </nav>
+      {tab === "overview" ? (
+        <>
+          <RelationshipList identity={record.identity} relationships={relationships} />
+          <RecordFacts record={record} />
+          {draft === undefined ? <ReadOnlyNotice /> : <Editor draft={draft} onChange={onDraft} />}
+          {draft !== undefined && status === "conflict" ? (
+            <RecordContent title="Current canonical content" content={record.content} />
+          ) : undefined}
+          {draft === undefined ? undefined : (
+            <ChangeControls
+              capability={capability}
+              status={status}
+              message={message}
+              onCapability={onCapability}
+              onPreview={onPreview}
+              onApply={onApply}
+              onReconcile={onReconcile}
+              preview={preview}
+            />
+          )}
+        </>
+      ) : undefined}
+      {tab === "rendered" ? <RenderedContent content={record.rendered_markdown} /> : undefined}
+      {tab === "source" ? (
+        <RecordContent title="Exact source" content={record.content} />
+      ) : undefined}
+    </>
+  );
+};
+
+const detailTabs: ReadonlyArray<Readonly<{ id: DetailTab; label: string }>> = [
+  { id: "overview", label: "Overview" },
+  { id: "rendered", label: "Rendered" },
+  { id: "source", label: "Source" },
+];
 
 const RelationshipList = ({
   identity,
@@ -110,7 +166,10 @@ const RelationshipList = ({
       <ul className="mt-3 space-y-2">
         {relationships.map((relationship) => {
           const linked =
-            identity !== undefined && sameIdentity(relationship.source, identity)
+            identity !== undefined &&
+            relationship.source.identity === identity.identity &&
+            relationship.source.scope.project === identity.scope.project &&
+            relationship.source.scope.investigation === identity.scope.investigation
               ? relationship.target
               : relationship.source;
           return (
@@ -130,10 +189,7 @@ const RelationshipList = ({
     )}
   </section>
 );
-const RecordFacts = ({
-  record,
-  boards,
-}: Readonly<{ record: Record; boards: ReadonlyArray<Board> }>): ReactNode => (
+const RecordFacts = ({ record }: Readonly<{ record: Record }>): ReactNode => (
   <section>
     <h3 className="text-xs font-semibold uppercase tracking-widest text-slate-500">Context</h3>
     <dl className="mt-3 space-y-2 text-sm">
@@ -148,10 +204,7 @@ const RecordFacts = ({
         </>
       )}
       {record.kind === "board" ? (
-        <Fact
-          label="Columns"
-          value={`${record.board?.columns.length ?? boards.length} configured`}
-        />
+        <Fact label="Columns" value={`${record.board?.columns.length ?? 0} configured`} />
       ) : undefined}
     </dl>
   </section>
@@ -183,3 +236,22 @@ const RecordContent = ({
       </pre>
     </section>
   );
+
+const RenderedContent = ({ content }: Readonly<{ content: string | undefined }>): ReactNode =>
+  content === undefined ? (
+    <p className="text-sm text-slate-500">This record does not have rendered Markdown.</p>
+  ) : (
+    <section>
+      <h3 className="text-xs font-semibold uppercase tracking-widest text-slate-500">
+        Rendered Markdown
+      </h3>
+      <article
+        className="mt-3 max-h-96 overflow-auto rounded-lg border border-slate-800 bg-slate-900/50 p-3 text-sm leading-6 text-slate-300 [&_a]:text-blue-300 [&_code]:rounded [&_code]:bg-slate-800 [&_code]:px-1 [&_pre]:overflow-auto [&_table]:w-full [&_td]:border [&_td]:border-slate-700 [&_td]:p-2 [&_th]:border [&_th]:border-slate-700 [&_th]:p-2"
+        dangerouslySetInnerHTML={{ __html: content }}
+      />
+    </section>
+  );
+
+const activeTabClass = "rounded-lg bg-blue-500/15 px-3 py-2 text-sm font-medium text-blue-200";
+const inactiveTabClass =
+  "rounded-lg px-3 py-2 text-sm font-medium text-slate-400 hover:bg-slate-900 hover:text-slate-200";

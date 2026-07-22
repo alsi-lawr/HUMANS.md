@@ -108,13 +108,17 @@ impl App {
         match key {
             KeyCode::Char('q') | KeyCode::Esc => self.interaction = Some(Interaction::Quit),
             KeyCode::Char('?') => self.show_help = true,
-            KeyCode::Char('1') => self.set_view(View::WorkQueue),
-            KeyCode::Char('2') => self.set_view(View::Records),
+            KeyCode::Char('1') => self.set_view(View::Projects),
+            KeyCode::Char('2') => self.set_view(View::Investigations),
+            KeyCode::Char('3') => self.set_view(View::Tickets),
+            KeyCode::Char('4') => self.set_view(View::Files),
             KeyCode::Char('t') => {
                 self.browser.cycle_view(&self.scan);
                 self.detail.reset_scroll();
             }
             KeyCode::Tab => self.focus = self.focus.next(),
+            KeyCode::Enter => self.drill_down(),
+            KeyCode::Backspace => self.go_up(),
             KeyCode::Char('/') => self.browser.start_filter(),
             KeyCode::Char('c') => self.clear_filter(),
             KeyCode::Left | KeyCode::Char('h') => self.detail.select_tab(-1),
@@ -137,6 +141,18 @@ impl App {
 
     fn clear_filter(&mut self) {
         if self.browser.clear_filter(&self.scan) {
+            self.detail.reset_scroll();
+        }
+    }
+
+    fn drill_down(&mut self) {
+        if self.focus == Focus::List && self.browser.drill_down(&self.scan) {
+            self.detail.reset_scroll();
+        }
+    }
+
+    fn go_up(&mut self) {
+        if self.focus == Focus::List && self.browser.go_up(&self.scan) {
             self.detail.reset_scroll();
         }
     }
@@ -203,7 +219,7 @@ impl App {
         } else if let Some(feedback) = &self.feedback {
             feedback
         } else {
-            " 1/2 view  Tab focus  j/k move  PgUp/PgDn page  h/l detail  e edit  / filter  ? help  q quit "
+            " 1-4 tabs  Enter drill down  Backspace up  Tab focus  j/k move  h/l detail  e edit  / filter  ? help  q quit "
         };
         Paragraph::new(footer_text)
             .style(Style::default().fg(MUTED))
@@ -238,10 +254,17 @@ fn render_help(area: Rect, buffer: &mut Buffer) {
         help_line("Tab", "Switch focus between list and detail"),
         Line::from(""),
         Line::from("VIEW").style(Style::default().fg(ACCENT).bold()),
-        help_line("1 / 2", "Open Work queue or Records"),
+        help_line(
+            "1 / 2 / 3 / 4",
+            "Open Projects, Investigations, Tickets, or Files",
+        ),
+        help_line(
+            "Enter / Backspace",
+            "Drill into the selected scope or go up",
+        ),
         help_line(
             "h / l, Left / Right",
-            "Switch Overview, Content, Diagnostics",
+            "Switch Overview, Rendered, Source, Diagnostics",
         ),
         help_line("/", "Enter filter mode"),
         help_line("c", "Clear the active filter"),

@@ -185,6 +185,10 @@ pub(super) fn scope_for<'a>(path: &str, active: &'a Activation) -> Option<&'a st
         })
 }
 
+pub(super) fn investigation_identity<'a>(project: &str, investigation: &'a str) -> Option<&'a str> {
+    investigation.strip_prefix(&format!("projects/{project}/investigations/"))
+}
+
 pub(super) fn project_for<'a>(path: &str, active: &'a Activation) -> Option<&'a str> {
     active
         .projects

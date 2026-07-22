@@ -4,10 +4,10 @@ import { useScopeNavigation } from "../navigation/use-scope-navigation";
 import { DetailPanel } from "../record-detail/record-detail";
 import { useChangeReview } from "../record-detail/use-change-review";
 import { useRecordSelection } from "../record-detail/use-record-selection";
-import { BoardPanel } from "../work-queue/work-area";
+import { BrowserPanel } from "../work-queue/work-area";
 import { Failure, Loading, Topbar } from "./app-shell";
 import { useWorkspace } from "./use-workspace";
-import { type Draft, type Identity, type Scope } from "../model";
+import { type Draft, type Record } from "../model";
 
 export const App = (): ReactNode => {
   const workspace = useWorkspace();
@@ -20,20 +20,25 @@ export const App = (): ReactNode => {
   if (workspace.workspace.tag === "failure")
     return <Failure message={workspace.workspace.message} onRetry={workspace.refresh} />;
 
-  const selectScope = (scope: Scope | undefined): void => {
-    navigation.selectScope(scope);
+  const selectRecord = (record: Record): void => {
+    selection.selectRecord(record);
+    changes.reset();
+  };
+  const selectProject = (project: string): void => {
+    navigation.selectProject(project);
     selection.clearRecord();
     changes.reset();
   };
-  const selectRecord = (identity: Identity): void => {
-    selection.selectRecord(identity);
+  const selectInvestigation = (investigation: string): void => {
+    navigation.selectInvestigation(investigation);
+    selection.clearRecord();
     changes.reset();
   };
   const updateDraft = (draft: Draft): void => {
     selection.updateDraft(draft);
     changes.draftChanged();
   };
-  const queryError = navigation.error ?? selection.error;
+  const queryError = selection.error;
   const status = queryError === undefined ? changes.status : "error";
   const message = queryError ?? changes.message;
 
@@ -47,21 +52,32 @@ export const App = (): ReactNode => {
       />
       <div className="grid min-h-0 grid-cols-1 overflow-y-auto lg:grid-cols-[15rem_minmax(0,1fr)_24rem] lg:overflow-hidden">
         <Sidebar
-          scopes={navigation.scopes}
-          selected={navigation.scope}
+          tab={navigation.tab}
+          projects={navigation.projects}
+          investigations={navigation.investigations}
+          project={navigation.project}
+          investigation={navigation.investigation}
           diagnostics={workspace.workspace.diagnostics}
-          onSelect={selectScope}
+          onTab={navigation.selectTab}
+          onProject={selectProject}
+          onInvestigation={selectInvestigation}
         />
-        <BoardPanel
-          boards={navigation.boards}
-          records={navigation.records}
-          selected={selection.selected}
+        <BrowserPanel
+          tab={navigation.tab}
+          projects={navigation.projects}
+          investigations={navigation.investigations}
+          tickets={navigation.tickets}
+          files={navigation.files}
+          project={navigation.project}
+          investigation={navigation.investigation}
+          selectedPath={selection.selectedPath}
+          onProject={selectProject}
+          onInvestigation={selectInvestigation}
           onSelect={selectRecord}
         />
         <DetailPanel
           record={selection.record}
           relationships={selection.relationships}
-          boards={navigation.boards}
           draft={selection.draft}
           preview={changes.preview}
           capability={changes.capability}

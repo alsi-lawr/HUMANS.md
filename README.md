@@ -1,13 +1,17 @@
 <div align="center">
 
+<img src="assets/humans-md.svg" alt="humans.md logo" width="128" height="128">
+
 # humans-md
+
+[![Reproducibility](https://github.com/alsi-lawr/HUMANS.md/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/alsi-lawr/HUMANS.md/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/alsi-lawr/HUMANS.md?display_name=tag&sort=semver)](https://github.com/alsi-lawr/HUMANS.md/releases/latest)
+[![MIT licence](https://img.shields.io/github/license/alsi-lawr/HUMANS.md)](LICENSE)
 
 **Give coding agents boundaries, not a manual.**
 
 Three independently installable plugins for standing contracts, governed Casefile work, and reusable
 coding guidance.
-
-`v0.2.1` | `MIT`
 
 </div>
 

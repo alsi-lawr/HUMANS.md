@@ -51,22 +51,37 @@ test("navigates and reconciles governed work against the shared host fixture", a
   const root = createRoot(container);
   try {
     await act(async () => root.render(<App />));
-    await waitFor(() => container.textContent?.includes("Planning space") === true);
+    await waitFor(() => container.textContent?.includes("Casefile projects") === true);
 
-    expect(container.textContent).toContain("invalid");
-    expect(container.textContent).toContain("raw");
-    expect(container.textContent).toContain("Project decision");
+    expect(container.textContent).toContain("demo");
     expect(container.textContent).not.toContain("demo / null");
 
     await unlink(join(host.root, "projects/demo/investigations/sample/review/broken.md"));
     await click(container, "Refresh");
-    await waitFor(() => container.textContent?.includes("invalid") === false);
-    await click(container, "demo / sample");
-    expect(container.textContent).toContain("Main");
+    await click(container, "demo");
+    await waitFor(() => container.textContent?.includes("Investigations") === true);
+    await click(container, "sample");
+    await waitFor(() => container.textContent?.includes("Governed work") === true);
     expect(container.textContent).toContain("Minimum ticket");
     expect(container.textContent).toContain("Minimum epic");
 
-    await click(container, ticketPath);
+    await click(container, "Files");
+    await waitFor(() => container.textContent?.includes("Files by directory") === true);
+    expect(container.textContent).toContain("HMD-D-002-project.md");
+    expect(container.textContent).toContain("Project-level files remain visible");
+    await click(container, "render.md");
+    await click(container, "Rendered");
+    expect(container.textContent).toContain("Rendered evidence");
+    const unsafeLink = [...container.querySelectorAll("a")].find((link) =>
+      link.textContent?.includes("bad link"),
+    );
+    expect(unsafeLink).toBeUndefined();
+    expect(container.querySelector("script")).toBeNull();
+    await click(container, "Source");
+    expect(container.textContent).toContain("<script>bad()</script>");
+
+    await click(container, "Tickets");
+    await click(container, "HMD-011.md");
     await waitFor(() => relationshipQueries.length > 0);
     expect(relationshipQueries).toContainEqual({
       query: "relationships",
@@ -75,6 +90,14 @@ test("navigates and reconciles governed work against the shared host fixture", a
         identity: "HMD-011",
       },
     });
+
+    await click(container, "Rendered");
+    expect(container.textContent).toContain("Rendered Markdown");
+    expect(container.textContent).toContain("HMD-011");
+    await click(container, "Source");
+    expect(container.textContent).toContain("Exact source");
+    expect(container.textContent).toContain("## Acceptance criteria");
+    await click(container, "Overview");
 
     const shortIdentity = await networkFetch(`${host.url}/api/query`, {
       method: "POST",
@@ -106,11 +129,51 @@ test("navigates and reconciles governed work against the shared host fixture", a
     await click(container, "Apply preview");
     expect(await readFile(canonical, "utf8")).toContain("Reconciled browser title");
 
-    await click(container, "boards/main.toml");
+    await click(container, "Files");
+    await click(container, "main.toml");
     await change(labelledInput(container, "Title"), "Revised board");
     await click(container, "Preview changes");
     await waitFor(() => container.textContent?.includes('title = "Revised board"') === true);
     expect(container.textContent).toContain('title = "Revised board"');
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+    globalThis.fetch = browserFetch;
+    await host.stop();
+  }
+}, 120_000);
+
+test("keeps nested investigations with the same leaf independently selectable", async () => {
+  const { createRoot } = await import("react-dom/client");
+  const host = await startHost({ nestedInvestigations: true });
+  const browserFetch = globalThis.fetch;
+  globalThis.fetch = Object.assign(
+    async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+      const target =
+        typeof input === "string" && input.startsWith("/") ? `${host.url}${input}` : input;
+      return await networkFetch(target, init);
+    },
+    { preconnect: browserFetch.preconnect },
+  );
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  try {
+    await act(async () => root.render(<App />));
+    await waitFor(() => container.textContent?.includes("Casefile projects") === true);
+
+    await click(container, "demo");
+    await waitFor(() => container.textContent?.includes("Investigations") === true);
+    expect(container.textContent).toContain("alpha/shared");
+    expect(container.textContent).toContain("beta/shared");
+
+    await click(container, "alpha/shared");
+    await waitFor(() => container.textContent?.includes("Alpha ticket") === true);
+    expect(container.textContent).not.toContain("Beta ticket");
+
+    await click(container, "beta/shared");
+    await waitFor(() => container.textContent?.includes("Beta ticket") === true);
+    expect(container.textContent).not.toContain("Alpha ticket");
   } finally {
     await act(async () => root.unmount());
     container.remove();
@@ -168,7 +231,9 @@ const change = async (input: HTMLInputElement, value: string): Promise<void> => 
   });
 };
 
-const startHost = async (): Promise<RunningHost> => {
+const startHost = async (
+  options: Readonly<{ nestedInvestigations?: boolean }> = {},
+): Promise<RunningHost> => {
   const temporary = await mkdtemp(join(tmpdir(), "casefile-browser-flow-"));
   const root = join(temporary, "root");
   await cp(sharedFixture, root, { recursive: true });
@@ -182,6 +247,37 @@ const startHost = async (): Promise<RunningHost> => {
     join(root, "projects/demo/investigations/sample/review/broken.md"),
     "not governed markdown\n",
   );
+  await writeFile(
+    join(root, "projects/demo/investigations/sample/evidence/render.md"),
+    "# Rendered evidence\n\n- **emphasis**\n- `code`\n\n| Safe | Value |\n| --- | --- |\n| yes | 1 |\n\n[bad link](JaVaScRiPt:bad()) [safe link](https://example.com)\n\n<script>bad()</script>\n",
+  );
+  if (options.nestedInvestigations === true) {
+    await writeFile(
+      join(root, "casefile.toml"),
+      'schema_version = 1\n\n[projects.demo]\nprefix = "HMD"\ninvestigations = ["projects/demo/investigations/alpha/shared", "projects/demo/investigations/beta/shared"]\n',
+    );
+    const ticket = await readFile(join(root, ticketPath), "utf8");
+    for (const [investigation, id, title] of [
+      ["alpha/shared", "HMD-101", "Alpha ticket"],
+      ["beta/shared", "HMD-102", "Beta ticket"],
+    ]) {
+      const path = join(
+        root,
+        "projects/demo/investigations",
+        investigation,
+        "tickets/accepted",
+        `${id}.md`,
+      );
+      await mkdir(resolve(path, ".."), { recursive: true });
+      await writeFile(
+        path,
+        ticket
+          .replaceAll("HMD-011", id)
+          .replace("Minimum ticket", title)
+          .replace('investigation: "sample"', `investigation: \"${investigation}\"`),
+      );
+    }
+  }
   for (const command of [
     ["git", "init", "-q"],
     ["git", "config", "user.email", "casefile@example.test"],

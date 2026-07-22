@@ -1,6 +1,9 @@
-use crate::ui::{
-    ACCENT, BAD, GOOD, MUTED, WARN, classification_name, classification_style, kind_name, panel,
-    safe_inline, safe_multiline, status_style,
+use crate::{
+    markdown,
+    ui::{
+        ACCENT, BAD, GOOD, MUTED, WARN, classification_name, classification_style, kind_name,
+        panel, safe_inline, safe_multiline, status_style,
+    },
 };
 use casefile_core::{Diagnostic, EntrySnapshot, RecordSummary};
 use ratatui::{
@@ -21,17 +24,24 @@ const BOARD_COLUMNS_TEXT_LIMIT: usize = 360;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum DetailTab {
     Overview,
-    Content,
+    Rendered,
+    Source,
     Diagnostics,
 }
 
 impl DetailTab {
-    const ALL: [Self; 3] = [Self::Overview, Self::Content, Self::Diagnostics];
+    const ALL: [Self; 4] = [
+        Self::Overview,
+        Self::Rendered,
+        Self::Source,
+        Self::Diagnostics,
+    ];
 
     fn title(self) -> &'static str {
         match self {
             Self::Overview => "Overview",
-            Self::Content => "Content",
+            Self::Rendered => "Rendered",
+            Self::Source => "Source",
             Self::Diagnostics => "Diagnostics",
         }
     }
@@ -146,8 +156,32 @@ fn detail_lines(
 ) -> Vec<Line<'static>> {
     match tab {
         DetailTab::Overview => overview_lines(entry, diagnostics),
-        DetailTab::Content => content_lines(&entry.original_bytes),
+        DetailTab::Rendered => rendered_lines(entry),
+        DetailTab::Source => source_lines(&entry.original_bytes),
         DetailTab::Diagnostics => diagnostic_lines(entry, diagnostics),
+    }
+}
+
+fn rendered_lines(entry: &EntrySnapshot) -> Vec<Line<'static>> {
+    match std::str::from_utf8(&entry.original_bytes) {
+        Ok(text) if entry.path.ends_with(".md") => markdown::render(text),
+        _ => content_lines(&entry.original_bytes),
+    }
+}
+
+fn source_lines(bytes: &[u8]) -> Vec<Line<'static>> {
+    match std::str::from_utf8(bytes) {
+        Ok(text) => {
+            if text.is_empty() {
+                return vec![Line::from("Empty text record.").style(Style::default().fg(MUTED))];
+            }
+            let (safe, truncated) = safe_multiline(text, usize::MAX);
+            debug_assert!(!truncated);
+            safe.split('\n')
+                .map(|line| Line::from(line.to_owned()))
+                .collect()
+        }
+        Err(_) => content_lines(bytes),
     }
 }
 
@@ -446,6 +480,28 @@ mod tests {
     }
 
     #[test]
+    fn source_keeps_text_beyond_the_display_limit() {
+        let tail = "source tail remains available";
+        let source = format!("{}\n{tail}", "x".repeat(TEXT_LIMIT + 1));
+        let entry = entry(
+            "a-ticket.md",
+            Classification::Governed,
+            Some(Kind::Ticket),
+            None,
+            source.as_bytes(),
+        );
+
+        let visible = detail_lines(&entry, &[], DetailTab::Source)
+            .into_iter()
+            .map(|line| line.to_string())
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        assert!(visible.contains(tail));
+        assert!(!visible.contains("truncated"));
+    }
+
+    #[test]
     fn metadata_and_diagnostics_cannot_inject_terminal_controls() {
         let control = "\x1b]0;metadata\x07";
         let path = format!("{control}-ticket.md");
@@ -471,7 +527,7 @@ mod tests {
             .section(&format!("section-{control}")),
         ];
         let mut detail = RecordDetail::new();
-        detail.select_tab(2);
+        detail.select_tab(3);
         let output = render_detail(&detail, &entry, &diagnostics, 160, 32);
         assert!(output.contains(r"code-\u{1b}]0;metadata\u{7}"));
         assert!(output.contains(r"field-\u{1b}]0;metadata\u{7}"));

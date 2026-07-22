@@ -152,7 +152,7 @@ fn editor_args(editor: &Path, values: &[&str]) -> Vec<OsString> {
 fn begin_edit(pty: &mut Pty) {
     pty.wait_for("q quit");
     thread::sleep(Duration::from_millis(200));
-    pty.send(b"e");
+    pty.send(b"\r\re");
 }
 
 fn restored(transcript: &[u8]) -> bool {
@@ -196,6 +196,7 @@ fn default_opener_ignores_editor_prompts_for_enter_and_cancels() {
     ];
     let mut pty = Pty::start(&fixture, &[], &environment);
     pty.wait_for("q quit");
+    pty.send(b"\r\r");
     pty.send(b"?");
     pty.wait_for("Keyboard help");
     pty.send(b"?");
