@@ -227,6 +227,7 @@ fn default_opener_ignores_editor_prompts_for_enter_and_cancels() {
             .contains("Minimum epic")
     );
     assert!(!draft.exists());
+    assert!(String::from_utf8_lossy(&transcript).contains("Loading Casefile..."));
     assert!(String::from_utf8_lossy(&transcript).contains("Keyboard help"));
     assert!(String::from_utf8_lossy(&transcript).contains("Verification"));
     assert!(restored(&transcript));
