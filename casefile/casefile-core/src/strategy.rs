@@ -202,19 +202,21 @@ fn parse_projection_table(
                 .field("requirements.capabilities"),
             ]
         })?;
-    let workers = root
-        .get("workers")
-        .and_then(toml::Value::as_array)
-        .ok_or_else(|| {
-            vec![
-                Diagnostic::new(path, "invalid_strategy", "workers must be an array")
-                    .field("workers"),
-            ]
-        })?
-        .iter()
-        .enumerate()
-        .map(|(index, value)| parse_worker(path, value, index, max_depth))
-        .collect::<Result<Vec<_>, _>>()?;
+    let workers = match root.get("workers") {
+        None => Vec::new(),
+        Some(value) => value
+            .as_array()
+            .ok_or_else(|| {
+                vec![
+                    Diagnostic::new(path, "invalid_strategy", "workers must be an array")
+                        .field("workers"),
+                ]
+            })?
+            .iter()
+            .enumerate()
+            .map(|(index, value)| parse_worker(path, value, index, max_depth))
+            .collect::<Result<Vec<_>, _>>()?,
+    };
     let minimum_total = workers
         .iter()
         .map(|worker| worker.minimum_count)

@@ -932,3 +932,95 @@ fn strategy_bindings_are_isolated_by_active_investigation_scope() {
         Some(StrategyBindingState::Invalid)
     ));
 }
+
+#[test]
+fn nested_active_investigations_use_the_most_specific_binding_scope() {
+    use casefile_store::StrategyBindingState;
+    let root = fixture();
+    let sample = root.path().join("projects/demo/investigations/sample");
+    let outer = root.path().join("projects/demo/investigations/outer");
+    let inner = outer.join("inner");
+    fs::create_dir_all(&outer).expect("outer");
+    copy_tree(&sample, &outer);
+    fs::create_dir_all(&inner).expect("inner");
+    copy_tree(&sample, &inner);
+    fs::write(root.path().join("casefile.toml"), "schema_version = 1\n\n[projects.demo]\nprefix = \"HMD\"\ninvestigations = [\"projects/demo/investigations/outer\", \"projects/demo/investigations/outer/inner\"]\n").expect("activation");
+    fs::write(
+        outer.join("strategy/implementation.toml"),
+        FULL_IMPLEMENTATION,
+    )
+    .expect("outer matrix");
+    fs::write(outer.join("strategy/bindings.toml"), BINDING).expect("outer binding");
+    fs::write(
+        inner.join("strategy/implementation.toml"),
+        FULL_IMPLEMENTATION.replace("gpt-5.6-sol", "gpt-5.6-luna"),
+    )
+    .expect("inner matrix");
+    fs::write(
+        inner.join("strategy/bindings.toml"),
+        BINDING.replace("adapter = \"codex\"", "adapter = \"claude\""),
+    )
+    .expect("inner binding");
+    let scan = Store::open(root.path())
+        .expect("store")
+        .scan()
+        .expect("scan");
+    for expected in [
+        "outer/strategy/bindings.toml",
+        "outer/inner/strategy/bindings.toml",
+    ] {
+        let entry = scan
+            .snapshot
+            .entries
+            .iter()
+            .find(|entry| entry.path.ends_with(expected))
+            .expect("binding entry");
+        assert_eq!(Some(Kind::StrategyBinding), entry.kind);
+    }
+    assert_eq!(
+        Some(("demo", Some("outer/inner"))),
+        scan.scope_for_path("projects/demo/investigations/outer/inner/strategy/bindings.toml")
+    );
+    let derived = Store::open(root.path())
+        .expect("store")
+        .derived_snapshot()
+        .expect("derived");
+    let outer_strategy = derived
+        .records
+        .iter()
+        .find(|record| {
+            record.path.ends_with("outer/strategy/implementation.toml")
+                && !record.path.contains("/inner/")
+        })
+        .and_then(|record| record.strategy.as_ref())
+        .expect("outer strategy");
+    assert!(
+        matches!(outer_strategy.binding, Some(StrategyBindingState::Resolved { ref effective }) if effective.model == "gpt-5.6-terra")
+    );
+    let inner_strategy = derived
+        .records
+        .iter()
+        .find(|record| {
+            record
+                .path
+                .ends_with("outer/inner/strategy/implementation.toml")
+        })
+        .and_then(|record| record.strategy.as_ref())
+        .expect("inner strategy");
+    assert!(matches!(
+        inner_strategy.binding,
+        Some(StrategyBindingState::Unresolved)
+    ));
+    assert!(derived.diagnostics.iter().any(|diagnostic| {
+        diagnostic
+            .path
+            .ends_with("outer/inner/strategy/bindings.toml")
+            && diagnostic.code == "binding_adapter"
+    }));
+    assert!(!derived.diagnostics.iter().any(|diagnostic| {
+        diagnostic.path.ends_with("outer/strategy/bindings.toml")
+            && !diagnostic
+                .path
+                .ends_with("outer/inner/strategy/bindings.toml")
+    }));
+}

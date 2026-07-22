@@ -129,3 +129,25 @@ fn check_ignores_unlisted_history_in_an_activated_root() {
     assert!(success);
     assert_result(&value, "active", json!(true), json!([]));
 }
+
+#[test]
+fn rust_validator_accepts_every_shipped_adapter_matrix_including_solo() {
+    let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+    for adapter in ["codex", "claude"] {
+        let matrices = source.join("adapters").join(adapter).join("matrices");
+        for entry in fs::read_dir(&matrices).expect("matrices") {
+            let matrix = entry.expect("matrix").path();
+            let output = Command::new(env!("CARGO_BIN_EXE_casefile"))
+                .args(["validate-matrix", "--matrix"])
+                .arg(&matrix)
+                .output()
+                .expect("validator");
+            assert!(
+                output.status.success(),
+                "{}: {}",
+                matrix.display(),
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }
+    }
+}

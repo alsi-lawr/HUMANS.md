@@ -34,11 +34,12 @@ impl ScanResult {
             .investigation_roots
             .get(project)?
             .iter()
-            .find(|investigation| {
+            .filter(|investigation| {
                 path.starts_with(&format!(
                     "projects/{project}/investigations/{investigation}/"
                 ))
             })
+            .max_by_key(|investigation| investigation.len())
             .map(String::as_str);
         Some((project, investigation))
     }
