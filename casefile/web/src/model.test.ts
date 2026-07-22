@@ -7,6 +7,7 @@ import {
   sameIdentity,
   toChangeRequest,
 } from "./model";
+import { strategiesForInvestigation } from "./navigation/use-scope-navigation";
 
 const board: BoardDraft = {
   id: "HMD-board",
@@ -30,6 +31,8 @@ const record: Record = {
   rendered_markdown: undefined,
   work_item: undefined,
   board,
+  strategy: undefined,
+  strategy_binding: undefined,
 };
 
 describe("host mutation boundary", () => {
@@ -60,4 +63,42 @@ test("scoped identity comparison includes project and investigation", () => {
   expect(
     sameIdentity(identity, { ...identity, scope: { ...identity.scope, investigation: "other" } }),
   ).toBeFalse();
+});
+
+test("strategy navigation preserves full investigation scope and recognized invalid records", () => {
+  const alpha: Record = {
+    ...record,
+    path: "projects/humans/investigations/alpha/shared/strategy/review.toml",
+    scope: { project: "humans", investigation: "alpha/shared" },
+    classification: "invalid",
+    kind: "strategy",
+    board: undefined,
+  };
+  const beta: Record = {
+    ...record,
+    path: "projects/humans/investigations/beta/shared/strategy/review.toml",
+    scope: { project: "humans", investigation: "beta/shared" },
+    kind: "strategy",
+    board: undefined,
+  };
+  const unrecognized: Record = {
+    ...alpha,
+    path: "projects/humans/investigations/alpha/shared/strategy/raw.toml",
+    classification: "ungoverned",
+  };
+
+  expect(
+    strategiesForInvestigation([alpha, beta, unrecognized], "humans", "alpha/shared").map(
+      (item) => item.path,
+    ),
+  ).toEqual([alpha.path]);
+  expect(strategiesForInvestigation([alpha], "humans", undefined)).toEqual([]);
+  expect(editableDraft({ ...beta, classification: "governed" })).toBeUndefined();
+  expect(
+    editableDraft({
+      ...beta,
+      path: "projects/humans/investigations/beta/shared/strategy/bindings.toml",
+      kind: "strategy_binding",
+    }),
+  ).toBeUndefined();
 });

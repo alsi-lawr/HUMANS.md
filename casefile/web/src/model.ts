@@ -9,6 +9,7 @@ export type Kind =
   | "plan"
   | "closeout"
   | "strategy"
+  | "strategy_binding"
   | "ticket"
   | "epic"
   | "board";
@@ -21,6 +22,57 @@ export type Diagnostic = Readonly<{
   field: string | undefined;
   section: string | undefined;
   message: string;
+}>;
+
+export type EffectiveWriterBinding = Readonly<{
+  model: string;
+  reasoning_effort: string;
+  source: "matrix" | "binding";
+}>;
+export type StrategyBindingState =
+  | Readonly<{ state: "absent"; effective: EffectiveWriterBinding }>
+  | Readonly<{ state: "pending" }>
+  | Readonly<{ state: "resolved"; effective: EffectiveWriterBinding }>
+  | Readonly<{ state: "unresolved" }>
+  | Readonly<{ state: "invalid" }>;
+export type StrategyWorker = Readonly<{
+  role: string;
+  platform_profile: string;
+  runtime:
+    | Readonly<{ tag: "unspecified" }>
+    | Readonly<{ tag: "declared"; model: string; reasoning_effort: string }>;
+  minimum_count: number;
+  maximum_count: number;
+  can_spawn_subagents: boolean;
+}>;
+export type StrategyPipeline = Readonly<{
+  maximum_active_tickets: number;
+  look_ahead_read_only: boolean;
+  require_dependency_independence: boolean;
+  require_disjoint_write_paths: boolean;
+  immutable_review_commits: boolean;
+  corrections_preempt_forward_work: boolean;
+}>;
+export type StrategyProjection = Readonly<{
+  root_binding: "root";
+  limits: Readonly<{ max_concurrent_subagents: number; max_depth: number }>;
+  requirements: Readonly<{ capabilities: ReadonlyArray<string> }>;
+  workers: ReadonlyArray<StrategyWorker>;
+  coordination: Readonly<{
+    batch_when_capacity_exceeded: boolean;
+    candidate_review_before_ticket: boolean;
+    shared_ticket_storage_required: boolean;
+    pipeline: StrategyPipeline | undefined;
+  }>;
+  binding: StrategyBindingState | null;
+}>;
+export type StrategyBindingRecord = Readonly<{
+  adapter: string;
+  role: "implementation-writer";
+  model: string;
+  reasoning_effort: string;
+  resolution: Readonly<{ mode: string; value: string }>;
+  state: StrategyBindingState;
 }>;
 
 export type WorkItemDraft = Readonly<{
@@ -82,6 +134,8 @@ export type Record = Readonly<{
   rendered_markdown: string | undefined;
   work_item: WorkItemDraft | undefined;
   board: BoardDraft | undefined;
+  strategy: StrategyProjection | undefined;
+  strategy_binding: StrategyBindingRecord | undefined;
 }>;
 export type Card = Readonly<{
   identity: Identity;

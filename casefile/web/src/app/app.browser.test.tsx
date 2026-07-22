@@ -56,6 +56,11 @@ test("navigates and reconciles governed work against the shared host fixture", a
     expect(container.textContent).toContain("demo");
     expect(container.textContent).not.toContain("demo / null");
 
+    await click(container, "Strategies");
+    expect(container.textContent).toContain(
+      "Select an investigation before inspecting its strategies",
+    );
+
     await unlink(join(host.root, "projects/demo/investigations/sample/review/broken.md"));
     await click(container, "Refresh");
     await click(container, "demo");
@@ -64,6 +69,76 @@ test("navigates and reconciles governed work against the shared host fixture", a
     await waitFor(() => container.textContent?.includes("Governed work") === true);
     expect(container.textContent).toContain("Minimum ticket");
     expect(container.textContent).toContain("Minimum epic");
+
+    await click(container, "Strategies");
+    await waitFor(() => container.textContent?.includes("Phase roles and constraints") === true);
+    expect(container.textContent).toContain("implementation phase");
+    expect(container.textContent).toContain("investigation phase");
+    expect(container.textContent).toContain("review phase");
+    expect(container.textContent).toContain("Implementation writer binding");
+
+    await click(container, "implementation.toml");
+    await waitFor(() => container.textContent?.includes("Declared role graph") === true);
+    expect(container.textContent).toContain("Root orchestrator");
+    expect(container.textContent).toContain("implementation-writer");
+    expect(container.textContent).toContain("verification-reviewer");
+    const writerNode = buttonWithLabel(container, "Inspect implementation-writer");
+    await focusAndActivate(writerNode);
+    expect(document.activeElement).toBe(writerNode);
+    expect(writerNode.getAttribute("aria-pressed")).toBe("true");
+    expect(container.textContent).toContain("gpt-5.6-terra / xhigh");
+    expect(container.textContent).toContain("Effective sourcebinding");
+    for (const fact of [
+      "Count",
+      "May spawn",
+      "Profile",
+      "Declared runtime",
+      "Limits and requirements",
+      "shared-ticket-storage",
+      "Coordination",
+      "Pipeline gates",
+      "Disjoint write paths",
+      "Immutable review commits",
+    ])
+      expect(container.textContent).toContain(fact);
+    await click(container, "Source");
+    expect(container.textContent).toContain('strategy_id = "casefile-implement-pipeline"');
+
+    await click(container, "investigation.toml");
+    expect(container.textContent).toContain(
+      "No workers declared. This is a valid root-only strategy.",
+    );
+
+    await click(container, "review.toml");
+    expect(container.textContent).toContain("Invalid strategy record");
+    await click(container, "Diagnostics");
+    expect(container.textContent).toContain("invalid_toml");
+    await click(container, "Source");
+    expect(container.textContent).toContain("workers = [");
+    await writeFile(
+      join(host.root, "projects/demo/investigations/sample/strategy/review.toml"),
+      legacyReviewStrategy,
+    );
+    await click(container, "Refresh");
+    await waitFor(
+      () => container.textContent?.includes("Legacy strategy without a typed projection") === true,
+    );
+
+    await click(container, "bindings.toml");
+    expect(container.textContent).toContain("Non-graph state");
+    expect(container.textContent).toContain("Stateresolved");
+    expect(container.textContent).toContain("Effective sourcebinding");
+    await click(container, "Source");
+    expect(container.textContent).toContain('model = "gpt-5.6-terra"');
+
+    await change(labelledInput(container, "Search records"), "no-strategy-can-match-this");
+    await waitFor(
+      () =>
+        container.textContent?.includes("No strategy records match the shared search filter") ===
+        true,
+    );
+    await change(labelledInput(container, "Search records"), "");
+    await waitFor(() => container.textContent?.includes("implementation.toml") === true);
 
     await click(container, "Files");
     await waitFor(() => container.textContent?.includes("Files by directory") === true);
@@ -170,7 +245,12 @@ test("keeps nested investigations with the same leaf independently selectable", 
     await click(container, "alpha/shared");
     await waitFor(() => container.textContent?.includes("Alpha ticket") === true);
     expect(container.textContent).not.toContain("Beta ticket");
+    await click(container, "Strategies");
+    expect(container.textContent).toContain(
+      "This investigation has no recognized strategy or binding records",
+    );
 
+    await click(container, "Investigations");
     await click(container, "beta/shared");
     await waitFor(() => container.textContent?.includes("Beta ticket") === true);
     expect(container.textContent).not.toContain("Alpha ticket");
@@ -212,9 +292,29 @@ const click = async (container: HTMLElement, text: string): Promise<void> => {
   });
 };
 
+const buttonWithLabel = (container: HTMLElement, label: string): HTMLButtonElement => {
+  const button = [...container.querySelectorAll("button")].find(
+    (candidate) => candidate.getAttribute("aria-label") === label,
+  );
+  if (button === undefined) throw new Error(`Button not found: ${label}`);
+  return button;
+};
+
+const focusAndActivate = async (button: HTMLButtonElement): Promise<void> => {
+  await act(async () => {
+    button.focus();
+    button.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Enter" }));
+    button.click();
+    button.dispatchEvent(new KeyboardEvent("keyup", { bubbles: true, key: "Enter" }));
+    await settle();
+  });
+};
+
 const labelledInput = (container: HTMLElement, label: string): HTMLInputElement => {
   const input = [...container.querySelectorAll("input")].find((candidate) => {
     if (candidate.getAttribute("aria-label") === label) return true;
+    if ([...(candidate.labels ?? [])].some((item) => item.textContent?.trim() === label))
+      return true;
     return candidate.closest("label")?.textContent?.trim().startsWith(label) === true;
   });
   if (input === undefined) throw new Error(`Input not found: ${label}`);
@@ -251,6 +351,11 @@ const startHost = async (
     join(root, "projects/demo/investigations/sample/evidence/render.md"),
     "# Rendered evidence\n\n- **emphasis**\n- `code`\n\n| Safe | Value |\n| --- | --- |\n| yes | 1 |\n\n[bad link](JaVaScRiPt:bad()) [safe link](https://example.com)\n\n<script>bad()</script>\n",
   );
+  const strategyRoot = join(root, "projects/demo/investigations/sample/strategy");
+  await writeFile(join(strategyRoot, "investigation.toml"), rootOnlyStrategy);
+  await writeFile(join(strategyRoot, "implementation.toml"), implementationStrategy);
+  await writeFile(join(strategyRoot, "review.toml"), "schema_version = 1\nworkers = [\n");
+  await writeFile(join(strategyRoot, "bindings.toml"), writerBinding);
   if (options.nestedInvestigations === true) {
     await writeFile(
       join(root, "casefile.toml"),
@@ -326,6 +431,89 @@ const startHost = async (
     },
   };
 };
+
+const rootOnlyStrategy = `schema_version = 1
+strategy_id = "casefile-investigate-solo"
+phase = "investigation"
+adapter = "codex"
+
+[orchestrator]
+binding = "root"
+
+[limits]
+max_concurrent_subagents = 1
+max_depth = 0
+
+[requirements]
+capabilities = []
+
+[coordination]
+batch_when_capacity_exceeded = false
+candidate_review_before_ticket = true
+shared_ticket_storage_required = true
+`;
+
+const implementationStrategy = `schema_version = 1
+strategy_id = "casefile-implement-pipeline"
+phase = "implementation"
+adapter = "codex"
+
+[orchestrator]
+binding = "root"
+
+[limits]
+max_concurrent_subagents = 4
+max_depth = 2
+
+[requirements]
+capabilities = ["subagents", "shared-ticket-storage"]
+
+[[workers]]
+role = "implementation-writer"
+platform_profile = "casefile-writer"
+model = "gpt-5.6-sol"
+reasoning = "high"
+minimum_count = 1
+maximum_count = 2
+can_spawn_subagents = false
+
+[[workers]]
+role = "verification-reviewer"
+platform_profile = "casefile-reviewer"
+minimum_count = 1
+maximum_count = 1
+can_spawn_subagents = true
+
+[coordination]
+batch_when_capacity_exceeded = true
+candidate_review_before_ticket = true
+shared_ticket_storage_required = true
+
+[coordination.pipeline]
+maximum_active_tickets = 2
+look_ahead_read_only = true
+require_dependency_independence = true
+require_disjoint_write_paths = true
+immutable_review_commits = true
+corrections_preempt_forward_work = true
+`;
+
+const writerBinding = `schema_version = 1
+adapter = "codex"
+role = "implementation-writer"
+model = "gpt-5.6-terra"
+reasoning_effort = "xhigh"
+
+[resolution]
+mode = "catalog_id"
+value = "gpt-5.6-terra/xhigh"
+`;
+
+const legacyReviewStrategy = `schema_version = 1
+strategy_id = "casefile-review-atomic"
+phase = "review"
+adapter = "codex"
+`;
 
 const run = async (command: ReadonlyArray<string>, cwd: string): Promise<void> => {
   const process = Bun.spawn({ cmd: [...command], cwd, stdout: "pipe", stderr: "pipe" });

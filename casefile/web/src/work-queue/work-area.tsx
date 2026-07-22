@@ -4,7 +4,8 @@ import {
   type Investigation,
   type Project,
 } from "../navigation/use-scope-navigation";
-import { type Record } from "../model";
+import { type Diagnostic, type Record } from "../model";
+import { StrategyPanel } from "../strategy/strategy-panel";
 import { Badge, classificationTone, kindTone } from "../ui/badge";
 
 export type BrowserPanelProps = Readonly<{
@@ -13,9 +14,13 @@ export type BrowserPanelProps = Readonly<{
   investigations: ReadonlyArray<Investigation>;
   tickets: ReadonlyArray<Record>;
   files: ReadonlyArray<Record>;
+  strategies: ReadonlyArray<Record>;
   project: string | undefined;
   investigation: string | undefined;
   selectedPath: string | undefined;
+  selectedRecord: Record | undefined;
+  diagnostics: ReadonlyArray<Diagnostic>;
+  search: string;
   onProject: (project: string) => void;
   onInvestigation: (investigation: string) => void;
   onSelect: (record: Record) => void;
@@ -27,14 +32,18 @@ export const BrowserPanel = ({
   investigations,
   tickets,
   files,
+  strategies,
   project,
   investigation,
   selectedPath,
+  selectedRecord,
+  diagnostics,
+  search,
   onProject,
   onInvestigation,
   onSelect,
 }: BrowserPanelProps): ReactNode => (
-  <main className="min-w-0 overflow-y-auto bg-slate-950 p-4 lg:p-6">
+  <main className="min-w-0 bg-slate-950 p-4 lg:overflow-y-auto lg:p-6">
     {tab === "projects" ? <ProjectList projects={projects} onSelect={onProject} /> : undefined}
     {tab === "investigations" ? (
       <InvestigationList
@@ -58,6 +67,17 @@ export const BrowserPanel = ({
         project={project}
         investigation={investigation}
         selectedPath={selectedPath}
+        onSelect={onSelect}
+      />
+    ) : undefined}
+    {tab === "strategies" ? (
+      <StrategyPanel
+        investigation={investigation}
+        records={strategies}
+        selectedRecord={selectedRecord}
+        selectedPath={selectedPath}
+        diagnostics={diagnostics}
+        search={search}
         onSelect={onSelect}
       />
     ) : undefined}

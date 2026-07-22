@@ -68,15 +68,20 @@ export const App = (): ReactNode => {
           investigations={navigation.investigations}
           tickets={navigation.tickets}
           files={navigation.files}
+          strategies={navigation.strategies}
           project={navigation.project}
           investigation={navigation.investigation}
           selectedPath={selection.selectedPath}
+          selectedRecord={selection.record}
+          diagnostics={workspace.workspace.diagnostics}
+          search={workspace.search}
           onProject={selectProject}
           onInvestigation={selectInvestigation}
           onSelect={selectRecord}
         />
         <DetailPanel
           record={selection.record}
+          diagnostics={workspace.workspace.diagnostics}
           relationships={selection.relationships}
           draft={selection.draft}
           preview={changes.preview}
