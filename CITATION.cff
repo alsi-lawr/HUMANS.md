@@ -10,7 +10,7 @@ abstract: >-
   task-shaped skills, deterministic validators, and a governed Casefile process
   into reproducible Codex and Claude plugins. The repository also preserves an
   evidenced design and implementation report with explicit verification limits.
-version: "0.1.5"
+version: "0.2.3"
 license: MIT
 repository-code: "https://github.com/alsi-lawr/HUMANS.md"
 url: "https://github.com/alsi-lawr/HUMANS.md"
