@@ -35,6 +35,7 @@ struct BindingJournal {
     source: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     previous: Option<String>,
+    checksum: String,
 }
 
 #[derive(Clone, Debug)]
@@ -65,10 +66,12 @@ impl Store {
     }
 
     pub fn preview(&self, request: ChangeRequest) -> Result<Preview, StoreError> {
+        recover_binding_transactions(&self.root)?;
         writing::preview(&self.root, request)
     }
 
     pub fn apply(&self, preview: Preview) -> Result<ApplyResult, StoreError> {
+        recover_binding_transactions(&self.root)?;
         writing::apply(&self.root, preview)
     }
 
@@ -141,6 +144,7 @@ fn atomic_binding_write(
     let mut temporary = NamedTempFile::new_in(parent)?;
     temporary.write_all(bytes)?;
     temporary.flush()?;
+    temporary.as_file().sync_all()?;
     if create {
         temporary
             .persist_noclobber(path)
@@ -178,7 +182,35 @@ fn transaction_paths(
     (target, history, journal)
 }
 
+fn journal_checksum(source: &str, previous: Option<&str>) -> String {
+    let mut input = source.as_bytes().to_vec();
+    input.push(0);
+    if let Some(previous) = previous {
+        input.extend_from_slice(previous.as_bytes());
+    }
+    format!("{:x}", Sha256::digest(input))
+}
+
+fn ensure_no_symlink(path: &Path) -> Result<(), StoreError> {
+    let mut current = PathBuf::new();
+    for component in path.components() {
+        current.push(component);
+        match fs::symlink_metadata(&current) {
+            Ok(metadata) if metadata.file_type().is_symlink() => {
+                return Err(StoreError::Invalid(
+                    "binding transaction path must not be a symlink".into(),
+                ));
+            }
+            Ok(_) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error.into()),
+        }
+    }
+    Ok(())
+}
+
 fn write_journal(path: &Path, journal: &BindingJournal) -> Result<(), StoreError> {
+    ensure_no_symlink(path)?;
     let source =
         toml::to_string(journal).map_err(|error| StoreError::Invalid(error.to_string()))?;
     atomic_binding_write(path, source.as_bytes(), true)
@@ -199,18 +231,35 @@ fn recover_binding_transaction(strategy: &Path) -> Result<(), StoreError> {
     }
     let journal: BindingJournal = toml::from_str(&fs::read_to_string(&journal_path)?)
         .map_err(|error| StoreError::Invalid(format!("invalid binding journal: {error}")))?;
-    if journal.schema_version != 1 {
+    if journal.schema_version != 1
+        || journal.checksum != journal_checksum(&journal.source, journal.previous.as_deref())
+    {
         return Err(StoreError::Invalid(
-            "binding journal schema_version must be 1".into(),
+            "binding journal integrity check failed".into(),
         ));
     }
+    parse_strategy_binding("strategy/bindings.toml", &journal.source)
+        .map_err(|_| StoreError::Invalid("binding journal source is invalid".into()))?;
+    ensure_no_symlink(strategy)?;
     let (target, history, _) = transaction_paths(strategy, journal.previous.as_deref());
+    ensure_no_symlink(&target)?;
+    if let Some(history) = &history {
+        ensure_no_symlink(history)?;
+    }
     for path in std::iter::once(&target).chain(history.iter()) {
         if path.exists() && fs::symlink_metadata(path)?.file_type().is_symlink() {
             return Err(StoreError::Invalid(
                 "binding recovery target must not be a symlink".into(),
             ));
         }
+    }
+    let current_target = read_file(&target)?;
+    if current_target.as_deref() != journal.previous.as_deref().map(str::as_bytes)
+        && current_target.as_deref() != Some(journal.source.as_bytes())
+    {
+        return Err(StoreError::Invalid(
+            "binding target conflicts with recovery journal".into(),
+        ));
     }
     if let (Some(history), Some(previous)) = (&history, &journal.previous) {
         match read_file(history)? {
@@ -260,10 +309,12 @@ fn replace_binding_transaction(strategy: &Path, source: &str) -> Result<(), Stor
         })
         .transpose()?;
     let (_, _, journal_path) = transaction_paths(strategy, previous.as_deref());
+    let checksum = journal_checksum(source, previous.as_deref());
     let journal = BindingJournal {
         schema_version: 1,
         source: source.into(),
         previous,
+        checksum,
     };
     write_journal(&journal_path, &journal)?;
     // Every durable boundary after this point is recoverable to the complete committed state.
@@ -284,31 +335,41 @@ mod tests {
 
     #[test]
     fn interrupted_replacement_recovers_to_the_complete_state_at_each_boundary() {
+        let old = "schema_version = 1\nadapter = \"codex\"\nrole = \"implementation-writer\"\nmodel = \"old\"\nreasoning_effort = \"high\"\n[resolution]\nmode = \"profile\"\nvalue = \"writer\"\n";
+        let new = old.replace("model = \"old\"", "model = \"new\"");
         for boundary in 0..3 {
             let root = TempDir::new().expect("root");
             let strategy = root.path().join("strategy");
             fs::create_dir_all(&strategy).expect("strategy");
             let target = strategy.join("bindings.toml");
-            fs::write(&target, "old").expect("target");
+            fs::write(&target, old).expect("target");
             let journal = BindingJournal {
                 schema_version: 1,
-                source: "new".into(),
-                previous: Some("old".into()),
+                source: new.clone(),
+                previous: Some(old.into()),
+                checksum: super::journal_checksum(&new, Some(old)),
             };
             let (_, history, journal_path) =
                 transaction_paths(&strategy, journal.previous.as_deref());
             write_journal(&journal_path, &journal).expect("journal");
             if boundary >= 1 {
-                super::atomic_binding_write(history.as_ref().expect("history"), b"old", true)
-                    .expect("history");
+                super::atomic_binding_write(
+                    history.as_ref().expect("history"),
+                    old.as_bytes(),
+                    true,
+                )
+                .expect("history");
             }
             if boundary >= 2 {
-                super::atomic_binding_write(&target, b"new", false).expect("target");
+                super::atomic_binding_write(&target, new.as_bytes(), false).expect("target");
             }
             recover_binding_transaction(&strategy).expect("recovery");
-            assert_eq!(b"new", fs::read(&target).expect("target").as_slice());
             assert_eq!(
-                b"old",
+                new.as_bytes(),
+                fs::read(&target).expect("target").as_slice()
+            );
+            assert_eq!(
+                old.as_bytes(),
                 fs::read(history.expect("history"))
                     .expect("history")
                     .as_slice()
