@@ -21,11 +21,14 @@ the expansion and selected one-file atomic replacement with Git as the only hist
 When an agent then proposed a dedicated workflow-test harness, the human classified that as another
 unnecessary layer:
 
-> No focused workflow contract tests are needed; that's overengineering the harness. A short case study is the required level of evidence.
+> No focused workflow contract tests are needed; that's overengineering the harness. A short case
+> study is the required level of evidence.
 
 The human also set the evidence style:
 
-> If you use human evidence in the case study, include my key prompts verbatim. Summaries should be the default for your turns and inconsequential exchanges. You may lightly correct grammar and wording to make the prompts clearer.
+> If you use human evidence in the case study, include my key prompts verbatim. Summaries should be
+> the default for your turns and inconsequential exchanges. You may lightly correct grammar and
+> wording to make the prompts clearer.
 
 Agent actions and routine approvals are therefore summarized here. The resulting boundary is small:
 reviewers propose a classification, root decides, consequential expansion waits for the human, and

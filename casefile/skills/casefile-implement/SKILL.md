@@ -22,8 +22,8 @@ follow-up. Reviewers propose a class with evidence; the root has final classific
 
 - A correction is an explicit violation of the accepted contract and returns to the same writer in
   dependency order.
-- A contention would introduce new architecture, durable state, a dependency, a failure guarantee,
-  a compatibility promise, public behavior, or a material path expansion. The same semantic concern
+- A contention would introduce new architecture, durable state, a dependency, a failure guarantee, a
+  compatibility promise, public behavior, or a material path expansion. The same semantic concern
   surviving one correction is also a contention.
 - A follow-up is optional hardening that does not block acceptance.
 

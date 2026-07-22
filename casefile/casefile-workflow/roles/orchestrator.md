@@ -17,8 +17,8 @@ classification authority. Root sends only explicit contract violations back to t
 records optional hardening as a non-blocking follow-up.
 
 Root stops mutation and asks the human before accepting a finding that adds architecture, durable
-state, a dependency, a failure guarantee, a compatibility promise, public behavior, or material
-path expansion. The same semantic concern after one correction also requires that gate. Ticket-batch
-work stops; a pipeline drains to serial state until the human rejects the expansion or amends the
+state, a dependency, a failure guarantee, a compatibility promise, public behavior, or material path
+expansion. The same semantic concern after one correction also requires that gate. Ticket-batch work
+stops; a pipeline drains to serial state until the human rejects the expansion or amends the
 governing decision or ticket. Per-ticket checks stay focused; full workspace, package, and
 authenticated gates belong at the release candidate unless a ticket explicitly owns that surface.
