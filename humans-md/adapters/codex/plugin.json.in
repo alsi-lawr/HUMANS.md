@@ -12,8 +12,7 @@
     ],
     "category": "Coding",
     "defaultPrompt": [
-      "Preview or recover the standing repository behaviour contract.",
-      "Migrate a supported humans-md 0.1.5 installation before installing optional siblings."
+      "Preview or recover the standing repository behaviour contract."
     ],
     "developerName": ${publisher_json},
     "displayName": ${name_json},

@@ -15,9 +15,6 @@ destination = "templates/AGENTS.md"
 [[shared]]
 source = "humans-md/skills/contract-bootstrap"
 destination = "skills/contract-bootstrap"
-[[shared]]
-source = "humans-md/skills/migrations"
-destination = "skills/migrations"
 [vendors.codex]
 output = "build/marketplace/plugins/codex/humans-md"
 [[vendors.codex.template]]

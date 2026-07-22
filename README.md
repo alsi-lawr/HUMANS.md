@@ -23,7 +23,7 @@ Casefile and coding remain optional siblings.
 ```sh
 codex plugin marketplace add alsi-lawr/humans-md-marketplace --ref v0.2.3
 codex plugin add humans-md@humans-md
-# optional after core setup or migration succeeds
+# optional siblings
 codex plugin add casefile@humans-md
 codex plugin add coding@humans-md
 ```
@@ -31,7 +31,7 @@ codex plugin add coding@humans-md
 ```sh
 claude plugin marketplace add alsi-lawr/humans-md-marketplace@v0.2.3
 claude plugin install humans-md@humans-md --scope user
-# optional after core setup or migration succeeds
+# optional siblings
 claude plugin install casefile@humans-md --scope user
 claude plugin install coding@humans-md --scope user
 ```
@@ -40,18 +40,6 @@ claude plugin install coding@humans-md --scope user
 `casefile` owns Casefile workflows and Codex model, selected multi-agent runtime, profile, and role
 integration. `coding` owns Git contribution, README, skill-generation, and generic verification
 guidance. Removing one plugin never removes the shared marketplace or another plugin.
-
-## Upgrade from v0.1.5
-
-Do **not** install `casefile` or `coding` yet. Update the existing `humans-md` plugin to `v0.2.0`,
-restart the host, then invoke its `migrations` skill. It supports only `0.1.5 -> 0.2.0`: it previews
-restoration of the old managed baseline, shows focused Git diffs for managed files, records a
-preview fingerprint for the approval, revalidates that every managed target still matches it, and
-then reseeds a fresh contract-only core receipt. It preserves the marketplace.
-
-After that succeeds, install optional sibling plugins and run their own setup skills where needed.
-Missing, altered, unsafe, or ambiguous legacy receipts stop with recovery guidance rather than being
-adopted.
 
 ## Project
 

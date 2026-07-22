@@ -168,7 +168,7 @@ def install(plan: dict) -> dict:
     plan = prepare(plan["root"], plan["home"], plan["executable"])
     home = plan["home"]
     if pointer(home).exists():
-        raise SetupError("an active humans-md receipt already exists; use migrations or uninstall")
+        raise SetupError("an active humans-md receipt already exists; uninstall it before reinstalling")
     backup_root(home).mkdir(parents=True, exist_ok=True)
     receipt_dir = Path(tempfile.mkdtemp(prefix=datetime.datetime.now(datetime.UTC).strftime("%Y%m%dT%H%M%SZ-"), dir=backup_root(home)))
     os.chmod(receipt_dir, 0o700)
