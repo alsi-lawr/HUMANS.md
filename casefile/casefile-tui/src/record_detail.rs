@@ -233,6 +233,19 @@ fn overview_lines(entry: &EntrySnapshot, diagnostics: &[Diagnostic]) -> Vec<Line
                 lines.push(label_line("Phase", safe_inline(phase)));
                 lines.push(label_line("Adapter", safe_inline(adapter)));
             }
+            RecordSummary::StrategyBinding { binding } => {
+                lines.push(
+                    Line::from("Implementation writer binding")
+                        .style(Style::default().fg(ACCENT).bold()),
+                );
+                lines.push(label_line("Adapter", safe_inline(&binding.adapter)));
+                lines.push(label_line("Role", safe_inline(&binding.role)));
+                lines.push(label_line("Model", safe_inline(&binding.model)));
+                lines.push(label_line(
+                    "Reasoning",
+                    safe_inline(&binding.reasoning_effort),
+                ));
+            }
             RecordSummary::Activation { projects } | RecordSummary::ProjectMap { projects } => {
                 lines.push(Line::from("Projects").style(Style::default().fg(ACCENT).bold()));
                 for project in projects {

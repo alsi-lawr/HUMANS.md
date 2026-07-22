@@ -9,7 +9,7 @@ use crate::{
 use casefile_core::{
     CasefileSnapshot, Classification, Diagnostic, EntrySnapshot, Kind, RecordDraft, RecordSummary,
     Revision, parse_decision, parse_metadata_arrays, parse_project_map, parse_request,
-    parse_strategy, stable,
+    parse_strategy, parse_strategy_binding, parse_strategy_projection, stable,
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -89,6 +89,7 @@ pub(super) fn scan(
         });
     }
     diagnostics.extend(cross_validate(&entries, &active));
+    diagnostics.extend(binding_diagnostics(&entries));
     entries.sort_by(|a, b| a.path.cmp(&b.path));
     let mut input = Vec::new();
     for entry in &entries {
@@ -224,6 +225,9 @@ fn classify(
                 .map(|summary| (None, Some(summary)))
         }
         Kind::Strategy => parse_strategy(path, text).map(|summary| (None, Some(summary))),
+        Kind::StrategyBinding => {
+            parse_strategy_binding(path, text).map(|summary| (None, Some(summary)))
+        }
         Kind::Activation | Kind::ProjectMap => unreachable!(),
     };
     match result {
@@ -320,4 +324,65 @@ fn digest(bytes: &[u8]) -> Revision {
 
 fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
+fn binding_diagnostics(entries: &[EntrySnapshot]) -> Vec<Diagnostic> {
+    let binding = entries
+        .iter()
+        .find(|entry| entry.kind == Some(Kind::StrategyBinding));
+    let Some(binding) = binding else {
+        return Vec::new();
+    };
+    let Some(RecordSummary::StrategyBinding {
+        binding: binding_value,
+    }) = &binding.summary
+    else {
+        return Vec::new();
+    };
+    let implementation = entries.iter().find(|entry| matches!(&entry.summary, Some(RecordSummary::Strategy { phase, .. }) if phase == "implementation"));
+    let Some(implementation) = implementation else {
+        return Vec::new();
+    };
+    let Some(RecordSummary::Strategy { adapter, .. }) = &implementation.summary else {
+        return Vec::new();
+    };
+    if binding_value.adapter != *adapter {
+        return vec![
+            Diagnostic::new(
+                &binding.path,
+                "binding_adapter",
+                "binding adapter does not match implementation strategy",
+            )
+            .field("adapter"),
+        ];
+    }
+    let Ok(text) = std::str::from_utf8(&implementation.original_bytes) else {
+        return Vec::new();
+    };
+    let Ok(Some(projection)) = parse_strategy_projection(&implementation.path, text) else {
+        return vec![
+            Diagnostic::new(
+                &binding.path,
+                "binding_writer_match",
+                "implementation strategy has no graphable implementation-writer match",
+            )
+            .field("role"),
+        ];
+    };
+    let writers = projection
+        .workers
+        .iter()
+        .filter(|worker| worker.role == "implementation-writer")
+        .count();
+    if writers != 1 {
+        return vec![
+            Diagnostic::new(
+                &binding.path,
+                "binding_writer_match",
+                "implementation strategy must declare exactly one implementation-writer",
+            )
+            .field("role"),
+        ];
+    }
+    Vec::new()
 }

@@ -583,3 +583,234 @@ fn assert_headers(diff: &str, path: &str, before: bool, after: bool) {
     assert!(diff.contains(&new), "{diff}");
     assert!(!diff.contains(".tmp") && !diff.contains("/tmp/"), "{diff}");
 }
+
+const FULL_IMPLEMENTATION: &str = r#"schema_version = 1
+strategy_id = "casefile-implement-ticket-batch"
+phase = "implementation"
+adapter = "codex"
+[orchestrator]
+binding = "root"
+[limits]
+max_concurrent_subagents = 3
+max_depth = 1
+[requirements]
+capabilities = ["subagents"]
+[[workers]]
+role = "implementation-writer"
+platform_profile = "writer"
+model = "gpt-5.6-sol"
+reasoning = "high"
+minimum_count = 1
+maximum_count = 1
+can_spawn_subagents = false
+[coordination]
+batch_when_capacity_exceeded = true
+candidate_review_before_ticket = false
+shared_ticket_storage_required = true
+"#;
+
+const BINDING: &str = r#"schema_version = 1
+adapter = "codex"
+role = "implementation-writer"
+model = "gpt-5.6-terra"
+reasoning_effort = "high"
+[resolution]
+mode = "profile"
+value = "casefile-implement-ticket-batch-implementation-writer"
+"#;
+
+fn full_implementation(root: &Path) {
+    fs::write(
+        path(root, "strategy/implementation.toml"),
+        FULL_IMPLEMENTATION,
+    )
+    .expect("matrix");
+}
+
+#[test]
+fn strategy_binding_projection_keeps_legacy_and_failure_states_distinct() {
+    use casefile_store::{StrategyBindingState, WriterBindingSource};
+    let root = fixture();
+    full_implementation(root.path());
+    let store = Store::open(root.path()).expect("store");
+    let absent = store.derived_snapshot().expect("absent");
+    let implementation = absent
+        .records
+        .iter()
+        .find(|record| record.path.ends_with("strategy/implementation.toml"))
+        .and_then(|record| record.strategy.as_ref())
+        .expect("projected implementation");
+    assert!(
+        matches!(implementation.binding.as_ref(), Some(StrategyBindingState::Absent { effective }) if effective.model == "gpt-5.6-sol" && effective.source == WriterBindingSource::Matrix)
+    );
+
+    fs::write(path(root.path(), "strategy/bindings.toml"), BINDING).expect("binding");
+    let resolved = store.derived_snapshot().expect("resolved");
+    let implementation = resolved
+        .records
+        .iter()
+        .find(|record| record.path.ends_with("strategy/implementation.toml"))
+        .and_then(|record| record.strategy.as_ref())
+        .expect("projected implementation");
+    assert!(
+        matches!(implementation.binding.as_ref(), Some(StrategyBindingState::Resolved { effective }) if effective.model == "gpt-5.6-terra" && effective.source == WriterBindingSource::Binding)
+    );
+    let binding = resolved
+        .records
+        .iter()
+        .find(|record| record.path.ends_with("strategy/bindings.toml"))
+        .and_then(|record| record.strategy_binding.as_ref())
+        .expect("binding projection");
+    assert!(matches!(
+        binding.state,
+        StrategyBindingState::Resolved { .. }
+    ));
+
+    fs::write(
+        path(root.path(), "strategy/bindings.toml"),
+        BINDING.replace("adapter = \"codex\"", "adapter = \"claude\""),
+    )
+    .expect("mismatch");
+    let unresolved = store.derived_snapshot().expect("unresolved");
+    assert!(
+        unresolved
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.code == "binding_adapter"
+                && diagnostic.path.ends_with("strategy/bindings.toml"))
+    );
+    let implementation = unresolved
+        .records
+        .iter()
+        .find(|record| record.path.ends_with("strategy/implementation.toml"))
+        .and_then(|record| record.strategy.as_ref())
+        .expect("projected implementation");
+    assert!(matches!(
+        implementation.binding,
+        Some(StrategyBindingState::Unresolved)
+    ));
+
+    fs::write(
+        path(root.path(), "strategy/bindings.toml"),
+        BINDING.replace("implementation-writer", "reviewer"),
+    )
+    .expect("invalid binding");
+    let invalid = store.derived_snapshot().expect("invalid");
+    assert!(
+        invalid
+            .records
+            .iter()
+            .any(|record| record.path.ends_with("strategy/bindings.toml")
+                && record.classification == Classification::Invalid)
+    );
+    let implementation = invalid
+        .records
+        .iter()
+        .find(|record| record.path.ends_with("strategy/implementation.toml"))
+        .and_then(|record| record.strategy.as_ref())
+        .expect("projected implementation");
+    assert!(matches!(
+        implementation.binding,
+        Some(StrategyBindingState::Invalid)
+    ));
+}
+
+#[test]
+fn strategy_binding_is_pending_without_implementation_and_unresolved_without_exact_writer() {
+    use casefile_store::StrategyBindingState;
+    let root = fixture();
+    fs::remove_file(path(root.path(), "strategy/implementation.toml"))
+        .expect("remove implementation");
+    fs::write(path(root.path(), "strategy/bindings.toml"), BINDING).expect("binding");
+    let store = Store::open(root.path()).expect("store");
+    let pending = store.derived_snapshot().expect("pending");
+    let binding = pending
+        .records
+        .iter()
+        .find(|record| record.path.ends_with("strategy/bindings.toml"))
+        .and_then(|record| record.strategy_binding.as_ref())
+        .expect("binding projection");
+    assert!(matches!(binding.state, StrategyBindingState::Pending));
+
+    full_implementation(root.path());
+    fs::write(
+        path(root.path(), "strategy/implementation.toml"),
+        FULL_IMPLEMENTATION.replace("implementation-writer", "reviewer"),
+    )
+    .expect("no writer");
+    let unresolved = store.derived_snapshot().expect("unresolved");
+    assert!(
+        unresolved
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.code == "binding_writer_match")
+    );
+    let implementation = unresolved
+        .records
+        .iter()
+        .find(|record| record.path.ends_with("strategy/implementation.toml"))
+        .and_then(|record| record.strategy.as_ref())
+        .expect("projected implementation");
+    assert!(matches!(
+        implementation.binding,
+        Some(StrategyBindingState::Unresolved)
+    ));
+
+    fs::write(
+        path(root.path(), "strategy/implementation.toml"),
+        format!("{FULL_IMPLEMENTATION}\n[[workers]]\nrole = \"implementation-writer\"\nplatform_profile = \"second-writer\"\nmodel = \"gpt-5.6-sol\"\nreasoning = \"high\"\nminimum_count = 1\nmaximum_count = 1\ncan_spawn_subagents = false\n"),
+    )
+    .expect("ambiguous writer");
+    let ambiguous = store.derived_snapshot().expect("ambiguous");
+    let implementation = ambiguous
+        .records
+        .iter()
+        .find(|record| record.path.ends_with("strategy/implementation.toml"))
+        .and_then(|record| record.strategy.as_ref())
+        .expect("projected implementation");
+    assert!(matches!(
+        implementation.binding,
+        Some(StrategyBindingState::Unresolved)
+    ));
+}
+
+#[test]
+fn binding_replacement_is_guarded_archived_and_atomic() {
+    let root = fixture();
+    let store = Store::open(root.path()).expect("store");
+    let investigation = "projects/demo/investigations/sample";
+    assert!(
+        store
+            .replace_strategy_binding(investigation, BINDING, true)
+            .is_err()
+    );
+    store
+        .replace_strategy_binding(investigation, BINDING, false)
+        .expect("create");
+    let alternate = BINDING.replace("gpt-5.6-terra", "gpt-5.6-luna");
+    store
+        .replace_strategy_binding(investigation, &alternate, false)
+        .expect("replace");
+    assert_eq!(
+        alternate,
+        fs::read_to_string(path(root.path(), "strategy/bindings.toml")).expect("current")
+    );
+    assert_eq!(
+        1,
+        fs::read_dir(
+            root.path()
+                .join("projects/demo/investigations/sample/strategy/binding-history")
+        )
+        .expect("history")
+        .count()
+    );
+    assert!(
+        store
+            .replace_strategy_binding(investigation, "not = [toml", false)
+            .is_err()
+    );
+    assert_eq!(
+        alternate,
+        fs::read_to_string(path(root.path(), "strategy/bindings.toml")).expect("unchanged")
+    );
+}

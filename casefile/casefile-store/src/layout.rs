@@ -40,6 +40,7 @@ pub(super) fn kind_for_path(path: &str, active: &Activation) -> Option<Kind> {
         ["request.md"] => Some(Kind::Request),
         ["final-disposition.md"] => Some(Kind::Closeout),
         ["implementation-plan", "PLAN.md"] => Some(Kind::Plan),
+        ["strategy", "bindings.toml"] => Some(Kind::StrategyBinding),
         ["strategy", name]
             if matches!(
                 *name,

@@ -217,3 +217,78 @@ fn replacement_index_is_revision_bound_repairable_and_queryable() {
             .len()
     );
 }
+
+#[test]
+fn strategy_binding_projection_survives_json_index_round_trip() {
+    let root = fixture();
+    let base = root
+        .path()
+        .join("projects/demo/investigations/sample/strategy");
+    fs::write(
+        base.join("implementation.toml"),
+        r#"schema_version = 1
+strategy_id = "casefile-implement-ticket-batch"
+phase = "implementation"
+adapter = "codex"
+[orchestrator]
+binding = "root"
+[limits]
+max_concurrent_subagents = 1
+max_depth = 1
+[requirements]
+capabilities = ["subagents"]
+[[workers]]
+role = "implementation-writer"
+platform_profile = "writer"
+model = "gpt-5.6-sol"
+reasoning = "high"
+minimum_count = 1
+maximum_count = 1
+can_spawn_subagents = false
+[coordination]
+batch_when_capacity_exceeded = true
+candidate_review_before_ticket = false
+shared_ticket_storage_required = true
+"#,
+    )
+    .expect("matrix");
+    fs::write(
+        base.join("bindings.toml"),
+        r#"schema_version = 1
+adapter = "codex"
+role = "implementation-writer"
+model = "gpt-5.6-terra"
+reasoning_effort = "high"
+[resolution]
+mode = "profile"
+value = "writer"
+"#,
+    )
+    .expect("binding");
+    let store = Store::open(root.path()).expect("store");
+    let indexes = TempDir::new().expect("indexes");
+    let index =
+        SqliteIndex::open(indexes.path().join("casefile.sqlite"), root.path()).expect("index");
+    let snapshot = current(&index, &store);
+    let Indexed::Current { value, .. } = index
+        .records(&snapshot.source_revision, None, None)
+        .expect("records")
+    else {
+        panic!("current");
+    };
+    let implementation = value
+        .iter()
+        .find(|record| record.path.ends_with("strategy/implementation.toml"))
+        .and_then(|record| record.strategy.as_ref())
+        .expect("strategy projection");
+    assert!(matches!(
+        implementation.binding,
+        Some(casefile_store::StrategyBindingState::Resolved { .. })
+    ));
+    assert!(
+        value
+            .iter()
+            .any(|record| record.path.ends_with("strategy/bindings.toml")
+                && record.strategy_binding.is_some())
+    );
+}

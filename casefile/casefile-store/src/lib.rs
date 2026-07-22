@@ -13,7 +13,8 @@ mod writing;
 pub use activation::ActivationState;
 pub use derived::{
     DerivedBoard, DerivedBoardColumn, DerivedCard, DerivedRecord, DerivedRelationship,
-    DerivedSnapshot, RecordScope, RelationshipKind, ScopedIdentity,
+    DerivedSnapshot, DerivedStrategy, DerivedStrategyBinding, EffectiveWriterBinding, RecordScope,
+    RelationshipKind, ScopedIdentity, StrategyBindingState, WriterBindingSource,
 };
 pub use index::{DerivedIndex, Indexed, RevisionSource};
 pub use scanning::ScanResult;
