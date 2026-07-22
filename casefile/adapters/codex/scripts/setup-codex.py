@@ -17,15 +17,17 @@ from pathlib import Path, PurePosixPath
 
 PLUGIN_ID = "casefile@humans-md"
 MARKETPLACE = "humans-md"
-RECEIPT_SCHEMA = 4
-RECEIPT_SCHEMAS = {4}
+RECEIPT_SCHEMA = 5
+RECEIPT_SCHEMAS = {4, 5}
 REQUIRED_MODELS = {
     "gpt-5.6-sol",
     "gpt-5.6-terra",
     "gpt-5.6-luna",
     "gpt-5.3-codex-spark",
 }
-V1_MODELS = {"gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"}
+V1_SELECTOR_MODELS = {"gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"}
+MULTI_AGENT_VERSIONS = {"v1", "v2"}
+V2_MINIMUM_CODEX_VERSION = (0, 145, 0)
 SCALAR_BEGIN = b"# >>> casefile setup scalars >>>\n"
 SCALAR_END = b"# <<< casefile setup scalars <<<\n"
 TABLE_BEGIN = b"\n# >>> casefile setup tables >>>\n"
@@ -149,7 +151,7 @@ def resource(profile: Path, target: dict, path_key: str) -> bytes:
     return data
 
 
-def set_selector(model: dict, dotted: str) -> None:
+def set_selector(model: dict, dotted: str, value: object = None) -> None:
     current = model
     parts = dotted.split(".")
     for part in parts[:-1]:
@@ -158,10 +160,19 @@ def set_selector(model: dict, dotted: str) -> None:
             raise SetupError(f"catalog selector is missing: {dotted}")
     if parts[-1] not in current:
         raise SetupError(f"catalog selector is missing: {dotted}")
-    current[parts[-1]] = None
+    current[parts[-1]] = value
 
 
-def catalog_override(raw: dict, profile_path: Path) -> tuple[bytes, list[str], list[str]]:
+def multi_agent_version(value: str) -> str:
+    if value not in MULTI_AGENT_VERSIONS:
+        raise SetupError(f"unsupported multi-agent version: {value!r}")
+    return value
+
+
+def catalog_override(
+    raw: dict, profile_path: Path, version: str
+) -> tuple[bytes, list[str], list[str]]:
+    version = multi_agent_version(version)
     profile = tomllib.loads(profile_path.read_text(encoding="ascii"))
     policy = profile.get("catalog", {})
     models = raw.get("models")
@@ -205,8 +216,14 @@ def catalog_override(raw: dict, profile_path: Path) -> tuple[bytes, list[str], l
         patched.append(model_id)
     if not REQUIRED_MODELS <= set(patched):
         raise SetupError("required models were not patched")
-    if any(output[model].get("multi_agent_version") is not None for model in V1_MODELS):
-        raise SetupError("required V1 selectors were not cleared")
+    if version == "v1":
+        if any(output[model].get("multi_agent_version") is not None for model in V1_SELECTOR_MODELS):
+            raise SetupError("required V1 selectors were not cleared")
+    else:
+        for model in result["models"]:
+            model["multi_agent_version"] = "v2"
+            if model["multi_agent_version"] != "v2":
+                raise SetupError("required V2 selectors were not assigned")
     return canonical(result), sorted(patched), sorted(skipped)
 
 
@@ -214,7 +231,7 @@ def marked(begin: bytes, payload: bytes, end: bytes) -> bytes:
     return begin + payload.rstrip(b"\n") + b"\n" + end
 
 
-def config_candidate(current: bytes, root: Path, catalog: Path) -> bytes:
+def config_candidate(current: bytes, root: Path, catalog: Path, version: str) -> bytes:
     document = tomllib.loads(current.decode("utf-8")) if current else {}
     conflicts = {
         key
@@ -225,9 +242,11 @@ def config_candidate(current: bytes, root: Path, catalog: Path) -> bytes:
         raise SetupError(
             "managed config already exists; clean it before setup: " + ", ".join(sorted(conflicts))
         )
-    fragment = (root / "config/config-fragment.toml.in").read_text(encoding="ascii").replace(
-        "__HUMANS_MD_PLUGIN_ROOT__", str(root).replace("\\", "/")
-    )
+    version = multi_agent_version(version)
+    fragment = (root / "config/config-fragment.toml.in").read_text(encoding="ascii")
+    fragment = fragment.replace("__HUMANS_MD_PLUGIN_ROOT__", str(root).replace("\\", "/"))
+    fragment = fragment.replace("__CASEFILE_MULTI_AGENT_V1__", "true" if version == "v1" else "false")
+    fragment = fragment.replace("__CASEFILE_MULTI_AGENT_V2__", "false" if version == "v1" else "true")
     scalar_block = marked(
         SCALAR_BEGIN,
         f"model_catalog_json = {json.dumps(str(catalog))}\n".encode("utf-8"),
@@ -235,7 +254,7 @@ def config_candidate(current: bytes, root: Path, catalog: Path) -> bytes:
     )
     table_block = marked(TABLE_BEGIN, fragment.encode("ascii"), TABLE_END)
     data = scalar_block + current + table_block
-    verify_config(data, root, catalog)
+    verify_config(data, root, catalog, version)
     return data
 
 
@@ -259,14 +278,16 @@ def unowned_config(data: bytes) -> bytes:
     return result
 
 
-def verify_config(data: bytes, root: Path, catalog: Path) -> None:
+def verify_config(data: bytes, root: Path, catalog: Path, version: str) -> None:
     document = tomllib.loads(data.decode("utf-8"))
+    version = multi_agent_version(version)
     profiles = tomllib.loads((root / "config/profiles.toml").read_text(encoding="ascii"))
     if document.get("model_catalog_json") != str(catalog):
         raise SetupError("catalog path is incorrect")
     features = document.get("features", {})
-    if features.get("multi_agent") is not True or features.get("multi_agent_v2") is not False:
-        raise SetupError("V1 feature flags are incorrect")
+    expected_features = {"multi_agent": version == "v1", "multi_agent_v2": version == "v2"}
+    if {name: features.get(name) for name in expected_features} != expected_features:
+        raise SetupError(f"{version.upper()} feature flags are incorrect")
     agents = document.get("agents", {})
     for row in profiles.get("matrix_profiles", []):
         relative = PurePosixPath(row["agent_file"].replace("\\", "/"))
@@ -334,10 +355,11 @@ def restore(home: Path, source: Path, entries: list[dict]) -> None:
             raise SetupError(f"restore verification failed: {path}")
 
 
-def managed(home: Path) -> list[Path]:
+def managed(home: Path, version: str = "v1") -> list[Path]:
+    version = multi_agent_version(version)
     return [
         home / "config.toml",
-        home / "models-casefile-v1.json",
+        home / f"models-casefile-{version}.json",
         *(home / relative for relative in LEGACY_PATHS),
     ]
 
@@ -346,32 +368,47 @@ def pointer(home: Path) -> Path:
     return home / "state/casefile/current.json"
 
 
-def prepare(root: Path, home: Path, executable: str) -> dict:
+def codex_version(executable: str, environment: dict[str, str]) -> tuple[int, int, int]:
+    output = checked([executable, "--version"], environment).strip()
+    found = re.search(r"\b(\d+)\.(\d+)\.(\d+)\b", output)
+    if found is None:
+        raise SetupError(f"Codex version is not parseable: {output or 'no version output'}")
+    return tuple(int(value) for value in found.groups())
+
+
+def require_v2(executable: str, environment: dict[str, str]) -> tuple[int, int, int]:
+    version = codex_version(executable, environment)
+    if version < V2_MINIMUM_CODEX_VERSION:
+        required = ".".join(str(value) for value in V2_MINIMUM_CODEX_VERSION)
+        actual = ".".join(str(value) for value in version)
+        raise SetupError(f"multi-agent V2 requires Codex {required} or newer; found {actual}")
+    return version
+
+
+def prepare(root: Path, home: Path, executable: str, version: str = "v1") -> dict:
+    version = multi_agent_version(version)
     root, manifest = plugin_root(root)
     environment = {**os.environ, "CODEX_HOME": str(home)}
     plugin = discover(executable, environment, manifest["version"])
-    catalog_command = [executable, "debug", "models"]
-    model_cache = home / "models_cache.json"
-    if model_cache.is_file():
-        catalog_command += [
-            "-c",
-            f"model_catalog_json={json.dumps(str(model_cache))}",
-        ]
-    try:
-        raw = json.loads(checked(catalog_command, environment))
-    except json.JSONDecodeError as error:
-        raise SetupError("active catalog export is invalid JSON") from error
-    catalog, patched, skipped = catalog_override(raw, root / "config/profiles.toml")
-    catalog_path = home / "models-casefile-v1.json"
+    if version == "v2":
+        require_v2(executable, environment)
+    catalog_path = home / f"models-casefile-{version}.json"
     config_path = home / "config.toml"
     current = config_path.read_bytes() if config_path.is_file() else b""
-    config = config_candidate(current, root, catalog_path)
+    # Refuse a managed configuration before asking Codex to refresh its authenticated catalog.
+    config = config_candidate(current, root, catalog_path, version)
+    try:
+        raw = json.loads(checked([executable, "debug", "models"], environment))
+    except json.JSONDecodeError as error:
+        raise SetupError("active catalog export is invalid JSON") from error
+    catalog, patched, skipped = catalog_override(raw, root / "config/profiles.toml", version)
     return {
         "root": root,
         "home": home,
         "executable": executable,
         "environment": environment,
         "version": plugin["version"],
+        "multi_agent_version": version,
         "config": config,
         "catalog": catalog,
         "patched": patched,
@@ -386,7 +423,8 @@ def preview(plan: dict) -> dict:
         "operation": "install",
         "plugin_version": plan["version"],
         "config": str(home / "config.toml"),
-        "catalog": str(home / "models-casefile-v1.json"),
+        "catalog": str(home / f"models-casefile-{plan['multi_agent_version']}.json"),
+        "multi_agent_version": plan["multi_agent_version"],
         "receipt_root": str(home / "backups/casefile"),
         "patched_models": plan["patched"],
         "skipped_optional_models": plan["skipped"],
@@ -412,6 +450,7 @@ def doctor(plan: dict) -> None:
 
 
 def verify_effective_catalog(plan: dict) -> None:
+    version = multi_agent_version(plan.get("multi_agent_version", "v1"))
     document = checked_json(
         [plan["executable"], "debug", "models"], plan["environment"]
     )
@@ -426,14 +465,19 @@ def verify_effective_catalog(plan: dict) -> None:
         raise SetupError(
             f"effective catalog lacks required models: {', '.join(missing)}"
         )
-    for model_id in V1_MODELS:
-        model = selected.get(model_id)
-        if not isinstance(model, dict) or model.get("multi_agent_version") is not None:
-            raise SetupError(f"effective catalog did not activate V1 for {model_id}")
+    if version == "v1":
+        for model_id in V1_SELECTOR_MODELS:
+            model = selected.get(model_id)
+            if not isinstance(model, dict) or model.get("multi_agent_version") is not None:
+                raise SetupError(f"effective catalog did not activate V1 for {model_id}")
+    else:
+        for model_id, model in selected.items():
+            if model.get("multi_agent_version") != "v2":
+                raise SetupError(f"effective catalog did not activate V2 for {model_id}")
 
 
 def install(plan: dict) -> dict:
-    plan = prepare(plan["root"], plan["home"], plan["executable"])
+    plan = prepare(plan["root"], plan["home"], plan["executable"], plan["multi_agent_version"])
     home = plan["home"]
     if pointer(home).exists():
         raise SetupError("an active humans-md receipt already exists")
@@ -445,13 +489,13 @@ def install(plan: dict) -> dict:
         )
     )
     secure_dir(receipt_dir)
-    paths = managed(home)
+    paths = managed(home, plan["multi_agent_version"])
     before = snapshot(home, paths, receipt_dir / "before")
     try:
         config, catalog = paths
         atomic_write(config, plan["config"], 0o600)
         atomic_write(catalog, plan["catalog"], 0o600)
-        verify_config(config.read_bytes(), plan["root"], catalog)
+        verify_config(config.read_bytes(), plan["root"], catalog, plan["multi_agent_version"])
         if catalog.read_bytes() != plan["catalog"]:
             raise SetupError("written setup bytes differ from preview")
         doctor(plan)
@@ -463,6 +507,7 @@ def install(plan: dict) -> dict:
             "status": "installed",
             "install_id": receipt_dir.name,
             "plugin_version": plan["version"],
+            "multi_agent_version": plan["multi_agent_version"],
             "before": before,
             "remove_plugin": True,
             "remove_marketplace": False,
@@ -472,7 +517,7 @@ def install(plan: dict) -> dict:
         atomic_write(receipt_path, receipt_data)
         secure_dir(pointer(home).parent)
         atomic_write(pointer(home), canonical({"receipt": str(receipt_path)}))
-        return {"status": "installed", "receipt": str(receipt_path), "restart_required": True}
+        return {"status": "installed", "receipt": str(receipt_path), "multi_agent_version": plan["multi_agent_version"], "restart_required": True}
     except BaseException as error:
         restore(home, receipt_dir / "before", before)
         pointer(home).unlink(missing_ok=True)
@@ -493,6 +538,10 @@ def read_json(path: Path) -> dict:
     return value
 
 
+def receipt_multi_agent_version(value: dict) -> str:
+    return multi_agent_version(value.get("multi_agent_version", "v1"))
+
+
 def receipt(home: Path, explicit: Path | None) -> tuple[Path, dict]:
     if explicit is None:
         selected = read_json(pointer(home))
@@ -509,7 +558,8 @@ def receipt(home: Path, explicit: Path | None) -> tuple[Path, dict]:
     inventory = value.get("before")
     if not isinstance(inventory, list) or not inventory:
         raise SetupError("receipt backup inventory is invalid")
-    expected = [path.relative_to(home) for path in managed(home)]
+    version = receipt_multi_agent_version(value)
+    expected = [path.relative_to(home) for path in managed(home, version)]
     if len(inventory) != len(expected):
         raise SetupError("receipt backup inventory is incomplete")
     for entry, relative in zip(inventory, expected, strict=True):
@@ -533,6 +583,7 @@ def uninstall_preview(path: Path, value: dict) -> dict:
         "receipt": str(path),
         "restore_snapshot": str(path.parent / "before"),
         "managed_path_count": len(value["before"]),
+        "multi_agent_version": receipt_multi_agent_version(value),
         "preserve_unowned_config": True,
         "remove_plugin": value["remove_plugin"],
         "remove_marketplace": value["remove_marketplace"],
@@ -541,7 +592,7 @@ def uninstall_preview(path: Path, value: dict) -> dict:
 
 
 def show_uninstall_diffs(home: Path, path: Path, value: dict) -> None:
-    current = managed(home)[:3]
+    current = managed(home, receipt_multi_agent_version(value))[:2]
     before = {
         Path(*PurePosixPath(item["path"].replace("\\", "/")).parts): item
         for item in value["before"]
@@ -575,7 +626,7 @@ def show_uninstall_diffs(home: Path, path: Path, value: dict) -> None:
 
 
 def uninstall(home: Path, executable: str, path: Path, value: dict) -> dict:
-    current = managed(home)
+    current = managed(home, receipt_multi_agent_version(value))
     config = current[0]
     rollback_dir = home / "backups/casefile" / (
         "uninstall-" + datetime.datetime.now(datetime.UTC).strftime("%Y%m%dT%H%M%SZ")
@@ -606,7 +657,7 @@ def uninstall(home: Path, executable: str, path: Path, value: dict) -> dict:
         if value["remove_plugin"]:
             checked([executable, "plugin", "remove", PLUGIN_ID, "--json"], environment)
         pointer(home).unlink(missing_ok=True)
-        result = {"status": "uninstalled", "install_receipt": str(path)}
+        result = {"status": "uninstalled", "install_receipt": str(path), "multi_agent_version": receipt_multi_agent_version(value)}
         atomic_write(rollback_dir / "receipt.json", canonical(result))
         return result
     except BaseException as error:
@@ -626,6 +677,7 @@ def main() -> int:
     default_home = Path(os.environ.get("CODEX_HOME", "~/.codex"))
     install_parser.add_argument("--codex-home", type=Path, default=default_home)
     install_parser.add_argument("--codex-executable", default=shutil.which("codex"))
+    install_parser.add_argument("--multi-agent-version", choices=("v1", "v2"), action="append")
     install_parser.add_argument("--apply", action="store_true")
     uninstall_parser = subparsers.add_parser("uninstall")
     uninstall_parser.add_argument("--codex-home", type=Path, default=default_home)
@@ -638,7 +690,11 @@ def main() -> int:
         if not arguments.codex_executable:
             raise SetupError("Codex executable was not found")
         if arguments.operation == "install":
-            plan = prepare(arguments.plugin_root, home, arguments.codex_executable)
+            selections = arguments.multi_agent_version or []
+            if len(selections) > 1:
+                raise SetupError("pass --multi-agent-version at most once")
+            selected_version = selections[0] if selections else "v1"
+            plan = prepare(arguments.plugin_root, home, arguments.codex_executable, selected_version)
             print(json.dumps(preview(plan), indent=2, sort_keys=True))
             if not arguments.apply:
                 print("preview only; no files changed")

@@ -37,9 +37,9 @@ claude plugin install coding@humans-md --scope user
 ```
 
 `humans-md` owns only the standing `AGENTS.md` / `CLAUDE.md` contract lifecycle and recovery.
-`casefile` owns Casefile workflows and Codex model, V1, profile, and role integration. `coding` owns
-Git contribution, README, skill-generation, and generic verification guidance. Removing one plugin
-never removes the shared marketplace or another plugin.
+`casefile` owns Casefile workflows and Codex model, selected multi-agent runtime, profile, and role
+integration. `coding` owns Git contribution, README, skill-generation, and generic verification
+guidance. Removing one plugin never removes the shared marketplace or another plugin.
 
 ## Upgrade from v0.1.5
 
