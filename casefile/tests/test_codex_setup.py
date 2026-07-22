@@ -15,6 +15,9 @@ from _load import ROOT, script
 
 
 setup = script("casefile/adapters/codex/scripts/setup-codex.py")
+PLUGIN_VERSION = tomllib.loads(
+    (ROOT / "casefile/packaging/plugin.toml").read_text(encoding="ascii")
+)["version"]
 
 
 class FakeCodex:
@@ -54,7 +57,7 @@ class FakeCodex:
             values = [
                 {
                     "pluginId": "casefile@humans-md",
-                    "version": "0.2.2",
+                    "version": PLUGIN_VERSION,
                     "installed": True,
                     "enabled": True,
                 }
@@ -74,7 +77,8 @@ class CodexSetupTests(unittest.TestCase):
         plugin = root / "plugin"
         (plugin / ".codex-plugin").mkdir(parents=True)
         (plugin / ".codex-plugin/plugin.json").write_text(
-            '{"name":"casefile","version":"0.2.2"}\n', encoding="ascii"
+            json.dumps({"name": "casefile", "version": PLUGIN_VERSION}) + "\n",
+            encoding="ascii",
         )
         (plugin / "config").mkdir()
         for name in ("config-fragment.toml.in", "profiles.toml"):

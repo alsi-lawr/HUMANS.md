@@ -31,8 +31,9 @@ def main() -> int:
     claude = root / ".claude-plugin/plugin.json"
     if codex.exists() or claude.exists():
         metadata = json.loads((codex if codex.exists() else claude).read_text(encoding="ascii"))
-        if metadata.get("name") != "casefile" or metadata.get("version") != "0.2.2":
-            errors.append("generated Casefile metadata is not casefile 0.2.2")
+        version = metadata.get("version")
+        if metadata.get("name") != "casefile" or not isinstance(version, str) or not version:
+            errors.append("generated Casefile metadata lacks its package identity")
     elif not (root / "casefile-workflow").is_dir():
         errors.append("source lacks Casefile workflow assets")
     if errors:
