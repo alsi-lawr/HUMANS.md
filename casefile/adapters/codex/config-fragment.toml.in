@@ -1,6 +1,6 @@
 [features]
-multi_agent = true
-multi_agent_v2 = false
+multi_agent = __CASEFILE_MULTI_AGENT_V1__
+multi_agent_v2 = __CASEFILE_MULTI_AGENT_V2__
 
 [agents]
 max_depth = 2
