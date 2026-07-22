@@ -16,6 +16,18 @@ Route the current phase to `casefile-investigate`, `casefile-review`, `casefile-
 `casefile-close`. Every governed phase requires an explicit compatible strategy. Present compatible
 choices and a recommendation, then wait for human selection.
 
+When starting a new Codex Casefile, activate the new investigation root, then run the installed
+`scripts/resolve-writer-binding.py offer` against the active Codex home before further delegation.
+Present every returned model/effort pair, identify Sol/high as the recommendation, and require an
+explicit exact choice. If the offer marks Sol/high unavailable, say so and present every remaining
+valid pair without recommending an unselectable pair. Do not infer a recommendation as consent.
+Persist only the confirmed pair with the resolver's `select` command and
+`--implementation-active false`; it delegates to the canonical Casefile binding transaction. If
+offering or persistence fails, stop without further planning or source mutation and surface the
+diagnostic. This selection gate is Codex-only; do not change Claude startup. Existing Casefiles
+being resumed without a binding retain their selected implementation matrix default and do not
+receive a start-time backfill.
+
 Keep investigation source access read-only. The root alone arbitrates duplicate findings, reserves
 ticket IDs and paths, records decisions, and disposes tickets. Reviewers write evidence only.
 Implementation begins only from accepted tickets and an approved dependency-safe plan. Preserve

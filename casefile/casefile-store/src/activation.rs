@@ -179,10 +179,9 @@ pub(super) fn scope_for<'a>(path: &str, active: &'a Activation) -> Option<&'a st
         .projects
         .values()
         .flat_map(|project| &project.investigations)
-        .find_map(|base| {
-            path.strip_prefix(&(base.to_owned() + "/"))
-                .map(|_| base.as_str())
-        })
+        .filter(|base| path.strip_prefix(&format!("{base}/")).is_some())
+        .max_by_key(|base| base.len())
+        .map(String::as_str)
 }
 
 pub(super) fn investigation_identity<'a>(project: &str, investigation: &'a str) -> Option<&'a str> {

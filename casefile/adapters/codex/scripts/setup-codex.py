@@ -109,6 +109,7 @@ def plugin_root(path: Path) -> tuple[Path, dict]:
     for relative in (
         "config/config-fragment.toml.in",
         "config/profiles.toml",
+        "scripts/resolve-writer-binding.py",
     ):
         if not (root / relative).is_file():
             raise SetupError(f"installed plugin lacks {relative}")
@@ -289,12 +290,56 @@ def verify_config(data: bytes, root: Path, catalog: Path, version: str) -> None:
     if {name: features.get(name) for name in expected_features} != expected_features:
         raise SetupError(f"{version.upper()} feature flags are incorrect")
     agents = document.get("agents", {})
-    for row in profiles.get("matrix_profiles", []):
+    matrix_rows = profiles.get("matrix_profiles", [])
+    writer_rows = profiles.get("writer_profiles", [])
+    override_rows = profiles.get("writer_runtime_overrides", [])
+    rows = [*matrix_rows, *writer_rows, *override_rows]
+    names = [row.get("profile") for row in rows]
+    if any(not isinstance(name, str) or not name for name in names) or len(names) != len(set(names)):
+        raise SetupError("role profile names must be non-empty and unique")
+    targets = {target.get("id"): target for target in profiles.get("catalog", {}).get("targets", [])}
+    expected_v1 = {
+        (model, effort)
+        for model in V1_SELECTOR_MODELS
+        for effort in targets.get(model, {}).get("required_reasoning", [])
+    }
+    actual_v1 = {
+        (row.get("model"), row.get("reasoning")) for row in writer_rows
+    }
+    if actual_v1 != expected_v1 or any(
+        row.get("multi_agent_version") != "v1"
+        or row.get("role") != "implementation-writer"
+        or set(row.get("strategy_ids", []))
+        != {"casefile-implement-ticket-batch", "casefile-implement-pipeline"}
+        for row in writer_rows
+    ):
+        raise SetupError("V1 writer profile catalog is incomplete or unsupported")
+    if {
+        row.get("strategy_id") for row in override_rows
+    } != {"casefile-implement-ticket-batch", "casefile-implement-pipeline"} or any(
+        row.get("multi_agent_version") != "v2"
+        or row.get("role") != "implementation-writer"
+        or row.get("model_override") is not True
+        or row.get("reasoning_override") is not True
+        or not isinstance(row.get("fork_turns"), int)
+        or row["fork_turns"] <= 0
+        for row in override_rows
+    ):
+        raise SetupError("V2 writer runtime-override catalog is incomplete or unsupported")
+    for row in rows:
         relative = PurePosixPath(row["agent_file"].replace("\\", "/"))
         expected = root / Path(*relative.parts)
         actual = agents.get(row["profile"], {}).get("config_file")
         if actual != str(expected) or not expected.is_file():
             raise SetupError(f"role binding is incorrect: {row['profile']}")
+        agent = tomllib.loads(expected.read_text(encoding="ascii"))
+        if row in override_rows:
+            if "model" in agent or "model_reasoning_effort" in agent:
+                raise SetupError(f"runtime-override role fixes a model: {row['profile']}")
+        elif agent.get("model") != row.get("model") or agent.get(
+            "model_reasoning_effort"
+        ) != row.get("reasoning"):
+            raise SetupError(f"role model binding is incoherent: {row['profile']}")
 
 
 def remove(path: Path) -> None:

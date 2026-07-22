@@ -4,7 +4,7 @@ use crate::{
 };
 use casefile_core::{
     BoardDraft, Classification, Diagnostic, Kind, RecordDraft, RecordSummary, Revision,
-    WorkItemDraft,
+    StrategyBinding, StrategyProjection, WorkItemDraft, parse_strategy_projection,
 };
 use serde::{Deserialize, Serialize};
 
@@ -50,6 +50,48 @@ pub struct DerivedRecord {
     pub work_item: Option<WorkItemDraft>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub board: Option<BoardDraft>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub strategy: Option<DerivedStrategy>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub strategy_binding: Option<DerivedStrategyBinding>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct DerivedStrategy {
+    #[serde(flatten)]
+    pub matrix: StrategyProjection,
+    pub binding: Option<StrategyBindingState>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct DerivedStrategyBinding {
+    #[serde(flatten)]
+    pub binding: StrategyBinding,
+    pub state: StrategyBindingState,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "state", rename_all = "snake_case")]
+pub enum StrategyBindingState {
+    Absent { effective: EffectiveWriterBinding },
+    Pending,
+    Resolved { effective: EffectiveWriterBinding },
+    Unresolved,
+    Invalid,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct EffectiveWriterBinding {
+    pub model: String,
+    pub reasoning_effort: String,
+    pub source: WriterBindingSource,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WriterBindingSource {
+    Matrix,
+    Binding,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -127,6 +169,50 @@ pub(super) fn derive_snapshot(scan: &ScanResult, active: &Activation) -> Derived
                 None => (None, None),
             };
             let scope = record_scope(&entry.path, active);
+            let scoped = |candidate: &casefile_core::EntrySnapshot| record_scope(&candidate.path, active) == scope;
+            let binding_entry = scan.snapshot.entries.iter().find(|candidate| {
+                candidate.kind == Some(Kind::StrategyBinding) && scoped(candidate)
+            });
+            let binding = binding_entry.and_then(|candidate| match &candidate.summary {
+                Some(RecordSummary::StrategyBinding { binding }) => Some(binding),
+                _ => None,
+            });
+            let binding_invalid = binding_entry.is_some_and(|candidate| candidate.classification == Classification::Invalid);
+            let implementation_entry = scan.snapshot.entries.iter().find(|candidate| {
+                candidate.classification == Classification::Governed && scoped(candidate)
+                    && matches!(&candidate.summary, Some(RecordSummary::Strategy { phase, .. }) if phase == "implementation")
+            });
+            let implementation_selected = implementation_entry.is_some();
+            let implementation_projection = implementation_entry.and_then(|candidate| {
+                let RecordSummary::Strategy { adapter, .. } = candidate.summary.as_ref()? else { return None; };
+                let text = std::str::from_utf8(&candidate.original_bytes).ok()?;
+                parse_strategy_projection(&candidate.path, text).ok().flatten().map(|matrix| (adapter.as_str(), matrix))
+            });
+            let strategy = match (&entry.summary, content.as_deref()) {
+                (Some(RecordSummary::Strategy { phase, adapter, .. }), Some(text)) => {
+                    parse_strategy_projection(&entry.path, text)
+                        .ok()
+                        .flatten()
+                        .map(|matrix| DerivedStrategy {
+                            binding: (phase == "implementation").then(|| {
+                                resolve_binding(phase, adapter, &matrix, binding, binding_invalid)
+                            }),
+                            matrix,
+                        })
+                }
+                _ => None,
+            };
+            let strategy_binding = match &entry.summary {
+                Some(RecordSummary::StrategyBinding { binding }) => Some(DerivedStrategyBinding {
+                    binding: binding.clone(),
+                    state: binding_state(
+                        binding,
+                        implementation_selected,
+                        implementation_projection.as_ref().map(|(adapter, matrix)| (*adapter, matrix)),
+                    ),
+                }),
+                _ => None,
+            };
             let identity = entry
                 .identity
                 .as_ref()
@@ -147,6 +233,8 @@ pub(super) fn derive_snapshot(scan: &ScanResult, active: &Activation) -> Derived
                 rendered_markdown,
                 work_item,
                 board,
+                strategy,
+                strategy_binding,
             }
         })
         .collect::<Vec<_>>();
@@ -167,8 +255,78 @@ fn summary_title(summary: &RecordSummary) -> String {
         | RecordSummary::WorkItem { title, .. }
         | RecordSummary::Board { title, .. } => title.clone(),
         RecordSummary::Strategy { strategy_id, .. } => strategy_id.clone(),
+        RecordSummary::StrategyBinding { binding } => format!("{} writer binding", binding.adapter),
         RecordSummary::Activation { .. } => "Casefile activation".into(),
         RecordSummary::ProjectMap { .. } => "Project map".into(),
+    }
+}
+
+fn resolve_binding(
+    phase: &str,
+    adapter: &str,
+    matrix: &StrategyProjection,
+    binding: Option<&StrategyBinding>,
+    binding_invalid: bool,
+) -> StrategyBindingState {
+    if phase != "implementation" {
+        return StrategyBindingState::Pending;
+    }
+    if binding_invalid {
+        return StrategyBindingState::Invalid;
+    }
+    match binding {
+        Some(binding) => binding_state(binding, true, Some((adapter, matrix))),
+        None => matrix_default(matrix),
+    }
+}
+
+fn matrix_default(matrix: &StrategyProjection) -> StrategyBindingState {
+    let writers = matrix
+        .workers
+        .iter()
+        .filter(|worker| worker.role == "implementation-writer")
+        .collect::<Vec<_>>();
+    if writers.len() != 1 {
+        return StrategyBindingState::Unresolved;
+    }
+    let writer = writers[0];
+    match (&writer.model, &writer.reasoning_effort) {
+        (Some(model), Some(reasoning_effort)) => StrategyBindingState::Absent {
+            effective: EffectiveWriterBinding {
+                model: model.clone(),
+                reasoning_effort: reasoning_effort.clone(),
+                source: WriterBindingSource::Matrix,
+            },
+        },
+        _ => StrategyBindingState::Unresolved,
+    }
+}
+
+fn binding_state(
+    binding: &StrategyBinding,
+    implementation_selected: bool,
+    implementation: Option<(&str, &StrategyProjection)>,
+) -> StrategyBindingState {
+    if !implementation_selected {
+        return StrategyBindingState::Pending;
+    }
+    let Some((adapter, matrix)) = implementation else {
+        return StrategyBindingState::Unresolved;
+    };
+    let writers = matrix
+        .workers
+        .iter()
+        .filter(|worker| worker.role == "implementation-writer")
+        .collect::<Vec<_>>();
+    if binding.adapter != adapter || writers.len() != 1 {
+        return StrategyBindingState::Unresolved;
+    }
+    StrategyBindingState::Resolved {
+        effective: EffectiveWriterBinding {
+            model: binding.model.clone(),
+            reasoning_effort: binding.reasoning_effort.clone(),
+            source: WriterBindingSource::Binding,
+        },
     }
 }
 

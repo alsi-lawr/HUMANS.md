@@ -1,3 +1,4 @@
+use pulldown_cmark::{Event, HeadingLevel, Options, Parser, Tag};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
@@ -261,17 +262,39 @@ fn required_sections(path: &str, body: &str) -> Result<Vec<String>, Vec<Diagnost
             "required H2 headings must occur exactly once and in order",
         )]);
     }
-    let mut values = Vec::new();
-    for (index, heading) in SECTIONS.iter().enumerate() {
-        let marker = format!("## {heading}");
-        let start = body.find(&marker).expect("heading parsed") + marker.len();
-        let end = SECTIONS
-            .get(index + 1)
-            .and_then(|next| body.find(&format!("## {next}")))
-            .unwrap_or(body.len());
-        values.push(body[start..end].trim().to_owned());
+    let starts = Parser::new_ext(body, Options::all())
+        .into_offset_iter()
+        .filter_map(|(event, range)| {
+            matches!(
+                event,
+                Event::Start(Tag::Heading {
+                    level: HeadingLevel::H2,
+                    ..
+                })
+            )
+            .then_some(range.start)
+        })
+        .collect::<Vec<_>>();
+    if starts.len() != SECTIONS.len() {
+        return Err(vec![Diagnostic::new(
+            path,
+            "work_item_sections",
+            "required H2 headings must occur exactly once and in order",
+        )]);
     }
-    Ok(values)
+
+    Ok(starts
+        .iter()
+        .enumerate()
+        .map(|(index, start)| {
+            let content_start = body[*start..]
+                .find('\n')
+                .map(|offset| start + offset + 1)
+                .unwrap_or(body.len());
+            let content_end = starts.get(index + 1).copied().unwrap_or(body.len());
+            body[content_start..content_end].trim().to_owned()
+        })
+        .collect())
 }
 
 fn yaml_string(value: &str) -> String {
@@ -290,4 +313,27 @@ fn yaml_list(values: &[String]) -> String {
             .collect::<Vec<_>>()
             .join(", ")
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn extracts_sections_after_a_nested_heading_with_the_same_text() {
+        let body = "# VISET-039\n\n## Requirement and evidence\n\nRequirement.\n\n### Acceptance criteria\n\nNested heading.\n\n## Impact\n\nImpact.\n\n## Resolution boundary\n\nBoundary.\n\n## Acceptance criteria\n\nCriteria.\n\n## Verification\n\nVerification.\n\n## Relationships and duplicate analysis\n\nRelationships.\n\n## Review and disposition history\n\nHistory.\n";
+
+        assert_eq!(
+            required_sections("VISET-039.md", body).expect("valid sections"),
+            [
+                "Requirement.\n\n### Acceptance criteria\n\nNested heading.",
+                "Impact.",
+                "Boundary.",
+                "Criteria.",
+                "Verification.",
+                "Relationships.",
+                "History.",
+            ]
+        );
+    }
 }

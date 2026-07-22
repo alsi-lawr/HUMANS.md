@@ -23,6 +23,7 @@ pub enum Kind {
     Plan,
     Closeout,
     Strategy,
+    StrategyBinding,
     Ticket,
     Epic,
     Board,
@@ -51,6 +52,9 @@ pub enum RecordSummary {
         strategy_id: String,
         phase: String,
         adapter: String,
+    },
+    StrategyBinding {
+        binding: crate::strategy::StrategyBinding,
     },
     WorkItem {
         id: String,

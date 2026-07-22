@@ -1,0 +1,449 @@
+#!/usr/bin/env python3
+"""Offer, persist, and resolve the active Codex Casefile writer binding."""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+import tomllib
+from pathlib import Path, PurePosixPath
+
+
+RECOMMENDED_MODEL = "gpt-5.6-sol"
+RECOMMENDED_EFFORT = "high"
+STRATEGIES = (
+    "casefile-implement-ticket-batch",
+    "casefile-implement-pipeline",
+)
+RUNTIMES = ("v1", "v2")
+
+
+class BindingError(RuntimeError):
+    pass
+
+
+def checked(args: list[str], environment: dict[str, str] | None = None) -> str:
+    result = subprocess.run(
+        args,
+        env=environment,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="strict",
+    )
+    if result.returncode:
+        detail = result.stderr.strip() or result.stdout.strip() or "no diagnostic output"
+        raise BindingError(f"command failed ({result.returncode}): {' '.join(args)}: {detail}")
+    return result.stdout
+
+
+def load_profiles(path: Path) -> dict:
+    try:
+        value = tomllib.loads(path.read_text(encoding="ascii"))
+    except (OSError, UnicodeError, tomllib.TOMLDecodeError) as error:
+        raise BindingError(f"invalid Codex profile catalog: {error}") from error
+    if value.get("schema_version") != 1 or value.get("adapter") != "codex":
+        raise BindingError("unsupported Codex profile catalog")
+    return value
+
+
+def default_profiles_path() -> Path:
+    script = Path(__file__).resolve()
+    candidates = (
+        script.parent.parent / "config/profiles.toml",
+        script.parent.parent / "profiles.toml",
+    )
+    return next((path for path in candidates if path.is_file()), candidates[0])
+
+
+def active_runtime(home: Path) -> str:
+    try:
+        config = tomllib.loads((home / "config.toml").read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, tomllib.TOMLDecodeError) as error:
+        raise BindingError(f"Codex Casefile setup is not readable: {error}") from error
+    features = config.get("features", {})
+    state = (features.get("multi_agent"), features.get("multi_agent_v2"))
+    if state == (True, False):
+        return "v1"
+    if state == (False, True):
+        return "v2"
+    raise BindingError("Codex Casefile setup must enable exactly one supported multi-agent runtime")
+
+
+def active_catalog(executable: str, home: Path) -> dict:
+    environment = {**os.environ, "CODEX_HOME": str(home)}
+    try:
+        value = json.loads(checked([executable, "debug", "models"], environment))
+    except json.JSONDecodeError as error:
+        raise BindingError("Codex returned an invalid effective catalog") from error
+    if not isinstance(value, dict) or not isinstance(value.get("models"), list):
+        raise BindingError("Codex effective catalog has no model list")
+    return value
+
+
+def resolution_rows(profiles: dict, runtime: str, model: str, effort: str) -> list[dict]:
+    if runtime == "v1":
+        matched = [
+            row
+            for row in profiles.get("writer_profiles", [])
+            if row.get("multi_agent_version") == runtime
+            and row.get("model") == model
+            and row.get("reasoning") == effort
+        ]
+        if len(matched) != 1 or set(matched[0].get("strategy_ids", [])) != set(STRATEGIES):
+            return []
+        rows = [{**matched[0], "strategy_id": strategy} for strategy in STRATEGIES]
+    elif runtime == "v2":
+        rows = [
+            row
+            for row in profiles.get("writer_runtime_overrides", [])
+            if row.get("multi_agent_version") == runtime
+            and row.get("model_override") is True
+            and row.get("reasoning_override") is True
+            and isinstance(row.get("fork_turns"), int)
+            and row["fork_turns"] > 0
+        ]
+    else:
+        raise BindingError(f"unsupported multi-agent runtime: {runtime}")
+    by_strategy = {row.get("strategy_id"): row for row in rows}
+    if set(by_strategy) != set(STRATEGIES) or len(rows) != len(STRATEGIES):
+        return []
+    if any(row.get("role") != "implementation-writer" for row in rows):
+        return []
+    return [by_strategy[strategy] for strategy in STRATEGIES]
+
+
+def offered_pairs(catalog: dict, profiles: dict, runtime: str) -> list[dict]:
+    models = catalog.get("models")
+    if not isinstance(models, list):
+        raise BindingError("Codex effective catalog has no model list")
+    identifiers = [model.get("slug") for model in models if isinstance(model, dict)]
+    if any(not isinstance(identifier, str) or not identifier for identifier in identifiers):
+        raise BindingError("Codex effective catalog has a model without an ID")
+    if len(set(identifiers)) != len(identifiers):
+        raise BindingError("Codex effective catalog has duplicate model IDs")
+    offered = []
+    for model in models:
+        if not isinstance(model, dict) or model.get("visibility") != "list":
+            continue
+        selector = model.get("multi_agent_version")
+        if (runtime == "v1" and selector is not None) or (runtime == "v2" and selector != "v2"):
+            continue
+        levels = model.get("supported_reasoning_levels")
+        if not isinstance(levels, list):
+            continue
+        efforts = []
+        for level in levels:
+            effort = level.get("effort") if isinstance(level, dict) else None
+            if isinstance(effort, str) and effort and effort not in efforts:
+                efforts.append(effort)
+        for effort in efforts:
+            rows = resolution_rows(profiles, runtime, model["slug"], effort)
+            if not rows:
+                continue
+            mode = "named_profile" if runtime == "v1" else "runtime_override"
+            value = ";".join(
+                f"{row['strategy_id']}={row['profile']}" for row in rows
+            )
+            offered.append(
+                {
+                    "model": model["slug"],
+                    "display_name": model.get("display_name", model["slug"]),
+                    "reasoning_effort": effort,
+                    "resolution": {"mode": mode, "value": value},
+                    "recommended": model["slug"] == RECOMMENDED_MODEL
+                    and effort == RECOMMENDED_EFFORT,
+                }
+            )
+    return offered
+
+
+def offer(
+    executable: str,
+    home: Path,
+    profiles_path: Path,
+) -> dict:
+    runtime = active_runtime(home)
+    pairs = offered_pairs(active_catalog(executable, home), load_profiles(profiles_path), runtime)
+    recommendation = next((pair for pair in pairs if pair["recommended"]), None)
+    if not pairs:
+        raise BindingError("no model/effort pair is currently selectable")
+    return {
+        "multi_agent_version": runtime,
+        "recommendation": {
+            "model": RECOMMENDED_MODEL,
+            "reasoning_effort": RECOMMENDED_EFFORT,
+            "available": recommendation is not None,
+        },
+        "pairs": pairs,
+        "selection_required": True,
+    }
+
+
+def safe_investigation(value: str) -> str:
+    path = PurePosixPath(value.replace("\\", "/"))
+    if path.is_absolute() or ".." in path.parts or not path.parts:
+        raise BindingError("investigation path must be a contained relative path")
+    return path.as_posix().rstrip("/")
+
+
+def selected_pair(result: dict, model: str, effort: str) -> dict:
+    pair = next(
+        (
+            pair
+            for pair in result["pairs"]
+            if pair["model"] == model and pair["reasoning_effort"] == effort
+        ),
+        None,
+    )
+    if pair is None:
+        raise BindingError(
+            f"{model}/{effort} is not currently selectable; rerun offer and obtain a new "
+            "explicit choice"
+        )
+    return pair
+
+
+def binding_source(pair: dict) -> str:
+    resolution = pair["resolution"]
+    values = {
+        "adapter": "codex",
+        "role": "implementation-writer",
+        "model": pair["model"],
+        "reasoning_effort": pair["reasoning_effort"],
+        "mode": resolution["mode"],
+        "value": resolution["value"],
+    }
+    return (
+        "schema_version = 1\n"
+        f"adapter = {json.dumps(values['adapter'])}\n"
+        f"role = {json.dumps(values['role'])}\n"
+        f"model = {json.dumps(values['model'])}\n"
+        f"reasoning_effort = {json.dumps(values['reasoning_effort'])}\n\n"
+        "[resolution]\n"
+        f"mode = {json.dumps(values['mode'])}\n"
+        f"value = {json.dumps(values['value'])}\n"
+    )
+
+
+def persist_selection(
+    casefile_executable: str,
+    planning_root: Path,
+    investigation: str,
+    pair: dict,
+    implementation_active: bool,
+) -> dict:
+    source = binding_source(pair)
+    with tempfile.TemporaryDirectory(prefix="casefile-writer-binding-") as temporary:
+        path = Path(temporary) / "bindings.toml"
+        path.write_text(source, encoding="ascii")
+        checked(
+            [
+                casefile_executable,
+                "--root",
+                str(planning_root),
+                "replace-strategy-binding",
+                "--investigation",
+                investigation,
+                "--source",
+                str(path),
+                "--implementation-active",
+                str(implementation_active).lower(),
+            ]
+        )
+    return {
+        "path": f"{investigation}/strategy/bindings.toml",
+        "model": pair["model"],
+        "reasoning_effort": pair["reasoning_effort"],
+        "resolution": pair["resolution"],
+        "persisted": True,
+    }
+
+
+def binding_projection(
+    casefile_executable: str,
+    planning_root: Path,
+    investigation: str,
+    strategy_id: str,
+) -> dict:
+    try:
+        result = json.loads(
+            checked(
+                [
+                    casefile_executable,
+                    "--root",
+                    str(planning_root),
+                    "project-writer-binding",
+                    "--investigation",
+                    investigation,
+                    "--strategy-id",
+                    strategy_id,
+                ]
+            )
+        )
+    except json.JSONDecodeError as error:
+        raise BindingError("Casefile writer projection returned invalid JSON") from error
+    if not isinstance(result, dict):
+        raise BindingError("Casefile writer projection is not an object")
+    return result
+
+
+def resolve_spawn(
+    executable: str,
+    home: Path,
+    profiles_path: Path,
+    casefile_executable: str,
+    planning_root: Path,
+    investigation: str,
+    strategy_id: str,
+) -> dict:
+    investigation = safe_investigation(investigation)
+    if strategy_id not in STRATEGIES:
+        raise BindingError(f"unsupported implementation strategy: {strategy_id}")
+    profiles = load_profiles(profiles_path)
+    projection = binding_projection(
+        casefile_executable,
+        planning_root,
+        investigation,
+        strategy_id,
+    )
+    if projection.get("strategy_id") != strategy_id or projection.get("adapter") != "codex":
+        raise BindingError("Casefile writer projection does not match the selected strategy")
+    state = projection.get("binding")
+    state_name = state.get("state") if isinstance(state, dict) else None
+    if state_name not in {"absent", "resolved"}:
+        if state_name in {"pending", "unresolved", "invalid"}:
+            raise BindingError(
+                f"canonical writer binding state is {state_name}; stop before delegation and "
+                "repair or explicitly reselect while implementation is inactive"
+            )
+        raise BindingError("Casefile writer projection has an invalid binding state")
+    effective = state.get("effective")
+    if not isinstance(effective, dict):
+        raise BindingError("Casefile writer projection lacks an effective pair")
+    model, effort, source = (
+        effective.get("model"),
+        effective.get("reasoning_effort"),
+        effective.get("source"),
+    )
+    expected_source = "matrix" if state_name == "absent" else "binding"
+    if (
+        not isinstance(model, str)
+        or not model
+        or not isinstance(effort, str)
+        or not effort
+        or source != expected_source
+    ):
+        raise BindingError("Casefile writer projection has an invalid effective pair")
+    current = offer(executable, home, profiles_path)
+    try:
+        pair = selected_pair(current, model, effort)
+    except BindingError as error:
+        raise BindingError(
+            f"effective writer {model}/{effort} is unavailable; stop before delegation, "
+            "rerun offer, "
+            "and obtain explicit reselection while implementation is inactive"
+        ) from error
+    rows = resolution_rows(profiles, current["multi_agent_version"], model, effort)
+    row = next(item for item in rows if item["strategy_id"] == strategy_id)
+    spawn = {"agent_type": row["profile"]}
+    if current["multi_agent_version"] == "v2":
+        spawn.update(
+            {
+                "model": model,
+                "reasoning_effort": effort,
+                "fork_turns": str(row["fork_turns"]),
+            }
+        )
+    return {
+        "model": model,
+        "reasoning_effort": effort,
+        "binding_source": source,
+        "multi_agent_version": current["multi_agent_version"],
+        "spawn": spawn,
+        "revalidated": True,
+    }
+
+
+def parser() -> argparse.ArgumentParser:
+    value = argparse.ArgumentParser(description=__doc__)
+    value.add_argument(
+        "--codex-home",
+        type=Path,
+        default=Path(os.environ.get("CODEX_HOME", "~/.codex")),
+    )
+    value.add_argument("--codex-executable", default=shutil.which("codex"))
+    value.add_argument("--profiles", type=Path, default=default_profiles_path())
+    subparsers = value.add_subparsers(dest="operation", required=True)
+    subparsers.add_parser("offer")
+    select = subparsers.add_parser("select")
+    select.add_argument("--casefile-executable", default=shutil.which("casefile"))
+    select.add_argument("--planning-root", type=Path, required=True)
+    select.add_argument("--investigation", required=True)
+    select.add_argument("--model", required=True)
+    select.add_argument("--reasoning-effort", required=True)
+    select.add_argument("--implementation-active", choices=("true", "false"), required=True)
+    resolve = subparsers.add_parser("resolve")
+    resolve.add_argument("--casefile-executable", default=shutil.which("casefile"))
+    resolve.add_argument("--planning-root", type=Path, required=True)
+    resolve.add_argument("--investigation", required=True)
+    resolve.add_argument("--strategy-id", choices=STRATEGIES, required=True)
+    return value
+
+
+def main() -> int:
+    arguments = parser().parse_args()
+    try:
+        if not arguments.codex_executable:
+            raise BindingError("Codex executable was not found")
+        home = arguments.codex_home.expanduser().resolve(strict=True)
+        profiles = arguments.profiles.expanduser().resolve(strict=True)
+        if arguments.operation == "offer":
+            result = offer(arguments.codex_executable, home, profiles)
+        elif arguments.operation == "select":
+            if not arguments.casefile_executable:
+                raise BindingError("Casefile executable was not found")
+            investigation = safe_investigation(arguments.investigation)
+            active = arguments.implementation_active == "true"
+            if active:
+                raise BindingError(
+                    "writer binding replacement is prohibited while implementation or "
+                    "correction work is active"
+                )
+            pair = selected_pair(
+                offer(arguments.codex_executable, home, profiles),
+                arguments.model,
+                arguments.reasoning_effort,
+            )
+            result = persist_selection(
+                arguments.casefile_executable,
+                arguments.planning_root.expanduser().resolve(strict=True),
+                investigation,
+                pair,
+                active,
+            )
+        else:
+            if not arguments.casefile_executable:
+                raise BindingError("Casefile executable was not found")
+            result = resolve_spawn(
+                arguments.codex_executable,
+                home,
+                profiles,
+                arguments.casefile_executable,
+                arguments.planning_root.expanduser().resolve(strict=True),
+                arguments.investigation,
+                arguments.strategy_id,
+            )
+        print(json.dumps(result, indent=2, sort_keys=True))
+        return 0
+    except (BindingError, OSError, UnicodeError, ValueError) as error:
+        print(f"writer binding {arguments.operation} failed: {error}", file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

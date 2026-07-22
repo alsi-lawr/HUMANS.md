@@ -29,17 +29,27 @@ pub(super) fn kind_for_path(path: &str, active: &Activation) -> Option<Kind> {
     }) {
         return Some(Kind::Decision);
     }
-    let (_, rest) = active.projects.iter().find_map(|(_, project)| {
-        project.investigations.iter().find_map(|base| {
-            path.strip_prefix(&(base.to_owned() + "/"))
-                .map(|rest| (project, rest))
+    let (_, rest) = active
+        .projects
+        .values()
+        .flat_map(|project| {
+            project
+                .investigations
+                .iter()
+                .map(move |base| (project, base))
         })
-    })?;
+        .filter_map(|(project, base)| {
+            path.strip_prefix(&format!("{base}/"))
+                .map(|rest| (project, base, rest))
+        })
+        .max_by_key(|(_, base, _)| base.len())
+        .map(|(project, _, rest)| (project, rest))?;
     let segments: Vec<_> = rest.split('/').collect();
     match segments.as_slice() {
         ["request.md"] => Some(Kind::Request),
         ["final-disposition.md"] => Some(Kind::Closeout),
         ["implementation-plan", "PLAN.md"] => Some(Kind::Plan),
+        ["strategy", "bindings.toml"] => Some(Kind::StrategyBinding),
         ["strategy", name]
             if matches!(
                 *name,

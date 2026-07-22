@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { type Record } from "../model";
 
-export type BrowseTab = "projects" | "investigations" | "tickets" | "files";
+export type BrowseTab = "projects" | "investigations" | "tickets" | "files" | "strategies";
 export type Project = Readonly<{ name: string; investigations: number; tickets: number }>;
 export type Investigation = Readonly<{ name: string; tickets: number }>;
 export type ScopeNavigation = Readonly<{
@@ -10,6 +10,7 @@ export type ScopeNavigation = Readonly<{
   investigations: ReadonlyArray<Investigation>;
   tickets: ReadonlyArray<Record>;
   files: ReadonlyArray<Record>;
+  strategies: ReadonlyArray<Record>;
   project: string | undefined;
   investigation: string | undefined;
   selectTab: (tab: BrowseTab) => void;
@@ -29,6 +30,7 @@ export const useScopeNavigation = (records: ReadonlyArray<Record>): ScopeNavigat
   const files = records.filter(
     (record) => matchesFiles(record, project, investigation) && !isTicket(record),
   );
+  const strategies = strategiesForInvestigation(records, project, investigation);
 
   return {
     tab,
@@ -36,6 +38,7 @@ export const useScopeNavigation = (records: ReadonlyArray<Record>): ScopeNavigat
     investigations,
     tickets,
     files,
+    strategies,
     project,
     investigation,
     selectTab: setTab,
@@ -114,3 +117,16 @@ const matchesFiles = (
 
 const isTicket = (record: Record): boolean =>
   record.classification === "governed" && (record.kind === "ticket" || record.kind === "epic");
+
+const isStrategy = (record: Record): boolean =>
+  (record.classification === "governed" || record.classification === "invalid") &&
+  (record.kind === "strategy" || record.kind === "strategy_binding");
+
+export const strategiesForInvestigation = (
+  records: ReadonlyArray<Record>,
+  project: string | undefined,
+  investigation: string | undefined,
+): ReadonlyArray<Record> =>
+  records.filter(
+    (record) => matchesInvestigation(record, project, investigation) && isStrategy(record),
+  );

@@ -9,7 +9,7 @@ use crate::{
 use casefile_core::{
     CasefileSnapshot, Classification, Diagnostic, EntrySnapshot, Kind, RecordDraft, RecordSummary,
     Revision, parse_decision, parse_metadata_arrays, parse_project_map, parse_request,
-    parse_strategy, stable,
+    parse_strategy, parse_strategy_binding, parse_strategy_projection, stable,
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -34,11 +34,12 @@ impl ScanResult {
             .investigation_roots
             .get(project)?
             .iter()
-            .find(|investigation| {
+            .filter(|investigation| {
                 path.starts_with(&format!(
                     "projects/{project}/investigations/{investigation}/"
                 ))
             })
+            .max_by_key(|investigation| investigation.len())
             .map(String::as_str);
         Some((project, investigation))
     }
@@ -89,6 +90,7 @@ pub(super) fn scan(
         });
     }
     diagnostics.extend(cross_validate(&entries, &active));
+    diagnostics.extend(binding_diagnostics(&entries));
     entries.sort_by(|a, b| a.path.cmp(&b.path));
     let mut input = Vec::new();
     for entry in &entries {
@@ -224,6 +226,9 @@ fn classify(
                 .map(|summary| (None, Some(summary)))
         }
         Kind::Strategy => parse_strategy(path, text).map(|summary| (None, Some(summary))),
+        Kind::StrategyBinding => {
+            parse_strategy_binding(path, text).map(|summary| (None, Some(summary)))
+        }
         Kind::Activation | Kind::ProjectMap => unreachable!(),
     };
     match result {
@@ -320,4 +325,78 @@ fn digest(bytes: &[u8]) -> Revision {
 
 fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
+fn binding_diagnostics(entries: &[EntrySnapshot]) -> Vec<Diagnostic> {
+    let scope = |entry: &EntrySnapshot| {
+        entry
+            .path
+            .rsplit_once("/strategy/")
+            .map(|(root, _)| root.to_owned())
+    };
+    let mut diagnostics = Vec::new();
+    for binding in entries
+        .iter()
+        .filter(|entry| entry.kind == Some(Kind::StrategyBinding))
+    {
+        let Some(RecordSummary::StrategyBinding {
+            binding: binding_value,
+        }) = &binding.summary
+        else {
+            continue;
+        };
+        let binding_scope = scope(binding);
+        let implementation = entries.iter().find(|entry| {
+            entry.classification == Classification::Governed && scope(entry) == binding_scope
+                && matches!(&entry.summary, Some(RecordSummary::Strategy { phase, .. }) if phase == "implementation")
+        });
+        let Some(implementation) = implementation else {
+            continue;
+        };
+        let Some(RecordSummary::Strategy { adapter, .. }) = &implementation.summary else {
+            continue;
+        };
+        if binding_value.adapter != *adapter {
+            diagnostics.push(
+                Diagnostic::new(
+                    &binding.path,
+                    "binding_adapter",
+                    "binding adapter does not match implementation strategy",
+                )
+                .field("adapter"),
+            );
+            continue;
+        }
+        let Ok(text) = std::str::from_utf8(&implementation.original_bytes) else {
+            continue;
+        };
+        let Ok(Some(projection)) = parse_strategy_projection(&implementation.path, text) else {
+            diagnostics.push(
+                Diagnostic::new(
+                    &binding.path,
+                    "binding_writer_match",
+                    "implementation strategy has no graphable implementation-writer match",
+                )
+                .field("role"),
+            );
+            continue;
+        };
+        if projection
+            .workers
+            .iter()
+            .filter(|worker| worker.role == "implementation-writer")
+            .count()
+            != 1
+        {
+            diagnostics.push(
+                Diagnostic::new(
+                    &binding.path,
+                    "binding_writer_match",
+                    "implementation strategy must declare exactly one implementation-writer",
+                )
+                .field("role"),
+            );
+        }
+    }
+    diagnostics
 }

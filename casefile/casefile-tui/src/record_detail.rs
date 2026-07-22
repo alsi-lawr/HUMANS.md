@@ -6,6 +6,9 @@ use crate::{
     },
 };
 use casefile_core::{Diagnostic, EntrySnapshot, RecordSummary};
+use casefile_store::{
+    DerivedRecord, EffectiveWriterBinding, StrategyBindingState, WriterBindingSource,
+};
 use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Direction, Layout, Rect},
@@ -91,6 +94,7 @@ impl RecordDetail {
     pub(crate) fn render(
         &self,
         entry: Option<&EntrySnapshot>,
+        derived: Option<&DerivedRecord>,
         diagnostics: &[Diagnostic],
         focused: bool,
         area: Rect,
@@ -108,7 +112,7 @@ impl RecordDetail {
         let titles = DetailTab::ALL.map(|tab| Line::from(format!(" {} ", tab.title())));
         let text = entry.map_or_else(
             || Text::from("Select a record to inspect it."),
-            |entry| Text::from(detail_lines(entry, diagnostics, self.tab)),
+            |entry| Text::from(detail_lines(entry, derived, diagnostics, self.tab)),
         );
         let paragraph = Paragraph::new(text)
             .style(Style::default().fg(Color::White))
@@ -151,11 +155,12 @@ impl RecordDetail {
 
 fn detail_lines(
     entry: &EntrySnapshot,
+    derived: Option<&DerivedRecord>,
     diagnostics: &[Diagnostic],
     tab: DetailTab,
 ) -> Vec<Line<'static>> {
     match tab {
-        DetailTab::Overview => overview_lines(entry, diagnostics),
+        DetailTab::Overview => overview_lines(entry, derived, diagnostics),
         DetailTab::Rendered => rendered_lines(entry),
         DetailTab::Source => source_lines(&entry.original_bytes),
         DetailTab::Diagnostics => diagnostic_lines(entry, diagnostics),
@@ -185,7 +190,11 @@ fn source_lines(bytes: &[u8]) -> Vec<Line<'static>> {
     }
 }
 
-fn overview_lines(entry: &EntrySnapshot, diagnostics: &[Diagnostic]) -> Vec<Line<'static>> {
+fn overview_lines(
+    entry: &EntrySnapshot,
+    derived: Option<&DerivedRecord>,
+    diagnostics: &[Diagnostic],
+) -> Vec<Line<'static>> {
     let matching = diagnostics
         .iter()
         .filter(|diagnostic| diagnostic.path == entry.path)
@@ -232,6 +241,74 @@ fn overview_lines(entry: &EntrySnapshot, diagnostics: &[Diagnostic]) -> Vec<Line
                 );
                 lines.push(label_line("Phase", safe_inline(phase)));
                 lines.push(label_line("Adapter", safe_inline(adapter)));
+                if let Some(strategy) = derived.and_then(|record| record.strategy.as_ref()) {
+                    lines.push(label_line(
+                        "Root binding",
+                        safe_inline(&strategy.matrix.root_binding),
+                    ));
+                    lines.push(label_line(
+                        "Limits",
+                        format!(
+                            "{} concurrent subagents, depth {}",
+                            strategy.matrix.limits.max_concurrent_subagents,
+                            strategy.matrix.limits.max_depth
+                        ),
+                    ));
+                    lines.push(label_line(
+                        "Capabilities",
+                        strategy.matrix.requirements.capabilities.join(", "),
+                    ));
+                    lines.push(label_line(
+                        "Workers",
+                        strategy.matrix.workers.len().to_string(),
+                    ));
+                    for worker in &strategy.matrix.workers {
+                        let runtime = worker
+                            .model
+                            .as_deref()
+                            .zip(worker.reasoning_effort.as_deref())
+                            .map(|(model, effort)| format!("  {model} / {effort}"))
+                            .unwrap_or_default();
+                        lines.push(Line::from(format!(
+                            "  {}  {}..{}  {}{}",
+                            safe_inline(&worker.role),
+                            worker.minimum_count,
+                            worker.maximum_count,
+                            safe_inline(&worker.platform_profile),
+                            safe_inline(&runtime)
+                        )));
+                    }
+                    if let Some(binding) = strategy.binding.as_ref() {
+                        lines.extend(binding_state_lines(binding));
+                    }
+                }
+            }
+            RecordSummary::StrategyBinding { binding } => {
+                lines.push(
+                    Line::from("Implementation writer binding")
+                        .style(Style::default().fg(ACCENT).bold()),
+                );
+                lines.push(label_line("Adapter", safe_inline(&binding.adapter)));
+                lines.push(label_line("Role", safe_inline(&binding.role)));
+                lines.push(label_line("Model", safe_inline(&binding.model)));
+                lines.push(label_line(
+                    "Reasoning",
+                    safe_inline(&binding.reasoning_effort),
+                ));
+                lines.push(label_line(
+                    "Resolution",
+                    safe_inline(&binding.resolution.mode),
+                ));
+                lines.push(label_line(
+                    "Catalog value",
+                    safe_inline(&binding.resolution.value),
+                ));
+                if let Some(state) = derived
+                    .and_then(|record| record.strategy_binding.as_ref())
+                    .map(|binding| &binding.state)
+                {
+                    lines.extend(binding_state_lines(state));
+                }
             }
             RecordSummary::Activation { projects } | RecordSummary::ProjectMap { projects } => {
                 lines.push(Line::from("Projects").style(Style::default().fg(ACCENT).bold()));
@@ -265,6 +342,36 @@ fn overview_lines(entry: &EntrySnapshot, diagnostics: &[Diagnostic]) -> Vec<Line
         ),
     ]));
     lines
+}
+
+fn binding_state_lines(state: &StrategyBindingState) -> Vec<Line<'static>> {
+    match state {
+        StrategyBindingState::Absent { effective } => {
+            effective_binding_lines("matrix default", effective)
+        }
+        StrategyBindingState::Pending => vec![label_line("Binding state", "pending")],
+        StrategyBindingState::Resolved { effective } => {
+            effective_binding_lines("resolved", effective)
+        }
+        StrategyBindingState::Unresolved => vec![label_line("Binding state", "unresolved")],
+        StrategyBindingState::Invalid => vec![label_line("Binding state", "invalid")],
+    }
+}
+
+fn effective_binding_lines(state: &str, effective: &EffectiveWriterBinding) -> Vec<Line<'static>> {
+    let source = match effective.source {
+        WriterBindingSource::Matrix => "matrix",
+        WriterBindingSource::Binding => "binding",
+    };
+    vec![
+        label_line("Binding state", state),
+        label_line("Effective writer", safe_inline(&effective.model)),
+        label_line(
+            "Effective reasoning",
+            safe_inline(&effective.reasoning_effort),
+        ),
+        label_line("Effective source", source),
+    ]
 }
 
 fn content_lines(bytes: &[u8]) -> Vec<Line<'static>> {
@@ -436,6 +543,7 @@ mod tests {
             .draw(|frame| {
                 detail.render(
                     Some(entry),
+                    None,
                     diagnostics,
                     true,
                     frame.area(),
@@ -491,7 +599,7 @@ mod tests {
             source.as_bytes(),
         );
 
-        let visible = detail_lines(&entry, &[], DetailTab::Source)
+        let visible = detail_lines(&entry, None, &[], DetailTab::Source)
             .into_iter()
             .map(|line| line.to_string())
             .collect::<Vec<_>>()

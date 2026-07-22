@@ -17,5 +17,37 @@ recommend one from ticket independence and runtime capabilities, and wait for ex
 Persist and validate the exact selected matrix before delegation. The root owns scope, dependency
 order, exclusive write ownership, acceptance, correction routing, and synthesis. Assign overlapping
 mutations to one writer. Writers return an immutable commit per ticket and focused evidence. Apply
-every declared review stage; return corrections to the same writer in dependency order. Complete a
-ticket only after the recorded flow accepts it.
+every declared review stage. Before routing a finding, classify it as a correction, contention, or
+follow-up. Reviewers propose a class with evidence; the root has final classification authority:
+
+- A correction is an explicit violation of the accepted contract and returns to the same writer in
+  dependency order.
+- A contention would introduce new architecture, durable state, a dependency, a failure guarantee, a
+  compatibility promise, public behavior, or a material path expansion. The same semantic concern
+  surviving one correction is also a contention.
+- A follow-up is optional hardening that does not block acceptance.
+
+Do not route a contention to a writer as though it were accepted scope. Stop ticket-batch work or
+drain a pipeline to serial state, present the evidence and concrete choice to the human, and resume
+mutation only after the human rejects the expansion or amends the governing decision or ticket.
+Complete a ticket only after the recorded flow accepts it. See the brief
+[correction-escalation case study](references/correction-escalation-case-study.md).
+
+For Codex, immediately before every implementation-writer spawn, run the installed
+`scripts/resolve-writer-binding.py resolve` with the planning root, active investigation, and exact
+selected implementation strategy ID. This applies equally to the first ticket, later batches,
+pipeline overlap, resume, and every correction round. Delegate with exactly the returned `spawn`
+object: V1 returns a named agent type; V2 returns a model-free role plus explicit model, reasoning,
+and bounded history override. Never reuse an earlier resolution without revalidation.
+
+If resolution says the persisted or matrix-derived pair is invalid or unavailable, stop before
+delegation and before any planning/source mutation. Run `offer`, present its complete current list,
+state when Sol/high is unavailable, and request a new explicit selection. Replace the binding with
+`select --implementation-active false` only after confirming no implementation writer or correction
+is active. Never substitute Sol/high or another pair silently. A missing binding in a historical
+Casefile is not an error: the resolver returns the selected matrix writer default after checking its
+current availability.
+
+Keep per-ticket review and verification focused on that ticket's acceptance criteria, changed
+surfaces, and concrete findings. Reserve full workspace, package, and authenticated gates for the
+release candidate unless the ticket explicitly owns one of those surfaces.

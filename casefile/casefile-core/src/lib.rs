@@ -29,8 +29,15 @@ pub use rendering::render_markdown_html;
 #[doc(hidden)]
 pub use request::parse as parse_request;
 pub use snapshot::{CasefileSnapshot, EntrySnapshot, Revision};
+pub use strategy::{
+    BindingResolution, StrategyBinding, StrategyCoordination, StrategyLimits, StrategyPipeline,
+    StrategyProjection, StrategyRequirements, StrategyWorker,
+};
 #[doc(hidden)]
-pub use strategy::parse as parse_strategy;
+pub use strategy::{
+    parse as parse_strategy, parse_binding as parse_strategy_binding,
+    parse_projection as parse_strategy_projection, validate_matrix as validate_strategy_matrix,
+};
 pub use work_item::WorkItemDraft;
 
 pub fn parse_draft(path: &str, kind: Kind, text: &str) -> Result<RecordDraft, Vec<Diagnostic>> {

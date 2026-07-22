@@ -2,7 +2,7 @@ use crate::ui::{
     ACCENT, BAD, BORDER, GOOD, MUTED, SELECTED, WARN, classification_name, classification_style,
     kind_name, panel, safe_inline, status_style, summary_title, work_status,
 };
-use casefile_core::{Classification, EntrySnapshot, RecordSummary};
+use casefile_core::{Classification, EntrySnapshot, Kind, RecordSummary};
 use casefile_store::{ActivationState, ScanResult};
 use ratatui::{
     buffer::Buffer,
@@ -19,14 +19,16 @@ pub(crate) enum View {
     Investigations,
     Tickets,
     Files,
+    Strategies,
 }
 
 impl View {
-    const ALL: [Self; 4] = [
+    const ALL: [Self; 5] = [
         Self::Projects,
         Self::Investigations,
         Self::Tickets,
         Self::Files,
+        Self::Strategies,
     ];
 
     fn title(self) -> &'static str {
@@ -35,6 +37,7 @@ impl View {
             Self::Investigations => "Investigations",
             Self::Tickets => "Tickets",
             Self::Files => "Files",
+            Self::Strategies => "Strategies",
         }
     }
 
@@ -76,11 +79,16 @@ impl Browser {
         self.set_view(scan, self.view.next());
     }
 
+    #[cfg(test)]
+    pub(crate) fn view(&self) -> View {
+        self.view
+    }
+
     pub(crate) fn drill_down(&mut self, scan: &ScanResult) -> bool {
         let next = match self.view {
             View::Projects => View::Investigations,
             View::Investigations => View::Tickets,
-            View::Tickets | View::Files => return false,
+            View::Tickets | View::Files | View::Strategies => return false,
         };
         self.set_view(scan, next);
         true
@@ -90,7 +98,7 @@ impl Browser {
         let next = match self.view {
             View::Projects => return false,
             View::Investigations => View::Projects,
-            View::Tickets | View::Files => View::Investigations,
+            View::Tickets | View::Files | View::Strategies => View::Investigations,
         };
         self.set_view(scan, next);
         true
@@ -133,7 +141,7 @@ impl Browser {
     }
 
     pub(crate) fn selected<'a>(&self, scan: &'a ScanResult) -> Option<&'a EntrySnapshot> {
-        if !matches!(self.view, View::Tickets | View::Files) {
+        if !matches!(self.view, View::Tickets | View::Files | View::Strategies) {
             return None;
         }
         let path = self.selected_path.as_deref()?;
@@ -158,7 +166,7 @@ impl Browser {
                 let values = self.investigations(scan);
                 select_value(&mut self.selected_investigation, &values, offset)
             }
-            View::Tickets | View::Files => {
+            View::Tickets | View::Files | View::Strategies => {
                 let values = self
                     .entries(scan)
                     .into_iter()
@@ -184,6 +192,7 @@ impl Browser {
             self.investigations(scan).len(),
             self.ticket_count(scan),
             self.file_count(scan),
+            self.strategy_count(scan),
         ];
         let mut tabs = vec![Span::styled(
             " CASEFILE ",
@@ -259,6 +268,7 @@ impl Browser {
                     View::Investigations => "This project has no investigations.",
                     View::Tickets => "This investigation has no governed tickets or epics.",
                     View::Files => "This scope has no non-ticket files.",
+                    View::Strategies => "This investigation has no strategy records.",
                 }
             } else {
                 "Nothing matches the active filter. Press c to clear it."
@@ -344,6 +354,7 @@ impl Browser {
             }
             View::Tickets => self.entry_items(scan, false),
             View::Files => self.entry_items(scan, true),
+            View::Strategies => self.entry_items(scan, false),
         }
     }
 
@@ -431,6 +442,14 @@ impl Browser {
             .count()
     }
 
+    fn strategy_count(&self, scan: &ScanResult) -> usize {
+        scan.snapshot
+            .entries
+            .iter()
+            .filter(|entry| self.matches_scope(scan, entry) && is_strategy(entry))
+            .count()
+    }
+
     fn matches_scope(&self, scan: &ScanResult, entry: &EntrySnapshot) -> bool {
         let Some((project, investigation)) = entry_scope(scan, entry) else {
             return false;
@@ -439,6 +458,10 @@ impl Browser {
             && match self.view {
                 View::Projects | View::Investigations => true,
                 View::Tickets => self.selected_investigation.as_deref() == investigation,
+                View::Strategies => self
+                    .selected_investigation
+                    .as_deref()
+                    .is_some_and(|selected| investigation == Some(selected)),
                 View::Files => {
                     investigation.is_none()
                         || self.selected_investigation.as_deref() == investigation
@@ -450,6 +473,7 @@ impl Browser {
         match self.view {
             View::Tickets => is_work(entry),
             View::Files => !is_work(entry),
+            View::Strategies => is_strategy(entry),
             View::Projects | View::Investigations => false,
         }
     }
@@ -464,6 +488,10 @@ impl Browser {
                 entry.identity.as_deref().unwrap_or_default(),
                 summary_title(entry.summary.as_ref()),
                 work_status(entry.summary.as_ref()),
+                strategy_phase(entry.summary.as_ref()),
+                strategy_role(entry.summary.as_ref()),
+                strategy_model(entry.summary.as_ref()),
+                strategy_reasoning(entry.summary.as_ref()),
             ]
             .into_iter()
             .any(|field| field.to_lowercase().contains(&filter))
@@ -530,6 +558,41 @@ fn is_work(entry: &EntrySnapshot) -> bool {
         && matches!(entry.summary, Some(RecordSummary::WorkItem { .. }))
 }
 
+fn is_strategy(entry: &EntrySnapshot) -> bool {
+    matches!(
+        entry.classification,
+        Classification::Governed | Classification::Invalid
+    ) && matches!(entry.kind, Some(Kind::Strategy | Kind::StrategyBinding))
+}
+
+fn strategy_phase(summary: Option<&RecordSummary>) -> &str {
+    match summary {
+        Some(RecordSummary::Strategy { phase, .. }) => phase,
+        _ => "",
+    }
+}
+
+fn strategy_role(summary: Option<&RecordSummary>) -> &str {
+    match summary {
+        Some(RecordSummary::StrategyBinding { binding }) => &binding.role,
+        _ => "",
+    }
+}
+
+fn strategy_model(summary: Option<&RecordSummary>) -> &str {
+    match summary {
+        Some(RecordSummary::StrategyBinding { binding }) => &binding.model,
+        _ => "",
+    }
+}
+
+fn strategy_reasoning(summary: Option<&RecordSummary>) -> &str {
+    match summary {
+        Some(RecordSummary::StrategyBinding { binding }) => &binding.reasoning_effort,
+        _ => "",
+    }
+}
+
 fn entry_scope<'a>(
     scan: &'a ScanResult,
     entry: &'a EntrySnapshot,
@@ -586,6 +649,37 @@ fn entry_label(entry: &EntrySnapshot, view: View) -> Line<'static> {
             Span::styled(
                 rank.map(|rank| format!("  #{rank}")).unwrap_or_default(),
                 Style::default().fg(MUTED),
+            ),
+        ]),
+        (
+            View::Strategies,
+            Some(RecordSummary::Strategy {
+                strategy_id, phase, ..
+            }),
+        ) => Line::from(vec![
+            Span::styled(
+                format!(" {:^12} ", safe_inline(phase).to_uppercase()),
+                classification_style(entry.classification),
+            ),
+            Span::styled(
+                format!(" {} ", kind_name(Kind::Strategy)),
+                Style::default().fg(MUTED),
+            ),
+            Span::styled(safe_inline(strategy_id), Style::default().fg(Color::White)),
+        ]),
+        (View::Strategies, Some(RecordSummary::StrategyBinding { binding })) => Line::from(vec![
+            Span::styled(
+                " IMPLEMENTATION ",
+                classification_style(entry.classification),
+            ),
+            Span::styled(" writer ", Style::default().fg(MUTED)),
+            Span::styled(
+                format!(
+                    "{} / {}",
+                    safe_inline(&binding.model),
+                    safe_inline(&binding.reasoning_effort)
+                ),
+                Style::default().fg(Color::White),
             ),
         ]),
         _ => Line::from(vec![

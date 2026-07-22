@@ -26,6 +26,32 @@ enum Command {
         #[arg(long)]
         require_activation: bool,
     },
+    /// Validate a complete candidate strategy matrix through the canonical Rust parser.
+    ValidateMatrix {
+        #[arg(long)]
+        matrix: PathBuf,
+    },
+    /// Persist a validated writer binding through the Store transaction boundary.
+    ReplaceStrategyBinding {
+        #[arg(long)]
+        investigation: String,
+        #[arg(long)]
+        source: PathBuf,
+        #[arg(
+            long,
+            required = true,
+            action = clap::ArgAction::Set,
+            value_parser = clap::value_parser!(bool)
+        )]
+        implementation_active: bool,
+    },
+    /// Project the selected implementation writer through the canonical Store-derived state.
+    ProjectWriterBinding {
+        #[arg(long)]
+        investigation: String,
+        #[arg(long)]
+        strategy_id: String,
+    },
     Preview {
         #[arg(long)]
         request: PathBuf,

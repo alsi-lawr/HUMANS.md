@@ -1,6 +1,7 @@
 import { type ReactNode, useState } from "react";
 import {
   type Draft,
+  type Diagnostic,
   type Identity,
   type Preview,
   type Record,
@@ -13,6 +14,7 @@ import { Editor } from "./editor";
 
 export type DetailProps = Readonly<{
   record: Record | undefined;
+  diagnostics: ReadonlyArray<Diagnostic>;
   relationships: ReadonlyArray<Relationship>;
   draft: Draft | undefined;
   preview: Preview | undefined;
@@ -27,6 +29,7 @@ export type DetailProps = Readonly<{
 }>;
 export const DetailPanel = ({
   record,
+  diagnostics,
   relationships,
   draft,
   preview,
@@ -39,7 +42,7 @@ export const DetailPanel = ({
   onApply,
   onReconcile,
 }: DetailProps): ReactNode => (
-  <aside className="min-h-0 overflow-y-auto border-l border-slate-800 bg-slate-950/90">
+  <aside className="min-h-0 border-l border-slate-800 bg-slate-950/90 lg:overflow-y-auto">
     <div className="border-b border-slate-800 p-4">
       <p className="text-xs font-semibold uppercase tracking-widest text-slate-500">
         Record detail
@@ -65,6 +68,7 @@ export const DetailPanel = ({
       <div className="space-y-6 p-4">
         <RecordTabs
           record={record}
+          diagnostics={diagnostics}
           relationships={relationships}
           draft={draft}
           preview={preview}
@@ -82,10 +86,11 @@ export const DetailPanel = ({
   </aside>
 );
 
-type DetailTab = "overview" | "rendered" | "source";
+type DetailTab = "overview" | "rendered" | "source" | "diagnostics";
 
 const RecordTabs = ({
   record,
+  diagnostics,
   relationships,
   draft,
   preview,
@@ -101,7 +106,10 @@ const RecordTabs = ({
   const [tab, setTab] = useState<DetailTab>("overview");
   return (
     <>
-      <nav aria-label="Record detail tabs" className="flex gap-1 border-b border-slate-800 pb-3">
+      <nav
+        aria-label="Record detail tabs"
+        className="flex flex-wrap gap-1 border-b border-slate-800 pb-3"
+      >
         {detailTabs.map(({ id, label }) => (
           <button
             key={id}
@@ -139,6 +147,11 @@ const RecordTabs = ({
       {tab === "source" ? (
         <RecordContent title="Exact source" content={record.content} />
       ) : undefined}
+      {tab === "diagnostics" ? (
+        <RecordDiagnostics
+          diagnostics={diagnostics.filter((diagnostic) => diagnostic.path === record.path)}
+        />
+      ) : undefined}
     </>
   );
 };
@@ -147,6 +160,7 @@ const detailTabs: ReadonlyArray<Readonly<{ id: DetailTab; label: string }>> = [
   { id: "overview", label: "Overview" },
   { id: "rendered", label: "Rendered" },
   { id: "source", label: "Source" },
+  { id: "diagnostics", label: "Diagnostics" },
 ];
 
 const RelationshipList = ({
@@ -251,6 +265,37 @@ const RenderedContent = ({ content }: Readonly<{ content: string | undefined }>)
       />
     </section>
   );
+
+const RecordDiagnostics = ({
+  diagnostics,
+}: Readonly<{ diagnostics: ReadonlyArray<Diagnostic> }>): ReactNode => (
+  <section>
+    <h3 className="text-xs font-semibold uppercase tracking-widest text-slate-500">
+      Record diagnostics
+    </h3>
+    {diagnostics.length === 0 ? (
+      <p className="mt-3 text-sm text-emerald-300">No diagnostics for this record.</p>
+    ) : (
+      <ul className="mt-3 space-y-3">
+        {diagnostics.map((diagnostic) => (
+          <li
+            key={`${diagnostic.path}:${diagnostic.code}:${diagnostic.field ?? ""}:${diagnostic.section ?? ""}`}
+            className="rounded-lg border border-rose-500/30 bg-rose-500/10 p-3"
+          >
+            <p className="font-mono text-xs font-semibold text-rose-200">{diagnostic.code}</p>
+            <p className="mt-2 text-sm leading-6 text-slate-300">{diagnostic.message}</p>
+            {diagnostic.field === undefined ? undefined : (
+              <p className="mt-2 text-xs text-slate-500">Field: {diagnostic.field}</p>
+            )}
+            {diagnostic.section === undefined ? undefined : (
+              <p className="mt-1 text-xs text-slate-500">Section: {diagnostic.section}</p>
+            )}
+          </li>
+        ))}
+      </ul>
+    )}
+  </section>
+);
 
 const activeTabClass = "rounded-lg bg-blue-500/15 px-3 py-2 text-sm font-medium text-blue-200";
 const inactiveTabClass =

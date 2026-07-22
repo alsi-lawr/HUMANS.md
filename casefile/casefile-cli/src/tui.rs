@@ -5,7 +5,7 @@ use std::{path::Path, process::ExitCode};
 
 pub(super) fn run(store: &Store, root: &Path, editor: EditorConfig) -> Result<ExitCode> {
     loop {
-        match casefile_tui::run(store.scan()?)? {
+        match casefile_tui::run(store.scan()?, store.derived_snapshot()?)? {
             casefile_tui::Interaction::Quit => return Ok(ExitCode::SUCCESS),
             casefile_tui::Interaction::Edit(intent) => {
                 let Some((preview, draft_path)) =
