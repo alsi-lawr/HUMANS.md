@@ -1,6 +1,6 @@
 # humans-md marketplace
 
-This generated marketplace contains synchronized `v0.2.1` packages: `humans-md` (standing contract
+This generated marketplace contains synchronized `v0.2.2` packages: `humans-md` (standing contract
 lifecycle), `casefile` (governed workflow and optional Codex integration), and `coding` (reusable
 coding guidance).
 

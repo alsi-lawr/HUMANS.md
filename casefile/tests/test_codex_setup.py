@@ -54,7 +54,7 @@ class FakeCodex:
             values = [
                 {
                     "pluginId": "casefile@humans-md",
-                    "version": "0.2.1",
+                    "version": "0.2.2",
                     "installed": True,
                     "enabled": True,
                 }
@@ -74,7 +74,7 @@ class CodexSetupTests(unittest.TestCase):
         plugin = root / "plugin"
         (plugin / ".codex-plugin").mkdir(parents=True)
         (plugin / ".codex-plugin/plugin.json").write_text(
-            '{"name":"casefile","version":"0.2.1"}\n', encoding="ascii"
+            '{"name":"casefile","version":"0.2.2"}\n', encoding="ascii"
         )
         (plugin / "config").mkdir()
         for name in ("config-fragment.toml.in", "profiles.toml"):
