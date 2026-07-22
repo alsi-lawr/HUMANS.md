@@ -796,7 +796,7 @@ fn strategy_binding_is_pending_without_implementation_and_unresolved_without_exa
 }
 
 #[test]
-fn binding_replacement_is_guarded_archived_and_atomic() {
+fn binding_replacement_is_guarded_single_file_and_atomic() {
     let root = fixture();
     let store = Store::open(root.path()).expect("store");
     let investigation = "projects/demo/investigations/sample";
@@ -816,14 +816,21 @@ fn binding_replacement_is_guarded_archived_and_atomic() {
         alternate,
         fs::read_to_string(path(root.path(), "strategy/bindings.toml")).expect("current")
     );
-    assert_eq!(
-        1,
-        fs::read_dir(
-            root.path()
-                .join("projects/demo/investigations/sample/strategy/binding-history")
-        )
-        .expect("history")
-        .count()
+    let strategy = root
+        .path()
+        .join("projects/demo/investigations/sample/strategy");
+    assert!(!strategy.join("binding-history").exists());
+    assert!(!strategy.join(".binding-transaction.toml").exists());
+    assert!(
+        !fs::read_dir(&strategy)
+            .expect("strategy entries")
+            .any(|entry| {
+                entry
+                    .expect("strategy entry")
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with(".bindings.toml.tmp-")
+            })
     );
     assert!(
         store

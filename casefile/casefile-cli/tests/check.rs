@@ -186,7 +186,7 @@ fn project_binding(root: &Path, strategy_id: &str) -> std::process::Output {
 }
 
 #[test]
-fn binding_cli_delegates_validation_activity_gate_and_transaction_history_to_store() {
+fn binding_cli_delegates_validation_activity_gate_and_single_file_replacement_to_store() {
     let root = fixture();
     let source = root.path().join("binding-source.toml");
     let target = root
@@ -228,14 +228,22 @@ fn binding_cli_delegates_validation_activity_gate_and_transaction_history_to_sto
         replacement,
         fs::read_to_string(&target).expect("replacement target")
     );
-    let history = root
+    let strategy = root
         .path()
-        .join("projects/demo/investigations/sample/strategy/binding-history");
-    let archived = fs::read_dir(history)
-        .expect("history")
-        .map(|entry| fs::read_to_string(entry.expect("entry").path()).expect("archived source"))
-        .collect::<Vec<_>>();
-    assert_eq!(vec![BINDING.to_owned()], archived);
+        .join("projects/demo/investigations/sample/strategy");
+    assert!(!strategy.join("binding-history").exists());
+    assert!(!strategy.join(".binding-transaction.toml").exists());
+    assert!(
+        !fs::read_dir(strategy)
+            .expect("strategy entries")
+            .any(|entry| {
+                entry
+                    .expect("strategy entry")
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with(".bindings.toml.tmp-")
+            })
+    );
 }
 
 #[test]
