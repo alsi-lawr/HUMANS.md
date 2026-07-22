@@ -88,6 +88,11 @@ class CodexSetupTests(unittest.TestCase):
             shutil.copy2(ROOT / "casefile/adapters/codex" / name, plugin / "config" / name)
         shutil.copytree(ROOT / "casefile/adapters/codex/catalog", plugin / "config/catalog")
         shutil.copytree(ROOT / "casefile/adapters/codex/agents", plugin / "agents")
+        (plugin / "scripts").mkdir()
+        shutil.copy2(
+            ROOT / "casefile/adapters/codex/scripts/resolve-writer-binding.py",
+            plugin / "scripts/resolve-writer-binding.py",
+        )
         (plugin / "templates").mkdir()
         shutil.copy2(ROOT / "AGENTS.md", plugin / "templates/AGENTS.md")
 
@@ -284,6 +289,41 @@ class CodexSetupTests(unittest.TestCase):
                     with self.assertRaisesRegex(setup.SetupError, "managed config already exists"):
                         setup.prepare(plugin, home, "codex")
                 self.assertFalse(any(call[1:3] == ["debug", "models"] for call in fake.calls))
+
+    def test_writer_profile_and_runtime_override_drift_reject_before_model_export(self):
+        for route in ("named", "runtime"):
+            with self.subTest(route=route), tempfile.TemporaryDirectory() as temporary:
+                plugin, home, _, catalog, _ = self.fixture(Path(temporary))
+                profiles = tomllib.loads(
+                    (plugin / "config/profiles.toml").read_text(encoding="ascii")
+                )
+                rows = (
+                    profiles["writer_profiles"]
+                    if route == "named"
+                    else profiles["writer_runtime_overrides"]
+                )
+                agent = plugin / rows[0]["agent_file"]
+                if route == "named":
+                    agent.write_text(
+                        agent.read_text(encoding="ascii").replace(
+                            f'model = "{rows[0]["model"]}"', 'model = "wrong"'
+                        ),
+                        encoding="ascii",
+                    )
+                    diagnostic = "incoherent"
+                else:
+                    agent.write_text(
+                        agent.read_text(encoding="ascii") + 'model = "gpt-5.6-sol"\n',
+                        encoding="ascii",
+                    )
+                    diagnostic = "fixes a model"
+                fake = FakeCodex(catalog)
+                with self.fake_command(fake):
+                    with self.assertRaisesRegex(setup.SetupError, diagnostic):
+                        setup.prepare(plugin, home, "codex", "v2")
+                self.assertFalse(
+                    any(call[1:3] == ["debug", "models"] for call in fake.calls)
+                )
 
     def test_effective_catalog_must_retain_required_spark(self):
         with tempfile.TemporaryDirectory() as temporary:

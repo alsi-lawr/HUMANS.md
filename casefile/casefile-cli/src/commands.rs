@@ -68,6 +68,20 @@ pub(super) fn execute(root: PathBuf, command: Command) -> Result<ExitCode> {
             print_json(&store.apply(preview)?)?;
             Ok(ExitCode::SUCCESS)
         }
+        Command::ReplaceStrategyBinding {
+            investigation,
+            source,
+            implementation_active,
+        } => {
+            let source = fs::read_to_string(&source)
+                .with_context(|| format!("read {}", source.display()))?;
+            store.replace_strategy_binding(&investigation, &source, implementation_active)?;
+            print_json(&serde_json::json!({
+                "path": format!("{}/strategy/bindings.toml", investigation.trim_end_matches('/')),
+                "replaced": true,
+            }))?;
+            Ok(ExitCode::SUCCESS)
+        }
         Command::Serve { .. } => unreachable!("serve handled before opening the store"),
         Command::ValidateMatrix { .. } => {
             unreachable!("validation handled before opening the store")

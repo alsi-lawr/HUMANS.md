@@ -31,6 +31,20 @@ enum Command {
         #[arg(long)]
         matrix: PathBuf,
     },
+    /// Persist a validated writer binding through the Store transaction boundary.
+    ReplaceStrategyBinding {
+        #[arg(long)]
+        investigation: String,
+        #[arg(long)]
+        source: PathBuf,
+        #[arg(
+            long,
+            required = true,
+            action = clap::ArgAction::Set,
+            value_parser = clap::value_parser!(bool)
+        )]
+        implementation_active: bool,
+    },
     Preview {
         #[arg(long)]
         request: PathBuf,

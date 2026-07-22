@@ -151,3 +151,74 @@ fn rust_validator_accepts_every_shipped_adapter_matrix_including_solo() {
         }
     }
 }
+
+const BINDING: &str = "schema_version = 1\nadapter = \"codex\"\nrole = \"implementation-writer\"\nmodel = \"gpt-5.6-sol\"\nreasoning_effort = \"high\"\n[resolution]\nmode = \"named_profile\"\nvalue = \"writer\"\n";
+
+fn replace_binding(root: &Path, source: &Path, active: bool) -> std::process::Output {
+    Command::new(env!("CARGO_BIN_EXE_casefile"))
+        .args(["--root"])
+        .arg(root)
+        .args([
+            "replace-strategy-binding",
+            "--investigation",
+            "projects/demo/investigations/sample",
+            "--source",
+        ])
+        .arg(source)
+        .args(["--implementation-active", &active.to_string()])
+        .output()
+        .expect("replace binding command")
+}
+
+#[test]
+fn binding_cli_delegates_validation_activity_gate_and_transaction_history_to_store() {
+    let root = fixture();
+    let source = root.path().join("binding-source.toml");
+    let target = root
+        .path()
+        .join("projects/demo/investigations/sample/strategy/bindings.toml");
+
+    fs::write(&source, BINDING).expect("binding source");
+    let active = replace_binding(root.path(), &source, true);
+    assert!(!active.status.success());
+    assert!(String::from_utf8_lossy(&active.stderr).contains("implementation work is active"));
+    assert!(!target.exists());
+
+    let invalid_source = root.path().join("invalid-binding.toml");
+    fs::write(&invalid_source, "not = [toml").expect("invalid source");
+    let invalid = replace_binding(root.path(), &invalid_source, false);
+    assert!(!invalid.status.success());
+    assert!(!target.exists());
+
+    let created = replace_binding(root.path(), &source, false);
+    assert!(
+        created.status.success(),
+        "{}",
+        String::from_utf8_lossy(&created.stderr)
+    );
+    assert_eq!(
+        BINDING,
+        fs::read_to_string(&target).expect("binding target")
+    );
+
+    let replacement = BINDING.replace("gpt-5.6-sol", "gpt-5.6-terra");
+    fs::write(&source, &replacement).expect("replacement source");
+    let replaced = replace_binding(root.path(), &source, false);
+    assert!(
+        replaced.status.success(),
+        "{}",
+        String::from_utf8_lossy(&replaced.stderr)
+    );
+    assert_eq!(
+        replacement,
+        fs::read_to_string(&target).expect("replacement target")
+    );
+    let history = root
+        .path()
+        .join("projects/demo/investigations/sample/strategy/binding-history");
+    let archived = fs::read_dir(history)
+        .expect("history")
+        .map(|entry| fs::read_to_string(entry.expect("entry").path()).expect("archived source"))
+        .collect::<Vec<_>>();
+    assert_eq!(vec![BINDING.to_owned()], archived);
+}

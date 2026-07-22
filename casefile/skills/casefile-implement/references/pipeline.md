@@ -13,3 +13,9 @@ commit.
 
 Drain to serial execution when a dependency, path overlap, correction scope, unavailable
 exact-commit check, or ownership uncertainty makes overlap unsafe.
+
+For Codex, resolve the Casefile writer binding with strategy ID `casefile-implement-pipeline`
+immediately before the initial writer, each permitted next-ticket spawn, every resume, and every
+correction. Use only the returned spawn arguments. Binding unavailability preempts forward work and
+stops before mutation pending explicit inactive reselection; it never changes reviewer or look-ahead
+bindings.
