@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="assets/humans-md.svg" alt="humans.md logo" width="128" height="128">
+
 # humans-md
 
 **Give coding agents boundaries, not a manual.**

@@ -1,0 +1,33 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="256"
+  height="256"
+  viewBox="0 0 256 256"
+  role="img"
+  aria-labelledby="title description"
+>
+  <title id="title">humans.md</title>
+  <desc id="description">A human figure held between two boundary brackets.</desc>
+
+  <style>
+    .boundary {
+      fill: none;
+      stroke: #f9fafb;
+      stroke-linecap: square;
+      stroke-linejoin: round;
+    }
+
+    .human {
+      fill: #f25f4c;
+    }
+  </style>
+
+  <g aria-hidden="true">
+    <rect width="256" height="256" rx="52" fill="#f25f4c" />
+    <rect x="10" y="10" width="236" height="236" rx="42" fill="#111827" />
+    <path class="boundary" d="M84 44H48v168h36" stroke-width="18" />
+    <path class="boundary" d="M172 44h36v168h-36" stroke-width="18" />
+    <circle class="human" cx="128" cy="90" r="22" />
+    <rect class="human" x="108" y="120" width="40" height="76" rx="20" />
+  </g>
+</svg>
