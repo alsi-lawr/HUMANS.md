@@ -32,13 +32,18 @@ const workItem: WorkItemDraft = {
 };
 const noAction = (): void => {};
 
-test("renders project scopes without a null investigation label", () => {
+test("renders project navigation without a null investigation label", () => {
   const html = renderToStaticMarkup(
     <Sidebar
-      scopes={[{ project: "demo", investigation: undefined }]}
-      selected={undefined}
+      tab="projects"
+      projects={[{ name: "demo", investigations: 1, tickets: 2 }]}
+      investigations={[]}
+      project={undefined}
+      investigation={undefined}
       diagnostics={[]}
-      onSelect={noAction}
+      onTab={noAction}
+      onProject={noAction}
+      onInvestigation={noAction}
     />,
   );
 

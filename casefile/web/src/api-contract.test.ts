@@ -9,6 +9,7 @@ const projectDecision = {
   identity: { scope: { project: "demo" }, identity: "HMD-D-002" },
   title: "HMD-D-002 - Project",
   content: "# HMD-D-002 - Project",
+  rendered_markdown: "<h1>HMD-D-002 - Project</h1>",
   search_text: "HMD-D-002 - Project",
 };
 
@@ -19,6 +20,7 @@ test("decodes the owned project-scope wire shape without a null investigation", 
   );
 
   expect(records[0]?.scope).toEqual({ project: "demo", investigation: undefined });
+  expect(records[0]?.rendered_markdown).toContain("<h1>");
   expect(() =>
     decodeCurrent(
       {

@@ -51,22 +51,37 @@ test("navigates and reconciles governed work against the shared host fixture", a
   const root = createRoot(container);
   try {
     await act(async () => root.render(<App />));
-    await waitFor(() => container.textContent?.includes("Planning space") === true);
+    await waitFor(() => container.textContent?.includes("Casefile projects") === true);
 
-    expect(container.textContent).toContain("invalid");
-    expect(container.textContent).toContain("raw");
-    expect(container.textContent).toContain("Project decision");
+    expect(container.textContent).toContain("demo");
     expect(container.textContent).not.toContain("demo / null");
 
     await unlink(join(host.root, "projects/demo/investigations/sample/review/broken.md"));
     await click(container, "Refresh");
-    await waitFor(() => container.textContent?.includes("invalid") === false);
-    await click(container, "demo / sample");
-    expect(container.textContent).toContain("Main");
+    await click(container, "demo");
+    await waitFor(() => container.textContent?.includes("Investigations") === true);
+    await click(container, "sample");
+    await waitFor(() => container.textContent?.includes("Governed work") === true);
     expect(container.textContent).toContain("Minimum ticket");
     expect(container.textContent).toContain("Minimum epic");
 
-    await click(container, ticketPath);
+    await click(container, "Files");
+    await waitFor(() => container.textContent?.includes("Files by directory") === true);
+    expect(container.textContent).toContain("HMD-D-002-project.md");
+    expect(container.textContent).toContain("Project-level files remain visible");
+    await click(container, "render.md");
+    await click(container, "Rendered");
+    expect(container.textContent).toContain("Rendered evidence");
+    const unsafeLink = [...container.querySelectorAll("a")].find((link) =>
+      link.textContent?.includes("bad link"),
+    );
+    expect(unsafeLink).toBeUndefined();
+    expect(container.querySelector("script")).toBeNull();
+    await click(container, "Source");
+    expect(container.textContent).toContain("<script>bad()</script>");
+
+    await click(container, "Tickets");
+    await click(container, "HMD-011.md");
     await waitFor(() => relationshipQueries.length > 0);
     expect(relationshipQueries).toContainEqual({
       query: "relationships",
@@ -75,6 +90,14 @@ test("navigates and reconciles governed work against the shared host fixture", a
         identity: "HMD-011",
       },
     });
+
+    await click(container, "Rendered");
+    expect(container.textContent).toContain("Rendered Markdown");
+    expect(container.textContent).toContain("HMD-011");
+    await click(container, "Source");
+    expect(container.textContent).toContain("Exact source");
+    expect(container.textContent).toContain("## Acceptance criteria");
+    await click(container, "Overview");
 
     const shortIdentity = await networkFetch(`${host.url}/api/query`, {
       method: "POST",
@@ -106,7 +129,8 @@ test("navigates and reconciles governed work against the shared host fixture", a
     await click(container, "Apply preview");
     expect(await readFile(canonical, "utf8")).toContain("Reconciled browser title");
 
-    await click(container, "boards/main.toml");
+    await click(container, "Files");
+    await click(container, "main.toml");
     await change(labelledInput(container, "Title"), "Revised board");
     await click(container, "Preview changes");
     await waitFor(() => container.textContent?.includes('title = "Revised board"') === true);
@@ -181,6 +205,10 @@ const startHost = async (): Promise<RunningHost> => {
   await writeFile(
     join(root, "projects/demo/investigations/sample/review/broken.md"),
     "not governed markdown\n",
+  );
+  await writeFile(
+    join(root, "projects/demo/investigations/sample/evidence/render.md"),
+    "# Rendered evidence\n\n- **emphasis**\n- `code`\n\n| Safe | Value |\n| --- | --- |\n| yes | 1 |\n\n[bad link](JaVaScRiPt:bad()) [safe link](https://example.com)\n\n<script>bad()</script>\n",
   );
   for (const command of [
     ["git", "init", "-q"],

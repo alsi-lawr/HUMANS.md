@@ -27,6 +27,7 @@ const record: Record = {
   },
   title: board.title,
   content: undefined,
+  rendered_markdown: undefined,
   work_item: undefined,
   board,
 };

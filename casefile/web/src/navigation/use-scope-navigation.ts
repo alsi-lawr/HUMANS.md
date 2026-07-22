@@ -1,64 +1,116 @@
-import { useEffect, useState } from "react";
-import { fetchBoards } from "../api";
-import { type Board, type Record, type Scope, sameScope } from "../model";
+import { useState } from "react";
+import { type Record } from "../model";
 
+export type BrowseTab = "projects" | "investigations" | "tickets" | "files";
+export type Project = Readonly<{ name: string; investigations: number; tickets: number }>;
+export type Investigation = Readonly<{ name: string; tickets: number }>;
 export type ScopeNavigation = Readonly<{
-  scope: Scope | undefined;
-  scopes: ReadonlyArray<Scope>;
-  records: ReadonlyArray<Record>;
-  boards: ReadonlyArray<Board>;
-  error: string | undefined;
-  selectScope: (scope: Scope | undefined) => void;
+  tab: BrowseTab;
+  projects: ReadonlyArray<Project>;
+  investigations: ReadonlyArray<Investigation>;
+  tickets: ReadonlyArray<Record>;
+  files: ReadonlyArray<Record>;
+  project: string | undefined;
+  investigation: string | undefined;
+  selectTab: (tab: BrowseTab) => void;
+  selectProject: (project: string) => void;
+  selectInvestigation: (investigation: string) => void;
 }>;
-type BoardQuery =
-  | Readonly<{ tag: "ready"; boards: ReadonlyArray<Board> }>
-  | Readonly<{ tag: "failure"; message: string }>;
 
-export const useScopeNavigation = (allRecords: ReadonlyArray<Record>): ScopeNavigation => {
-  const [scope, setScope] = useState<Scope | undefined>(undefined);
-  const [query, setQuery] = useState<BoardQuery>({ tag: "ready", boards: [] });
-
-  useEffect(() => {
-    if (scope === undefined) {
-      setQuery({ tag: "ready", boards: [] });
-      return;
-    }
-    const controller = new AbortController();
-    setQuery({ tag: "ready", boards: [] });
-    void fetchBoards(scope, controller.signal).then((result) => {
-      if (controller.signal.aborted) return;
-      if (result.tag === "success") {
-        setQuery({ tag: "ready", boards: result.value });
-        return;
-      }
-      setQuery({ tag: "failure", message: result.message });
-    });
-    return () => controller.abort();
-  }, [scope]);
-
-  const records = allRecords.filter(
-    (record) =>
-      scope === undefined || (record.scope !== undefined && sameScope(record.scope, scope)),
+export const useScopeNavigation = (records: ReadonlyArray<Record>): ScopeNavigation => {
+  const [tab, setTab] = useState<BrowseTab>("projects");
+  const [project, setProject] = useState<string | undefined>(undefined);
+  const [investigation, setInvestigation] = useState<string | undefined>(undefined);
+  const projects = projectRows(records);
+  const investigations = investigationRows(records, project);
+  const tickets = records.filter(
+    (record) => matchesInvestigation(record, project, investigation) && isTicket(record),
+  );
+  const files = records.filter(
+    (record) => matchesFiles(record, project, investigation) && !isTicket(record),
   );
 
   return {
-    scope,
-    scopes: uniqueScopes(allRecords),
-    records,
-    boards: query.tag === "ready" ? query.boards : [],
-    error: query.tag === "failure" ? query.message : undefined,
-    selectScope: setScope,
+    tab,
+    projects,
+    investigations,
+    tickets,
+    files,
+    project,
+    investigation,
+    selectTab: setTab,
+    selectProject: (selectedProject) => {
+      setProject(selectedProject);
+      setInvestigation(undefined);
+      setTab("investigations");
+    },
+    selectInvestigation: (selectedInvestigation) => {
+      setInvestigation(selectedInvestigation);
+      setTab("tickets");
+    },
   };
 };
 
-const uniqueScopes = (records: ReadonlyArray<Record>): ReadonlyArray<Scope> =>
-  records
-    .flatMap((record) => (record.scope === undefined ? [] : [record.scope]))
-    .filter(
-      (scope, index, all) => all.findIndex((candidate) => sameScope(candidate, scope)) === index,
-    )
-    .sort((left, right) =>
-      `${left.project}/${left.investigation ?? ""}`.localeCompare(
-        `${right.project}/${right.investigation ?? ""}`,
+const projectRows = (records: ReadonlyArray<Record>): ReadonlyArray<Project> =>
+  [
+    ...new Set(
+      records.flatMap((record) => (record.scope === undefined ? [] : [record.scope.project])),
+    ),
+  ]
+    .sort((left, right) => left.localeCompare(right))
+    .map((name) => ({
+      name,
+      investigations: investigationRows(records, name).length,
+      tickets: records.filter((record) => record.scope?.project === name && isTicket(record))
+        .length,
+    }));
+
+const investigationRows = (
+  records: ReadonlyArray<Record>,
+  project: string | undefined,
+): ReadonlyArray<Investigation> => {
+  if (project === undefined) return [];
+  return [
+    ...new Set(
+      records.flatMap((record) =>
+        record.scope?.project === project && record.scope.investigation !== undefined
+          ? [record.scope.investigation]
+          : [],
       ),
-    );
+    ),
+  ]
+    .sort((left, right) => left.localeCompare(right))
+    .map((name) => ({
+      name,
+      tickets: records.filter(
+        (record) =>
+          record.scope?.project === project &&
+          record.scope.investigation === name &&
+          isTicket(record),
+      ).length,
+    }));
+};
+
+const matchesInvestigation = (
+  record: Record,
+  project: string | undefined,
+  investigation: string | undefined,
+): boolean =>
+  project !== undefined &&
+  investigation !== undefined &&
+  record.scope?.project === project &&
+  record.scope.investigation === investigation;
+
+const matchesFiles = (
+  record: Record,
+  project: string | undefined,
+  investigation: string | undefined,
+): boolean =>
+  project !== undefined &&
+  record.scope?.project === project &&
+  (investigation === undefined ||
+    record.scope.investigation === undefined ||
+    record.scope.investigation === investigation);
+
+const isTicket = (record: Record): boolean =>
+  record.classification === "governed" && (record.kind === "ticket" || record.kind === "epic");

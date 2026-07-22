@@ -2,6 +2,7 @@
 
 mod browsing;
 mod interaction;
+mod markdown;
 mod record_detail;
 mod review;
 #[cfg(test)]

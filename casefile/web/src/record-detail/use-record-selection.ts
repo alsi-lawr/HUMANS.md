@@ -1,21 +1,14 @@
 import { useEffect, useState } from "react";
 import { fetchRelationships } from "../api";
-import {
-  type Draft,
-  type Identity,
-  type Record,
-  type Relationship,
-  editableDraft,
-  sameIdentity,
-} from "../model";
+import { type Draft, type Record, type Relationship, editableDraft } from "../model";
 
 export type RecordSelection = Readonly<{
-  selected: Identity | undefined;
+  selectedPath: string | undefined;
   record: Record | undefined;
   relationships: ReadonlyArray<Relationship>;
   draft: Draft | undefined;
   error: string | undefined;
-  selectRecord: (identity: Identity) => void;
+  selectRecord: (record: Record) => void;
   clearRecord: () => void;
   updateDraft: (draft: Draft) => void;
 }>;
@@ -23,18 +16,21 @@ type RelationshipQuery =
   | Readonly<{ tag: "ready"; relationships: ReadonlyArray<Relationship> }>
   | Readonly<{ tag: "failure"; message: string }>;
 
+const emptyQuery: RelationshipQuery = { tag: "ready", relationships: [] };
+
 export const useRecordSelection = (records: ReadonlyArray<Record>): RecordSelection => {
-  const [selected, setSelected] = useState<Identity | undefined>(undefined);
-  const [query, setQuery] = useState<RelationshipQuery>({ tag: "ready", relationships: [] });
+  const [selectedPath, setSelectedPath] = useState<string | undefined>(undefined);
+  const [query, setQuery] = useState<RelationshipQuery>(emptyQuery);
   const [draft, setDraft] = useState<Draft | undefined>(undefined);
 
   useEffect(() => {
-    if (selected === undefined) {
-      setQuery({ tag: "ready", relationships: [] });
+    const record = findRecord(records, selectedPath);
+    if (record?.identity === undefined) {
+      setQuery(emptyQuery);
       return;
     }
     const controller = new AbortController();
-    void fetchRelationships(selected, controller.signal).then((result) => {
+    void fetchRelationships(record.identity, controller.signal).then((result) => {
       if (controller.signal.aborted) return;
       if (result.tag === "success") {
         setQuery({ tag: "ready", relationships: result.value });
@@ -43,25 +39,24 @@ export const useRecordSelection = (records: ReadonlyArray<Record>): RecordSelect
       setQuery({ tag: "failure", message: result.message });
     });
     return () => controller.abort();
-  }, [selected]);
+  }, [records, selectedPath]);
 
-  const record = findRecord(records, selected);
+  const record = findRecord(records, selectedPath);
   return {
-    selected,
+    selectedPath,
     record,
     relationships: query.tag === "ready" ? query.relationships : [],
     draft,
     error: query.tag === "failure" ? query.message : undefined,
-    selectRecord: (identity) => {
-      const record = findRecord(records, identity);
-      setSelected(identity);
-      setDraft(record === undefined ? undefined : editableDraft(record));
-      setQuery({ tag: "ready", relationships: [] });
+    selectRecord: (record) => {
+      setSelectedPath(record.path);
+      setDraft(editableDraft(record));
+      setQuery(emptyQuery);
     },
     clearRecord: () => {
-      setSelected(undefined);
+      setSelectedPath(undefined);
       setDraft(undefined);
-      setQuery({ tag: "ready", relationships: [] });
+      setQuery(emptyQuery);
     },
     updateDraft: setDraft,
   };
@@ -69,10 +64,6 @@ export const useRecordSelection = (records: ReadonlyArray<Record>): RecordSelect
 
 const findRecord = (
   records: ReadonlyArray<Record>,
-  identity: Identity | undefined,
+  path: string | undefined,
 ): Record | undefined =>
-  identity === undefined
-    ? undefined
-    : records.find(
-        (record) => record.identity !== undefined && sameIdentity(record.identity, identity),
-      );
+  path === undefined ? undefined : records.find((record) => record.path === path);

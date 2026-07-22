@@ -234,6 +234,7 @@ dependencies = [
  "casefile-core",
  "casefile-store",
  "crossterm",
+ "pulldown-cmark",
  "ratatui",
 ]
 
