@@ -1,4 +1,5 @@
 use crate::{SCHEMA_VERSION, diagnostic::Diagnostic, record::RecordSummary};
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -471,9 +472,41 @@ fn schema(path: &str, table: &toml::map::Map<String, toml::Value>) -> Result<(),
     }
 }
 
+/// Validates a complete selectable matrix without relying on its filesystem name.
+/// Workflow selection uses this authority before copying the matrix into its selected path.
+pub fn validate_matrix(text: &str) -> Result<(), Vec<Diagnostic>> {
+    let path = "strategy matrix";
+    let value: toml::Value = toml::from_str(text)
+        .map_err(|error| vec![Diagnostic::new(path, "invalid_toml", error.to_string())])?;
+    let table = table(path, &value, "strategy")?;
+    schema(path, table)?;
+    let strategy_id = string(path, table, "strategy_id", "invalid_strategy")?;
+    if !Regex::new(r"^[a-z0-9][a-z0-9-]*$")
+        .expect("fixed expression")
+        .is_match(&strategy_id)
+    {
+        return Err(vec![
+            Diagnostic::new(path, "invalid_strategy", "strategy_id is invalid")
+                .field("strategy_id"),
+        ]);
+    }
+    let phase = string(path, table, "phase", "invalid_strategy")?;
+    if !matches!(
+        phase.as_str(),
+        "planning" | "investigation" | "review" | "implementation" | "closeout"
+    ) {
+        return Err(vec![
+            Diagnostic::new(path, "strategy_phase", "phase is not supported").field("phase"),
+        ]);
+    }
+    string(path, table, "adapter", "invalid_strategy")?;
+    parse_projection_table(path, table)?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{parse, parse_binding, parse_projection};
+    use super::{parse, parse_binding, parse_projection, validate_matrix};
     use crate::RecordSummary;
 
     const COMPLETE: &str = r#"schema_version = 1
@@ -519,6 +552,18 @@ shared_ticket_storage_required = true
             Ok(RecordSummary::Strategy { .. })
         ));
         assert_eq!(None, parse_projection(path, legacy).expect("legacy"));
+    }
+
+    #[test]
+    fn workflow_matrix_validation_rejects_incomplete_pipeline() {
+        assert!(validate_matrix(COMPLETE).is_ok());
+        assert!(
+            validate_matrix(
+                &(String::from(COMPLETE)
+                    + "\n[coordination.pipeline]\nmaximum_active_tickets = 1\n")
+            )
+            .is_err()
+        );
     }
 
     #[test]

@@ -136,33 +136,6 @@ pub struct DerivedCard {
 }
 
 pub(super) fn derive_snapshot(scan: &ScanResult, active: &Activation) -> DerivedSnapshot {
-    let binding_entry = scan
-        .snapshot
-        .entries
-        .iter()
-        .find(|entry| entry.kind == Some(Kind::StrategyBinding));
-    let binding = binding_entry.and_then(|entry| match &entry.summary {
-        Some(RecordSummary::StrategyBinding { binding }) => Some(binding),
-        _ => None,
-    });
-    let binding_invalid =
-        binding_entry.is_some_and(|entry| entry.classification == Classification::Invalid);
-    let implementation = scan.snapshot.entries.iter().find_map(|entry| {
-        let (Some(RecordSummary::Strategy { phase, adapter, .. }), Ok(text)) =
-            (&entry.summary, std::str::from_utf8(&entry.original_bytes))
-        else {
-            return None;
-        };
-        (phase == "implementation")
-            .then(|| {
-                parse_strategy_projection(&entry.path, text)
-                    .ok()
-                    .flatten()
-                    .map(|matrix| (adapter.as_str(), matrix))
-            })
-            .flatten()
-    });
-    let implementation_selected = implementation.is_some();
     let records = scan
         .snapshot
         .entries
@@ -195,6 +168,26 @@ pub(super) fn derive_snapshot(scan: &ScanResult, active: &Activation) -> Derived
                 Some(RecordDraft::Board(board)) => (None, Some(board)),
                 None => (None, None),
             };
+            let scope = record_scope(&entry.path, active);
+            let scoped = |candidate: &casefile_core::EntrySnapshot| record_scope(&candidate.path, active) == scope;
+            let binding_entry = scan.snapshot.entries.iter().find(|candidate| {
+                candidate.kind == Some(Kind::StrategyBinding) && scoped(candidate)
+            });
+            let binding = binding_entry.and_then(|candidate| match &candidate.summary {
+                Some(RecordSummary::StrategyBinding { binding }) => Some(binding),
+                _ => None,
+            });
+            let binding_invalid = binding_entry.is_some_and(|candidate| candidate.classification == Classification::Invalid);
+            let implementation_entry = scan.snapshot.entries.iter().find(|candidate| {
+                candidate.classification == Classification::Governed && scoped(candidate)
+                    && matches!(&candidate.summary, Some(RecordSummary::Strategy { phase, .. }) if phase == "implementation")
+            });
+            let implementation_selected = implementation_entry.is_some();
+            let implementation_projection = implementation_entry.and_then(|candidate| {
+                let RecordSummary::Strategy { adapter, .. } = candidate.summary.as_ref()? else { return None; };
+                let text = std::str::from_utf8(&candidate.original_bytes).ok()?;
+                parse_strategy_projection(&candidate.path, text).ok().flatten().map(|matrix| (adapter.as_str(), matrix))
+            });
             let strategy = match (&entry.summary, content.as_deref()) {
                 (Some(RecordSummary::Strategy { phase, adapter, .. }), Some(text)) => {
                     parse_strategy_projection(&entry.path, text)
@@ -215,14 +208,11 @@ pub(super) fn derive_snapshot(scan: &ScanResult, active: &Activation) -> Derived
                     state: binding_state(
                         binding,
                         implementation_selected,
-                        implementation
-                            .as_ref()
-                            .map(|(adapter, matrix)| (*adapter, matrix)),
+                        implementation_projection.as_ref().map(|(adapter, matrix)| (*adapter, matrix)),
                     ),
                 }),
                 _ => None,
             };
-            let scope = record_scope(&entry.path, active);
             let identity = entry
                 .identity
                 .as_ref()

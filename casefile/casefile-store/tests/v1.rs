@@ -732,6 +732,27 @@ fn strategy_binding_is_pending_without_implementation_and_unresolved_without_exa
         .expect("binding projection");
     assert!(matches!(binding.state, StrategyBindingState::Pending));
 
+    fs::write(
+        path(root.path(), "strategy/implementation.toml"),
+        "schema_version = 1\nstrategy_id = 'legacy'\nphase = 'implementation'\nadapter = 'codex'\n",
+    )
+    .expect("legacy implementation");
+    let legacy = store.derived_snapshot().expect("legacy unresolved");
+    let binding = legacy
+        .records
+        .iter()
+        .find(|record| record.path.ends_with("strategy/bindings.toml"))
+        .and_then(|record| record.strategy_binding.as_ref())
+        .expect("binding projection");
+    assert!(matches!(binding.state, StrategyBindingState::Unresolved));
+    assert!(
+        legacy
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.code == "binding_writer_match"
+                && diagnostic.path.ends_with("strategy/bindings.toml"))
+    );
+
     full_implementation(root.path());
     fs::write(
         path(root.path(), "strategy/implementation.toml"),
@@ -813,4 +834,101 @@ fn binding_replacement_is_guarded_archived_and_atomic() {
         alternate,
         fs::read_to_string(path(root.path(), "strategy/bindings.toml")).expect("unchanged")
     );
+}
+
+#[test]
+fn strategy_bindings_are_isolated_by_active_investigation_scope() {
+    use casefile_store::{StrategyBindingState, WriterBindingSource};
+    let root = fixture();
+    let sample = root.path().join("projects/demo/investigations/sample");
+    let other = root.path().join("projects/demo/investigations/other");
+    fs::create_dir_all(&other).expect("other");
+    copy_tree(&sample, &other);
+    fs::write(
+        root.path().join("casefile.toml"),
+        "schema_version = 1\n\n[projects.demo]\nprefix = \"HMD\"\ninvestigations = [\"projects/demo/investigations/sample\", \"projects/demo/investigations/other\"]\n",
+    ).expect("activate other");
+    full_implementation(root.path());
+    fs::write(sample.join("strategy/bindings.toml"), BINDING).expect("sample binding");
+    fs::write(
+        other.join("strategy/implementation.toml"),
+        FULL_IMPLEMENTATION.replace("gpt-5.6-sol", "gpt-5.6-luna"),
+    )
+    .expect("other matrix");
+    let store = Store::open(root.path()).expect("store");
+    let records = store.derived_snapshot().expect("states").records;
+    let sample_strategy = records
+        .iter()
+        .find(|record| record.path.ends_with("sample/strategy/implementation.toml"))
+        .and_then(|record| record.strategy.as_ref())
+        .expect("sample strategy");
+    assert!(
+        matches!(sample_strategy.binding.as_ref(), Some(StrategyBindingState::Resolved { effective }) if effective.model == "gpt-5.6-terra")
+    );
+    let other_strategy = records
+        .iter()
+        .find(|record| record.path.ends_with("other/strategy/implementation.toml"))
+        .and_then(|record| record.strategy.as_ref())
+        .expect("other strategy");
+    assert!(
+        matches!(other_strategy.binding.as_ref(), Some(StrategyBindingState::Absent { effective }) if effective.model == "gpt-5.6-luna" && effective.source == WriterBindingSource::Matrix)
+    );
+
+    fs::write(
+        other.join("strategy/bindings.toml"),
+        BINDING.replace("adapter = \"codex\"", "adapter = \"claude\""),
+    )
+    .expect("other mismatch");
+    let unresolved = store.derived_snapshot().expect("unresolved");
+    let sample_strategy = unresolved
+        .records
+        .iter()
+        .find(|record| record.path.ends_with("sample/strategy/implementation.toml"))
+        .and_then(|record| record.strategy.as_ref())
+        .expect("sample strategy");
+    assert!(matches!(
+        sample_strategy.binding,
+        Some(StrategyBindingState::Resolved { .. })
+    ));
+    let other_strategy = unresolved
+        .records
+        .iter()
+        .find(|record| record.path.ends_with("other/strategy/implementation.toml"))
+        .and_then(|record| record.strategy.as_ref())
+        .expect("other strategy");
+    assert!(matches!(
+        other_strategy.binding,
+        Some(StrategyBindingState::Unresolved)
+    ));
+    assert!(unresolved.diagnostics.iter().any(|diagnostic| {
+        diagnostic.path.ends_with("other/strategy/bindings.toml")
+            && diagnostic.code == "binding_adapter"
+    }));
+
+    fs::write(
+        other.join("strategy/bindings.toml"),
+        BINDING.replace("implementation-writer", "reviewer"),
+    )
+    .expect("other invalid");
+    let invalid = store.derived_snapshot().expect("invalid");
+    let sample_strategy = invalid
+        .records
+        .iter()
+        .find(|record| record.path.ends_with("sample/strategy/implementation.toml"))
+        .and_then(|record| record.strategy.as_ref())
+        .expect("sample strategy");
+    assert!(matches!(
+        sample_strategy.binding,
+        Some(StrategyBindingState::Resolved { .. })
+    ));
+    let other_strategy = invalid
+        .records
+        .iter()
+        .find(|record| record.path.ends_with("other/strategy/implementation.toml"))
+        .and_then(|record| record.strategy.as_ref())
+        .expect("other strategy");
+    assert!(matches!(
+        other_strategy.binding,
+        Some(StrategyBindingState::Invalid)
+    ));
 }

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import subprocess
 import sys
 import tempfile
@@ -38,6 +39,17 @@ shared_ticket_storage_required = true
 
 
 class SwitchStrategyTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        subprocess.run(
+            ["cargo", "build", "-p", "casefile-cli"],
+            cwd=ROOT / "casefile",
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        cls.environment = os.environ | {"CASEFILE_MATRIX_VALIDATOR": str(ROOT / "casefile/target/debug/casefile")}
+
     def test_governed_replacement_is_backed_up_and_rolls_back_on_record_failure(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -83,6 +95,7 @@ paths = ["tickets/T-001.md"]
                 capture_output=True,
                 text=True,
                 check=False,
+                env=self.environment,
             )
             self.assertEqual(0, result.returncode, result.stdout + result.stderr)
             self.assertEqual(matrix.read_bytes(), selected.read_bytes())
@@ -107,6 +120,30 @@ paths = ["tickets/T-001.md"]
             self.assertEqual(old, selected.read_bytes())
             self.assertEqual(before_mtime, selected.stat().st_mtime_ns)
             self.assertFalse((root / "failed-transition.toml").exists())
+
+
+    def test_switch_uses_rust_validation_for_pipeline_shape(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            state = root / "state.toml"
+            state.write_text('''schema_version = 1
+strategy_id = "current"
+phase = "review"
+[root]
+binding = "root"
+[work]
+paths = []
+''', encoding="ascii")
+            matrix = root / "matrix.toml"
+            matrix.write_text(MATRIX + "\n[coordination.pipeline]\nmaximum_active_tickets = 1\n", encoding="ascii")
+            result = subprocess.run(
+                [sys.executable, str(ROOT / "casefile/casefile-workflow/scripts/switch-strategy.py"),
+                 "--state", str(state), "--matrix", str(matrix), "--output-dir", str(root / "strategy"),
+                 "--mode", "governed", "--capability", "subagents", "--rationale", "test"],
+                capture_output=True, text=True, check=False, env=self.environment,
+            )
+            self.assertNotEqual(0, result.returncode)
+            self.assertIn("canonical Rust matrix validation failed", result.stdout + result.stderr)
 
 
 if __name__ == "__main__":

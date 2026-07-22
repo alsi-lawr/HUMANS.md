@@ -26,6 +26,11 @@ enum Command {
         #[arg(long)]
         require_activation: bool,
     },
+    /// Validate a complete candidate strategy matrix through the canonical Rust parser.
+    ValidateMatrix {
+        #[arg(long)]
+        matrix: PathBuf,
+    },
     Preview {
         #[arg(long)]
         request: PathBuf,

@@ -327,62 +327,75 @@ fn hex(bytes: &[u8]) -> String {
 }
 
 fn binding_diagnostics(entries: &[EntrySnapshot]) -> Vec<Diagnostic> {
-    let binding = entries
+    let scope = |entry: &EntrySnapshot| {
+        entry
+            .path
+            .rsplit_once("/strategy/")
+            .map(|(root, _)| root.to_owned())
+    };
+    let mut diagnostics = Vec::new();
+    for binding in entries
         .iter()
-        .find(|entry| entry.kind == Some(Kind::StrategyBinding));
-    let Some(binding) = binding else {
-        return Vec::new();
-    };
-    let Some(RecordSummary::StrategyBinding {
-        binding: binding_value,
-    }) = &binding.summary
-    else {
-        return Vec::new();
-    };
-    let implementation = entries.iter().find(|entry| matches!(&entry.summary, Some(RecordSummary::Strategy { phase, .. }) if phase == "implementation"));
-    let Some(implementation) = implementation else {
-        return Vec::new();
-    };
-    let Some(RecordSummary::Strategy { adapter, .. }) = &implementation.summary else {
-        return Vec::new();
-    };
-    if binding_value.adapter != *adapter {
-        return vec![
-            Diagnostic::new(
-                &binding.path,
-                "binding_adapter",
-                "binding adapter does not match implementation strategy",
-            )
-            .field("adapter"),
-        ];
+        .filter(|entry| entry.kind == Some(Kind::StrategyBinding))
+    {
+        let Some(RecordSummary::StrategyBinding {
+            binding: binding_value,
+        }) = &binding.summary
+        else {
+            continue;
+        };
+        let binding_scope = scope(binding);
+        let implementation = entries.iter().find(|entry| {
+            entry.classification == Classification::Governed && scope(entry) == binding_scope
+                && matches!(&entry.summary, Some(RecordSummary::Strategy { phase, .. }) if phase == "implementation")
+        });
+        let Some(implementation) = implementation else {
+            continue;
+        };
+        let Some(RecordSummary::Strategy { adapter, .. }) = &implementation.summary else {
+            continue;
+        };
+        if binding_value.adapter != *adapter {
+            diagnostics.push(
+                Diagnostic::new(
+                    &binding.path,
+                    "binding_adapter",
+                    "binding adapter does not match implementation strategy",
+                )
+                .field("adapter"),
+            );
+            continue;
+        }
+        let Ok(text) = std::str::from_utf8(&implementation.original_bytes) else {
+            continue;
+        };
+        let Ok(Some(projection)) = parse_strategy_projection(&implementation.path, text) else {
+            diagnostics.push(
+                Diagnostic::new(
+                    &binding.path,
+                    "binding_writer_match",
+                    "implementation strategy has no graphable implementation-writer match",
+                )
+                .field("role"),
+            );
+            continue;
+        };
+        if projection
+            .workers
+            .iter()
+            .filter(|worker| worker.role == "implementation-writer")
+            .count()
+            != 1
+        {
+            diagnostics.push(
+                Diagnostic::new(
+                    &binding.path,
+                    "binding_writer_match",
+                    "implementation strategy must declare exactly one implementation-writer",
+                )
+                .field("role"),
+            );
+        }
     }
-    let Ok(text) = std::str::from_utf8(&implementation.original_bytes) else {
-        return Vec::new();
-    };
-    let Ok(Some(projection)) = parse_strategy_projection(&implementation.path, text) else {
-        return vec![
-            Diagnostic::new(
-                &binding.path,
-                "binding_writer_match",
-                "implementation strategy has no graphable implementation-writer match",
-            )
-            .field("role"),
-        ];
-    };
-    let writers = projection
-        .workers
-        .iter()
-        .filter(|worker| worker.role == "implementation-writer")
-        .count();
-    if writers != 1 {
-        return vec![
-            Diagnostic::new(
-                &binding.path,
-                "binding_writer_match",
-                "implementation strategy must declare exactly one implementation-writer",
-            )
-            .field("role"),
-        ];
-    }
-    Vec::new()
+    diagnostics
 }

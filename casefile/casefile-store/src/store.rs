@@ -23,6 +23,8 @@ pub enum StoreError {
     StaleTargetRevision,
 }
 
+type BindingWriter<'a> = dyn FnMut(&std::path::Path, &[u8], bool) -> Result<(), StoreError> + 'a;
+
 #[derive(Clone, Debug)]
 pub struct Store {
     root: PathBuf,
@@ -100,79 +102,148 @@ impl Store {
                 "binding target must not be a symlink".into(),
             ));
         }
-        let previous = if target.exists() {
-            Some(fs::read(&target)?)
-        } else {
-            None
-        };
+        let previous = read_file(&target)?;
         let history = previous.as_ref().map(|bytes| {
             let digest = Sha256::digest(bytes);
             self.root.join(format!(
                 "{binding}/strategy/binding-history/{digest:x}.toml"
             ))
         });
-        let history_before = history.as_ref().map(|path| fs::read(path).ok());
-        let target_before = previous.clone();
-        let write =
-            |path: &std::path::Path, bytes: &[u8], create: bool| -> Result<(), StoreError> {
-                let parent = path
-                    .parent()
-                    .ok_or_else(|| StoreError::Invalid("binding has no parent".into()))?;
-                fs::create_dir_all(parent)?;
-                let mut temporary = NamedTempFile::new_in(parent)?;
-                temporary.write_all(bytes)?;
-                temporary.flush()?;
-                if create {
-                    temporary
-                        .persist_noclobber(path)
-                        .map_err(|error| StoreError::Io(error.error))?;
-                } else {
-                    temporary
-                        .persist(path)
-                        .map_err(|error| StoreError::Io(error.error))?;
-                }
-                Ok(())
-            };
-        let result = (|| {
-            if let (Some(history), Some(previous)) = (&history, &previous) {
-                if !history.exists() {
-                    write(history, previous, true)?;
-                }
-            }
-            write(&target, source.as_bytes(), previous.is_none())?;
-            if fs::read(&target)? != source.as_bytes() {
-                return Err(StoreError::Invalid(
-                    "binding post-write verification failed".into(),
-                ));
-            }
-            Ok(())
-        })();
-        if result.is_err() {
-            match target_before {
-                Some(bytes) => {
-                    let _ = write(&target, &bytes, false);
-                }
-                None => {
-                    let _ = fs::remove_file(&target);
-                }
-            }
-            if let Some(history) = history {
-                match history_before.flatten() {
-                    Some(bytes) => {
-                        let _ = write(&history, &bytes, false);
-                    }
-                    None => {
-                        let _ = fs::remove_file(history);
-                    }
-                }
+        replace_binding_files(
+            &target,
+            history.as_deref(),
+            source.as_bytes(),
+            &mut atomic_binding_write,
+        )
+    }
+}
+
+fn read_file(path: &std::path::Path) -> Result<Option<Vec<u8>>, StoreError> {
+    if path.exists() {
+        Ok(Some(fs::read(path)?))
+    } else {
+        Ok(None)
+    }
+}
+
+fn atomic_binding_write(
+    path: &std::path::Path,
+    bytes: &[u8],
+    create: bool,
+) -> Result<(), StoreError> {
+    let parent = path
+        .parent()
+        .ok_or_else(|| StoreError::Invalid("binding has no parent".into()))?;
+    fs::create_dir_all(parent)?;
+    let mut temporary = NamedTempFile::new_in(parent)?;
+    temporary.write_all(bytes)?;
+    temporary.flush()?;
+    if create {
+        temporary
+            .persist_noclobber(path)
+            .map_err(|error| StoreError::Io(error.error))?;
+    } else {
+        temporary
+            .persist(path)
+            .map_err(|error| StoreError::Io(error.error))?;
+    }
+    Ok(())
+}
+
+fn restore_binding_file(path: &std::path::Path, before: Option<&[u8]>) -> Result<(), StoreError> {
+    match before {
+        Some(bytes) => atomic_binding_write(path, bytes, false)?,
+        None if path.exists() => fs::remove_file(path)?,
+        None => {}
+    }
+    if read_file(path)?.as_deref() == before {
+        Ok(())
+    } else {
+        Err(StoreError::Invalid(
+            "binding rollback verification failed".into(),
+        ))
+    }
+}
+
+fn replace_binding_files(
+    target: &std::path::Path,
+    history: Option<&std::path::Path>,
+    source: &[u8],
+    writer: &mut BindingWriter<'_>,
+) -> Result<(), StoreError> {
+    let target_before = read_file(target)?;
+    let history_before = history.map(read_file).transpose()?;
+    let attempt = (|| {
+        if let (Some(history), Some(previous)) = (history, target_before.as_deref()) {
+            if history_before.as_ref().is_none_or(Option::is_none) {
+                writer(history, previous, true)?;
             }
         }
-        result
+        writer(target, source, target_before.is_none())?;
+        if read_file(target)?.as_deref() != Some(source) {
+            return Err(StoreError::Invalid(
+                "binding post-write verification failed".into(),
+            ));
+        }
+        Ok(())
+    })();
+    if let Err(error) = attempt {
+        let target_recovery = restore_binding_file(target, target_before.as_deref());
+        let history_recovery = history
+            .map(|path| {
+                restore_binding_file(
+                    path,
+                    history_before.as_ref().and_then(|value| value.as_deref()),
+                )
+            })
+            .transpose();
+        target_recovery?;
+        history_recovery?;
+        return Err(error);
     }
+    Ok(())
 }
 
 impl RevisionSource for Store {
     fn current_revision(&self) -> Result<Revision, StoreError> {
         Ok(self.scan()?.snapshot.revision)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{StoreError, replace_binding_files};
+    use std::fs;
+    use tempfile::TempDir;
+
+    #[test]
+    fn replacement_rolls_back_exactly_after_history_write_failure() {
+        let root = TempDir::new().expect("root");
+        let target = root.path().join("bindings.toml");
+        let history = root.path().join("binding-history/previous.toml");
+        fs::write(&target, b"old").expect("target");
+        let mut writes = 0;
+        let error = replace_binding_files(
+            &target,
+            Some(&history),
+            b"new",
+            &mut |path, bytes, create| {
+                writes += 1;
+                if writes == 2 {
+                    return Err(StoreError::Invalid("injected target failure".into()));
+                }
+                super::atomic_binding_write(path, bytes, create)
+            },
+        )
+        .expect_err("injected failure");
+        assert!(error.to_string().contains("injected"));
+        assert_eq!(
+            b"old",
+            fs::read(&target).expect("target restored").as_slice()
+        );
+        assert!(
+            !history.exists(),
+            "archive must be removed during verified recovery"
+        );
     }
 }

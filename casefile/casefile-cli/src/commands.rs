@@ -14,6 +14,19 @@ struct CheckResult {
 }
 
 pub(super) fn execute(root: PathBuf, command: Command) -> Result<ExitCode> {
+    if let Command::ValidateMatrix { matrix } = &command {
+        let source = fs::read_to_string(matrix)?;
+        casefile_core::validate_strategy_matrix(&source).map_err(|diagnostics| {
+            anyhow::anyhow!(
+                diagnostics
+                    .into_iter()
+                    .map(|diagnostic| diagnostic.message)
+                    .collect::<Vec<_>>()
+                    .join("; ")
+            )
+        })?;
+        return Ok(ExitCode::SUCCESS);
+    }
     if let Command::Serve { port, index, write } = &command {
         casefile_server::serve(&root, *port, index.as_deref(), *write)?;
         return Ok(ExitCode::SUCCESS);
@@ -56,6 +69,9 @@ pub(super) fn execute(root: PathBuf, command: Command) -> Result<ExitCode> {
             Ok(ExitCode::SUCCESS)
         }
         Command::Serve { .. } => unreachable!("serve handled before opening the store"),
+        Command::ValidateMatrix { .. } => {
+            unreachable!("validation handled before opening the store")
+        }
         Command::Tui { editor, editor_arg } => tui::run(
             &store,
             &root,

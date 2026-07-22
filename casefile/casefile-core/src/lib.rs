@@ -36,7 +36,7 @@ pub use strategy::{
 #[doc(hidden)]
 pub use strategy::{
     parse as parse_strategy, parse_binding as parse_strategy_binding,
-    parse_projection as parse_strategy_projection,
+    parse_projection as parse_strategy_projection, validate_matrix as validate_strategy_matrix,
 };
 pub use work_item::WorkItemDraft;
 

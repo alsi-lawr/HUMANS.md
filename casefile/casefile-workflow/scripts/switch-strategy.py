@@ -7,6 +7,8 @@ import difflib
 import hashlib
 import os
 import re
+import shlex
+import subprocess
 import tempfile
 import tomllib
 from dataclasses import dataclass
@@ -17,12 +19,6 @@ from typing import Callable
 
 SAFE_ID = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 PHASES = {"planning", "investigation", "review", "implementation", "closeout"}
-COORDINATION_KEYS = (
-    "batch_when_capacity_exceeded",
-    "candidate_review_before_ticket",
-    "shared_ticket_storage_required",
-)
-
 
 @dataclass(frozen=True)
 class FileState:
@@ -50,101 +46,28 @@ def safe_work_path(value: object) -> bool:
     return ".." not in pure.parts and "\\" not in value
 
 
-def validate_matrix(matrix: dict) -> list[str]:
-    errors: list[str] = []
-    required_root = {
-        "schema_version",
-        "strategy_id",
-        "phase",
-        "adapter",
-        "orchestrator",
-        "limits",
-        "requirements",
-        "coordination",
-    }
-    missing = required_root - matrix.keys()
-    if missing:
-        errors.append(f"matrix missing root keys: {', '.join(sorted(missing))}")
-    if matrix.get("schema_version") != 1:
-        errors.append("matrix schema_version must be 1")
-    strategy_id = matrix.get("strategy_id")
-    if not isinstance(strategy_id, str) or not SAFE_ID.fullmatch(strategy_id):
-        errors.append("matrix strategy_id is invalid")
-    if matrix.get("phase") not in PHASES:
-        errors.append("matrix phase is invalid")
-    if not isinstance(matrix.get("adapter"), str) or not matrix.get("adapter"):
-        errors.append("matrix adapter is required")
-    if matrix.get("orchestrator", {}).get("binding") != "root":
-        errors.append("selected matrix would change the root")
-
-    limits = matrix.get("limits", {})
-    concurrency = limits.get("max_concurrent_subagents")
-    depth = limits.get("max_depth")
-    if not isinstance(concurrency, int) or isinstance(concurrency, bool) or concurrency < 1:
-        errors.append("matrix max_concurrent_subagents must be a positive integer")
-    if not isinstance(depth, int) or isinstance(depth, bool) or depth < 0:
-        errors.append("matrix max_depth must be a non-negative integer")
-
-    required_capabilities = matrix.get("requirements", {}).get("capabilities")
-    if not isinstance(required_capabilities, list) or not all(
-        isinstance(item, str) and item for item in required_capabilities
-    ):
-        errors.append("matrix capabilities must be a string array")
-
-    workers = matrix.get("workers", [])
-    if not isinstance(workers, list):
-        errors.append("matrix workers must be an array")
-        workers = []
-    minimum_total = 0
-    for index, worker in enumerate(workers):
-        required = {
-            "role",
-            "platform_profile",
-            "minimum_count",
-            "maximum_count",
-            "can_spawn_subagents",
-        }
-        if not isinstance(worker, dict) or required - worker.keys():
-            errors.append(f"matrix worker {index} is incomplete")
-            continue
-        if not isinstance(worker["role"], str) or not worker["role"]:
-            errors.append(f"matrix worker {index} role is invalid")
-        if not isinstance(worker["platform_profile"], str) or not worker["platform_profile"]:
-            errors.append(f"matrix worker {index} profile is invalid")
-        minimum = worker["minimum_count"]
-        maximum = worker["maximum_count"]
-        if (
-            not isinstance(minimum, int)
-            or isinstance(minimum, bool)
-            or not isinstance(maximum, int)
-            or isinstance(maximum, bool)
-            or minimum < 1
-            or minimum > maximum
-        ):
-            errors.append(f"matrix worker {index} counts are invalid")
-        else:
-            minimum_total += minimum
-        if not isinstance(worker["can_spawn_subagents"], bool):
-            errors.append(f"matrix worker {index} spawn flag must be boolean")
-        elif worker["can_spawn_subagents"] and isinstance(depth, int) and depth < 2:
-            errors.append(f"matrix worker {index} cannot spawn at depth {depth}")
-    if isinstance(concurrency, int) and minimum_total > concurrency:
-        errors.append("matrix worker minima exceed concurrency")
-
-    coordination = matrix.get("coordination", {})
-    for key in COORDINATION_KEYS:
-        if not isinstance(coordination.get(key), bool):
-            errors.append(f"matrix coordination {key} must be boolean")
-    return errors
+def validate_matrix(matrix_path: Path, validator: str) -> list[str]:
+    result = subprocess.run(
+        [*shlex.split(validator), "validate-matrix", "--matrix", str(matrix_path)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode == 0:
+        return []
+    detail = (result.stderr or result.stdout).strip()
+    return [f"canonical Rust matrix validation failed: {detail or 'validator failed'}"]
 
 
 def validate(
     state: dict,
     matrix: dict,
     capabilities: set[str],
+    matrix_path: Path,
+    validator: str,
     mode: str = "governed",
 ) -> list[str]:
-    errors = validate_matrix(matrix)
+    errors = validate_matrix(matrix_path, validator)
     if state.get("schema_version") != 1:
         errors.append("state schema_version must be 1")
     phase = state.get("phase")
@@ -344,6 +267,7 @@ def apply_transaction(
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--state", type=Path, required=True)
+    parser.add_argument("--validator", default=os.environ.get("CASEFILE_MATRIX_VALIDATOR", "casefile"))
     parser.add_argument("--matrix", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--mode", choices=("governed", "ad-hoc"), required=True)
@@ -357,7 +281,7 @@ def main() -> int:
         state, _ = load_toml(arguments.state.resolve(strict=True))
         matrix_path = arguments.matrix.resolve(strict=True)
         matrix, matrix_bytes = load_toml(matrix_path)
-        errors = validate(state, matrix, set(arguments.capability), arguments.mode)
+        errors = validate(state, matrix, set(arguments.capability), matrix_path, arguments.validator, arguments.mode)
         if errors:
             raise ValueError("strategy switch refused:\n- " + "\n- ".join(errors))
 
