@@ -157,7 +157,7 @@ fn detail_lines(
     match tab {
         DetailTab::Overview => overview_lines(entry, diagnostics),
         DetailTab::Rendered => rendered_lines(entry),
-        DetailTab::Source => content_lines(&entry.original_bytes),
+        DetailTab::Source => source_lines(&entry.original_bytes),
         DetailTab::Diagnostics => diagnostic_lines(entry, diagnostics),
     }
 }
@@ -166,6 +166,22 @@ fn rendered_lines(entry: &EntrySnapshot) -> Vec<Line<'static>> {
     match std::str::from_utf8(&entry.original_bytes) {
         Ok(text) if entry.path.ends_with(".md") => markdown::render(text),
         _ => content_lines(&entry.original_bytes),
+    }
+}
+
+fn source_lines(bytes: &[u8]) -> Vec<Line<'static>> {
+    match std::str::from_utf8(bytes) {
+        Ok(text) => {
+            if text.is_empty() {
+                return vec![Line::from("Empty text record.").style(Style::default().fg(MUTED))];
+            }
+            let (safe, truncated) = safe_multiline(text, usize::MAX);
+            debug_assert!(!truncated);
+            safe.split('\n')
+                .map(|line| Line::from(line.to_owned()))
+                .collect()
+        }
+        Err(_) => content_lines(bytes),
     }
 }
 
@@ -461,6 +477,28 @@ mod tests {
         assert!(output.contains(r"\u{1b}[31mnot a colour"));
         assert!(!output.contains("first line\\nsecond line"));
         assert!(!output.contains('\x1b'));
+    }
+
+    #[test]
+    fn source_keeps_text_beyond_the_display_limit() {
+        let tail = "source tail remains available";
+        let source = format!("{}\n{tail}", "x".repeat(TEXT_LIMIT + 1));
+        let entry = entry(
+            "a-ticket.md",
+            Classification::Governed,
+            Some(Kind::Ticket),
+            None,
+            source.as_bytes(),
+        );
+
+        let visible = detail_lines(&entry, &[], DetailTab::Source)
+            .into_iter()
+            .map(|line| line.to_string())
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        assert!(visible.contains(tail));
+        assert!(!visible.contains("truncated"));
     }
 
     #[test]
