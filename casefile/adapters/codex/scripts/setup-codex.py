@@ -221,7 +221,7 @@ def catalog_override(
             raise SetupError("required V1 selectors were not cleared")
     else:
         for model in result["models"]:
-            set_selector(model, "multi_agent_version", "v2")
+            model["multi_agent_version"] = "v2"
             if model["multi_agent_version"] != "v2":
                 raise SetupError("required V2 selectors were not assigned")
     return canonical(result), sorted(patched), sorted(skipped)

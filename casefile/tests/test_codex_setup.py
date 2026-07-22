@@ -99,10 +99,14 @@ class CodexSetupTests(unittest.TestCase):
                     "display_name": target["expected"]["display_name"],
                     "base_instructions": "upstream",
                     "model_messages": {"instructions_template": "upstream"},
-                    "multi_agent_version": "v2",
                     "supported_reasoning_levels": [
                         {"effort": effort} for effort in target["required_reasoning"]
                     ],
+                    **(
+                        {"multi_agent_version": "v2"}
+                        if target["id"] in setup.V1_SELECTOR_MODELS
+                        else {}
+                    ),
                 }
                 for target in profiles["catalog"]["targets"]
             ]
@@ -169,7 +173,9 @@ class CodexSetupTests(unittest.TestCase):
                     self.assertEqual(version, receipt["multi_agent_version"])
                     self.assertEqual(version, setup.uninstall_preview(receipt_path, receipt)["multi_agent_version"])
                     selected = json.loads((home / f"models-casefile-{version}.json").read_bytes())["models"]
-                    selectors = {model["slug"]: model["multi_agent_version"] for model in selected}
+                    selectors = {
+                        model["slug"]: model.get("multi_agent_version") for model in selected
+                    }
                     if version == "v1":
                         self.assertTrue(all(selectors[model] is None for model in setup.V1_SELECTOR_MODELS))
                     else:
