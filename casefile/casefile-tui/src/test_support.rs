@@ -2,7 +2,7 @@ use crate::workbench::App;
 use casefile_core::{
     CasefileSnapshot, Classification, Diagnostic, EntrySnapshot, Kind, RecordSummary, Revision,
 };
-use casefile_store::{ActivationState, ScanResult};
+use casefile_store::{ActivationState, DerivedSnapshot, ScanResult};
 use ratatui::{Terminal, backend::TestBackend};
 use std::collections::BTreeMap;
 
@@ -95,6 +95,21 @@ pub(crate) fn scan() -> ScanResult {
             ),
         ],
     }
+}
+
+pub(crate) fn derived(scan: &ScanResult) -> DerivedSnapshot {
+    DerivedSnapshot {
+        source_revision: scan.snapshot.revision.clone(),
+        records: Vec::new(),
+        relationships: Vec::new(),
+        boards: Vec::new(),
+        diagnostics: scan.diagnostics.clone(),
+    }
+}
+
+pub(crate) fn app(scan: ScanResult) -> App {
+    let derived = derived(&scan);
+    App::new(scan, derived)
 }
 
 pub(crate) fn render(app: &App, width: u16, height: u16) -> String {

@@ -13,7 +13,7 @@ mod workbench;
 pub use interaction::{EditIntent, Interaction};
 pub use review::ReviewDecision;
 
-use casefile_store::ScanResult;
+use casefile_store::{DerivedSnapshot, ScanResult};
 use crossterm::{
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
@@ -24,11 +24,11 @@ use std::io;
 const PAGE_SIZE: isize = 10;
 
 /// Starts the workbench for an already scanned snapshot.
-pub fn run(scan: ScanResult) -> io::Result<Interaction> {
+pub fn run(scan: ScanResult, derived: DerivedSnapshot) -> io::Result<Interaction> {
     let _guard = TerminalGuard::enter()?;
     let backend = CrosstermBackend::new(io::stdout());
     let mut terminal = Terminal::new(backend)?;
-    let mut app = workbench::App::new(scan);
+    let mut app = workbench::App::new(scan, derived);
     let result = app.run(&mut terminal);
     terminal.show_cursor()?;
     result

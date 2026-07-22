@@ -5,7 +5,7 @@ use crate::{
     record_detail::RecordDetail,
     ui::{ACCENT, MUTED, WARN},
 };
-use casefile_store::ScanResult;
+use casefile_store::{DerivedSnapshot, ScanResult};
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use ratatui::{
     Terminal,
@@ -43,6 +43,7 @@ impl Focus {
 
 pub(crate) struct App {
     scan: ScanResult,
+    derived: DerivedSnapshot,
     browser: Browser,
     detail: RecordDetail,
     focus: Focus,
@@ -52,10 +53,11 @@ pub(crate) struct App {
 }
 
 impl App {
-    pub(crate) fn new(scan: ScanResult) -> Self {
+    pub(crate) fn new(scan: ScanResult, derived: DerivedSnapshot) -> Self {
         let browser = Browser::new(&scan);
         Self {
             scan,
+            derived,
             browser,
             detail: RecordDetail::new(),
             focus: Focus::List,
@@ -112,6 +114,7 @@ impl App {
             KeyCode::Char('2') => self.set_view(View::Investigations),
             KeyCode::Char('3') => self.set_view(View::Tickets),
             KeyCode::Char('4') => self.set_view(View::Files),
+            KeyCode::Char('5') => self.set_view(View::Strategies),
             KeyCode::Char('t') => {
                 self.browser.cycle_view(&self.scan);
                 self.detail.reset_scroll();
@@ -219,7 +222,7 @@ impl App {
         } else if let Some(feedback) = &self.feedback {
             feedback
         } else {
-            " 1-4 tabs  Enter drill down  Backspace up  Tab focus  j/k move  h/l detail  e edit  / filter  ? help  q quit "
+            " 1-5 tabs  Enter drill down  Backspace up  Tab focus  j/k move  h/l detail  e edit  / filter  ? help  q quit "
         };
         Paragraph::new(footer_text)
             .style(Style::default().fg(MUTED))
@@ -231,10 +234,22 @@ impl App {
     }
 
     fn render_body(&self, list: Rect, detail: Rect, buffer: &mut Buffer) {
+        let selected = self.browser.selected(&self.scan);
+        let derived = if self.derived.source_revision == self.scan.snapshot.revision {
+            selected.and_then(|entry| {
+                self.derived
+                    .records
+                    .iter()
+                    .find(|record| record.path == entry.path)
+            })
+        } else {
+            None
+        };
         self.browser
             .render_list(&self.scan, self.focus == Focus::List, list, buffer);
         self.detail.render(
-            self.browser.selected(&self.scan),
+            selected,
+            derived,
             &self.scan.diagnostics,
             self.focus == Focus::Detail,
             detail,
@@ -255,8 +270,8 @@ fn render_help(area: Rect, buffer: &mut Buffer) {
         Line::from(""),
         Line::from("VIEW").style(Style::default().fg(ACCENT).bold()),
         help_line(
-            "1 / 2 / 3 / 4",
-            "Open Projects, Investigations, Tickets, or Files",
+            "1 / 2 / 3 / 4 / 5",
+            "Open Projects, Investigations, Tickets, Files, or Strategies",
         ),
         help_line(
             "Enter / Backspace",
