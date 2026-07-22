@@ -69,9 +69,14 @@ test("navigates and reconciles governed work against the shared host fixture", a
     await waitFor(() => container.textContent?.includes("Governed work") === true);
     expect(container.textContent).toContain("Minimum ticket");
     expect(container.textContent).toContain("Minimum epic");
+    await click(container, "HMD-011.md");
 
     await click(container, "Strategies");
     await waitFor(() => container.textContent?.includes("Phase roles and constraints") === true);
+    expect(container.textContent).toContain(
+      "Select a phase strategy or writer binding to inspect it",
+    );
+    expect(container.textContent).not.toContain("Legacy strategy without a typed projection");
     expect(container.textContent).toContain("implementation phase");
     expect(container.textContent).toContain("investigation phase");
     expect(container.textContent).toContain("review phase");

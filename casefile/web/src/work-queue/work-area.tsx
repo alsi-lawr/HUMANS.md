@@ -74,7 +74,7 @@ export const BrowserPanel = ({
       <StrategyPanel
         investigation={investigation}
         records={strategies}
-        selectedRecord={selectedRecord}
+        selectedRecord={strategies.find((record) => record.path === selectedRecord?.path)}
         selectedPath={selectedPath}
         diagnostics={diagnostics}
         search={search}
