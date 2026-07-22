@@ -43,46 +43,7 @@ guidance. Removing one plugin never removes the shared marketplace or another pl
 
 ## Project
 
-[Casefile guide](casefile/casefile-workflow/README.md) | [Thesis](HUMANS.md) |
+[Documentation](https://github.com/alsi-lawr/HUMANS.md/wiki) |
+[Casefile guide](https://github.com/alsi-lawr/HUMANS.md/wiki/Casefile) | [Thesis](HUMANS.md) |
+[Contributing](CONTRIBUTING.md) |
 [Generated marketplace](https://github.com/alsi-lawr/humans-md-marketplace) | [MIT licence](LICENSE)
-
-## Development
-
-Enter the pinned development environment from the repository root:
-
-```sh
-nix develop
-(cd casefile/web && bun install)
-```
-
-It provides the Rust, Python, Node.js, workflow, GitHub, Docker-client, and PTY tools used by the
-repository checks. The one-time Bun install materializes the lock-resolved web tooling; manifest
-ranges remain upgrade-forward for deliberate updates. Docker itself remains an external service.
-Format Markdown and TypeScript with Prettier and Rust with rustfmt through the shared command:
-
-```sh
-scripts/format-source.sh --write
-```
-
-Build and inspect the Casefile browser workbench against a planning root with:
-
-```sh
-cd casefile/web
-bun run typecheck
-bun run test
-bun run build
-cd ..
-cargo run -p casefile-cli -- --root ~/dev/agent-planning serve --write
-```
-
-Open the printed loopback URL. Read-only browsing works immediately; paste the printed write
-capability into the workbench only when you intend to preview and apply governed ticket, epic, or
-board edits. The server never needs Node at runtime because it embeds the tracked static build.
-
-Run `nix flake check` to evaluate the flake. Replay CI with a cached runner image from inside the
-shell:
-
-```sh
-act pull_request -j validate --pull=false \
-  -P ubuntu-latest=catthehacker/ubuntu:act-latest
-```
