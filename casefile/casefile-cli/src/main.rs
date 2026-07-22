@@ -45,6 +45,13 @@ enum Command {
         )]
         implementation_active: bool,
     },
+    /// Project the selected implementation writer through the canonical Store-derived state.
+    ProjectWriterBinding {
+        #[arg(long)]
+        investigation: String,
+        #[arg(long)]
+        strategy_id: String,
+    },
     Preview {
         #[arg(long)]
         request: PathBuf,

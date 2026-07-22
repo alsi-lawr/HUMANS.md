@@ -1,7 +1,10 @@
 use crate::{Command, editor::EditorConfig, tui};
 use anyhow::{Context, Result};
-use casefile_core::{ChangeRequest, Diagnostic, Preview, Revision};
-use casefile_store::{ActivationState, Store};
+use casefile_core::{
+    ChangeRequest, Classification, Diagnostic, Kind, Preview, RecordSummary, Revision,
+    parse_strategy,
+};
+use casefile_store::{ActivationState, Store, StrategyBindingState};
 use serde::Serialize;
 use std::{fs, path::PathBuf, process::ExitCode};
 
@@ -11,6 +14,13 @@ struct CheckResult {
     valid: Option<bool>,
     revision: Revision,
     diagnostics: Vec<Diagnostic>,
+}
+
+#[derive(Serialize)]
+struct WriterBindingProjection {
+    strategy_id: String,
+    adapter: String,
+    binding: StrategyBindingState,
 }
 
 pub(super) fn execute(root: PathBuf, command: Command) -> Result<ExitCode> {
@@ -82,6 +92,52 @@ pub(super) fn execute(root: PathBuf, command: Command) -> Result<ExitCode> {
             }))?;
             Ok(ExitCode::SUCCESS)
         }
+        Command::ProjectWriterBinding {
+            investigation,
+            strategy_id,
+        } => {
+            let implementation_path = strategy_path(&investigation)?;
+            let derived = store.derived_snapshot()?;
+            let record = derived
+                .records
+                .iter()
+                .find(|record| record.path == implementation_path)
+                .ok_or_else(|| anyhow::anyhow!("selected implementation strategy is missing"))?;
+            if record.classification != Classification::Governed
+                || record.kind != Some(Kind::Strategy)
+            {
+                anyhow::bail!("selected implementation strategy is invalid or ungraphable");
+            }
+            let content = record.content.as_deref().ok_or_else(|| {
+                anyhow::anyhow!("selected implementation strategy is invalid or ungraphable")
+            })?;
+            let summary = parse_strategy(&implementation_path, content).map_err(|_| {
+                anyhow::anyhow!("selected implementation strategy is invalid or ungraphable")
+            })?;
+            let RecordSummary::Strategy {
+                strategy_id: selected_id,
+                phase,
+                adapter,
+            } = summary
+            else {
+                anyhow::bail!("selected implementation strategy is invalid or ungraphable");
+            };
+            if phase != "implementation" || selected_id != strategy_id || adapter != "codex" {
+                anyhow::bail!("requested Codex implementation strategy is not selected");
+            }
+            let strategy = record.strategy.as_ref().ok_or_else(|| {
+                anyhow::anyhow!("selected implementation strategy is invalid or ungraphable")
+            })?;
+            let binding = strategy.binding.clone().ok_or_else(|| {
+                anyhow::anyhow!("selected implementation strategy has no writer binding state")
+            })?;
+            print_json(&WriterBindingProjection {
+                strategy_id,
+                adapter,
+                binding,
+            })?;
+            Ok(ExitCode::SUCCESS)
+        }
         Command::Serve { .. } => unreachable!("serve handled before opening the store"),
         Command::ValidateMatrix { .. } => {
             unreachable!("validation handled before opening the store")
@@ -95,6 +151,20 @@ pub(super) fn execute(root: PathBuf, command: Command) -> Result<ExitCode> {
             },
         ),
     }
+}
+
+fn strategy_path(investigation: &str) -> Result<String> {
+    let investigation = investigation.trim_end_matches('/');
+    if investigation.is_empty()
+        || investigation.starts_with('/')
+        || investigation.contains('\\')
+        || investigation
+            .split('/')
+            .any(|component| component.is_empty() || matches!(component, "." | ".."))
+    {
+        anyhow::bail!("investigation path must be a contained relative path");
+    }
+    Ok(format!("{investigation}/strategy/implementation.toml"))
 }
 
 fn read_json<T: serde::de::DeserializeOwned>(path: &PathBuf) -> Result<T> {

@@ -166,26 +166,19 @@ def offer(
     executable: str,
     home: Path,
     profiles_path: Path,
-    *,
-    require_recommendation: bool = True,
 ) -> dict:
     runtime = active_runtime(home)
     pairs = offered_pairs(active_catalog(executable, home), load_profiles(profiles_path), runtime)
     recommendation = next((pair for pair in pairs if pair["recommended"]), None)
-    if require_recommendation and recommendation is None:
-        raise BindingError(
-            "recommended Sol/high is unavailable; repair Codex Casefile setup before selection"
-        )
+    if not pairs:
+        raise BindingError("no model/effort pair is currently selectable")
     return {
         "multi_agent_version": runtime,
-        "recommendation": (
-            {
-                "model": RECOMMENDED_MODEL,
-                "reasoning_effort": RECOMMENDED_EFFORT,
-            }
-            if recommendation is not None
-            else None
-        ),
+        "recommendation": {
+            "model": RECOMMENDED_MODEL,
+            "reasoning_effort": RECOMMENDED_EFFORT,
+            "available": recommendation is not None,
+        },
         "pairs": pairs,
         "selection_required": True,
     }
@@ -271,35 +264,32 @@ def persist_selection(
     }
 
 
-def scan(casefile_executable: str, planning_root: Path) -> dict:
+def binding_projection(
+    casefile_executable: str,
+    planning_root: Path,
+    investigation: str,
+    strategy_id: str,
+) -> dict:
     try:
         result = json.loads(
-            checked([casefile_executable, "--root", str(planning_root), "scan"])
+            checked(
+                [
+                    casefile_executable,
+                    "--root",
+                    str(planning_root),
+                    "project-writer-binding",
+                    "--investigation",
+                    investigation,
+                    "--strategy-id",
+                    strategy_id,
+                ]
+            )
         )
     except json.JSONDecodeError as error:
-        raise BindingError("Casefile scan returned invalid JSON") from error
-    if not isinstance(result, dict) or result.get("activation") != "active":
-        raise BindingError("planning root must be an active Casefile")
+        raise BindingError("Casefile writer projection returned invalid JSON") from error
+    if not isinstance(result, dict):
+        raise BindingError("Casefile writer projection is not an object")
     return result
-
-
-def scan_entry(snapshot: dict, path: str) -> dict | None:
-    entries = snapshot.get("snapshot", {}).get("entries", [])
-    matches = [entry for entry in entries if isinstance(entry, dict) and entry.get("path") == path]
-    if len(matches) > 1:
-        raise BindingError(f"Casefile scan returned duplicate path: {path}")
-    return matches[0] if matches else None
-
-
-def matrix_default(profiles: dict, strategy_id: str) -> tuple[str, str]:
-    rows = [
-        row
-        for row in profiles.get("matrix_profiles", [])
-        if row.get("strategy_id") == strategy_id and row.get("role") == "implementation-writer"
-    ]
-    if len(rows) != 1:
-        raise BindingError("selected implementation strategy has no exact default writer profile")
-    return rows[0]["model"], rows[0]["reasoning"]
 
 
 def resolve_spawn(
@@ -315,66 +305,46 @@ def resolve_spawn(
     if strategy_id not in STRATEGIES:
         raise BindingError(f"unsupported implementation strategy: {strategy_id}")
     profiles = load_profiles(profiles_path)
-    snapshot = scan(casefile_executable, planning_root)
-    implementation_path = f"{investigation}/strategy/implementation.toml"
-    implementation = scan_entry(snapshot, implementation_path)
-    summary = implementation.get("summary") if implementation else None
-    if (
-        not isinstance(summary, dict)
-        or implementation.get("classification") != "governed"
-        or summary.get("type") != "strategy"
-        or summary.get("adapter") != "codex"
-        or summary.get("phase") != "implementation"
-        or summary.get("strategy_id") != strategy_id
-    ):
-        raise BindingError(
-            "the requested Codex implementation strategy is not selected and governed"
-        )
-    binding_path = f"{investigation}/strategy/bindings.toml"
-    binding = scan_entry(snapshot, binding_path)
-    binding_diagnostics = [
-        item
-        for item in snapshot.get("diagnostics", [])
-        if isinstance(item, dict)
-        and item.get("path") == binding_path
-        and item.get("code") in {"binding_adapter", "binding_writer_match"}
-    ]
-    if binding_diagnostics:
-        detail = "; ".join(
-            str(item.get("message", "unresolved binding"))
-            for item in binding_diagnostics
-        )
-        raise BindingError(
-            f"persisted writer binding is unresolved ({detail}); explicitly reselect or "
-            "repair the strategy before delegation"
-        )
-    if binding is None:
-        model, effort = matrix_default(profiles, strategy_id)
-        source = "matrix_default"
-    else:
-        binding_summary = binding.get("summary")
-        value = binding_summary.get("binding") if isinstance(binding_summary, dict) else None
-        if (
-            binding.get("classification") != "governed"
-            or binding.get("kind") != "strategy_binding"
-            or not isinstance(value, dict)
-            or value.get("adapter") != "codex"
-            or value.get("role") != "implementation-writer"
-        ):
+    projection = binding_projection(
+        casefile_executable,
+        planning_root,
+        investigation,
+        strategy_id,
+    )
+    if projection.get("strategy_id") != strategy_id or projection.get("adapter") != "codex":
+        raise BindingError("Casefile writer projection does not match the selected strategy")
+    state = projection.get("binding")
+    state_name = state.get("state") if isinstance(state, dict) else None
+    if state_name not in {"absent", "resolved"}:
+        if state_name in {"pending", "unresolved", "invalid"}:
             raise BindingError(
-                "persisted writer binding is invalid; repair or explicitly reselect before "
-                "delegation"
+                f"canonical writer binding state is {state_name}; stop before delegation and "
+                "repair or explicitly reselect while implementation is inactive"
             )
-        model, effort = value.get("model"), value.get("reasoning_effort")
-        if not isinstance(model, str) or not isinstance(effort, str):
-            raise BindingError("persisted writer binding lacks a model/effort pair")
-        source = "binding"
-    current = offer(executable, home, profiles_path, require_recommendation=False)
+        raise BindingError("Casefile writer projection has an invalid binding state")
+    effective = state.get("effective")
+    if not isinstance(effective, dict):
+        raise BindingError("Casefile writer projection lacks an effective pair")
+    model, effort, source = (
+        effective.get("model"),
+        effective.get("reasoning_effort"),
+        effective.get("source"),
+    )
+    expected_source = "matrix" if state_name == "absent" else "binding"
+    if (
+        not isinstance(model, str)
+        or not model
+        or not isinstance(effort, str)
+        or not effort
+        or source != expected_source
+    ):
+        raise BindingError("Casefile writer projection has an invalid effective pair")
+    current = offer(executable, home, profiles_path)
     try:
         pair = selected_pair(current, model, effort)
     except BindingError as error:
         raise BindingError(
-            f"persisted writer {model}/{effort} is unavailable; stop before delegation, "
+            f"effective writer {model}/{effort} is unavailable; stop before delegation, "
             "rerun offer, "
             "and obtain explicit reselection while implementation is inactive"
         ) from error

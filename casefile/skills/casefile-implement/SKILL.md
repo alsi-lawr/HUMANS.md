@@ -27,9 +27,9 @@ pipeline overlap, resume, and every correction round. Delegate with exactly the 
 object: V1 returns a named agent type; V2 returns a model-free role plus explicit model, reasoning,
 and bounded history override. Never reuse an earlier resolution without revalidation.
 
-If resolution says the persisted or matrix-default pair is invalid or unavailable, stop before
+If resolution says the persisted or matrix-derived pair is invalid or unavailable, stop before
 delegation and before any planning/source mutation. Run `offer`, present its complete current list,
-and request a new explicit selection. Replace the binding with
+state when Sol/high is unavailable, and request a new explicit selection. Replace the binding with
 `select --implementation-active false` only after confirming no implementation writer or correction
 is active. Never substitute Sol/high or another pair silently. A missing binding in a historical
 Casefile is not an error: the resolver returns the selected matrix writer default after checking its

@@ -170,6 +170,21 @@ fn replace_binding(root: &Path, source: &Path, active: bool) -> std::process::Ou
         .expect("replace binding command")
 }
 
+fn project_binding(root: &Path, strategy_id: &str) -> std::process::Output {
+    Command::new(env!("CARGO_BIN_EXE_casefile"))
+        .args(["--root"])
+        .arg(root)
+        .args([
+            "project-writer-binding",
+            "--investigation",
+            "projects/demo/investigations/sample",
+            "--strategy-id",
+            strategy_id,
+        ])
+        .output()
+        .expect("project writer binding command")
+}
+
 #[test]
 fn binding_cli_delegates_validation_activity_gate_and_transaction_history_to_store() {
     let root = fixture();
@@ -221,4 +236,90 @@ fn binding_cli_delegates_validation_activity_gate_and_transaction_history_to_sto
         .map(|entry| fs::read_to_string(entry.expect("entry").path()).expect("archived source"))
         .collect::<Vec<_>>();
     assert_eq!(vec![BINDING.to_owned()], archived);
+}
+
+#[test]
+fn writer_projection_uses_canonical_matrix_and_binding_states() {
+    let root = fixture();
+    let implementation = root
+        .path()
+        .join("projects/demo/investigations/sample/strategy/implementation.toml");
+    let shipped = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../adapters/codex/matrices/casefile-implement-ticket-batch.toml");
+    let historical = fs::read_to_string(shipped)
+        .expect("shipped matrix")
+        .replacen("model = \"gpt-5.6-sol\"", "model = \"gpt-5.6-terra\"", 1);
+    fs::write(&implementation, historical).expect("historical implementation matrix");
+
+    let absent = project_binding(root.path(), "casefile-implement-ticket-batch");
+    assert!(
+        absent.status.success(),
+        "{}",
+        String::from_utf8_lossy(&absent.stderr)
+    );
+    assert_eq!(
+        json!({
+            "strategy_id": "casefile-implement-ticket-batch",
+            "adapter": "codex",
+            "binding": {
+                "state": "absent",
+                "effective": {
+                    "model": "gpt-5.6-terra",
+                    "reasoning_effort": "high",
+                    "source": "matrix"
+                }
+            }
+        }),
+        serde_json::from_slice::<Value>(&absent.stdout).expect("absent projection")
+    );
+
+    let binding = root.path().join("binding-source.toml");
+    fs::write(&binding, BINDING).expect("binding source");
+    assert!(
+        replace_binding(root.path(), &binding, false)
+            .status
+            .success()
+    );
+    let resolved = project_binding(root.path(), "casefile-implement-ticket-batch");
+    assert!(resolved.status.success());
+    assert_eq!(
+        json!({
+            "state": "resolved",
+            "effective": {
+                "model": "gpt-5.6-sol",
+                "reasoning_effort": "high",
+                "source": "binding"
+            }
+        }),
+        serde_json::from_slice::<Value>(&resolved.stdout).expect("resolved projection")["binding"]
+    );
+
+    fs::write(&binding, BINDING.replacen("codex", "claude", 1)).expect("mismatch source");
+    assert!(
+        replace_binding(root.path(), &binding, false)
+            .status
+            .success()
+    );
+    let unresolved = project_binding(root.path(), "casefile-implement-ticket-batch");
+    assert!(unresolved.status.success());
+    assert_eq!(
+        json!({"state": "unresolved"}),
+        serde_json::from_slice::<Value>(&unresolved.stdout).expect("unresolved projection")["binding"]
+    );
+
+    let target = root
+        .path()
+        .join("projects/demo/investigations/sample/strategy/bindings.toml");
+    fs::write(&target, "not = [toml").expect("invalid binding");
+    let invalid = project_binding(root.path(), "casefile-implement-ticket-batch");
+    assert!(invalid.status.success());
+    assert_eq!(
+        json!({"state": "invalid"}),
+        serde_json::from_slice::<Value>(&invalid.stdout).expect("invalid projection")["binding"]
+    );
+
+    fs::write(&implementation, "not = [toml").expect("invalid implementation");
+    let ungraphable = project_binding(root.path(), "casefile-implement-ticket-batch");
+    assert!(!ungraphable.status.success());
+    assert!(String::from_utf8_lossy(&ungraphable.stderr).contains("invalid or ungraphable"));
 }
