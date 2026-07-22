@@ -127,7 +127,7 @@ impl Browser {
         scan.snapshot
             .entries
             .iter()
-            .filter(|entry| self.matches_scope(entry))
+            .filter(|entry| self.matches_scope(scan, entry))
             .filter(|entry| self.matches_view(entry) && self.matches_entry_filter(entry))
             .collect()
     }
@@ -296,7 +296,7 @@ impl Browser {
                         let tickets = work_entries(scan)
                             .into_iter()
                             .filter(|entry| {
-                                entry_scope(entry).is_some_and(|scope| scope.0 == project)
+                                entry_scope(scan, entry).is_some_and(|scope| scope.0 == project)
                             })
                             .count();
                         ListItem::new(Line::from(vec![
@@ -323,7 +323,7 @@ impl Browser {
                         let tickets = work_entries(scan)
                             .into_iter()
                             .filter(|entry| {
-                                entry_scope(entry).is_some_and(|scope| {
+                                entry_scope(scan, entry).is_some_and(|scope| {
                                     scope.0 == project && scope.1 == Some(investigation.as_str())
                                 })
                             })
@@ -361,6 +361,7 @@ impl Browser {
             .into_iter()
             .map(|entry| {
                 let directory = relative_parent_directory(
+                    scan,
                     entry,
                     self.selected_project.as_deref(),
                     self.selected_investigation.as_deref(),
@@ -388,7 +389,7 @@ impl Browser {
                 self.filter.is_empty()
                     || project.to_lowercase().contains(&self.filter.to_lowercase())
                     || scan.snapshot.entries.iter().any(|entry| {
-                        entry_scope(entry).is_some_and(|scope| scope.0 == project)
+                        entry_scope(scan, entry).is_some_and(|scope| scope.0 == project)
                             && self.matches_entry_filter(entry)
                     })
             })
@@ -407,7 +408,7 @@ impl Browser {
                         .to_lowercase()
                         .contains(&self.filter.to_lowercase())
                     || scan.snapshot.entries.iter().any(|entry| {
-                        entry_scope(entry).is_some_and(|scope| {
+                        entry_scope(scan, entry).is_some_and(|scope| {
                             scope.0 == project && scope.1 == Some(investigation.as_str())
                         }) && self.matches_entry_filter(entry)
                     })
@@ -418,7 +419,7 @@ impl Browser {
     fn ticket_count(&self, scan: &ScanResult) -> usize {
         work_entries(scan)
             .into_iter()
-            .filter(|entry| self.matches_scope(entry))
+            .filter(|entry| self.matches_scope(scan, entry))
             .count()
     }
 
@@ -426,12 +427,12 @@ impl Browser {
         scan.snapshot
             .entries
             .iter()
-            .filter(|entry| self.matches_scope(entry) && !is_work(entry))
+            .filter(|entry| self.matches_scope(scan, entry) && !is_work(entry))
             .count()
     }
 
-    fn matches_scope(&self, entry: &EntrySnapshot) -> bool {
-        let Some((project, investigation)) = entry_scope(entry) else {
+    fn matches_scope(&self, scan: &ScanResult, entry: &EntrySnapshot) -> bool {
+        let Some((project, investigation)) = entry_scope(scan, entry) else {
             return false;
         };
         self.selected_project.as_deref() == Some(project)
@@ -497,7 +498,7 @@ fn all_projects(scan: &ScanResult) -> Vec<String> {
     scan.snapshot
         .entries
         .iter()
-        .filter_map(entry_scope)
+        .filter_map(|entry| entry_scope(scan, entry))
         .map(|scope| scope.0.to_owned())
         .collect::<BTreeSet<_>>()
         .into_iter()
@@ -508,7 +509,7 @@ fn all_investigations(scan: &ScanResult, project: &str) -> Vec<String> {
     scan.snapshot
         .entries
         .iter()
-        .filter_map(entry_scope)
+        .filter_map(|entry| entry_scope(scan, entry))
         .filter(|scope| scope.0 == project)
         .filter_map(|scope| scope.1.map(str::to_owned))
         .collect::<BTreeSet<_>>()
@@ -529,19 +530,15 @@ fn is_work(entry: &EntrySnapshot) -> bool {
         && matches!(entry.summary, Some(RecordSummary::WorkItem { .. }))
 }
 
-fn entry_scope(entry: &EntrySnapshot) -> Option<(&str, Option<&str>)> {
-    let mut segments = entry.path.split('/');
-    if segments.next()? != "projects" {
-        return None;
-    }
-    let project = segments.next()?;
-    if segments.next() == Some("investigations") {
-        return Some((project, segments.next()));
-    }
-    Some((project, None))
+fn entry_scope<'a>(
+    scan: &'a ScanResult,
+    entry: &'a EntrySnapshot,
+) -> Option<(&'a str, Option<&'a str>)> {
+    scan.scope_for_path(&entry.path)
 }
 
 fn relative_parent_directory(
+    scan: &ScanResult,
     entry: &EntrySnapshot,
     project: Option<&str>,
     investigation: Option<&str>,
@@ -550,7 +547,7 @@ fn relative_parent_directory(
     let investigation_prefix = project.zip(investigation).map(|(project, investigation)| {
         format!("projects/{project}/investigations/{investigation}/")
     });
-    let prefix = match entry_scope(entry) {
+    let prefix = match entry_scope(scan, entry) {
         Some((_, Some(_))) => investigation_prefix.as_deref(),
         Some((_, None)) => project_prefix.as_deref(),
         None => None,

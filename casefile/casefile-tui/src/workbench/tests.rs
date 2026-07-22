@@ -2,6 +2,7 @@ use super::*;
 use crate::{EditIntent, test_support};
 use casefile_core::{CasefileSnapshot, Classification, Diagnostic, Kind, RecordSummary, Revision};
 use casefile_store::{ActivationState, ScanResult};
+use std::collections::BTreeMap;
 
 const TICKET_PATH: &str = "projects/demo/investigations/sample/tickets/accepted/HMD-013.md";
 
@@ -27,6 +28,59 @@ fn project_investigation_ticket_drill_down_selects_a_canonical_path() {
             .map(|entry| entry.path.as_str()),
         Some(TICKET_PATH),
     );
+}
+
+#[test]
+fn nested_investigations_with_the_same_leaf_are_selectable_independently() {
+    let mut scan = test_support::scan();
+    scan.investigation_roots = BTreeMap::from([(
+        "demo".into(),
+        vec!["alpha/shared".into(), "beta/shared".into()],
+    )]);
+    scan.snapshot.entries = vec![
+        test_support::entry(
+            "projects/demo/investigations/alpha/shared/tickets/accepted/HMD-101.md",
+            Classification::Governed,
+            Some(Kind::Ticket),
+            Some(RecordSummary::WorkItem {
+                id: "HMD-101".into(),
+                title: "Alpha ticket".into(),
+                status: "accepted".into(),
+                rank: None,
+            }),
+            b"alpha",
+        ),
+        test_support::entry(
+            "projects/demo/investigations/beta/shared/tickets/accepted/HMD-102.md",
+            Classification::Governed,
+            Some(Kind::Ticket),
+            Some(RecordSummary::WorkItem {
+                id: "HMD-102".into(),
+                title: "Beta ticket".into(),
+                status: "accepted".into(),
+                rank: None,
+            }),
+            b"beta",
+        ),
+    ];
+    let mut app = App::new(scan);
+
+    app.handle(KeyCode::Enter);
+    let investigations = test_support::render(&app, 120, 32);
+    assert!(investigations.contains("alpha/shared"));
+    assert!(investigations.contains("beta/shared"));
+
+    app.handle(KeyCode::Enter);
+    let alpha = test_support::render(&app, 120, 32);
+    assert!(alpha.contains("HMD-101"));
+    assert!(!alpha.contains("HMD-102"));
+
+    app.handle(KeyCode::Backspace);
+    app.handle(KeyCode::Down);
+    app.handle(KeyCode::Enter);
+    let beta = test_support::render(&app, 120, 32);
+    assert!(beta.contains("HMD-102"));
+    assert!(!beta.contains("HMD-101"));
 }
 
 #[test]
@@ -83,6 +137,7 @@ fn filtering_and_empty_hierarchy_states_remain_predictable() {
 
     let empty = ScanResult {
         activation: ActivationState::Unactivated,
+        investigation_roots: BTreeMap::new(),
         snapshot: CasefileSnapshot {
             revision: Revision("sha256:empty".into()),
             entries: Vec::new(),
@@ -121,6 +176,7 @@ fn diagnostics_and_editing_remain_governed_path_only() {
     let path = format!("projects/demo/investigations/sample/review/{control}-ticket.md");
     let scan = ScanResult {
         activation: ActivationState::Active,
+        investigation_roots: BTreeMap::from([("demo".into(), vec!["sample".into()])]),
         snapshot: CasefileSnapshot {
             revision: Revision("sha256:controls".into()),
             entries: vec![test_support::entry(

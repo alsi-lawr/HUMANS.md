@@ -4,6 +4,7 @@ use casefile_core::{
 };
 use casefile_store::{ActivationState, ScanResult};
 use ratatui::{Terminal, backend::TestBackend};
+use std::collections::BTreeMap;
 
 pub(crate) fn entry(
     path: &str,
@@ -31,6 +32,7 @@ pub(crate) fn entry(
 pub(crate) fn scan() -> ScanResult {
     ScanResult {
         activation: ActivationState::Active,
+        investigation_roots: BTreeMap::from([("demo".into(), vec!["sample".into()])]),
         snapshot: CasefileSnapshot {
             revision: Revision("sha256:scan".into()),
             entries: vec![

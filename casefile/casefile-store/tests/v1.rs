@@ -392,6 +392,67 @@ fn derived_relationships_are_unique_and_directed() {
 }
 
 #[test]
+fn nested_investigation_roots_have_distinct_scoped_identities() {
+    let root = fixture();
+    let ticket =
+        fs::read_to_string(path(root.path(), "tickets/accepted/HMD-011.md")).expect("ticket");
+    fs::write(
+        root.path().join("casefile.toml"),
+        "schema_version = 1\n[projects.demo]\nprefix = 'HMD'\ninvestigations = ['projects/demo/investigations/alpha/shared', 'projects/demo/investigations/beta/shared']\n",
+    )
+    .expect("nested activation");
+    for investigation in ["alpha/shared", "beta/shared"] {
+        let ticket_path = root.path().join(format!(
+            "projects/demo/investigations/{investigation}/tickets/accepted/HMD-011.md"
+        ));
+        fs::create_dir_all(ticket_path.parent().expect("ticket parent")).expect("ticket directory");
+        fs::write(
+            ticket_path,
+            ticket.replace(
+                "investigation: \"sample\"",
+                &format!("investigation: \"{investigation}\""),
+            ),
+        )
+        .expect("ticket");
+    }
+
+    let store = Store::open(root.path()).expect("store");
+    let scan = store.scan().expect("scan");
+    assert_eq!(
+        scan.scope_for_path(
+            "projects/demo/investigations/alpha/shared/tickets/accepted/HMD-011.md"
+        ),
+        Some(("demo", Some("alpha/shared")))
+    );
+    assert_eq!(
+        scan.scope_for_path("projects/demo/investigations/beta/shared/tickets/accepted/HMD-011.md"),
+        Some(("demo", Some("beta/shared")))
+    );
+
+    let scopes = store
+        .derived_snapshot()
+        .expect("derived snapshot")
+        .records
+        .into_iter()
+        .filter(|record| {
+            record
+                .identity
+                .as_ref()
+                .is_some_and(|identity| identity.identity == "HMD-011")
+        })
+        .map(|record| record.identity.expect("identity").scope)
+        .collect::<Vec<_>>();
+    assert!(scopes.contains(&casefile_store::RecordScope {
+        project: "demo".into(),
+        investigation: Some("alpha/shared".into()),
+    }));
+    assert!(scopes.contains(&casefile_store::RecordScope {
+        project: "demo".into(),
+        investigation: Some("beta/shared".into()),
+    }));
+}
+
+#[test]
 fn previews_and_applies_one_path_without_touching_index() {
     let root = fixture();
     let store = Store::open(root.path()).expect("store");

@@ -1,5 +1,5 @@
 use crate::{
-    activation::{Activation, project_for, scope_for},
+    activation::{Activation, investigation_identity, project_for, scope_for},
     scanning::ScanResult,
 };
 use casefile_core::{
@@ -173,10 +173,12 @@ fn summary_title(summary: &RecordSummary) -> String {
 }
 
 fn record_scope(path: &str, active: &Activation) -> Option<RecordScope> {
+    let project = project_for(path, active)?;
     Some(RecordScope {
-        project: project_for(path, active)?.into(),
+        project: project.into(),
         investigation: scope_for(path, active)
-            .map(|value| value.rsplit('/').next().unwrap_or(value).into()),
+            .and_then(|value| investigation_identity(project, value))
+            .map(Into::into),
     })
 }
 

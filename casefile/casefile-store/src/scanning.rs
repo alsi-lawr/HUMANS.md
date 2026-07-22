@@ -1,5 +1,7 @@
 use crate::{
-    activation::{Activation, ActivationState, activation, activation_entry},
+    activation::{
+        Activation, ActivationState, activation, activation_entry, investigation_identity,
+    },
     layout::kind_for_path,
     store::StoreError,
     validation::cross_validate,
@@ -20,8 +22,26 @@ use std::{
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct ScanResult {
     pub activation: ActivationState,
+    pub investigation_roots: BTreeMap<String, Vec<String>>,
     pub snapshot: CasefileSnapshot,
     pub diagnostics: Vec<Diagnostic>,
+}
+
+impl ScanResult {
+    pub fn scope_for_path<'a>(&'a self, path: &'a str) -> Option<(&'a str, Option<&'a str>)> {
+        let (project, _) = path.strip_prefix("projects/")?.split_once('/')?;
+        let investigation = self
+            .investigation_roots
+            .get(project)?
+            .iter()
+            .find(|investigation| {
+                path.starts_with(&format!(
+                    "projects/{project}/investigations/{investigation}/"
+                ))
+            })
+            .map(String::as_str);
+        Some((project, investigation))
+    }
 }
 
 pub(super) fn scan(
@@ -79,6 +99,20 @@ pub(super) fn scan(
     }
     Ok(ScanResult {
         activation,
+        investigation_roots: active
+            .projects
+            .iter()
+            .map(|(project, value)| {
+                (
+                    project.clone(),
+                    value
+                        .investigations
+                        .iter()
+                        .filter_map(|path| investigation_identity(project, path).map(Into::into))
+                        .collect(),
+                )
+            })
+            .collect(),
         snapshot: CasefileSnapshot {
             revision: digest(&input),
             entries,

@@ -143,6 +143,45 @@ test("navigates and reconciles governed work against the shared host fixture", a
   }
 }, 120_000);
 
+test("keeps nested investigations with the same leaf independently selectable", async () => {
+  const { createRoot } = await import("react-dom/client");
+  const host = await startHost({ nestedInvestigations: true });
+  const browserFetch = globalThis.fetch;
+  globalThis.fetch = Object.assign(
+    async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+      const target =
+        typeof input === "string" && input.startsWith("/") ? `${host.url}${input}` : input;
+      return await networkFetch(target, init);
+    },
+    { preconnect: browserFetch.preconnect },
+  );
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  try {
+    await act(async () => root.render(<App />));
+    await waitFor(() => container.textContent?.includes("Casefile projects") === true);
+
+    await click(container, "demo");
+    await waitFor(() => container.textContent?.includes("Investigations") === true);
+    expect(container.textContent).toContain("alpha/shared");
+    expect(container.textContent).toContain("beta/shared");
+
+    await click(container, "alpha/shared");
+    await waitFor(() => container.textContent?.includes("Alpha ticket") === true);
+    expect(container.textContent).not.toContain("Beta ticket");
+
+    await click(container, "beta/shared");
+    await waitFor(() => container.textContent?.includes("Beta ticket") === true);
+    expect(container.textContent).not.toContain("Alpha ticket");
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+    globalThis.fetch = browserFetch;
+    await host.stop();
+  }
+}, 120_000);
+
 const isRelationshipQuery = (
   value: unknown,
 ): value is Readonly<{ query: "relationships"; identity: unknown }> => {
@@ -192,7 +231,9 @@ const change = async (input: HTMLInputElement, value: string): Promise<void> => 
   });
 };
 
-const startHost = async (): Promise<RunningHost> => {
+const startHost = async (
+  options: Readonly<{ nestedInvestigations?: boolean }> = {},
+): Promise<RunningHost> => {
   const temporary = await mkdtemp(join(tmpdir(), "casefile-browser-flow-"));
   const root = join(temporary, "root");
   await cp(sharedFixture, root, { recursive: true });
@@ -210,6 +251,33 @@ const startHost = async (): Promise<RunningHost> => {
     join(root, "projects/demo/investigations/sample/evidence/render.md"),
     "# Rendered evidence\n\n- **emphasis**\n- `code`\n\n| Safe | Value |\n| --- | --- |\n| yes | 1 |\n\n[bad link](JaVaScRiPt:bad()) [safe link](https://example.com)\n\n<script>bad()</script>\n",
   );
+  if (options.nestedInvestigations === true) {
+    await writeFile(
+      join(root, "casefile.toml"),
+      'schema_version = 1\n\n[projects.demo]\nprefix = "HMD"\ninvestigations = ["projects/demo/investigations/alpha/shared", "projects/demo/investigations/beta/shared"]\n',
+    );
+    const ticket = await readFile(join(root, ticketPath), "utf8");
+    for (const [investigation, id, title] of [
+      ["alpha/shared", "HMD-101", "Alpha ticket"],
+      ["beta/shared", "HMD-102", "Beta ticket"],
+    ]) {
+      const path = join(
+        root,
+        "projects/demo/investigations",
+        investigation,
+        "tickets/accepted",
+        `${id}.md`,
+      );
+      await mkdir(resolve(path, ".."), { recursive: true });
+      await writeFile(
+        path,
+        ticket
+          .replaceAll("HMD-011", id)
+          .replace("Minimum ticket", title)
+          .replace('investigation: "sample"', `investigation: \"${investigation}\"`),
+      );
+    }
+  }
   for (const command of [
     ["git", "init", "-q"],
     ["git", "config", "user.email", "casefile@example.test"],
