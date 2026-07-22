@@ -6,8 +6,14 @@ use crate::{
     writing,
 };
 use casefile_core::{ApplyResult, ChangeRequest, Preview, Revision, parse_strategy_binding};
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::{collections::BTreeMap, fs, io::Write, path::PathBuf};
+use std::{
+    collections::BTreeMap,
+    fs,
+    io::Write,
+    path::{Path, PathBuf},
+};
 use tempfile::NamedTempFile;
 use thiserror::Error;
 
@@ -23,7 +29,13 @@ pub enum StoreError {
     StaleTargetRevision,
 }
 
-type BindingWriter<'a> = dyn FnMut(&std::path::Path, &[u8], bool) -> Result<(), StoreError> + 'a;
+#[derive(Deserialize, Serialize)]
+struct BindingJournal {
+    schema_version: u32,
+    source: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    previous: Option<String>,
+}
 
 #[derive(Clone, Debug)]
 pub struct Store {
@@ -42,6 +54,7 @@ impl Store {
     }
 
     pub fn scan(&self) -> Result<ScanResult, StoreError> {
+        recover_binding_transactions(&self.root)?;
         scan(&self.root, &BTreeMap::new())
     }
 
@@ -67,6 +80,7 @@ impl Store {
         source: &str,
         implementation_active: bool,
     ) -> Result<(), StoreError> {
+        recover_binding_transactions(&self.root)?;
         if implementation_active {
             return Err(StoreError::Invalid(
                 "cannot replace a writer binding while implementation work is active".into(),
@@ -102,19 +116,8 @@ impl Store {
                 "binding target must not be a symlink".into(),
             ));
         }
-        let previous = read_file(&target)?;
-        let history = previous.as_ref().map(|bytes| {
-            let digest = Sha256::digest(bytes);
-            self.root.join(format!(
-                "{binding}/strategy/binding-history/{digest:x}.toml"
-            ))
-        });
-        replace_binding_files(
-            &target,
-            history.as_deref(),
-            source.as_bytes(),
-            &mut atomic_binding_write,
-        )
+        let strategy = self.root.join(binding).join("strategy");
+        replace_binding_transaction(&strategy, source)
     }
 }
 
@@ -147,61 +150,124 @@ fn atomic_binding_write(
             .persist(path)
             .map_err(|error| StoreError::Io(error.error))?;
     }
+    fs::File::open(parent)?.sync_all()?;
     Ok(())
 }
 
-fn restore_binding_file(path: &std::path::Path, before: Option<&[u8]>) -> Result<(), StoreError> {
-    match before {
-        Some(bytes) => atomic_binding_write(path, bytes, false)?,
-        None if path.exists() => fs::remove_file(path)?,
-        None => {}
+fn remove_binding_file(path: &Path) -> Result<(), StoreError> {
+    if path.exists() {
+        fs::remove_file(path)?;
     }
-    if read_file(path)?.as_deref() == before {
-        Ok(())
-    } else {
-        Err(StoreError::Invalid(
-            "binding rollback verification failed".into(),
-        ))
+    if let Some(parent) = path.parent() {
+        fs::File::open(parent)?.sync_all()?;
     }
+    Ok(())
 }
 
-fn replace_binding_files(
-    target: &std::path::Path,
-    history: Option<&std::path::Path>,
-    source: &[u8],
-    writer: &mut BindingWriter<'_>,
-) -> Result<(), StoreError> {
-    let target_before = read_file(target)?;
-    let history_before = history.map(read_file).transpose()?;
-    let attempt = (|| {
-        if let (Some(history), Some(previous)) = (history, target_before.as_deref()) {
-            if history_before.as_ref().is_none_or(Option::is_none) {
-                writer(history, previous, true)?;
-            }
-        }
-        writer(target, source, target_before.is_none())?;
-        if read_file(target)?.as_deref() != Some(source) {
+fn transaction_paths(
+    strategy: &Path,
+    previous: Option<&str>,
+) -> (PathBuf, Option<PathBuf>, PathBuf) {
+    let target = strategy.join("bindings.toml");
+    let history = previous.map(|value| {
+        strategy
+            .join("binding-history")
+            .join(format!("{:x}.toml", Sha256::digest(value.as_bytes())))
+    });
+    let journal = strategy.join(".binding-transaction.toml");
+    (target, history, journal)
+}
+
+fn write_journal(path: &Path, journal: &BindingJournal) -> Result<(), StoreError> {
+    let source =
+        toml::to_string(journal).map_err(|error| StoreError::Invalid(error.to_string()))?;
+    atomic_binding_write(path, source.as_bytes(), true)
+}
+
+fn recover_binding_transaction(strategy: &Path) -> Result<(), StoreError> {
+    let journal_path = strategy.join(".binding-transaction.toml");
+    if !journal_path.exists() {
+        return Ok(());
+    }
+    if fs::symlink_metadata(&journal_path)?
+        .file_type()
+        .is_symlink()
+    {
+        return Err(StoreError::Invalid(
+            "binding journal must not be a symlink".into(),
+        ));
+    }
+    let journal: BindingJournal = toml::from_str(&fs::read_to_string(&journal_path)?)
+        .map_err(|error| StoreError::Invalid(format!("invalid binding journal: {error}")))?;
+    if journal.schema_version != 1 {
+        return Err(StoreError::Invalid(
+            "binding journal schema_version must be 1".into(),
+        ));
+    }
+    let (target, history, _) = transaction_paths(strategy, journal.previous.as_deref());
+    for path in std::iter::once(&target).chain(history.iter()) {
+        if path.exists() && fs::symlink_metadata(path)?.file_type().is_symlink() {
             return Err(StoreError::Invalid(
-                "binding post-write verification failed".into(),
+                "binding recovery target must not be a symlink".into(),
             ));
         }
-        Ok(())
-    })();
-    if let Err(error) = attempt {
-        let target_recovery = restore_binding_file(target, target_before.as_deref());
-        let history_recovery = history
-            .map(|path| {
-                restore_binding_file(
-                    path,
-                    history_before.as_ref().and_then(|value| value.as_deref()),
-                )
-            })
-            .transpose();
-        target_recovery?;
-        history_recovery?;
-        return Err(error);
+    }
+    if let (Some(history), Some(previous)) = (&history, &journal.previous) {
+        match read_file(history)? {
+            None => atomic_binding_write(history, previous.as_bytes(), true)?,
+            Some(current) if current == previous.as_bytes() => {}
+            Some(_) => {
+                return Err(StoreError::Invalid(
+                    "binding history conflicts with recovery journal".into(),
+                ));
+            }
+        }
+    }
+    atomic_binding_write(&target, journal.source.as_bytes(), !target.exists())?;
+    if read_file(&target)?.as_deref() != Some(journal.source.as_bytes()) {
+        return Err(StoreError::Invalid(
+            "binding recovery target verification failed".into(),
+        ));
+    }
+    if let (Some(history), Some(previous)) = (&history, &journal.previous) {
+        if read_file(history)?.as_deref() != Some(previous.as_bytes()) {
+            return Err(StoreError::Invalid(
+                "binding recovery history verification failed".into(),
+            ));
+        }
+    }
+    remove_binding_file(&journal_path)
+}
+
+fn recover_binding_transactions(root: &Path) -> Result<(), StoreError> {
+    let (_, active, _) = crate::activation::activation(root)?;
+    for project in active.projects.values() {
+        for investigation in &project.investigations {
+            recover_binding_transaction(&root.join(investigation).join("strategy"))?;
+        }
     }
     Ok(())
+}
+
+fn replace_binding_transaction(strategy: &Path, source: &str) -> Result<(), StoreError> {
+    recover_binding_transaction(strategy)?;
+    let target = strategy.join("bindings.toml");
+    let previous = read_file(&target)?;
+    let previous = previous
+        .map(|value| {
+            String::from_utf8(value)
+                .map_err(|_| StoreError::Invalid("binding must be UTF-8".into()))
+        })
+        .transpose()?;
+    let (_, _, journal_path) = transaction_paths(strategy, previous.as_deref());
+    let journal = BindingJournal {
+        schema_version: 1,
+        source: source.into(),
+        previous,
+    };
+    write_journal(&journal_path, &journal)?;
+    // Every durable boundary after this point is recoverable to the complete committed state.
+    recover_binding_transaction(strategy)
 }
 
 impl RevisionSource for Store {
@@ -212,38 +278,58 @@ impl RevisionSource for Store {
 
 #[cfg(test)]
 mod tests {
-    use super::{StoreError, replace_binding_files};
+    use super::{BindingJournal, recover_binding_transaction, transaction_paths, write_journal};
     use std::fs;
     use tempfile::TempDir;
 
     #[test]
-    fn replacement_rolls_back_exactly_after_history_write_failure() {
+    fn interrupted_replacement_recovers_to_the_complete_state_at_each_boundary() {
+        for boundary in 0..3 {
+            let root = TempDir::new().expect("root");
+            let strategy = root.path().join("strategy");
+            fs::create_dir_all(&strategy).expect("strategy");
+            let target = strategy.join("bindings.toml");
+            fs::write(&target, "old").expect("target");
+            let journal = BindingJournal {
+                schema_version: 1,
+                source: "new".into(),
+                previous: Some("old".into()),
+            };
+            let (_, history, journal_path) =
+                transaction_paths(&strategy, journal.previous.as_deref());
+            write_journal(&journal_path, &journal).expect("journal");
+            if boundary >= 1 {
+                super::atomic_binding_write(history.as_ref().expect("history"), b"old", true)
+                    .expect("history");
+            }
+            if boundary >= 2 {
+                super::atomic_binding_write(&target, b"new", false).expect("target");
+            }
+            recover_binding_transaction(&strategy).expect("recovery");
+            assert_eq!(b"new", fs::read(&target).expect("target").as_slice());
+            assert_eq!(
+                b"old",
+                fs::read(history.expect("history"))
+                    .expect("history")
+                    .as_slice()
+            );
+            assert!(!journal_path.exists());
+        }
+    }
+
+    #[test]
+    fn failed_journal_creation_leaves_the_pre_state_unchanged() {
         let root = TempDir::new().expect("root");
-        let target = root.path().join("bindings.toml");
-        let history = root.path().join("binding-history/previous.toml");
-        fs::write(&target, b"old").expect("target");
-        let mut writes = 0;
-        let error = replace_binding_files(
-            &target,
-            Some(&history),
-            b"new",
-            &mut |path, bytes, create| {
-                writes += 1;
-                if writes == 2 {
-                    return Err(StoreError::Invalid("injected target failure".into()));
-                }
-                super::atomic_binding_write(path, bytes, create)
-            },
-        )
-        .expect_err("injected failure");
-        assert!(error.to_string().contains("injected"));
+        let strategy = root.path().join("strategy");
+        fs::create_dir_all(strategy.join(".binding-transaction.toml")).expect("journal directory");
+        fs::write(strategy.join("bindings.toml"), "old").expect("target");
+        assert!(super::replace_binding_transaction(&strategy, "new").is_err());
         assert_eq!(
             b"old",
-            fs::read(&target).expect("target restored").as_slice()
+            fs::read(strategy.join("bindings.toml"))
+                .expect("target")
+                .as_slice()
         );
-        assert!(
-            !history.exists(),
-            "archive must be removed during verified recovery"
-        );
+        assert!(!strategy.join("binding-history").exists());
     }
 }
