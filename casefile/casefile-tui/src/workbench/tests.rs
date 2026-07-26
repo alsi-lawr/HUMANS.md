@@ -6,8 +6,9 @@ use casefile_core::{
     StrategyRequirements, StrategyWorker,
 };
 use casefile_store::{
-    ActivationState, DerivedRecord, DerivedStrategy, DerivedStrategyBinding,
-    EffectiveWriterBinding, RecordScope, ScanResult, StrategyBindingState, WriterBindingSource,
+    ActivationState, DerivedBoard, DerivedBoardColumn, DerivedCard, DerivedRecord, DerivedStrategy,
+    DerivedStrategyBinding, EffectiveWriterBinding, RecordScope, ScanResult, StrategyBindingState,
+    WriterBindingSource,
 };
 use std::collections::BTreeMap;
 
@@ -262,12 +263,74 @@ fn strategy_key_and_tab_cycle_preserve_existing_view_targets() {
     app.handle(KeyCode::Char('t'));
     assert_eq!(app.browser.view(), View::Strategies);
     app.handle(KeyCode::Char('t'));
+    assert_eq!(app.browser.view(), View::Boards);
+    app.handle(KeyCode::Char('t'));
     assert_eq!(app.browser.view(), View::Projects);
 
     let output = test_support::render(&app, 180, 32);
     assert!(output.contains("[1] PROJECTS"));
     assert!(output.contains("[4] FILES"));
     assert!(output.contains("[5] STRATEGIES"));
+    assert!(output.contains("[6] BOARDS"));
+}
+
+#[test]
+fn boards_are_read_only_unfiltered_and_open_a_canonical_ticket_detail() {
+    let scan = test_support::scan();
+    let mut derived = test_support::derived(&scan);
+    derived.boards.push(DerivedBoard {
+        identity: casefile_store::ScopedIdentity {
+            scope: RecordScope {
+                project: "demo".into(),
+                investigation: Some("sample".into()),
+            },
+            identity: "HMD-board".into(),
+        },
+        title: "Delivery".into(),
+        status_source: casefile_core::BoardStatusSource::Progress,
+        filter_statuses: None,
+        filter_kinds: None,
+        columns: vec![DerivedBoardColumn {
+            name: "Unknown".into(),
+            statuses: vec!["unknown".into()],
+            cards: vec![DerivedCard {
+                identity: casefile_store::ScopedIdentity {
+                    scope: RecordScope {
+                        project: "demo".into(),
+                        investigation: Some("sample".into()),
+                    },
+                    identity: "HMD-013".into(),
+                },
+                kind: Kind::Ticket,
+                title: "Navigator".into(),
+                status: "unknown".into(),
+                rank: Some(3),
+            }],
+        }],
+    });
+    let mut app = App::new(scan, derived);
+
+    app.handle(KeyCode::Char('6'));
+    app.handle(KeyCode::Char('/'));
+    for key in "no-match".chars().map(KeyCode::Char) {
+        app.handle(key);
+    }
+    app.handle(KeyCode::Enter);
+    let output = test_support::render(&app, 160, 28);
+    assert!(output.contains("[6] BOARDS 1"));
+    assert!(output.contains("Delivery"));
+    assert!(output.contains("Unknown (1)"));
+    assert!(output.contains("HMD-013  unknown  Navigator"));
+    assert!(output.contains("record filter does not alter cards"));
+    assert!(test_support::render(&app, 70, 28).contains("Delivery"));
+    assert_eq!(
+        app.browser
+            .selected(&app.scan)
+            .map(|entry| entry.path.as_str()),
+        Some(TICKET_PATH),
+    );
+    app.handle(KeyCode::Char('e'));
+    assert!(test_support::render(&app, 160, 28).contains("Read-only"));
 }
 
 #[test]

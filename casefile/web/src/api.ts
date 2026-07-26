@@ -1,8 +1,9 @@
 import {
   type Decoder,
+  type Indexed,
   decodeApplyResponse,
   decodeBoards,
-  decodeCurrent,
+  decodeIndexed,
   decodeDiagnostics,
   decodeHostFailure,
   decodePreview,
@@ -65,27 +66,31 @@ const post = async <T>(
   }
 };
 
-const query = <T>(body: unknown, signal: AbortSignal, decode: Decoder<T>): Promise<ApiResult<T>> =>
-  post("/api/query", body, signal, undefined, (value) => decodeCurrent(value, decode));
+const query = <T>(
+  body: unknown,
+  signal: AbortSignal,
+  decode: Decoder<T>,
+): Promise<ApiResult<Indexed<T>>> =>
+  post("/api/query", body, signal, undefined, (value) => decodeIndexed(value, decode));
 
 export const fetchRecords = (
   search: string | undefined,
   signal: AbortSignal,
-): Promise<ApiResult<ReadonlyArray<Record>>> =>
+): Promise<ApiResult<Indexed<ReadonlyArray<Record>>>> =>
   query({ query: "records", search }, signal, decodeRecords);
 export const fetchDiagnostics = (
   signal: AbortSignal,
-): Promise<ApiResult<ReadonlyArray<Diagnostic>>> =>
+): Promise<ApiResult<Indexed<ReadonlyArray<Diagnostic>>>> =>
   query({ query: "diagnostics" }, signal, decodeDiagnostics);
 export const fetchBoards = (
   scope: Scope,
   signal: AbortSignal,
-): Promise<ApiResult<ReadonlyArray<Board>>> =>
+): Promise<ApiResult<Indexed<ReadonlyArray<Board>>>> =>
   query({ query: "boards", scope }, signal, decodeBoards);
 export const fetchRelationships = (
   identity: Identity,
   signal: AbortSignal,
-): Promise<ApiResult<ReadonlyArray<Relationship>>> =>
+): Promise<ApiResult<Indexed<ReadonlyArray<Relationship>>>> =>
   query({ query: "relationships", identity }, signal, decodeRelationships);
 export const preview = (change: ChangeRequest, signal: AbortSignal): Promise<ApiResult<Preview>> =>
   post("/api/preview", change, signal, undefined, decodePreview);

@@ -6,6 +6,7 @@ import { WorkItemEditor } from "./record-detail/work-item-editor";
 import { type WorkItemDraft } from "./model";
 import { type StrategyGraph as Graph } from "./strategy/graph-model";
 import { StrategyGraph } from "./strategy/strategy-graph";
+import { BoardsPanel } from "./boards/boards-panel";
 
 const workItem: WorkItemDraft = {
   id: "HMD-011",
@@ -168,4 +169,54 @@ test("renders zero-worker strategy as a valid root-only graph", () => {
 
   expect(html).toContain("No workers declared. This is a valid root-only strategy.");
   expect(html).toContain('aria-label="Inspect Root orchestrator"');
+});
+
+test("renders stale and unresolved board cards without inventing a ticket detail", () => {
+  const stale = renderToStaticMarkup(
+    <BoardsPanel state={{ tag: "stale" }} records={[]} onSelect={noAction} />,
+  );
+  const unresolved = renderToStaticMarkup(
+    <BoardsPanel
+      state={{
+        tag: "ready",
+        boards: [
+          {
+            identity: {
+              scope: { project: "demo", investigation: "sample" },
+              identity: "HMD-board",
+            },
+            title: "Delivery",
+            status_source: "progress",
+            filter_statuses: null,
+            filter_kinds: null,
+            columns: [
+              {
+                name: "Unknown",
+                statuses: ["unknown"],
+                cards: [
+                  {
+                    identity: {
+                      scope: { project: "demo", investigation: "sample" },
+                      identity: "HMD-missing",
+                    },
+                    kind: "ticket",
+                    title: "Missing ticket",
+                    status: "unknown",
+                    rank: null,
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      }}
+      records={[]}
+      onSelect={noAction}
+    />,
+  );
+
+  expect(stale).toContain("Board projection is stale");
+  expect(unresolved).toContain("Missing ticket");
+  expect(unresolved).toContain("identity is missing or ambiguous");
+  expect(unresolved).not.toContain("<button");
 });

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { decodeCurrent, decodeHostFailure, decodeRecords } from "./api-contract";
+import { decodeBoards, decodeCurrent, decodeHostFailure, decodeRecords } from "./api-contract";
 
 const projectDecision = {
   path: "projects/demo/decision-log/HMD-D-002-project.md",
@@ -43,6 +43,21 @@ test("preserves the host stale-revision failure code", () => {
   expect(decodeHostFailure({ error: "stale store revision", code: "stale_revision" }, 409)).toEqual(
     { message: "stale store revision", code: "stale_revision" },
   );
+});
+
+test("decodes both canonical board status sources", () => {
+  const boards = decodeBoards([
+    {
+      identity: { scope: { project: "demo", investigation: "sample" }, identity: "HMD-board" },
+      title: "Delivery",
+      status_source: "progress",
+      filter_statuses: null,
+      filter_kinds: ["ticket"],
+      columns: [{ name: "Unknown", statuses: ["unknown"], cards: [] }],
+    },
+  ]);
+
+  expect(boards[0]?.status_source).toBe("progress");
 });
 
 const strategyProjection = {

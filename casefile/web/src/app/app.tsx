@@ -7,14 +7,24 @@ import { useRecordSelection } from "../record-detail/use-record-selection";
 import { BrowserPanel } from "../work-queue/work-area";
 import { Failure, Loading, Topbar } from "./app-shell";
 import { useWorkspace } from "./use-workspace";
+import { useBoards } from "../boards/use-boards";
 import { type Draft, type Record } from "../model";
 
 export const App = (): ReactNode => {
   const workspace = useWorkspace();
   const allRecords = workspace.workspace.tag === "ready" ? workspace.workspace.records : [];
+  const unfilteredRecords =
+    workspace.workspace.tag === "ready" ? workspace.workspace.unfilteredRecords : [];
   const navigation = useScopeNavigation(allRecords);
-  const selection = useRecordSelection(allRecords);
+  const selection = useRecordSelection(unfilteredRecords);
   const changes = useChangeReview();
+  const boards = useBoards(
+    navigation.project === undefined || navigation.investigation === undefined
+      ? undefined
+      : { project: navigation.project, investigation: navigation.investigation },
+    workspace.workspace.tag === "ready" ? workspace.workspace.sourceRevision : undefined,
+    workspace.refreshKey,
+  );
 
   if (workspace.workspace.tag === "loading") return <Loading />;
   if (workspace.workspace.tag === "failure")
@@ -75,6 +85,8 @@ export const App = (): ReactNode => {
           selectedRecord={selection.record}
           diagnostics={workspace.workspace.diagnostics}
           search={workspace.search}
+          boards={boards}
+          boardRecords={unfilteredRecords}
           onProject={selectProject}
           onInvestigation={selectInvestigation}
           onSelect={selectRecord}

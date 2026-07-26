@@ -69,6 +69,16 @@ test("navigates and reconciles governed work against the shared host fixture", a
     await waitFor(() => container.textContent?.includes("Governed work") === true);
     expect(container.textContent).toContain("Minimum ticket");
     expect(container.textContent).toContain("Minimum epic");
+    await click(container, "Boards");
+    await waitFor(() => container.textContent?.includes("Delivery boards") === true);
+    expect(container.textContent).toContain("Unknown");
+    expect(container.textContent).toContain("Minimum ticket");
+    await change(labelledInput(container, "Search records"), "no-ticket-list-match");
+    await waitFor(() => container.textContent?.includes("Minimum ticket") === true);
+    await click(container, "Minimum ticket");
+    expect(container.textContent).toContain("HMD-011");
+    await change(labelledInput(container, "Search records"), "");
+    await click(container, "Tickets");
     await click(container, "HMD-011.md");
 
     await click(container, "Strategies");
@@ -361,6 +371,10 @@ const startHost = async (
   await writeFile(join(strategyRoot, "implementation.toml"), implementationStrategy);
   await writeFile(join(strategyRoot, "review.toml"), "schema_version = 1\nworkers = [\n");
   await writeFile(join(strategyRoot, "bindings.toml"), writerBinding);
+  await writeFile(
+    join(root, "projects/demo/investigations/sample/boards/progress.toml"),
+    'schema_version = 1\nid = "HMD-progress"\ntitle = "Delivery"\nstatus_source = "progress"\nfilter_kinds = ["ticket"]\n\n[[columns]]\nname = "Unknown"\nstatuses = ["unknown"]\n',
+  );
   if (options.nestedInvestigations === true) {
     await writeFile(
       join(root, "casefile.toml"),

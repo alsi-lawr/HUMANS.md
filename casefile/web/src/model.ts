@@ -101,10 +101,12 @@ export type WorkItemDraft = Readonly<{
   review_and_disposition_history: string;
 }>;
 export type BoardColumnPayload = Readonly<{ name: string; statuses: ReadonlyArray<string> }>;
+export type BoardStatusSource = "disposition" | "progress";
 export type BoardColumn = BoardColumnPayload & Readonly<{ editor_key: string }>;
 export type BoardPayload = Readonly<{
   id: string;
   title: string;
+  status_source: BoardStatusSource;
   filter_statuses: ReadonlyArray<string> | null | undefined;
   filter_kinds: ReadonlyArray<string> | null | undefined;
   columns: ReadonlyArray<BoardColumnPayload>;
@@ -112,6 +114,7 @@ export type BoardPayload = Readonly<{
 export type BoardDraft = Readonly<{
   id: string;
   title: string;
+  status_source: BoardStatusSource;
   filter_statuses: ReadonlyArray<string> | null | undefined;
   filter_kinds: ReadonlyArray<string> | null | undefined;
   columns: ReadonlyArray<BoardColumn>;
@@ -147,6 +150,7 @@ export type Card = Readonly<{
 export type Board = Readonly<{
   identity: Identity;
   title: string;
+  status_source: BoardStatusSource;
   filter_statuses: ReadonlyArray<string> | null;
   filter_kinds: ReadonlyArray<string> | null;
   columns: ReadonlyArray<

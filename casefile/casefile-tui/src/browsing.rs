@@ -20,15 +20,17 @@ pub(crate) enum View {
     Tickets,
     Files,
     Strategies,
+    Boards,
 }
 
 impl View {
-    const ALL: [Self; 5] = [
+    const ALL: [Self; 6] = [
         Self::Projects,
         Self::Investigations,
         Self::Tickets,
         Self::Files,
         Self::Strategies,
+        Self::Boards,
     ];
 
     fn title(self) -> &'static str {
@@ -38,6 +40,7 @@ impl View {
             Self::Tickets => "Tickets",
             Self::Files => "Files",
             Self::Strategies => "Strategies",
+            Self::Boards => "Boards",
         }
     }
 
@@ -79,7 +82,6 @@ impl Browser {
         self.set_view(scan, self.view.next());
     }
 
-    #[cfg(test)]
     pub(crate) fn view(&self) -> View {
         self.view
     }
@@ -88,7 +90,7 @@ impl Browser {
         let next = match self.view {
             View::Projects => View::Investigations,
             View::Investigations => View::Tickets,
-            View::Tickets | View::Files | View::Strategies => return false,
+            View::Tickets | View::Files | View::Strategies | View::Boards => return false,
         };
         self.set_view(scan, next);
         true
@@ -98,7 +100,7 @@ impl Browser {
         let next = match self.view {
             View::Projects => return false,
             View::Investigations => View::Projects,
-            View::Tickets | View::Files | View::Strategies => View::Investigations,
+            View::Tickets | View::Files | View::Strategies | View::Boards => View::Investigations,
         };
         self.set_view(scan, next);
         true
@@ -141,7 +143,10 @@ impl Browser {
     }
 
     pub(crate) fn selected<'a>(&self, scan: &'a ScanResult) -> Option<&'a EntrySnapshot> {
-        if !matches!(self.view, View::Tickets | View::Files | View::Strategies) {
+        if !matches!(
+            self.view,
+            View::Tickets | View::Files | View::Strategies | View::Boards
+        ) {
             return None;
         }
         let path = self.selected_path.as_deref()?;
@@ -166,7 +171,7 @@ impl Browser {
                 let values = self.investigations(scan);
                 select_value(&mut self.selected_investigation, &values, offset)
             }
-            View::Tickets | View::Files | View::Strategies => {
+            View::Tickets | View::Files | View::Strategies | View::Boards => {
                 let values = self
                     .entries(scan)
                     .into_iter()
@@ -186,13 +191,30 @@ impl Browser {
         self.select_offset(scan, offset)
     }
 
-    pub(crate) fn render_header(&self, scan: &ScanResult, area: Rect, buffer: &mut Buffer) {
+    pub(crate) fn select_board_offset(&mut self, paths: &[String], offset: isize) -> bool {
+        select_value(&mut self.selected_path, paths, offset)
+    }
+
+    pub(crate) fn scope(&self) -> Option<(&str, &str)> {
+        self.selected_project
+            .as_deref()
+            .zip(self.selected_investigation.as_deref())
+    }
+
+    pub(crate) fn render_header(
+        &self,
+        scan: &ScanResult,
+        board_count: usize,
+        area: Rect,
+        buffer: &mut Buffer,
+    ) {
         let counts = [
             self.projects(scan).len(),
             self.investigations(scan).len(),
             self.ticket_count(scan),
             self.file_count(scan),
             self.strategy_count(scan),
+            board_count,
         ];
         let mut tabs = vec![Span::styled(
             " CASEFILE ",
@@ -269,6 +291,7 @@ impl Browser {
                     View::Tickets => "This investigation has no governed tickets or epics.",
                     View::Files => "This scope has no non-ticket files.",
                     View::Strategies => "This investigation has no strategy records.",
+                    View::Boards => "This investigation has no board definitions.",
                 }
             } else {
                 "Nothing matches the active filter. Press c to clear it."
@@ -355,6 +378,7 @@ impl Browser {
             View::Tickets => self.entry_items(scan, false),
             View::Files => self.entry_items(scan, true),
             View::Strategies => self.entry_items(scan, false),
+            View::Boards => (Vec::new(), None),
         }
     }
 
@@ -397,7 +421,8 @@ impl Browser {
         all_projects(scan)
             .into_iter()
             .filter(|project| {
-                self.filter.is_empty()
+                self.view == View::Boards
+                    || self.filter.is_empty()
                     || project.to_lowercase().contains(&self.filter.to_lowercase())
                     || scan.snapshot.entries.iter().any(|entry| {
                         entry_scope(scan, entry).is_some_and(|scope| scope.0 == project)
@@ -414,7 +439,8 @@ impl Browser {
         all_investigations(scan, project)
             .into_iter()
             .filter(|investigation| {
-                self.filter.is_empty()
+                self.view == View::Boards
+                    || self.filter.is_empty()
                     || investigation
                         .to_lowercase()
                         .contains(&self.filter.to_lowercase())
@@ -462,6 +488,7 @@ impl Browser {
                     .selected_investigation
                     .as_deref()
                     .is_some_and(|selected| investigation == Some(selected)),
+                View::Boards => false,
                 View::Files => {
                     investigation.is_none()
                         || self.selected_investigation.as_deref() == investigation
@@ -475,6 +502,7 @@ impl Browser {
             View::Files => !is_work(entry),
             View::Strategies => is_strategy(entry),
             View::Projects | View::Investigations => false,
+            View::Boards => false,
         }
     }
 
@@ -507,12 +535,14 @@ impl Browser {
         normalise_value(&mut self.selected_project, &projects);
         let investigations = self.investigations(scan);
         normalise_value(&mut self.selected_investigation, &investigations);
-        let paths = self
-            .entries(scan)
-            .into_iter()
-            .map(|entry| entry.path.clone())
-            .collect::<Vec<_>>();
-        normalise_value(&mut self.selected_path, &paths);
+        if self.view != View::Boards {
+            let paths = self
+                .entries(scan)
+                .into_iter()
+                .map(|entry| entry.path.clone())
+                .collect::<Vec<_>>();
+            normalise_value(&mut self.selected_path, &paths);
+        }
         previous
             != (
                 self.selected_project.clone(),
