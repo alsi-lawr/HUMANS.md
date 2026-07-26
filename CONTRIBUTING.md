@@ -209,7 +209,7 @@ delivery-progress board through the workflow wrapper above:
 
 ```toml
 schema_version = 1
-id = "HMD-delivery"
+id = "HMD-sample-delivery"
 title = "Delivery"
 status_source = "progress"
 filter_kinds = ["ticket"]
