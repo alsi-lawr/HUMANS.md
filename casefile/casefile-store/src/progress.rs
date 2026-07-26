@@ -11,7 +11,6 @@ use casefile_core::{
 };
 use serde::{Deserialize, Serialize};
 use tempfile::NamedTempFile;
-use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
 use crate::{activation::activation, scanning::scan, store::StoreError};
 
@@ -24,15 +23,8 @@ pub struct ProgressChangeRequest {
     pub replacement: Option<ProgressLog>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub replacement_source: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub bootstrap: Option<ProgressBootstrap>,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-pub struct ProgressBootstrap {
-    pub operation_id_prefix: String,
-    pub recorded_at: String,
-    pub recorded_by: String,
+    #[serde(default)]
+    pub bootstrap: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -45,6 +37,8 @@ pub struct ProgressPreview {
     pub diagnostics: Vec<Diagnostic>,
     pub diff: String,
     pub no_op: bool,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub bootstrap_ticket_ids: Vec<String>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -86,7 +80,7 @@ pub(super) fn preview(
             },
         }
     };
-    if let Some(bootstrap) = &request.bootstrap {
+    if request.bootstrap {
         if !request.entries.is_empty()
             || request.replacement.is_some()
             || request.replacement_source.is_some()
@@ -102,23 +96,10 @@ pub(super) fn preview(
                 ),
             ));
         }
-        if bootstrap.operation_id_prefix.trim().is_empty()
-            || bootstrap.recorded_by.trim().is_empty()
-            || OffsetDateTime::parse(&bootstrap.recorded_at, &Rfc3339).is_err()
-        {
-            return Ok(rejected(
-                request,
-                path,
-                before.snapshot.revision,
-                Diagnostic::new(
-                    "progress/log.toml",
-                    "invalid_progress_bootstrap",
-                    "bootstrap needs an operation ID prefix, actor, and RFC 3339 timestamp",
-                ),
-            ));
-        }
     }
-    let proposed_log = if replacing {
+    let proposed_log = if request.bootstrap && existing.is_some() {
+        existing_log.clone()
+    } else if replacing {
         if !request.entries.is_empty()
             || (request.replacement.is_some() && request.replacement_source.is_some())
         {
@@ -191,6 +172,11 @@ pub(super) fn preview(
     overlay.insert(path.clone(), Some(bytes.clone()));
     let proposed = scan(root, &overlay)?;
     let diagnostics = scoped_diagnostics(&proposed.diagnostics, &scope_prefix);
+    let bootstrap_ticket_ids = if request.bootstrap {
+        accepted_ticket_ids(&before, &scope_prefix)
+    } else {
+        Vec::new()
+    };
     if !diagnostics.is_empty() {
         return Ok(ProgressPreview {
             request,
@@ -201,6 +187,7 @@ pub(super) fn preview(
             diagnostics,
             diff: String::new(),
             no_op: false,
+            bootstrap_ticket_ids,
         });
     }
     let diff = if same {
@@ -222,6 +209,7 @@ pub(super) fn preview(
         diagnostics,
         diff,
         no_op: same,
+        bootstrap_ticket_ids,
     })
 }
 
@@ -242,18 +230,30 @@ pub(super) fn apply(
         ));
     }
     let current = scan(root, &BTreeMap::new())?;
-    if current.snapshot.revision != preview.expected_store_revision {
-        return Err(StoreError::StaleStoreRevision);
-    }
     let current_entry = current
         .snapshot
         .entries
         .iter()
         .find(|entry| entry.path == path);
-    if current_entry.map(|entry| &entry.content_revision)
-        != preview.expected_target_revision.as_ref()
-    {
-        return Err(StoreError::StaleTargetRevision);
+    let stale_store = current.snapshot.revision != preview.expected_store_revision;
+    let stale_target = current_entry.map(|entry| &entry.content_revision)
+        != preview.expected_target_revision.as_ref();
+    if stale_store || stale_target {
+        if completed_no_op(&preview.request, current_entry)? {
+            return Ok(ProgressApplyResult {
+                path,
+                resulting_target_revision: current_entry
+                    .map(|entry| entry.content_revision.clone()),
+                resulting_store_revision: current.snapshot.revision,
+                diff: preview.diff,
+                no_op: true,
+            });
+        }
+        return Err(if stale_store {
+            StoreError::StaleStoreRevision
+        } else {
+            StoreError::StaleTargetRevision
+        });
     }
     if preview.no_op {
         return Ok(ProgressApplyResult {
@@ -293,24 +293,19 @@ pub(super) fn apply(
 pub(super) fn bootstrap(
     root: &Path,
     investigation: &str,
-    operation_id_prefix: &str,
-    recorded_at: &str,
-    recorded_by: &str,
 ) -> Result<ProgressChangeRequest, StoreError> {
     progress_path(root, investigation)?;
-    // Unknown bootstrap creates the one canonical log without inventing a history. The immutable
-    // operation envelope records its caller-supplied ID prefix, actor, and time for preview/retry.
     Ok(ProgressChangeRequest {
         investigation: investigation.into(),
         entries: Vec::new(),
         replacement: None,
         replacement_source: None,
-        bootstrap: Some(ProgressBootstrap {
-            operation_id_prefix: operation_id_prefix.into(),
-            recorded_at: recorded_at.into(),
-            recorded_by: recorded_by.into(),
-        }),
+        bootstrap: true,
     })
+}
+
+pub(super) fn validate_investigation(root: &Path, investigation: &str) -> Result<(), StoreError> {
+    progress_path(root, investigation).map(|_| ())
 }
 
 fn materialize(
@@ -351,6 +346,58 @@ fn materialize(
         }
     }
     Ok(log)
+}
+
+fn completed_no_op(
+    request: &ProgressChangeRequest,
+    current: Option<&casefile_core::EntrySnapshot>,
+) -> Result<bool, StoreError> {
+    let Some(current) = current else {
+        return Ok(false);
+    };
+    let current = parse_progress_log(
+        "progress/log.toml",
+        std::str::from_utf8(&current.original_bytes)
+            .map_err(|_| StoreError::Invalid("progress log must be UTF-8".into()))?,
+    )
+    .map_err(diagnostics_error)?;
+    if request.bootstrap {
+        return Ok(true);
+    }
+    if let Some(replacement) = &request.replacement {
+        return Ok(&current == replacement);
+    }
+    if let Some(source) = &request.replacement_source {
+        return Ok(current
+            == parse_progress_log("progress/log.toml", source).map_err(diagnostics_error)?);
+    }
+    Ok(request
+        .entries
+        .iter()
+        .all(|entry| current.entries.iter().any(|recorded| recorded == entry)))
+}
+
+fn accepted_ticket_ids(scan: &crate::scanning::ScanResult, scope_prefix: &str) -> Vec<String> {
+    let mut result = scan
+        .snapshot
+        .entries
+        .iter()
+        .filter(|entry| {
+            entry.path.starts_with(scope_prefix)
+                && entry.kind == Some(casefile_core::Kind::Ticket)
+                && entry.classification == casefile_core::Classification::Governed
+        })
+        .filter_map(|entry| match &entry.summary {
+            Some(casefile_core::RecordSummary::WorkItem { id, status, .. })
+                if status == "accepted" =>
+            {
+                Some(id.clone())
+            }
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    result.sort();
+    result
 }
 
 fn progress_path(root: &Path, investigation: &str) -> Result<(String, String), StoreError> {
@@ -397,6 +444,7 @@ fn rejected(
         diagnostics: vec![diagnostic],
         diff: String::new(),
         no_op: false,
+        bootstrap_ticket_ids: Vec::new(),
     }
 }
 

@@ -192,7 +192,7 @@ fn malformed_and_cross_scope_progress_never_become_unknown_and_store_writer_is_p
             entries: Vec::new(),
             replacement: None,
             replacement_source: Some("schema_version = 1\n".into()),
-            bootstrap: None,
+            bootstrap: false,
         })
         .expect("repair preview");
     assert!(repair.diagnostics.is_empty(), "{:#?}", repair.diagnostics);
@@ -209,7 +209,7 @@ fn malformed_and_cross_scope_progress_never_become_unknown_and_store_writer_is_p
         }],
         replacement: None,
         replacement_source: None,
-        bootstrap: None,
+        bootstrap: false,
     };
     let preview = store.preview_progress(request.clone()).expect("preview");
     assert!(preview.diagnostics.is_empty(), "{:#?}", preview.diagnostics);
@@ -237,7 +237,7 @@ fn malformed_and_cross_scope_progress_never_become_unknown_and_store_writer_is_p
             }],
             replacement: None,
             replacement_source: None,
-            bootstrap: None,
+            bootstrap: false,
         })
         .expect("conflict preview");
     assert!(

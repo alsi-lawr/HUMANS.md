@@ -326,6 +326,40 @@ fn serve_exposes_only_the_fixed_read_contract() {
 }
 
 #[test]
+fn serve_transports_derived_ticket_progress() {
+    let root = fixture();
+    let progress = root
+        .path()
+        .join("projects/demo/investigations/sample/progress/log.toml");
+    fs::create_dir_all(progress.parent().expect("progress parent")).expect("progress parent");
+    fs::write(
+        progress,
+        "schema_version = 1\n\n[[entries]]\nid = \"start\"\nrecorded_at = \"2026-07-26T10:00:00Z\"\nrecorded_by = \"root\"\nticket_id = \"HMD-011\"\nkind = \"transition\"\nfrom = \"unknown\"\nto = \"in_progress\"\n",
+    )
+    .expect("progress");
+    let server = Running::start(root.path(), None, false);
+    let records = json_request(
+        &server,
+        "/api/query",
+        &json!({"query":"records", "scope":{"project":"demo", "investigation":"sample"}}),
+    );
+    let Indexed::Current { value, .. } =
+        serde_json::from_str::<Indexed<Vec<DerivedRecord>>>(&records.body).expect("record query")
+    else {
+        panic!("current records")
+    };
+    assert_eq!(
+        "in_progress",
+        value
+            .iter()
+            .find(|record| record.path.ends_with("HMD-011.md"))
+            .and_then(|record| record.progress.as_ref())
+            .map(|progress| progress.status.as_str())
+            .expect("transported progress")
+    );
+}
+
+#[test]
 fn serve_preserves_preview_and_gates_apply_with_capability() {
     let root = fixture();
     let indexes = TempDir::new().expect("indexes");

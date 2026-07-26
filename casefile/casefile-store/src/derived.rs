@@ -118,6 +118,7 @@ pub struct DerivedRelationship {
 pub struct DerivedBoard {
     pub identity: ScopedIdentity,
     pub title: String,
+    #[serde(default)]
     pub status_source: BoardStatusSource,
     pub filter_statuses: Option<Vec<String>>,
     pub filter_kinds: Option<Vec<String>>,
@@ -396,7 +397,12 @@ fn progress_by_scope(
         let Some(scope) = record_scope(&entry.path, active) else {
             continue;
         };
-        if entry.classification != Classification::Governed {
+        if entry.classification != Classification::Governed
+            || scan
+                .diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.path == entry.path)
+        {
             invalid.insert(scope);
             continue;
         }
@@ -641,14 +647,13 @@ fn derive_boards(records: &[DerivedRecord], active: &Activation) -> Vec<DerivedB
             };
             let (status, eligible) = match board.status_source {
                 BoardStatusSource::Disposition => (item.status.clone(), true),
-                BoardStatusSource::Progress => (
-                    candidate
-                        .progress
-                        .as_ref()
-                        .map(|progress| progress.status.as_str().into())
-                        .unwrap_or_else(|| "unknown".into()),
-                    item.status == "accepted" && kind == Kind::Ticket,
-                ),
+                BoardStatusSource::Progress => match candidate.progress.as_ref() {
+                    Some(progress) => (
+                        progress.status.as_str().into(),
+                        item.status == "accepted" && kind == Kind::Ticket,
+                    ),
+                    None => continue,
+                },
             };
             if !eligible
                 || board

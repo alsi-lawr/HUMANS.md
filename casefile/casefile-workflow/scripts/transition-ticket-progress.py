@@ -76,20 +76,17 @@ def main() -> int:
     note.add_argument("--category", required=True, choices=sorted(CATEGORIES))
     note.add_argument("--message", required=True)
     note.add_argument("--operation-id", required=True)
-    bootstrap = subparsers.add_parser("bootstrap-unknown", parents=[common])
-    bootstrap.add_argument("--operation-id-prefix", required=True)
+    subparsers.add_parser("bootstrap-unknown").add_argument("--investigation", required=True)
     replace = subparsers.add_parser("replace", parents=[common])
     replace.add_argument("--replacement", required=True, type=Path)
     args = parser.parse_args()
+    if args.preview_file.resolve().is_relative_to(args.root.resolve()):
+        raise ValueError("--preview-file must be outside --root so it cannot change the saved Store revision")
 
     if args.apply:
         if not args.preview_file.is_file():
             raise ValueError("--apply requires the immutable --preview-file created by a prior preview")
         preview = json.loads(args.preview_file.read_text(encoding="utf-8"))
-        # The preview file may live in task scratch below the planning root. Refresh only the
-        # canonical preview envelope from its immutable request so that scratch itself cannot make
-        # the Store revision stale; the operation ID/timestamp-bearing payload remains unchanged.
-        preview = invoke(args.casefile, args.root, ["progress-preview"], preview["request"])
         with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".json") as handle:
             json.dump(preview, handle)
             handle.flush()
@@ -98,11 +95,7 @@ def main() -> int:
         return 0
 
     if args.action == "bootstrap-unknown":
-        request = invoke(args.casefile, args.root, [
-            "progress-bootstrap", "--investigation", args.investigation,
-            "--operation-id-prefix", args.operation_id_prefix,
-            "--recorded-at", timestamp(args.recorded_at), "--recorded-by", args.recorded_by,
-        ])
+        request = invoke(args.casefile, args.root, ["progress-bootstrap", "--investigation", args.investigation])
     else:
         request = request_from(args)
     preview = invoke(args.casefile, args.root, ["progress-preview"], request)

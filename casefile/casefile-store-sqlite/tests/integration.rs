@@ -1,5 +1,5 @@
-use casefile_core::{Classification, Kind};
-use casefile_store::{DerivedIndex, Indexed, RecordScope, ScopedIdentity, Store};
+use casefile_core::{BoardStatusSource, Classification, Kind};
+use casefile_store::{DerivedBoard, DerivedIndex, Indexed, RecordScope, ScopedIdentity, Store};
 use casefile_store_sqlite::SqliteIndex;
 use std::{fs, path::Path};
 use tempfile::TempDir;
@@ -37,6 +37,18 @@ fn current(index: &SqliteIndex, store: &Store) -> casefile_store::DerivedSnapsho
         Indexed::Current { .. }
     ));
     snapshot
+}
+
+#[test]
+fn old_derived_board_json_defaults_to_disposition() {
+    let board: DerivedBoard = serde_json::from_str(
+        r#"{
+      "identity":{"scope":{"project":"demo","investigation":"sample"},"identity":"HMD-board"},
+      "title":"Board","filter_statuses":null,"filter_kinds":null,"columns":[]
+    }"#,
+    )
+    .expect("old board JSON");
+    assert_eq!(BoardStatusSource::Disposition, board.status_source);
 }
 
 #[test]

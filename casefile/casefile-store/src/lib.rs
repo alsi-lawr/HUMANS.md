@@ -19,8 +19,6 @@ pub use derived::{
     StrategyBindingState, WriterBindingSource,
 };
 pub use index::{DerivedIndex, Indexed, RevisionSource};
-pub use progress::{
-    ProgressApplyResult, ProgressBootstrap, ProgressChangeRequest, ProgressPreview,
-};
+pub use progress::{ProgressApplyResult, ProgressChangeRequest, ProgressPreview};
 pub use scanning::ScanResult;
 pub use store::{Store, StoreError};

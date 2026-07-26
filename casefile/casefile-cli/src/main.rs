@@ -76,12 +76,6 @@ enum Command {
     ProgressBootstrap {
         #[arg(long)]
         investigation: String,
-        #[arg(long)]
-        operation_id_prefix: String,
-        #[arg(long)]
-        recorded_at: String,
-        #[arg(long)]
-        recorded_by: String,
     },
     /// Serve the fixed planning root on an IPv4 loopback socket.
     Serve {

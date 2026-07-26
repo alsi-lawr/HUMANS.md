@@ -53,6 +53,9 @@ pub(super) fn execute(root: PathBuf, command: Command) -> Result<ExitCode> {
             require_activation,
             investigation,
         } => {
+            if let Some(investigation) = &investigation {
+                store.validate_investigation(investigation)?;
+            }
             let scan = store.scan()?;
             let diagnostics = investigation.as_ref().map_or_else(
                 || scan.diagnostics.clone(),
@@ -104,18 +107,8 @@ pub(super) fn execute(root: PathBuf, command: Command) -> Result<ExitCode> {
             print_json(&store.apply_progress(preview)?)?;
             Ok(ExitCode::SUCCESS)
         }
-        Command::ProgressBootstrap {
-            investigation,
-            operation_id_prefix,
-            recorded_at,
-            recorded_by,
-        } => {
-            print_json(&store.bootstrap_progress(
-                &investigation,
-                &operation_id_prefix,
-                &recorded_at,
-                &recorded_by,
-            )?)?;
+        Command::ProgressBootstrap { investigation } => {
+            print_json(&store.bootstrap_progress(&investigation)?)?;
             Ok(ExitCode::SUCCESS)
         }
         Command::ReplaceStrategyBinding {

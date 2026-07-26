@@ -81,17 +81,12 @@ impl Store {
     pub fn bootstrap_progress(
         &self,
         investigation: &str,
-        operation_id_prefix: &str,
-        recorded_at: &str,
-        recorded_by: &str,
     ) -> Result<ProgressChangeRequest, StoreError> {
-        progress::bootstrap(
-            &self.root,
-            investigation,
-            operation_id_prefix,
-            recorded_at,
-            recorded_by,
-        )
+        progress::bootstrap(&self.root, investigation)
+    }
+
+    pub fn validate_investigation(&self, investigation: &str) -> Result<(), StoreError> {
+        progress::validate_investigation(&self.root, investigation)
     }
 
     /// Replaces the sole governed writer-binding state file atomically.
