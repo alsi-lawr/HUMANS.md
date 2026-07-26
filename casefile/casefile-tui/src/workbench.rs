@@ -303,7 +303,10 @@ impl App {
             .filter(|board| board_matches_scope(board, project, investigation))
             .flat_map(|board| board.columns.iter())
             .flat_map(|column| column.cards.iter())
-            .filter_map(|card| canonical_card_path(&self.scan, card))
+            .filter_map(|card| match canonical_card_path(&self.scan, card) {
+                CardPathResolution::Resolved(path) => Some(path),
+                CardPathResolution::Missing | CardPathResolution::Ambiguous => None,
+            })
             .collect()
     }
 
@@ -338,6 +341,29 @@ impl App {
                 .block(block)
                 .render(area, buffer);
         };
+        let invalid_diagnostics = scoped_board_diagnostics(&self.scan, project, investigation);
+        if !invalid_diagnostics.is_empty() {
+            let mut lines = vec![
+                Line::from("Board definitions or the progress log are invalid.")
+                    .style(Style::default().fg(WARN).bold()),
+                Line::from("Inspect Files or Diagnostics for the canonical validation details.")
+                    .style(Style::default().fg(MUTED)),
+            ];
+            for diagnostic in invalid_diagnostics {
+                lines.push(
+                    Line::from(format!(
+                        "{}: {}",
+                        safe_inline(&diagnostic.code),
+                        safe_inline(&diagnostic.message),
+                    ))
+                    .style(Style::default().fg(WARN)),
+                );
+            }
+            return Paragraph::new(lines)
+                .block(block)
+                .wrap(Wrap { trim: false })
+                .render(area, buffer);
+        }
         let boards = self
             .derived
             .boards
@@ -345,13 +371,11 @@ impl App {
             .filter(|board| board_matches_scope(board, project, investigation))
             .collect::<Vec<_>>();
         if boards.is_empty() {
-            return Paragraph::new(
-                "This investigation has no board definitions. Inspect Files or Diagnostics for configuration problems.",
-            )
-            .style(Style::default().fg(MUTED))
-            .block(block)
-            .wrap(Wrap { trim: false })
-            .render(area, buffer);
+            return Paragraph::new("This investigation has no board definitions.")
+                .style(Style::default().fg(MUTED))
+                .block(block)
+                .wrap(Wrap { trim: false })
+                .render(area, buffer);
         }
         let mut lines = vec![
             Line::from("Read-only; record filter does not alter cards.")
@@ -367,7 +391,14 @@ impl App {
                 ))
                 .style(Style::default().fg(ACCENT).bold()),
             );
-            board_lines(board, &self.scan, &mut lines);
+            board_lines(
+                board,
+                &self.scan,
+                self.browser
+                    .selected(&self.scan)
+                    .map(|entry| entry.path.as_str()),
+                &mut lines,
+            );
         }
         Paragraph::new(lines)
             .block(block)
@@ -381,7 +412,16 @@ fn board_matches_scope(board: &DerivedBoard, project: &str, investigation: &str)
         && board.identity.scope.investigation.as_deref() == Some(investigation)
 }
 
-fn canonical_card_path(scan: &ScanResult, card: &casefile_store::DerivedCard) -> Option<String> {
+enum CardPathResolution {
+    Resolved(String),
+    Missing,
+    Ambiguous,
+}
+
+fn canonical_card_path(
+    scan: &ScanResult,
+    card: &casefile_store::DerivedCard,
+) -> CardPathResolution {
     let matches = scan
         .snapshot
         .entries
@@ -394,10 +434,34 @@ fn canonical_card_path(scan: &ScanResult, card: &casefile_store::DerivedCard) ->
                 })
         })
         .collect::<Vec<_>>();
-    (matches.len() == 1).then(|| matches[0].path.clone())
+    match matches.as_slice() {
+        [entry] => CardPathResolution::Resolved(entry.path.clone()),
+        [] => CardPathResolution::Missing,
+        _ => CardPathResolution::Ambiguous,
+    }
 }
 
-fn board_lines(board: &DerivedBoard, scan: &ScanResult, lines: &mut Vec<Line<'static>>) {
+fn scoped_board_diagnostics<'a>(
+    scan: &'a ScanResult,
+    project: &str,
+    investigation: &str,
+) -> Vec<&'a casefile_core::Diagnostic> {
+    let prefix = format!("projects/{project}/investigations/{investigation}/");
+    scan.diagnostics
+        .iter()
+        .filter(|diagnostic| {
+            diagnostic.path.starts_with(&format!("{prefix}boards/"))
+                || diagnostic.path == format!("{prefix}progress/log.toml")
+        })
+        .collect()
+}
+
+fn board_lines(
+    board: &DerivedBoard,
+    scan: &ScanResult,
+    selected_path: Option<&str>,
+    lines: &mut Vec<Line<'static>>,
+) {
     for column in &board.columns {
         lines.push(
             Line::from(format!(
@@ -412,18 +476,32 @@ fn board_lines(board: &DerivedBoard, scan: &ScanResult, lines: &mut Vec<Line<'st
             continue;
         }
         for card in &column.cards {
-            let suffix = if canonical_card_path(scan, card).is_some() {
-                ""
-            } else {
-                "  [detail unavailable]"
+            let resolution = canonical_card_path(scan, card);
+            let selected = matches!(&resolution, CardPathResolution::Resolved(path) if Some(path.as_str()) == selected_path);
+            let (marker, suffix) = match &resolution {
+                CardPathResolution::Resolved(_) if selected => (">", "  [selected]"),
+                CardPathResolution::Resolved(_) => (" ", ""),
+                CardPathResolution::Missing => ("!", "  [detail unavailable: missing identity]"),
+                CardPathResolution::Ambiguous => {
+                    ("!", "  [detail unavailable: ambiguous identity]")
+                }
             };
-            lines.push(Line::from(format!(
-                "    {}  {}  {}{}",
-                safe_inline(&card.identity.identity),
-                safe_inline(&card.status),
-                safe_inline(&card.title),
-                suffix,
-            )));
+            lines.push(
+                Line::from(format!(
+                    "  {marker} {}  {}  {}{}",
+                    safe_inline(&card.identity.identity),
+                    safe_inline(&card.status),
+                    safe_inline(&card.title),
+                    suffix,
+                ))
+                .style(if selected {
+                    Style::default().fg(ACCENT).bold()
+                } else if !matches!(resolution, CardPathResolution::Resolved(_)) {
+                    Style::default().fg(WARN)
+                } else {
+                    Style::default()
+                }),
+            );
         }
     }
 }

@@ -217,6 +217,151 @@ test("renders stale and unresolved board cards without inventing a ticket detail
 
   expect(stale).toContain("Board projection is stale");
   expect(unresolved).toContain("Missing ticket");
-  expect(unresolved).toContain("identity is missing or ambiguous");
+  expect(unresolved).toContain("identity is missing");
   expect(unresolved).not.toContain("<button");
+});
+
+test("distinguishes browser board loading, no-board, empty-column, invalid, failure, and both sources", () => {
+  const noBoard = renderToStaticMarkup(
+    <BoardsPanel state={{ tag: "ready", boards: [] }} records={[]} onSelect={noAction} />,
+  );
+  const loading = renderToStaticMarkup(
+    <BoardsPanel state={{ tag: "loading" }} records={[]} onSelect={noAction} />,
+  );
+  const failure = renderToStaticMarkup(
+    <BoardsPanel
+      state={{ tag: "failure", message: "host unavailable" }}
+      records={[]}
+      onSelect={noAction}
+    />,
+  );
+  const invalid = renderToStaticMarkup(
+    <BoardsPanel
+      state={{
+        tag: "invalid",
+        diagnostics: [
+          {
+            path: "projects/demo/investigations/sample/progress/log.toml",
+            code: "invalid_toml",
+            field: undefined,
+            section: undefined,
+            message: "progress syntax is malformed",
+          },
+        ],
+      }}
+      records={[]}
+      onSelect={noAction}
+    />,
+  );
+  const sources = renderToStaticMarkup(
+    <BoardsPanel
+      state={{
+        tag: "ready",
+        boards: [
+          {
+            identity: {
+              scope: { project: "demo", investigation: "sample" },
+              identity: "HMD-disposition",
+            },
+            title: "Disposition",
+            status_source: "disposition",
+            filter_statuses: null,
+            filter_kinds: null,
+            columns: [{ name: "Accepted", statuses: ["accepted"], cards: [] }],
+          },
+          {
+            identity: {
+              scope: { project: "demo", investigation: "sample" },
+              identity: "HMD-progress",
+            },
+            title: "Progress",
+            status_source: "progress",
+            filter_statuses: null,
+            filter_kinds: null,
+            columns: [{ name: "Unknown", statuses: ["unknown"], cards: [] }],
+          },
+        ],
+      }}
+      records={[]}
+      onSelect={noAction}
+    />,
+  );
+
+  expect(loading).toContain("Loading canonical board projection");
+  expect(noBoard).toContain("no board definitions");
+  expect(failure).toContain("Boards query failed: host unavailable");
+  expect(invalid).toContain("Board definitions or the progress log are invalid");
+  expect(invalid).toContain("invalid_toml");
+  expect(invalid).toContain("Files or Diagnostics");
+  expect(sources).toContain("Disposition");
+  expect(sources).toContain("Progress");
+  expect(sources).toContain("No cards.");
+});
+
+test("keeps missing and ambiguous browser cards non-activatable", () => {
+  const card = {
+    identity: {
+      scope: { project: "demo", investigation: "sample" },
+      identity: "HMD-011",
+    },
+    kind: "ticket" as const,
+    title: "Minimum ticket",
+    status: "unknown",
+    rank: null,
+  };
+  const board = {
+    identity: {
+      scope: { project: "demo", investigation: "sample" },
+      identity: "HMD-board",
+    },
+    title: "Delivery",
+    status_source: "progress" as const,
+    filter_statuses: null,
+    filter_kinds: null,
+    columns: [{ name: "Unknown", statuses: ["unknown"], cards: [card] }],
+  };
+  const missing = renderToStaticMarkup(
+    <BoardsPanel state={{ tag: "ready", boards: [board] }} records={[]} onSelect={noAction} />,
+  );
+  const ambiguous = renderToStaticMarkup(
+    <BoardsPanel
+      state={{ tag: "ready", boards: [board] }}
+      records={[
+        {
+          path: "projects/demo/investigations/sample/tickets/accepted/HMD-011.md",
+          scope: { project: "demo", investigation: "sample" },
+          classification: "governed",
+          kind: "ticket",
+          identity: card.identity,
+          title: "First",
+          content: undefined,
+          rendered_markdown: undefined,
+          work_item: undefined,
+          board: undefined,
+          strategy: undefined,
+          strategy_binding: undefined,
+        },
+        {
+          path: "projects/demo/investigations/sample/tickets/rejected/HMD-011.md",
+          scope: { project: "demo", investigation: "sample" },
+          classification: "governed",
+          kind: "ticket",
+          identity: card.identity,
+          title: "Second",
+          content: undefined,
+          rendered_markdown: undefined,
+          work_item: undefined,
+          board: undefined,
+          strategy: undefined,
+          strategy_binding: undefined,
+        },
+      ]}
+      onSelect={noAction}
+    />,
+  );
+
+  expect(missing).toContain("identity is missing");
+  expect(ambiguous).toContain("identity is ambiguous");
+  expect(missing).not.toContain("<button");
+  expect(ambiguous).not.toContain("<button");
 });

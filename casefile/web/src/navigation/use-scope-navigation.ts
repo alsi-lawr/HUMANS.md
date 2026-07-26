@@ -16,7 +16,7 @@ export type ScopeNavigation = Readonly<{
   investigation: string | undefined;
   selectTab: (tab: BrowseTab) => void;
   selectProject: (project: string) => void;
-  selectInvestigation: (investigation: string) => void;
+  selectInvestigation: (investigation: string, tab?: BrowseTab) => void;
 }>;
 
 export const useScopeNavigation = (records: ReadonlyArray<Record>): ScopeNavigation => {
@@ -48,9 +48,9 @@ export const useScopeNavigation = (records: ReadonlyArray<Record>): ScopeNavigat
       setInvestigation(undefined);
       setTab("investigations");
     },
-    selectInvestigation: (selectedInvestigation) => {
+    selectInvestigation: (selectedInvestigation, tab = "tickets") => {
       setInvestigation(selectedInvestigation);
-      setTab("tickets");
+      setTab(tab);
     },
   };
 };

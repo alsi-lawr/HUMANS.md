@@ -1,6 +1,6 @@
 import { type ReactNode } from "react";
 import { type BoardsState } from "./use-boards";
-import { type Board, type Card, type Record, sameIdentity } from "../model";
+import { type Board, type Card, type Diagnostic, type Record, sameIdentity } from "../model";
 
 export const BoardsPanel = ({
   state,
@@ -19,6 +19,7 @@ export const BoardsPanel = ({
     return (
       <Empty message="Board projection is stale. Refresh to load the current investigation." />
     );
+  if (state.tag === "invalid") return <InvalidBoardDefinitions diagnostics={state.diagnostics} />;
   if (state.boards.length === 0)
     return <Empty message="This investigation has no board definitions." />;
   return (
@@ -104,11 +105,12 @@ const BoardCard = ({
     (record) => record.identity !== undefined && sameIdentity(record.identity, card.identity),
   );
   if (matches.length !== 1) {
+    const reason = matches.length === 0 ? "missing" : "ambiguous";
     return (
       <article className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-100">
         <p className="font-medium">{card.title}</p>
         <p className="mt-1 text-xs">
-          Ticket detail is unavailable because its current identity is missing or ambiguous.
+          Ticket detail is unavailable because its current identity is {reason}.
         </p>
       </article>
     );
@@ -128,6 +130,25 @@ const BoardCard = ({
     </button>
   );
 };
+
+const InvalidBoardDefinitions = ({
+  diagnostics,
+}: Readonly<{ diagnostics: ReadonlyArray<Diagnostic> }>): ReactNode => (
+  <section className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-6 text-sm text-amber-100">
+    <h1 className="font-semibold">Board definitions or the progress log are invalid.</h1>
+    <p className="mt-2 text-amber-100/80">
+      Inspect Files or Diagnostics for the canonical validation details.
+    </p>
+    <ul className="mt-4 space-y-2">
+      {diagnostics.map((diagnostic) => (
+        <li key={`${diagnostic.path}:${diagnostic.code}:${diagnostic.field ?? ""}`}>
+          <span className="font-mono text-xs font-semibold">{diagnostic.code}</span>
+          <span className="ml-2">{diagnostic.message}</span>
+        </li>
+      ))}
+    </ul>
+  </section>
+);
 
 const Empty = ({ message }: Readonly<{ message: string }>): ReactNode => (
   <p className="rounded-xl border border-dashed border-slate-800 p-8 text-sm text-slate-500">

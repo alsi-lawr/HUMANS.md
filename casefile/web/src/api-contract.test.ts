@@ -45,11 +45,19 @@ test("preserves the host stale-revision failure code", () => {
   );
 });
 
-test("decodes both canonical board status sources", () => {
+test("decodes both canonical board status sources and rejects malformed selectors", () => {
   const boards = decodeBoards([
     {
       identity: { scope: { project: "demo", investigation: "sample" }, identity: "HMD-board" },
-      title: "Delivery",
+      title: "Disposition",
+      status_source: "disposition",
+      filter_statuses: null,
+      filter_kinds: ["ticket"],
+      columns: [{ name: "Accepted", statuses: ["accepted"], cards: [] }],
+    },
+    {
+      identity: { scope: { project: "demo", investigation: "sample" }, identity: "HMD-progress" },
+      title: "Progress",
       status_source: "progress",
       filter_statuses: null,
       filter_kinds: ["ticket"],
@@ -57,7 +65,15 @@ test("decodes both canonical board status sources", () => {
     },
   ]);
 
-  expect(boards[0]?.status_source).toBe("progress");
+  expect(boards.map((board) => board.status_source)).toEqual(["disposition", "progress"]);
+  expect(() =>
+    decodeBoards([
+      {
+        ...boards[0],
+        status_source: "future-state",
+      },
+    ]),
+  ).toThrow("board status source");
 });
 
 const strategyProjection = {

@@ -24,6 +24,7 @@ export const App = (): ReactNode => {
       : { project: navigation.project, investigation: navigation.investigation },
     workspace.workspace.tag === "ready" ? workspace.workspace.sourceRevision : undefined,
     workspace.refreshKey,
+    workspace.workspace.tag === "ready" ? workspace.workspace.diagnostics : [],
   );
 
   if (workspace.workspace.tag === "loading") return <Loading />;
@@ -40,7 +41,10 @@ export const App = (): ReactNode => {
     changes.reset();
   };
   const selectInvestigation = (investigation: string): void => {
-    navigation.selectInvestigation(investigation);
+    navigation.selectInvestigation(
+      investigation,
+      navigation.tab === "boards" ? "boards" : undefined,
+    );
     selection.clearRecord();
     changes.reset();
   };
