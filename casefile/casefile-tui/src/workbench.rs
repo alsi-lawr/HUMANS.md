@@ -381,6 +381,7 @@ impl App {
             Line::from("Read-only; record filter does not alter cards.")
                 .style(Style::default().fg(MUTED)),
         ];
+        let mut selected_line = None;
         for board in boards {
             lines.push(Line::from(""));
             lines.push(
@@ -391,18 +392,23 @@ impl App {
                 ))
                 .style(Style::default().fg(ACCENT).bold()),
             );
-            board_lines(
+            if let Some(index) = board_lines(
                 board,
                 &self.scan,
                 self.browser
                     .selected(&self.scan)
                     .map(|entry| entry.path.as_str()),
                 &mut lines,
-            );
+            ) {
+                selected_line = Some(index);
+            }
         }
+        let inner = block.inner(area);
+        let scroll = board_scroll_offset(&lines, selected_line, inner.width, inner.height);
         Paragraph::new(lines)
             .block(block)
             .wrap(Wrap { trim: false })
+            .scroll((scroll, 0))
             .render(area, buffer);
     }
 }
@@ -461,7 +467,8 @@ fn board_lines(
     scan: &ScanResult,
     selected_path: Option<&str>,
     lines: &mut Vec<Line<'static>>,
-) {
+) -> Option<usize> {
+    let mut selected_line = None;
     for column in &board.columns {
         lines.push(
             Line::from(format!(
@@ -486,6 +493,9 @@ fn board_lines(
                     ("!", "  [detail unavailable: ambiguous identity]")
                 }
             };
+            if selected {
+                selected_line = Some(lines.len());
+            }
             lines.push(
                 Line::from(format!(
                     "  {marker} {}  {}  {}{}",
@@ -504,6 +514,45 @@ fn board_lines(
             );
         }
     }
+    selected_line
+}
+
+fn board_scroll_offset(
+    lines: &[Line<'_>],
+    selected_line: Option<usize>,
+    width: u16,
+    height: u16,
+) -> u16 {
+    let Some(selected_line) = selected_line.filter(|index| *index < lines.len()) else {
+        return 0;
+    };
+    if width == 0 || height == 0 {
+        return 0;
+    }
+
+    let mut selected_start = 0usize;
+    let mut selected_height = 1usize;
+    for (index, line) in lines.iter().enumerate() {
+        let rows = Paragraph::new(line.clone())
+            .wrap(Wrap { trim: false })
+            .line_count(width)
+            .max(1);
+        if index < selected_line {
+            selected_start = selected_start.saturating_add(rows);
+        } else if index == selected_line {
+            selected_height = rows;
+            break;
+        }
+    }
+
+    let visible_rows = usize::from(height);
+    let selected_end = selected_start.saturating_add(selected_height);
+    let scroll = if selected_height >= visible_rows {
+        selected_start
+    } else {
+        selected_end.saturating_sub(visible_rows)
+    };
+    scroll.min(usize::from(u16::MAX)) as u16
 }
 
 fn render_help(area: Rect, buffer: &mut Buffer) {
