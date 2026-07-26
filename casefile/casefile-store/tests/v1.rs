@@ -1,5 +1,7 @@
-use casefile_core::{ChangeRequest, Classification, Kind, RecordDraft};
-use casefile_store::{ActivationState, RelationshipKind, Store};
+use casefile_core::{
+    ChangeRequest, Classification, Kind, ProgressEntry, ProgressStatus, RecordDraft,
+};
+use casefile_store::{ActivationState, ProgressChangeRequest, RelationshipKind, Store};
 use std::{fs, path::Path, process::Command};
 use tempfile::TempDir;
 
@@ -114,6 +116,383 @@ fn scans_each_v1_kind_and_preserves_raw_material() {
             .find(|entry| entry.path.ends_with("legacy.txt"))
             .map(|entry| entry.classification)
     );
+}
+
+#[test]
+fn accepted_tickets_project_unknown_and_a_valid_log_folds_progress_notes_and_progress_boards() {
+    let root = fixture();
+    let store = Store::open(root.path()).expect("store");
+    let initial = store.derived_snapshot().expect("derived");
+    let ticket = initial
+        .records
+        .iter()
+        .find(|record| record.path.ends_with("HMD-011.md"))
+        .expect("ticket");
+    assert_eq!(
+        ticket.progress.as_ref().expect("unknown progress").status,
+        ProgressStatus::Unknown
+    );
+
+    let log = "schema_version = 1\n\n[[entries]]\nid = \"start\"\nrecorded_at = \"2026-07-26T10:00:00Z\"\nrecorded_by = \"root\"\nticket_id = \"HMD-011\"\nkind = \"transition\"\nfrom = \"unknown\"\nto = \"in_progress\"\n\n[[entries]]\nid = \"quirk\"\nrecorded_at = \"2026-07-26T10:01:00Z\"\nrecorded_by = \"root\"\nticket_id = \"HMD-011\"\nkind = \"note\"\ncategory = \"quirk\"\nmessage = \"Fixture note.\"\n";
+    fs::create_dir_all(
+        root.path()
+            .join("projects/demo/investigations/sample/progress"),
+    )
+    .expect("progress directory");
+    fs::write(
+        root.path()
+            .join("projects/demo/investigations/sample/progress/log.toml"),
+        log,
+    )
+    .expect("log");
+    fs::write(root.path().join("projects/demo/investigations/sample/boards/main.toml"), "schema_version = 1\nid = \"HMD-board\"\ntitle = \"Main\"\nstatus_source = \"progress\"\nfilter_statuses = [\"in_progress\"]\nfilter_kinds = [\"ticket\"]\n\n[[columns]]\nname = \"Working\"\nstatuses = [\"in_progress\"]\n").expect("board");
+    let derived = store.derived_snapshot().expect("derived");
+    let ticket = derived
+        .records
+        .iter()
+        .find(|record| record.path.ends_with("HMD-011.md"))
+        .expect("ticket");
+    let progress = ticket.progress.as_ref().expect("progress");
+    assert_eq!(progress.status, ProgressStatus::InProgress);
+    assert_eq!(progress.notes.len(), 1);
+    assert_eq!(derived.boards[0].columns[0].cards[0].status, "in_progress");
+}
+
+#[test]
+fn malformed_and_cross_scope_progress_never_become_unknown_and_store_writer_is_preview_first_and_idempotent()
+ {
+    let root = fixture();
+    let store = Store::open(root.path()).expect("store");
+    fs::create_dir_all(
+        root.path()
+            .join("projects/demo/investigations/sample/progress"),
+    )
+    .expect("progress directory");
+    let log_path = root
+        .path()
+        .join("projects/demo/investigations/sample/progress/log.toml");
+    fs::write(&log_path, "schema_version = 1\n[[entries]]\nid = \"bad\"\n").expect("bad log");
+    let invalid = store.derived_snapshot().expect("derived");
+    let ticket = invalid
+        .records
+        .iter()
+        .find(|record| record.path.ends_with("HMD-011.md"))
+        .expect("ticket");
+    assert!(ticket.progress.is_none());
+    assert!(
+        invalid
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.code == "invalid_progress_log")
+    );
+
+    let repair = store
+        .preview_progress(ProgressChangeRequest {
+            investigation: "projects/demo/investigations/sample".into(),
+            entries: Vec::new(),
+            replacement: None,
+            replacement_source: Some("schema_version = 1\n".into()),
+            bootstrap: false,
+        })
+        .expect("repair preview");
+    assert!(repair.diagnostics.is_empty(), "{:#?}", repair.diagnostics);
+    store.apply_progress(repair).expect("repair malformed log");
+    let request = ProgressChangeRequest {
+        investigation: "projects/demo/investigations/sample".into(),
+        entries: vec![ProgressEntry::Transition {
+            id: "start-001".into(),
+            recorded_at: "2026-07-26T10:00:00Z".into(),
+            recorded_by: "root".into(),
+            ticket_id: "HMD-011".into(),
+            from: ProgressStatus::Unknown,
+            to: ProgressStatus::InProgress,
+        }],
+        replacement: None,
+        replacement_source: None,
+        bootstrap: false,
+    };
+    let preview = store.preview_progress(request.clone()).expect("preview");
+    assert!(preview.diagnostics.is_empty(), "{:#?}", preview.diagnostics);
+    assert_eq!(
+        "schema_version = 1\n",
+        fs::read_to_string(&log_path).expect("pre-preview log"),
+        "preview must not mutate"
+    );
+    let applied = store.apply_progress(preview).expect("apply");
+    assert!(!applied.no_op);
+    let retry = store.preview_progress(request).expect("retry preview");
+    assert!(retry.diagnostics.is_empty());
+    assert!(retry.no_op);
+    assert!(store.apply_progress(retry).expect("retry apply").no_op);
+    let conflict = store
+        .preview_progress(ProgressChangeRequest {
+            investigation: "projects/demo/investigations/sample".into(),
+            entries: vec![ProgressEntry::Transition {
+                id: "start-001".into(),
+                recorded_at: "2026-07-26T10:00:00Z".into(),
+                recorded_by: "root".into(),
+                ticket_id: "HMD-011".into(),
+                from: ProgressStatus::InProgress,
+                to: ProgressStatus::Complete,
+            }],
+            replacement: None,
+            replacement_source: None,
+            bootstrap: false,
+        })
+        .expect("conflict preview");
+    assert!(
+        conflict
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.code == "conflicting_progress_operation_id")
+    );
+}
+
+#[test]
+fn bootstrap_creates_only_an_absent_empty_log_and_existing_valid_log_is_byte_preserving_no_op() {
+    let root = fixture();
+    let store = Store::open(root.path()).expect("store");
+    let investigation = "projects/demo/investigations/sample";
+    let log_path = root
+        .path()
+        .join("projects/demo/investigations/sample/progress/log.toml");
+
+    let absent = store
+        .preview_progress(
+            store
+                .bootstrap_progress(investigation)
+                .expect("bootstrap request"),
+        )
+        .expect("absent bootstrap preview");
+    assert!(absent.diagnostics.is_empty(), "{:#?}", absent.diagnostics);
+    assert!(!absent.no_op);
+    assert_eq!(absent.bootstrap_ticket_ids, ["HMD-011"]);
+    store
+        .apply_progress(absent)
+        .expect("absent bootstrap apply");
+    assert_eq!(
+        fs::read_to_string(&log_path).expect("empty log"),
+        "schema_version = 1\n"
+    );
+
+    let noncanonical =
+        "schema_version=1\n\n# Preserve this comment and whitespace.\nentries = []\n";
+    fs::write(&log_path, noncanonical).expect("noncanonical valid log");
+    let before = store.scan().expect("before scan").snapshot.revision;
+    let existing = store
+        .preview_progress(
+            store
+                .bootstrap_progress(investigation)
+                .expect("bootstrap request"),
+        )
+        .expect("existing bootstrap preview");
+    assert!(
+        existing.diagnostics.is_empty(),
+        "{:#?}",
+        existing.diagnostics
+    );
+    assert!(existing.no_op);
+    assert!(existing.diff.is_empty());
+    assert!(existing.bootstrap_ticket_ids.is_empty());
+    assert_eq!(existing.expected_store_revision, before);
+    let applied = store
+        .apply_progress(existing)
+        .expect("existing bootstrap apply");
+    assert!(applied.no_op);
+    assert_eq!(
+        fs::read_to_string(&log_path).expect("preserved log"),
+        noncanonical
+    );
+    assert_eq!(applied.resulting_store_revision, before);
+}
+
+#[test]
+fn progress_mutations_require_active_activation_but_ignore_unrelated_diagnostics() {
+    let root = fixture();
+    let store = Store::open(root.path()).expect("store");
+    let request = ProgressChangeRequest {
+        investigation: "projects/demo/investigations/sample".into(),
+        entries: vec![ProgressEntry::Transition {
+            id: "start-activation".into(),
+            recorded_at: "2026-07-26T10:00:00Z".into(),
+            recorded_by: "root".into(),
+            ticket_id: "HMD-011".into(),
+            from: ProgressStatus::Unknown,
+            to: ProgressStatus::InProgress,
+        }],
+        replacement: None,
+        replacement_source: None,
+        bootstrap: false,
+    };
+
+    fs::write(root.path().join("casefile.toml"), "schema_version = 2\n")
+        .expect("invalid activation");
+    assert!(matches!(
+        store.preview_progress(request.clone()),
+        Err(casefile_store::StoreError::Invalid(message)) if message.contains("active Casefile activation")
+    ));
+
+    let apply_root = fixture();
+    let apply_store = Store::open(apply_root.path()).expect("apply store");
+    let preview = apply_store
+        .preview_progress(request.clone())
+        .expect("active preview");
+    fs::write(
+        apply_root.path().join("casefile.toml"),
+        "schema_version = 2\n",
+    )
+    .expect("invalidate activation before apply");
+    assert!(matches!(
+        apply_store.apply_progress(preview),
+        Err(casefile_store::StoreError::Invalid(message)) if message.contains("active Casefile activation")
+    ));
+
+    let active = fixture();
+    let store = Store::open(active.path()).expect("active store");
+    fs::write(active.path().join("request.md"), "# Request\n").expect("unrelated diagnostic");
+    let preview = store
+        .preview_progress(request)
+        .expect("unrelated diagnostic preview");
+    assert!(preview.diagnostics.is_empty(), "{:#?}", preview.diagnostics);
+}
+
+#[test]
+fn semantic_invalid_progress_suppresses_unknown_and_progress_board_cards() {
+    let root = fixture();
+    let store = Store::open(root.path()).expect("store");
+    let progress = root
+        .path()
+        .join("projects/demo/investigations/sample/progress/log.toml");
+    fs::create_dir_all(progress.parent().expect("progress parent")).expect("progress directory");
+    fs::write(
+        &progress,
+        "schema_version = 1\n\n[[entries]]\nid = \"wrong-ticket\"\nrecorded_at = \"2026-07-26T10:00:00Z\"\nrecorded_by = \"root\"\nticket_id = \"HMD-999\"\nkind = \"transition\"\nfrom = \"unknown\"\nto = \"in_progress\"\n",
+    )
+    .expect("cross-scope log");
+    fs::write(
+        root.path().join("projects/demo/investigations/sample/boards/main.toml"),
+        "schema_version = 1\nid = \"HMD-board\"\ntitle = \"Progress\"\nstatus_source = \"progress\"\nfilter_kinds = [\"ticket\"]\n\n[[columns]]\nname = \"Unknown\"\nstatuses = [\"unknown\"]\n",
+    )
+    .expect("progress board");
+
+    let derived = store.derived_snapshot().expect("derived");
+    assert!(
+        derived
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.code == "invalid_progress_ticket")
+    );
+    let ticket = derived
+        .records
+        .iter()
+        .find(|record| record.path.ends_with("HMD-011.md"))
+        .expect("ticket");
+    assert!(ticket.progress.is_none());
+    assert!(derived.boards[0].columns[0].cards.is_empty());
+}
+
+#[cfg(unix)]
+#[test]
+fn progress_apply_refuses_unsafe_paths_without_replacing_existing_bytes() {
+    use std::os::unix::fs::symlink;
+
+    let root = fixture();
+    let store = Store::open(root.path()).expect("store");
+    let request = ProgressChangeRequest {
+        investigation: "projects/demo/investigations/sample".into(),
+        entries: Vec::new(),
+        replacement: None,
+        replacement_source: Some("schema_version = 1\n".into()),
+        bootstrap: false,
+    };
+    let mut preview = store.preview_progress(request).expect("preview");
+    let progress = root
+        .path()
+        .join("projects/demo/investigations/sample/progress");
+    fs::create_dir_all(&progress).expect("progress parent");
+    let outside = root.path().join("outside-progress.toml");
+    fs::write(&outside, "outside bytes\n").expect("outside bytes");
+    symlink(&outside, progress.join("log.toml")).expect("unsafe link");
+
+    // This models a caller that refreshes its revision after detecting an out-of-band path change:
+    // the Store must still reject the unsafe target at the single atomic writer boundary.
+    let current = store.scan().expect("updated scan").snapshot;
+    preview.expected_store_revision = current.revision;
+    preview.expected_target_revision = current
+        .entries
+        .iter()
+        .find(|entry| entry.path.ends_with("progress/log.toml"))
+        .map(|entry| entry.content_revision.clone());
+    let error = store
+        .apply_progress(preview)
+        .expect_err("unsafe target refused");
+    assert!(
+        matches!(
+            &error,
+            casefile_store::StoreError::Invalid(message) if message.contains("regular non-symlink")
+        ),
+        "{error}"
+    );
+    assert_eq!(
+        fs::read_to_string(&outside).expect("outside preserved"),
+        "outside bytes\n"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn atomic_progress_write_failure_preserves_the_previous_log() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let root = fixture();
+    let store = Store::open(root.path()).expect("store");
+    let progress = root
+        .path()
+        .join("projects/demo/investigations/sample/progress");
+    fs::create_dir_all(&progress).expect("progress directory");
+    let log = progress.join("log.toml");
+    let original = "schema_version = 1\n";
+    fs::write(&log, original).expect("original log");
+    let preview = store
+        .preview_progress(ProgressChangeRequest {
+            investigation: "projects/demo/investigations/sample".into(),
+            entries: vec![ProgressEntry::Transition {
+                id: "cannot-write".into(),
+                recorded_at: "2026-07-26T10:00:00Z".into(),
+                recorded_by: "root".into(),
+                ticket_id: "HMD-011".into(),
+                from: ProgressStatus::Unknown,
+                to: ProgressStatus::InProgress,
+            }],
+            replacement: None,
+            replacement_source: None,
+            bootstrap: false,
+        })
+        .expect("preview");
+    fs::set_permissions(&progress, fs::Permissions::from_mode(0o500))
+        .expect("read-only progress directory");
+    let result = store.apply_progress(preview);
+    fs::set_permissions(&progress, fs::Permissions::from_mode(0o700))
+        .expect("restore progress directory");
+    assert!(matches!(result, Err(casefile_store::StoreError::Io(_))));
+    assert_eq!(fs::read_to_string(&log).expect("previous log"), original);
+}
+
+#[test]
+fn progress_target_paths_must_remain_contained() {
+    let root = fixture();
+    let store = Store::open(root.path()).expect("store");
+    let request = ProgressChangeRequest {
+        investigation: "../outside".into(),
+        entries: Vec::new(),
+        replacement: None,
+        replacement_source: None,
+        bootstrap: true,
+    };
+    assert!(matches!(
+        store.preview_progress(request),
+        Err(casefile_store::StoreError::Invalid(message)) if message.contains("must be contained")
+    ));
 }
 
 #[test]

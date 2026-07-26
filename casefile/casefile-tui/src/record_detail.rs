@@ -316,6 +316,9 @@ fn overview_lines(
                     lines.push(Line::from(format!("  - {}", safe_inline(project))));
                 }
             }
+            RecordSummary::Progress => {
+                lines.push(Line::from("Ticket progress").style(Style::default().fg(ACCENT).bold()));
+            }
         }
         lines.push(Line::from(""));
     }

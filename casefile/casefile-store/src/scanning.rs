@@ -8,8 +8,8 @@ use crate::{
 };
 use casefile_core::{
     CasefileSnapshot, Classification, Diagnostic, EntrySnapshot, Kind, RecordDraft, RecordSummary,
-    Revision, parse_decision, parse_metadata_arrays, parse_project_map, parse_request,
-    parse_strategy, parse_strategy_binding, parse_strategy_projection, stable,
+    Revision, parse_decision, parse_metadata_arrays, parse_progress_log, parse_project_map,
+    parse_request, parse_strategy, parse_strategy_binding, parse_strategy_projection, stable,
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -228,6 +228,9 @@ fn classify(
         Kind::Strategy => parse_strategy(path, text).map(|summary| (None, Some(summary))),
         Kind::StrategyBinding => {
             parse_strategy_binding(path, text).map(|summary| (None, Some(summary)))
+        }
+        Kind::Progress => {
+            parse_progress_log(path, text).map(|_| (None, Some(RecordSummary::Progress)))
         }
         Kind::Activation | Kind::ProjectMap => unreachable!(),
     };

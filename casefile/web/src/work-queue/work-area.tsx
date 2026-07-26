@@ -6,6 +6,8 @@ import {
 } from "../navigation/use-scope-navigation";
 import { type Diagnostic, type Record } from "../model";
 import { StrategyPanel } from "../strategy/strategy-panel";
+import { BoardsPanel } from "../boards/boards-panel";
+import { type BoardsState } from "../boards/use-boards";
 import { Badge, classificationTone, kindTone } from "../ui/badge";
 
 export type BrowserPanelProps = Readonly<{
@@ -21,6 +23,8 @@ export type BrowserPanelProps = Readonly<{
   selectedRecord: Record | undefined;
   diagnostics: ReadonlyArray<Diagnostic>;
   search: string;
+  boards: BoardsState;
+  boardRecords: ReadonlyArray<Record>;
   onProject: (project: string) => void;
   onInvestigation: (investigation: string) => void;
   onSelect: (record: Record) => void;
@@ -39,6 +43,8 @@ export const BrowserPanel = ({
   selectedRecord,
   diagnostics,
   search,
+  boards,
+  boardRecords,
   onProject,
   onInvestigation,
   onSelect,
@@ -80,6 +86,9 @@ export const BrowserPanel = ({
         search={search}
         onSelect={onSelect}
       />
+    ) : undefined}
+    {tab === "boards" ? (
+      <BoardsPanel state={boards} records={boardRecords} onSelect={onSelect} />
     ) : undefined}
   </main>
 );

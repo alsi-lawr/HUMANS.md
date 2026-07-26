@@ -2,6 +2,7 @@ use crate::{
     activation::activation,
     derived::{DerivedSnapshot, derive_snapshot},
     index::RevisionSource,
+    progress::{self, ProgressApplyResult, ProgressChangeRequest, ProgressPreview},
     scanning::{ScanResult, scan},
     writing,
 };
@@ -61,6 +62,31 @@ impl Store {
 
     pub fn apply(&self, preview: Preview) -> Result<ApplyResult, StoreError> {
         writing::apply(&self.root, preview)
+    }
+
+    pub fn preview_progress(
+        &self,
+        request: ProgressChangeRequest,
+    ) -> Result<ProgressPreview, StoreError> {
+        progress::preview(&self.root, request)
+    }
+
+    pub fn apply_progress(
+        &self,
+        preview: ProgressPreview,
+    ) -> Result<ProgressApplyResult, StoreError> {
+        progress::apply(&self.root, preview)
+    }
+
+    pub fn bootstrap_progress(
+        &self,
+        investigation: &str,
+    ) -> Result<ProgressChangeRequest, StoreError> {
+        progress::bootstrap(&self.root, investigation)
+    }
+
+    pub fn validate_investigation(&self, investigation: &str) -> Result<(), StoreError> {
+        progress::validate_investigation(&self.root, investigation)
     }
 
     /// Replaces the sole governed writer-binding state file atomically.

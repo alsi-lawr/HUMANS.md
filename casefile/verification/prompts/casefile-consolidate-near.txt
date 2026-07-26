@@ -1,0 +1,2 @@
+Start a new Casefile, choose an investigation strategy, review its tickets, implement the accepted
+work, close it, run a normal validation check, and tidy unrelated old planning files.

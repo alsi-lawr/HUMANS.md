@@ -20,6 +20,7 @@ const tabs: ReadonlyArray<Readonly<{ id: BrowseTab; label: string }>> = [
   { id: "tickets", label: "Tickets" },
   { id: "files", label: "Files" },
   { id: "strategies", label: "Strategies" },
+  { id: "boards", label: "Boards" },
 ];
 
 export const Sidebar = ({

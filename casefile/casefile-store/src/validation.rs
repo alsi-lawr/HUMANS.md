@@ -4,7 +4,7 @@ use crate::{
 };
 use casefile_core::{
     Classification, Diagnostic, EntrySnapshot, Kind, RecordDraft, RecordSummary,
-    parse_metadata_arrays,
+    parse_metadata_arrays, parse_progress_log,
 };
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -47,6 +47,32 @@ pub(super) fn cross_validate(entries: &[EntrySnapshot], active: &Activation) -> 
                         "record identity must use the configured project prefix",
                     ));
                 }
+            }
+        }
+    }
+    for entry in entries.iter().filter(|entry| {
+        entry.kind == Some(Kind::Progress) && entry.classification == Classification::Governed
+    }) {
+        let Ok(text) = std::str::from_utf8(&entry.original_bytes) else {
+            continue;
+        };
+        let Ok(log) = parse_progress_log(&entry.path, text) else {
+            continue;
+        };
+        let scope = scope_for(&entry.path, active);
+        for progress in log.entries {
+            let accepted_ticket = entries.iter().any(|candidate| {
+                candidate.kind == Some(Kind::Ticket)
+                    && candidate.classification == Classification::Governed
+                    && scope_for(&candidate.path, active) == scope
+                    && matches!(&candidate.summary, Some(RecordSummary::WorkItem { id, status, .. }) if id == progress.ticket_id() && status == "accepted")
+            });
+            if !accepted_ticket {
+                diagnostics.push(Diagnostic::new(
+                    &entry.path,
+                    "invalid_progress_ticket",
+                    "progress entries must target accepted tickets in the same investigation",
+                ));
             }
         }
     }

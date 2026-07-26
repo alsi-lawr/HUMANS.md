@@ -69,6 +69,16 @@ test("navigates and reconciles governed work against the shared host fixture", a
     await waitFor(() => container.textContent?.includes("Governed work") === true);
     expect(container.textContent).toContain("Minimum ticket");
     expect(container.textContent).toContain("Minimum epic");
+    await click(container, "Boards");
+    await waitFor(() => container.textContent?.includes("Delivery boards") === true);
+    expect(container.textContent).toContain("Unknown");
+    expect(container.textContent).toContain("Minimum ticket");
+    await change(labelledInput(container, "Search records"), "no-ticket-list-match");
+    await waitFor(() => container.textContent?.includes("Minimum ticket") === true);
+    await click(container, "Minimum ticket");
+    expect(container.textContent).toContain("HMD-011");
+    await change(labelledInput(container, "Search records"), "");
+    await click(container, "Tickets");
     await click(container, "HMD-011.md");
 
     await click(container, "Strategies");
@@ -223,6 +233,69 @@ test("navigates and reconciles governed work against the shared host fixture", a
   }
 }, 120_000);
 
+test("rejects stale board projections across scope changes and refresh outcomes", async () => {
+  const { createRoot } = await import("react-dom/client");
+  const host = await startHost({ nestedInvestigations: true, boardsForNested: true });
+  const browserFetch = globalThis.fetch;
+  let betaBoardGate = deferred();
+  let delayBetaBoard = true;
+  let failBoardRequests = false;
+  globalThis.fetch = Object.assign(
+    async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+      const body = typeof init?.body === "string" ? JSON.parse(init.body) : undefined;
+      if (isBoardsQuery(body, "beta/shared")) {
+        if (failBoardRequests) {
+          return new Response(JSON.stringify({ error: "simulated board failure" }), {
+            status: 503,
+          });
+        }
+        if (delayBetaBoard) await betaBoardGate.promise;
+      }
+      const target =
+        typeof input === "string" && input.startsWith("/") ? `${host.url}${input}` : input;
+      return await networkFetch(target, init);
+    },
+    { preconnect: browserFetch.preconnect },
+  );
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  try {
+    await act(async () => root.render(<App />));
+    await waitFor(() => container.textContent?.includes("Casefile projects") === true);
+    await click(container, "demo");
+    await waitFor(() => container.textContent?.includes("Investigations") === true);
+    await click(container, "alpha/shared");
+    await waitFor(() => container.textContent?.includes("Alpha ticket") === true);
+    await click(container, "Boards");
+    await waitFor(() => container.textContent?.includes("Alpha board") === true);
+
+    await clickNavigationItem(container, "beta/shared");
+    expect(container.textContent).toContain("Loading canonical board projection");
+    expect(container.textContent).not.toContain("Alpha board");
+    betaBoardGate.resolve();
+    await waitFor(() => container.textContent?.includes("Beta board") === true);
+
+    delayBetaBoard = true;
+    betaBoardGate = deferred();
+    await click(container, "Refresh");
+    expect(container.textContent).toContain("Loading canonical board projection");
+    expect(container.textContent).not.toContain("Beta board");
+    betaBoardGate.resolve();
+    await waitFor(() => container.textContent?.includes("Beta board") === true);
+
+    failBoardRequests = true;
+    await click(container, "Refresh");
+    await waitFor(() => container.textContent?.includes("Boards query failed") === true);
+    expect(container.textContent).toContain("simulated board failure");
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+    globalThis.fetch = browserFetch;
+    await host.stop();
+  }
+}, 120_000);
+
 test("keeps nested investigations with the same leaf independently selectable", async () => {
   const { createRoot } = await import("react-dom/client");
   const host = await startHost({ nestedInvestigations: true });
@@ -267,11 +340,34 @@ test("keeps nested investigations with the same leaf independently selectable", 
   }
 }, 120_000);
 
+const isBoardsQuery = (value: unknown, investigation: string): boolean => {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  if (Reflect.get(value, "query") !== "boards") return false;
+  const scope = Reflect.get(value, "scope");
+  return (
+    typeof scope === "object" &&
+    scope !== null &&
+    !Array.isArray(scope) &&
+    Reflect.get(scope, "investigation") === investigation
+  );
+};
+
 const isRelationshipQuery = (
   value: unknown,
 ): value is Readonly<{ query: "relationships"; identity: unknown }> => {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
   return Reflect.get(value, "query") === "relationships";
+};
+
+type Deferred = Readonly<{ promise: Promise<void>; resolve: () => void }>;
+
+const deferred = (): Deferred => {
+  let resolve: (() => void) | undefined;
+  const promise = new Promise<void>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  if (resolve === undefined) throw new Error("Deferred promise did not expose a resolver");
+  return { promise, resolve };
 };
 
 const settle = async (milliseconds = 100): Promise<void> => {
@@ -294,6 +390,17 @@ const click = async (container: HTMLElement, text: string): Promise<void> => {
   await act(async () => {
     button.click();
     await settle();
+  });
+};
+
+const clickNavigationItem = async (container: HTMLElement, value: string): Promise<void> => {
+  const button = [...container.querySelectorAll("button")].find((candidate) =>
+    candidate.textContent?.startsWith(value),
+  );
+  if (button === undefined) throw new Error(`Navigation item not found: ${value}`);
+  await act(async () => {
+    button.click();
+    await settle(0);
   });
 };
 
@@ -337,7 +444,7 @@ const change = async (input: HTMLInputElement, value: string): Promise<void> => 
 };
 
 const startHost = async (
-  options: Readonly<{ nestedInvestigations?: boolean }> = {},
+  options: Readonly<{ nestedInvestigations?: boolean; boardsForNested?: boolean }> = {},
 ): Promise<RunningHost> => {
   const temporary = await mkdtemp(join(tmpdir(), "casefile-browser-flow-"));
   const root = join(temporary, "root");
@@ -361,6 +468,10 @@ const startHost = async (
   await writeFile(join(strategyRoot, "implementation.toml"), implementationStrategy);
   await writeFile(join(strategyRoot, "review.toml"), "schema_version = 1\nworkers = [\n");
   await writeFile(join(strategyRoot, "bindings.toml"), writerBinding);
+  await writeFile(
+    join(root, "projects/demo/investigations/sample/boards/progress.toml"),
+    'schema_version = 1\nid = "HMD-progress"\ntitle = "Delivery"\nstatus_source = "progress"\nfilter_kinds = ["ticket"]\n\n[[columns]]\nname = "Unknown"\nstatuses = ["unknown"]\n',
+  );
   if (options.nestedInvestigations === true) {
     await writeFile(
       join(root, "casefile.toml"),
@@ -386,6 +497,14 @@ const startHost = async (
           .replace("Minimum ticket", title)
           .replace('investigation: "sample"', `investigation: \"${investigation}\"`),
       );
+      if (options.boardsForNested === true) {
+        const boardRoot = join(root, "projects/demo/investigations", investigation, "boards");
+        await mkdir(boardRoot, { recursive: true });
+        await writeFile(
+          join(boardRoot, "main.toml"),
+          `schema_version = 1\nid = "${id}-board"\ntitle = "${title.replace(" ticket", "")} board"\nfilter_statuses = ["accepted"]\nfilter_kinds = ["ticket"]\n\n[[columns]]\nname = "Accepted"\nstatuses = ["accepted"]\n`,
+        );
+      }
     }
   }
   for (const command of [

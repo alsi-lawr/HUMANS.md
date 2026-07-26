@@ -5,6 +5,7 @@ mod activation;
 mod derived;
 mod index;
 mod layout;
+mod progress;
 mod scanning;
 mod store;
 mod validation;
@@ -12,10 +13,12 @@ mod writing;
 
 pub use activation::ActivationState;
 pub use derived::{
-    DerivedBoard, DerivedBoardColumn, DerivedCard, DerivedRecord, DerivedRelationship,
-    DerivedSnapshot, DerivedStrategy, DerivedStrategyBinding, EffectiveWriterBinding, RecordScope,
-    RelationshipKind, ScopedIdentity, StrategyBindingState, WriterBindingSource,
+    DerivedBoard, DerivedBoardColumn, DerivedCard, DerivedProgressNote, DerivedProgressTransition,
+    DerivedRecord, DerivedRelationship, DerivedSnapshot, DerivedStrategy, DerivedStrategyBinding,
+    DerivedTicketProgress, EffectiveWriterBinding, RecordScope, RelationshipKind, ScopedIdentity,
+    StrategyBindingState, WriterBindingSource,
 };
 pub use index::{DerivedIndex, Indexed, RevisionSource};
+pub use progress::{ProgressApplyResult, ProgressChangeRequest, ProgressPreview};
 pub use scanning::ScanResult;
 pub use store::{Store, StoreError};

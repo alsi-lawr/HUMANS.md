@@ -33,7 +33,7 @@ export const useRecordSelection = (records: ReadonlyArray<Record>): RecordSelect
     void fetchRelationships(record.identity, controller.signal).then((result) => {
       if (controller.signal.aborted) return;
       if (result.tag === "success") {
-        setQuery({ tag: "ready", relationships: result.value });
+        setQuery({ tag: "ready", relationships: result.value.value });
         return;
       }
       setQuery({ tag: "failure", message: result.message });

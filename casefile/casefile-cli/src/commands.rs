@@ -4,7 +4,9 @@ use casefile_core::{
     ChangeRequest, Classification, Diagnostic, Kind, Preview, RecordSummary, Revision,
     parse_strategy,
 };
-use casefile_store::{ActivationState, Store, StrategyBindingState};
+use casefile_store::{
+    ActivationState, ProgressChangeRequest, ProgressPreview, Store, StrategyBindingState,
+};
 use serde::Serialize;
 use std::{fs, path::PathBuf, process::ExitCode};
 
@@ -47,18 +49,35 @@ pub(super) fn execute(root: PathBuf, command: Command) -> Result<ExitCode> {
             print_json(&store.scan()?)?;
             Ok(ExitCode::SUCCESS)
         }
-        Command::Check { require_activation } => {
+        Command::Check {
+            require_activation,
+            investigation,
+        } => {
+            if let Some(investigation) = &investigation {
+                store.validate_investigation(investigation)?;
+            }
             let scan = store.scan()?;
+            let diagnostics = investigation.as_ref().map_or_else(
+                || scan.diagnostics.clone(),
+                |investigation| {
+                    let prefix = format!("{}/", investigation.trim_end_matches('/'));
+                    scan.diagnostics
+                        .iter()
+                        .filter(|diagnostic| diagnostic.path.starts_with(&prefix))
+                        .cloned()
+                        .collect()
+                },
+            );
             let valid = match scan.activation {
                 ActivationState::Unactivated => None,
-                ActivationState::Active => Some(scan.diagnostics.is_empty()),
+                ActivationState::Active => Some(diagnostics.is_empty()),
                 ActivationState::Invalid => Some(false),
             };
             print_json(&CheckResult {
                 activation: scan.activation,
                 valid,
                 revision: scan.snapshot.revision,
-                diagnostics: scan.diagnostics,
+                diagnostics,
             })?;
             Ok(
                 if valid == Some(false) || (require_activation && valid.is_none()) {
@@ -76,6 +95,20 @@ pub(super) fn execute(root: PathBuf, command: Command) -> Result<ExitCode> {
         Command::Apply { preview } => {
             let preview: Preview = read_json(&preview)?;
             print_json(&store.apply(preview)?)?;
+            Ok(ExitCode::SUCCESS)
+        }
+        Command::ProgressPreview { request } => {
+            let request: ProgressChangeRequest = read_json(&request)?;
+            print_json(&store.preview_progress(request)?)?;
+            Ok(ExitCode::SUCCESS)
+        }
+        Command::ProgressApply { preview } => {
+            let preview: ProgressPreview = read_json(&preview)?;
+            print_json(&store.apply_progress(preview)?)?;
+            Ok(ExitCode::SUCCESS)
+        }
+        Command::ProgressBootstrap { investigation } => {
+            print_json(&store.bootstrap_progress(&investigation)?)?;
             Ok(ExitCode::SUCCESS)
         }
         Command::ReplaceStrategyBinding {

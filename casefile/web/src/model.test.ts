@@ -12,6 +12,7 @@ import { strategiesForInvestigation } from "./navigation/use-scope-navigation";
 const board: BoardDraft = {
   id: "HMD-board",
   title: "Delivery",
+  status_source: "disposition",
   filter_statuses: ["accepted"],
   filter_kinds: ["ticket"],
   columns: [{ editor_key: "HMD-board:Accepted", name: "Accepted", statuses: ["accepted"] }],

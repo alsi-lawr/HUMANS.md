@@ -1,5 +1,5 @@
-use casefile_core::{ChangeRequest, Kind, Preview, RecordDraft};
-use casefile_store::{DerivedRecord, Indexed, Store};
+use casefile_core::{BoardStatusSource, ChangeRequest, Kind, Preview, RecordDraft};
+use casefile_store::{DerivedBoard, DerivedRecord, Indexed, Store};
 use serde_json::{Value, json};
 use std::{
     fs,
@@ -323,6 +323,62 @@ fn serve_exposes_only_the_fixed_read_contract() {
     assert_eq!(again.index, default_index);
     drop(again);
     fs::remove_file(default_index).expect("remove default index");
+}
+
+#[test]
+fn serve_transports_derived_ticket_progress() {
+    let root = fixture();
+    let progress = root
+        .path()
+        .join("projects/demo/investigations/sample/progress/log.toml");
+    fs::create_dir_all(progress.parent().expect("progress parent")).expect("progress parent");
+    fs::write(
+        progress,
+        "schema_version = 1\n\n[[entries]]\nid = \"start\"\nrecorded_at = \"2026-07-26T10:00:00Z\"\nrecorded_by = \"root\"\nticket_id = \"HMD-011\"\nkind = \"transition\"\nfrom = \"unknown\"\nto = \"in_progress\"\n",
+    )
+    .expect("progress");
+    fs::write(
+        root.path()
+            .join("projects/demo/investigations/sample/boards/progress.toml"),
+        "schema_version = 1\nid = \"HMD-progress\"\ntitle = \"Progress\"\nstatus_source = \"progress\"\nfilter_kinds = [\"ticket\"]\n\n[[columns]]\nname = \"Working\"\nstatuses = [\"in_progress\"]\n",
+    )
+    .expect("progress board");
+    let server = Running::start(root.path(), None, false);
+    let records = json_request(
+        &server,
+        "/api/query",
+        &json!({"query":"records", "scope":{"project":"demo", "investigation":"sample"}}),
+    );
+    let Indexed::Current { value, .. } =
+        serde_json::from_str::<Indexed<Vec<DerivedRecord>>>(&records.body).expect("record query")
+    else {
+        panic!("current records")
+    };
+    assert_eq!(
+        "in_progress",
+        value
+            .iter()
+            .find(|record| record.path.ends_with("HMD-011.md"))
+            .and_then(|record| record.progress.as_ref())
+            .map(|progress| progress.status.as_str())
+            .expect("transported progress")
+    );
+    let boards = json_request(
+        &server,
+        "/api/query",
+        &json!({"query":"boards", "scope":{"project":"demo", "investigation":"sample"}}),
+    );
+    let Indexed::Current { value, .. } =
+        serde_json::from_str::<Indexed<Vec<DerivedBoard>>>(&boards.body).expect("board query")
+    else {
+        panic!("current boards")
+    };
+    let board = value
+        .iter()
+        .find(|board| board.identity.identity == "HMD-progress")
+        .expect("progress board transport");
+    assert_eq!(board.status_source, BoardStatusSource::Progress);
+    assert_eq!(board.columns[0].cards[0].identity.identity, "HMD-011");
 }
 
 #[test]

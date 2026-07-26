@@ -6,8 +6,9 @@ use casefile_core::{
     StrategyRequirements, StrategyWorker,
 };
 use casefile_store::{
-    ActivationState, DerivedRecord, DerivedStrategy, DerivedStrategyBinding,
-    EffectiveWriterBinding, RecordScope, ScanResult, StrategyBindingState, WriterBindingSource,
+    ActivationState, DerivedBoard, DerivedBoardColumn, DerivedCard, DerivedRecord, DerivedStrategy,
+    DerivedStrategyBinding, EffectiveWriterBinding, RecordScope, ScanResult, StrategyBindingState,
+    WriterBindingSource,
 };
 use std::collections::BTreeMap;
 
@@ -127,6 +128,7 @@ fn derived_record(path: &str, kind: Kind) -> DerivedRecord {
         rendered_markdown: None,
         search_text: String::new(),
         work_item: None,
+        progress: None,
         board: None,
         strategy: None,
         strategy_binding: None,
@@ -261,12 +263,74 @@ fn strategy_key_and_tab_cycle_preserve_existing_view_targets() {
     app.handle(KeyCode::Char('t'));
     assert_eq!(app.browser.view(), View::Strategies);
     app.handle(KeyCode::Char('t'));
+    assert_eq!(app.browser.view(), View::Boards);
+    app.handle(KeyCode::Char('t'));
     assert_eq!(app.browser.view(), View::Projects);
 
     let output = test_support::render(&app, 180, 32);
     assert!(output.contains("[1] PROJECTS"));
     assert!(output.contains("[4] FILES"));
     assert!(output.contains("[5] STRATEGIES"));
+    assert!(output.contains("[6] BOARDS"));
+}
+
+#[test]
+fn boards_are_read_only_unfiltered_and_open_a_canonical_ticket_detail() {
+    let scan = test_support::scan();
+    let mut derived = test_support::derived(&scan);
+    derived.boards.push(DerivedBoard {
+        identity: casefile_store::ScopedIdentity {
+            scope: RecordScope {
+                project: "demo".into(),
+                investigation: Some("sample".into()),
+            },
+            identity: "HMD-board".into(),
+        },
+        title: "Delivery".into(),
+        status_source: casefile_core::BoardStatusSource::Progress,
+        filter_statuses: None,
+        filter_kinds: None,
+        columns: vec![DerivedBoardColumn {
+            name: "Unknown".into(),
+            statuses: vec!["unknown".into()],
+            cards: vec![DerivedCard {
+                identity: casefile_store::ScopedIdentity {
+                    scope: RecordScope {
+                        project: "demo".into(),
+                        investigation: Some("sample".into()),
+                    },
+                    identity: "HMD-013".into(),
+                },
+                kind: Kind::Ticket,
+                title: "Navigator".into(),
+                status: "unknown".into(),
+                rank: Some(3),
+            }],
+        }],
+    });
+    let mut app = App::new(scan, derived);
+
+    app.handle(KeyCode::Char('6'));
+    app.handle(KeyCode::Char('/'));
+    for key in "no-match".chars().map(KeyCode::Char) {
+        app.handle(key);
+    }
+    app.handle(KeyCode::Enter);
+    let output = test_support::render(&app, 160, 28);
+    assert!(output.contains("[6] BOARDS 1"));
+    assert!(output.contains("Delivery"));
+    assert!(output.contains("Unknown (1)"));
+    assert!(output.contains("HMD-013  unknown  Navigator"));
+    assert!(output.contains("record filter does not alter cards"));
+    assert!(test_support::render(&app, 70, 28).contains("Delivery"));
+    assert_eq!(
+        app.browser
+            .selected(&app.scan)
+            .map(|entry| entry.path.as_str()),
+        Some(TICKET_PATH),
+    );
+    app.handle(KeyCode::Char('e'));
+    assert!(test_support::render(&app, 160, 28).contains("Read-only"));
 }
 
 #[test]
@@ -527,4 +591,156 @@ fn diagnostics_and_editing_remain_governed_path_only() {
             kind: Kind::Ticket,
         }))
     );
+}
+
+#[test]
+fn boards_distinguish_no_definition_invalid_empty_and_stale_projections() {
+    let scan = test_support::scan();
+    let mut no_board = App::new(scan.clone(), test_support::derived(&scan));
+    no_board.handle(KeyCode::Char('6'));
+    assert!(test_support::render(&no_board, 120, 28).contains("no board definitions"));
+
+    let mut invalid_scan = scan.clone();
+    invalid_scan.diagnostics.extend([
+        Diagnostic::new(
+            "projects/demo/investigations/sample/boards/invalid.toml",
+            "invalid_toml",
+            "board syntax is malformed",
+        ),
+        Diagnostic::new(
+            "projects/demo/investigations/sample/progress/log.toml",
+            "invalid_progress_log",
+            "progress syntax is malformed",
+        ),
+    ]);
+    let mut invalid = App::new(invalid_scan.clone(), test_support::derived(&invalid_scan));
+    invalid.handle(KeyCode::Char('6'));
+    let invalid_output = test_support::render(&invalid, 120, 28);
+    assert!(invalid_output.contains("Board definitions or the progress log are invalid"));
+    assert!(invalid_output.contains("invalid_toml: board syntax is malformed"));
+    assert!(invalid_output.contains("invalid_progress_log: progress syntax is malformed"));
+    assert!(invalid_output.contains("Files or Diagnostics"));
+
+    let mut derived = test_support::derived(&scan);
+    derived.boards.push(board_with_cards("Empty", Vec::new()));
+    let mut empty = App::new(scan.clone(), derived);
+    empty.handle(KeyCode::Char('6'));
+    assert!(test_support::render(&empty, 120, 28).contains("No cards."));
+
+    let mut stale_derived = test_support::derived(&scan);
+    stale_derived.source_revision = Revision("sha256:stale".into());
+    let mut stale = App::new(scan, stale_derived);
+    stale.handle(KeyCode::Char('6'));
+    assert!(test_support::render(&stale, 120, 28).contains("Board projection is stale"));
+}
+
+#[test]
+fn board_keyboard_selection_marks_the_card_changes_detail_and_skips_unresolved_identities() {
+    let mut scan = test_support::scan();
+    scan.snapshot.entries.extend([
+        test_support::entry(
+            "projects/demo/investigations/sample/tickets/accepted/HMD-014.md",
+            Classification::Governed,
+            Some(Kind::Ticket),
+            Some(RecordSummary::WorkItem {
+                id: "HMD-014".into(),
+                title: "Follow-up".into(),
+                status: "accepted".into(),
+                rank: Some(4),
+            }),
+            b"follow-up",
+        ),
+        test_support::entry(
+            "projects/demo/investigations/sample/tickets/accepted/HMD-099.md",
+            Classification::Governed,
+            Some(Kind::Ticket),
+            Some(RecordSummary::WorkItem {
+                id: "HMD-099".into(),
+                title: "Duplicate one".into(),
+                status: "accepted".into(),
+                rank: Some(9),
+            }),
+            b"duplicate-one",
+        ),
+        test_support::entry(
+            "projects/demo/investigations/sample/tickets/rejected/HMD-099.md",
+            Classification::Governed,
+            Some(Kind::Ticket),
+            Some(RecordSummary::WorkItem {
+                id: "HMD-099".into(),
+                title: "Duplicate two".into(),
+                status: "rejected".into(),
+                rank: Some(10),
+            }),
+            b"duplicate-two",
+        ),
+    ]);
+    let mut derived = test_support::derived(&scan);
+    derived.boards.push(board_with_cards(
+        "Delivery",
+        vec![
+            board_card("HMD-013", "Navigator"),
+            board_card("HMD-014", "Follow-up"),
+            board_card("HMD-404", "Missing ticket"),
+            board_card("HMD-099", "Ambiguous ticket"),
+        ],
+    ));
+    let mut app = App::new(scan, derived);
+
+    app.handle(KeyCode::Char('6'));
+    let initial = test_support::render(&app, 160, 56);
+    assert!(initial.contains("> HMD-013  unknown  Navigator  [selected]"));
+    assert!(initial.contains("Missing ticket"));
+    assert!(initial.contains("missing identity]"));
+    assert!(initial.contains("Ambiguous ticket"));
+    assert!(initial.contains("ambiguous identity]"));
+    assert!(initial.contains("Navigator"));
+
+    app.handle(KeyCode::Down);
+    let selected_next = test_support::render(&app, 160, 56);
+    assert!(selected_next.contains("> HMD-014  unknown  Follow-up  [selected]"));
+    assert!(selected_next.contains("tickets/accepted/HMD-014.md"));
+    assert_eq!(
+        app.browser
+            .selected(&app.scan)
+            .map(|entry| entry.path.as_str()),
+        Some("projects/demo/investigations/sample/tickets/accepted/HMD-014.md"),
+    );
+}
+
+fn board_with_cards(title: &str, cards: Vec<DerivedCard>) -> DerivedBoard {
+    DerivedBoard {
+        identity: casefile_store::ScopedIdentity {
+            scope: RecordScope {
+                project: "demo".into(),
+                investigation: Some("sample".into()),
+            },
+            identity: format!("HMD-{title}"),
+        },
+        title: title.into(),
+        status_source: casefile_core::BoardStatusSource::Progress,
+        filter_statuses: None,
+        filter_kinds: None,
+        columns: vec![DerivedBoardColumn {
+            name: "Unknown".into(),
+            statuses: vec!["unknown".into()],
+            cards,
+        }],
+    }
+}
+
+fn board_card(id: &str, title: &str) -> DerivedCard {
+    DerivedCard {
+        identity: casefile_store::ScopedIdentity {
+            scope: RecordScope {
+                project: "demo".into(),
+                investigation: Some("sample".into()),
+            },
+            identity: id.into(),
+        },
+        kind: Kind::Ticket,
+        title: title.into(),
+        status: "unknown".into(),
+        rank: None,
+    }
 }

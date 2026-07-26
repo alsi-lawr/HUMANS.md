@@ -72,6 +72,46 @@ semantics. The SQLite adapter is a disposable derived index. The loopback server
 root at launch and embeds the tracked browser build; the browser does not parse or write planning
 files directly.
 
+### Ticket progress and consolidation
+
+`progress/log.toml` is an investigation-scoped canonical record. Ticket disposition remains the
+review decision; delivery progress is derived separately. The Rust Store and
+`casefile-workflow/scripts/transition-ticket-progress.py` are the only supported progress write
+path. Do not edit a progress log, ticket frontmatter, or a second progress file to migrate, repair,
+or update ticket delivery state.
+
+For a selected active investigation, first validate only that scope, then save the script's preview
+outside the planning root. Apply only the unchanged saved preview:
+
+```sh
+casefile --root "$CASEFILE_ROOT" check --require-activation --investigation "$INVESTIGATION"
+python casefile/casefile-workflow/scripts/transition-ticket-progress.py \
+  --root "$CASEFILE_ROOT" --casefile casefile --preview-file "$TASK_SCRATCH/progress-preview.json" \
+  bootstrap-unknown --investigation "$INVESTIGATION"
+# Obtain the explicit apply decision, then rerun with --apply and the same preview file.
+```
+
+The same script owns ordinary transitions and typed notes. Supply the ticket's currently derived
+state in `--from`, use a stable operation ID, and preserve the generated preview for the apply or
+exact retry. Notes use category `deviation` or `quirk` and never change state. Do not backfill
+stages that were not captured when they occurred; record a note instead. The `replace` action
+accepts an exact caller-supplied complete log only for malformed-log repair. No action may use a
+preview inside the planning root.
+
+Bootstrap creates an absent empty `progress/log.toml`; accepted tickets without entries derive as
+`unknown`. It never writes invented initialization history and an existing valid log is a no-op. For
+a malformed log, require exact caller-supplied replacement content. Before its non-mutating
+`replace` preview, copy the original bytes under a SHA-256 content-hash filename in `$TASK_SCRATCH`,
+retain that backup through closeout, and report it. The canonical writer owns atomic replacement and
+post-write validation; on stale revision or failure, make no ad-hoc repair.
+
+`casefile-consolidate` is the explicit-only skill for this narrow migration/repair work. It is not a
+legacy-layout converter, historical-progress inference tool, generic validator, or lifecycle skill.
+Its packaged source is shared by the Codex and Claude Casefile packages through
+`casefile/packaging/plugin.toml`; update its validation inventory and verification suite whenever
+the skill boundary changes. User-facing migration and repair guidance is in the
+[Casefile ticket progress wiki page](https://github.com/alsi-lawr/HUMANS.md/wiki/Casefile-Ticket-Progress).
+
 ### Strategies and writer bindings
 
 Each investigation keeps the selected phase matrices in `strategy/<phase>.toml`. A complete matrix
@@ -132,6 +172,35 @@ cargo run -p casefile-cli -- --root ~/dev/agent-planning serve --write
 
 Read-only browsing works immediately. Supply the printed, non-persisted write capability only when
 testing governed ticket, epic, or board replacement.
+
+The TUI opens the investigation-scoped Boards view with key `6`; the browser exposes the same view
+through its Boards navigation item. Both clients consume the Store-derived board projection and
+leave ticket progress read-only. A board file under `boards/` selects delivery progress explicitly:
+
+```toml
+schema_version = 1
+id = "delivery"
+title = "Delivery"
+status_source = "progress"
+filter_kinds = ["ticket"]
+
+[[columns]]
+name = "Unknown"
+statuses = ["unknown"]
+
+[[columns]]
+name = "Active"
+statuses = ["in_progress", "in_review", "verifying", "blocked"]
+
+[[columns]]
+name = "Complete"
+statuses = ["complete"]
+```
+
+Omitting `status_source` preserves the existing disposition board. Progress boards include accepted
+tickets only; their columns and `filter_statuses` are interpreted against delivery progress. Keep
+missing, ambiguous, invalid, stale, loading, failure, and empty states visible, and resolve card
+details against the unfiltered investigation records even when browser search is active.
 
 The TUI's `Strategies` view is investigation-scoped and available through key `5` or the `t` view
 cycle. It shows matrices and `bindings.toml` with Overview, exact Source, and Diagnostics panes.
@@ -202,7 +271,8 @@ adding new developer or reference documents beside the source.
 
 For a release:
 
-1. Update the synchronized versions in all three package manifests and the README install ref.
+1. Update the synchronized versions in all three package manifests, `CITATION.cff`, and the README
+   install ref.
 2. Run the full source and package checks.
 3. Merge a green release pull request.
 4. Create an annotated source tag on the release merge and publish a GitHub Release for that tag.

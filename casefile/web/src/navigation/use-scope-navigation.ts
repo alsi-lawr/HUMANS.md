@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { type Record } from "../model";
 
-export type BrowseTab = "projects" | "investigations" | "tickets" | "files" | "strategies";
+export type BrowseTab =
+  "projects" | "investigations" | "tickets" | "files" | "strategies" | "boards";
 export type Project = Readonly<{ name: string; investigations: number; tickets: number }>;
 export type Investigation = Readonly<{ name: string; tickets: number }>;
 export type ScopeNavigation = Readonly<{
@@ -15,7 +16,7 @@ export type ScopeNavigation = Readonly<{
   investigation: string | undefined;
   selectTab: (tab: BrowseTab) => void;
   selectProject: (project: string) => void;
-  selectInvestigation: (investigation: string) => void;
+  selectInvestigation: (investigation: string, tab?: BrowseTab) => void;
 }>;
 
 export const useScopeNavigation = (records: ReadonlyArray<Record>): ScopeNavigation => {
@@ -47,9 +48,9 @@ export const useScopeNavigation = (records: ReadonlyArray<Record>): ScopeNavigat
       setInvestigation(undefined);
       setTab("investigations");
     },
-    selectInvestigation: (selectedInvestigation) => {
+    selectInvestigation: (selectedInvestigation, tab = "tickets") => {
       setInvestigation(selectedInvestigation);
-      setTab("tickets");
+      setTab(tab);
     },
   };
 };

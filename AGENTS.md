@@ -42,6 +42,9 @@ Use structured tools for structured data. Prefer safe repo-local mechanisms over
 Use `.agent-workspace/<session-id>/` for task-local scratch state. Keep each session separate so
 transient context does not leak across task boundaries.
 
+Build in the session's `.agent-workspace`; use `/tmp` for a build only when its artifacts are
+explicitly cleaned.
+
 Put relevant command output, logs, temporary notes, intermediate diffs, disposable scripts, and
 repeated-analysis material there when it would otherwise pollute the conversation or needlessly
 rerun a long task.

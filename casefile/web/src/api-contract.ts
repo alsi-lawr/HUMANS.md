@@ -3,6 +3,7 @@ import {
   type Board,
   type BoardDraft,
   type BoardPayload,
+  type BoardStatusSource,
   type Card,
   type ChangeRequest,
   type Classification,
@@ -24,6 +25,7 @@ import {
 
 type JsonObject = Readonly<{ [key: string]: unknown }>;
 export type Decoder<T> = (value: unknown) => T;
+export type Indexed<T> = Readonly<{ sourceRevision: string; value: T }>;
 export type HostFailure = Readonly<{
   message: string;
   code: "stale_revision" | undefined;
@@ -289,6 +291,7 @@ const decodeBoardPayload = (value: unknown): BoardPayload => {
   return {
     id: string(input.id, "board ID"),
     title: string(input.title, "board title"),
+    status_source: decodeBoardStatusSource(input.status_source),
     filter_statuses: optional(input.filter_statuses, (item) =>
       nullable(item, (present) => strings(present, "board status filters")),
     ),
@@ -348,6 +351,7 @@ const decodeBoard = (value: unknown): Board => {
   return {
     identity: decodeIdentity(input.identity),
     title: string(input.title, "board title"),
+    status_source: decodeBoardStatusSource(input.status_source),
     filter_statuses: nullable(input.filter_statuses, (item) =>
       strings(item, "board status filters"),
     ),
@@ -361,6 +365,10 @@ const decodeBoard = (value: unknown): Board => {
       };
     }),
   };
+};
+const decodeBoardStatusSource = (value: unknown): BoardStatusSource => {
+  if (value === "disposition" || value === "progress") return value;
+  return contractError("board status source");
 };
 const decodeRelationship = (value: unknown): Relationship => {
   const input = object(value, "relationship");
@@ -404,10 +412,15 @@ const decodeChangeRequest = (value: unknown): ChangeRequest => {
 };
 
 export const decodeCurrent = <T>(value: unknown, decode: Decoder<T>): T => {
+  return decodeIndexed(value, decode).value;
+};
+export const decodeIndexed = <T>(value: unknown, decode: Decoder<T>): Indexed<T> => {
   const envelope = object(value, "index envelope");
   const current = object(envelope.Current, "current index");
-  string(current.source_revision, "source revision");
-  return decode(current.value);
+  return {
+    sourceRevision: string(current.source_revision, "source revision"),
+    value: decode(current.value),
+  };
 };
 export const decodeRecords = (value: unknown): ReadonlyArray<Record> =>
   array(value, "records", decodeRecord);

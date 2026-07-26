@@ -129,6 +129,27 @@ prompt = "prompts/casefile-close-behavior.txt"
 rubric = "rubrics/behavior.md"
 
 [[cases]]
+id = "casefile-consolidate-positive"
+skill = "casefile-consolidate"
+partition = "positive_trigger"
+prompt = "prompts/casefile-consolidate-positive.txt"
+rubric = "rubrics/trigger.md"
+
+[[cases]]
+id = "casefile-consolidate-near"
+skill = "casefile-consolidate"
+partition = "hard_non_trigger"
+prompt = "prompts/casefile-consolidate-near.txt"
+rubric = "rubrics/trigger.md"
+
+[[cases]]
+id = "casefile-consolidate-behavior"
+skill = "casefile-consolidate"
+partition = "task_behavior"
+prompt = "prompts/casefile-consolidate-behavior.txt"
+rubric = "rubrics/behavior.md"
+
+[[cases]]
 id = "contract-bootstrap-positive"
 skill = "contract-bootstrap"
 partition = "positive_trigger"

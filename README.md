@@ -16,11 +16,11 @@ coding guidance.
 
 ## Install
 
-Add the `humans-md` marketplace at `v0.3.0`, then install the identities you need. Start with core;
+Add the `humans-md` marketplace at `v0.3.1`, then install the identities you need. Start with core;
 Casefile and coding remain optional siblings.
 
 ```sh
-codex plugin marketplace add alsi-lawr/humans-md-marketplace --ref v0.3.0
+codex plugin marketplace add alsi-lawr/humans-md-marketplace --ref v0.3.1
 codex plugin add humans-md@humans-md
 # optional siblings
 codex plugin add casefile@humans-md
@@ -28,7 +28,7 @@ codex plugin add coding@humans-md
 ```
 
 ```sh
-claude plugin marketplace add alsi-lawr/humans-md-marketplace@v0.3.0
+claude plugin marketplace add alsi-lawr/humans-md-marketplace@v0.3.1
 claude plugin install humans-md@humans-md --scope user
 # optional siblings
 claude plugin install casefile@humans-md --scope user

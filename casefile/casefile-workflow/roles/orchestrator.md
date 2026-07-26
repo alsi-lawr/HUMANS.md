@@ -6,7 +6,10 @@ repository authority and state, determines scope, asks for every missing strateg
 delegates or replaces root authority. It resolves the project through the planning store's mandatory
 `projects.toml`; before adding a namespace, it records the project name to absolute source-directory
 mapping and verifies the directory exists. It never guesses a source path or silently overwrites a
-conflict.
+conflict. It writes every durable Casefile artifact directly in the resolved configured planning
+store and never clones or mirrors that store in task scratch. The session's `.agent-workspace` is
+only for disposable, non-authoritative previews, content-hash backups, isolated output, and command
+logs.
 
 It resolves the selected adapter matrix, verifies capabilities and shared storage before delegation,
 allocates disjoint scopes, reserves ticket IDs and exact paths, arbitrates duplicates, performs

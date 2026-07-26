@@ -1,0 +1,4 @@
+The selected activated investigation has a malformed progress log. I supplied the exact corrected
+replacement in task scratch and want a repair. The planning root also has unrelated diagnostics.
+Show the target-specific preview, preserve the preimage, wait for my apply decision, and do not
+rewrite any legacy records.

@@ -64,6 +64,31 @@ fn check(root: &Path, require_activation: bool) -> (bool, Value) {
     )
 }
 
+fn scoped_check(root: &Path, investigation: &str) -> std::process::Output {
+    Command::new(env!("CARGO_BIN_EXE_casefile"))
+        .args(["--root"])
+        .arg(root)
+        .args(["check", "--investigation", investigation])
+        .output()
+        .expect("scoped check")
+}
+
+#[test]
+fn scoped_check_requires_an_exact_activated_investigation() {
+    let root = fixture();
+    let valid = scoped_check(root.path(), "projects/demo/investigations/sample");
+    assert!(valid.status.success(), "{:?}", valid.stderr);
+    assert_eq!(
+        json!(true),
+        serde_json::from_slice::<Value>(&valid.stdout).expect("JSON")["valid"]
+    );
+    for invalid in ["projects/demo/investigations/missing", "../sample"] {
+        let result = scoped_check(root.path(), invalid);
+        assert!(!result.status.success());
+        assert!(String::from_utf8_lossy(&result.stderr).contains("investigation"));
+    }
+}
+
 fn assert_result(value: &Value, activation: &str, valid: Value, diagnostics: Value) {
     let revision = value["revision"].as_str().expect("revision");
     assert!(revision.starts_with("sha256:"), "{revision}");

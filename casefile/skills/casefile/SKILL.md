@@ -10,7 +10,10 @@ description:
 The request-receiving root remains the orchestrator with the model and effort through which the
 human invoked it. Root is an authority binding, not a model profile. Read repository authority and
 current state, bound the work, resolve the configured planning store, and validate its
-project-to-source mapping. Never infer a source path or replace the root.
+project-to-source mapping. Write every durable Casefile artifact directly in that resolved store;
+never clone or mirror the planning store in task scratch. Use the session's `.agent-workspace` only
+for disposable, non-authoritative previews, content-hash backups, isolated output, and command logs.
+Never infer a source path or replace the root.
 
 Route the current phase to `casefile-investigate`, `casefile-review`, `casefile-implement`, or
 `casefile-close`. Every governed phase requires an explicit compatible strategy. Present compatible
