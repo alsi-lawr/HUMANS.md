@@ -296,6 +296,45 @@ test("rejects stale board projections across scope changes and refresh outcomes"
   }
 }, 120_000);
 
+test("loads a progress log and places cards in their recorded board columns", async () => {
+  const { createRoot } = await import("react-dom/client");
+  const host = await startHost({ progress: true });
+  const browserFetch = globalThis.fetch;
+  globalThis.fetch = Object.assign(
+    async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+      const target =
+        typeof input === "string" && input.startsWith("/") ? `${host.url}${input}` : input;
+      return await networkFetch(target, init);
+    },
+    { preconnect: browserFetch.preconnect },
+  );
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  try {
+    await act(async () => root.render(<App />));
+    await waitFor(() => container.textContent?.includes("Casefile projects") === true);
+    await click(container, "demo");
+    await waitFor(() => container.textContent?.includes("Investigations") === true);
+    await click(container, "sample");
+    await waitFor(() => container.textContent?.includes("Governed work") === true);
+    await click(container, "Boards");
+    await waitFor(() => container.textContent?.includes("Progress") === true);
+
+    const inProgress = container.querySelector('[aria-label="Progress: In progress"]');
+    const blocked = container.querySelector('[aria-label="Progress: Blocked"]');
+    expect(inProgress?.textContent).toContain("Minimum ticket");
+    expect(inProgress?.textContent).toContain("HMD-011 · in_progress");
+    expect(blocked?.textContent).toContain("Blocked ticket");
+    expect(blocked?.textContent).toContain("HMD-012 · blocked");
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+    globalThis.fetch = browserFetch;
+    await host.stop();
+  }
+}, 120_000);
+
 test("keeps nested investigations with the same leaf independently selectable", async () => {
   const { createRoot } = await import("react-dom/client");
   const host = await startHost({ nestedInvestigations: true });
@@ -444,7 +483,11 @@ const change = async (input: HTMLInputElement, value: string): Promise<void> => 
 };
 
 const startHost = async (
-  options: Readonly<{ nestedInvestigations?: boolean; boardsForNested?: boolean }> = {},
+  options: Readonly<{
+    nestedInvestigations?: boolean;
+    boardsForNested?: boolean;
+    progress?: boolean;
+  }> = {},
 ): Promise<RunningHost> => {
   const temporary = await mkdtemp(join(tmpdir(), "casefile-browser-flow-"));
   const root = join(temporary, "root");
@@ -470,8 +513,25 @@ const startHost = async (
   await writeFile(join(strategyRoot, "bindings.toml"), writerBinding);
   await writeFile(
     join(root, "projects/demo/investigations/sample/boards/progress.toml"),
-    'schema_version = 1\nid = "HMD-progress"\ntitle = "Delivery"\nstatus_source = "progress"\nfilter_kinds = ["ticket"]\n\n[[columns]]\nname = "Unknown"\nstatuses = ["unknown"]\n',
+    options.progress === true
+      ? 'schema_version = 1\nid = "HMD-progress"\ntitle = "Progress"\nstatus_source = "progress"\nfilter_kinds = ["ticket"]\n\n[[columns]]\nname = "In progress"\nstatuses = ["in_progress"]\n\n[[columns]]\nname = "Blocked"\nstatuses = ["blocked"]\n'
+      : 'schema_version = 1\nid = "HMD-progress"\ntitle = "Delivery"\nstatus_source = "progress"\nfilter_kinds = ["ticket"]\n\n[[columns]]\nname = "Unknown"\nstatuses = ["unknown"]\n',
   );
+  if (options.progress === true) {
+    const ticket = await readFile(join(root, ticketPath), "utf8");
+    await writeFile(
+      join(root, "projects/demo/investigations/sample/tickets/accepted/HMD-012.md"),
+      ticket
+        .replaceAll("HMD-011", "HMD-012")
+        .replace("Minimum ticket", "Blocked ticket")
+        .replace("rank: 1", "rank: 2"),
+    );
+    await mkdir(join(root, "projects/demo/investigations/sample/progress"), { recursive: true });
+    await writeFile(
+      join(root, "projects/demo/investigations/sample/progress/log.toml"),
+      'schema_version = 1\n\n[[entries]]\nid = "start"\nrecorded_at = "2026-07-26T10:00:00Z"\nrecorded_by = "test"\nticket_id = "HMD-011"\nkind = "transition"\nfrom = "unknown"\nto = "in_progress"\n\n[[entries]]\nid = "blocked"\nrecorded_at = "2026-07-26T10:01:00Z"\nrecorded_by = "test"\nticket_id = "HMD-012"\nkind = "transition"\nfrom = "unknown"\nto = "blocked"\n',
+    );
+  }
   if (options.nestedInvestigations === true) {
     await writeFile(
       join(root, "casefile.toml"),

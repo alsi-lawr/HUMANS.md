@@ -39,6 +39,25 @@ test("decodes the owned project-scope wire shape without a null investigation", 
   ).toThrow("invalid scope investigation");
 });
 
+test("accepts the canonical progress record kind and rejects future kinds", () => {
+  const progress = {
+    ...projectDecision,
+    path: "projects/demo/investigations/sample/progress/log.toml",
+    scope: { project: "demo", investigation: "sample" },
+    kind: "progress",
+    identity: {
+      scope: { project: "demo", investigation: "sample" },
+      identity: "progress/log",
+    },
+    title: "Progress log",
+  };
+
+  expect(decodeRecords([progress])[0]?.kind).toBe("progress");
+  expect(() => decodeRecords([{ ...progress, kind: "future_kind" }])).toThrow(
+    "invalid record kind",
+  );
+});
+
 test("preserves the host stale-revision failure code", () => {
   expect(decodeHostFailure({ error: "stale store revision", code: "stale_revision" }, 409)).toEqual(
     { message: "stale store revision", code: "stale_revision" },
