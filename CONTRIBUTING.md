@@ -128,12 +128,16 @@ python casefile/casefile-workflow/scripts/provision-delivery-board.py \
   --investigation "$INVESTIGATION" --apply
 ```
 
-The wrapper selects the exact activated project's prefix only to construct `<PREFIX>-delivery`. The
-Rust `preview` and `apply` operations remain authoritative for board rendering, path checks,
-validation, Store revisions, and the one-file atomic write. The wrapper creates an absent
-`boards/delivery.toml`, reports exact canonical content as a no-op, and refuses a different target
-without replacement. It never reads or mutates progress or tickets, and consolidation keeps the
-progress and board writes sequential rather than transactional.
+The wrapper selects the exact activated project's prefix and mapped investigation directory name
+only to construct `<PREFIX>-<INVESTIGATION-DIRECTORY>-delivery`. This keeps board identities unique
+when one project has multiple investigations. The Rust `preview` and `apply` operations remain
+authoritative for board rendering, path checks, validation, Store revisions, and the one-file atomic
+write. Generic preview compares the proposed diagnostics with its exact pre-write baseline:
+unchanged baseline diagnostics remain visible to scan, check, and query but do not block the write;
+an introduced or changed diagnostic does. The whole-Store revision still pins that baseline through
+apply. The wrapper creates an absent `boards/delivery.toml`, reports exact canonical content as a
+no-op, and refuses a different target without replacement. It never reads or mutates progress or
+tickets, and consolidation keeps the progress and board writes sequential rather than transactional.
 
 ### Strategies and writer bindings
 

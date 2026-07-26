@@ -52,27 +52,35 @@ def invoke(casefile: str, root: Path, command: list[str], payload: object | None
             Path(temporary.name).unlink(missing_ok=True)
 
 
-def project_prefix(root: Path, investigation: str) -> str:
+def board_identity(root: Path, investigation: str) -> str:
     document = tomllib.loads((root / "casefile.toml").read_text(encoding="utf-8"))
-    matches: list[str] = []
+    matches: list[tuple[object, object]] = []
     for project in document.get("projects", {}).values():
         if not isinstance(project, dict):
             continue
         for activated in project.get("investigations", []):
             if activated == investigation:
-                matches.append(project.get("prefix"))
-    if len(matches) != 1 or not isinstance(matches[0], str):
+                matches.append((project.get("prefix"), activated))
+    if (
+        len(matches) != 1
+        or not isinstance(matches[0][0], str)
+        or not isinstance(matches[0][1], str)
+    ):
         raise ValueError("investigation must have exactly one activated project-prefix mapping")
-    return matches[0]
+    prefix, mapped_investigation = matches[0]
+    directory_name = mapped_investigation.rsplit("/", 1)[-1]
+    if not directory_name or directory_name in {".", ".."}:
+        raise ValueError("activated investigation must have a safe directory name")
+    return f"{prefix}-{directory_name}-delivery"
 
 
-def request_for(path: str, prefix: str, operation: str) -> dict:
+def request_for(path: str, identity: str, operation: str) -> dict:
     return {
         "operation": operation,
         "path": path,
         "draft": {
             "kind": "board",
-            "id": f"{prefix}-delivery",
+            "id": identity,
             "title": "Delivery",
             "status_source": "progress",
             "filter_statuses": None,
@@ -150,7 +158,7 @@ def main() -> int:
         expected_path = f"{investigation}/boards/delivery.toml"
         if operation not in {"create", "replace"}:
             raise ValueError("saved preview is not a delivery-board create or replace")
-        expected = request_for(expected_path, project_prefix(root, investigation), operation)
+        expected = request_for(expected_path, board_identity(root, investigation), operation)
         if request != expected or preview.get("diagnostics"):
             raise ValueError("saved preview is not the canonical delivery-board preview")
         require_directory_ancestors(root, expected_path)
@@ -188,9 +196,9 @@ def main() -> int:
         root,
         ["check", "--require-activation", "--investigation", investigation],
     )
-    prefix = project_prefix(root, investigation)
+    identity = board_identity(root, investigation)
     operation = target_operation(root, path)
-    preview = invoke(args.casefile, root, ["preview"], request_for(path, prefix, operation))
+    preview = invoke(args.casefile, root, ["preview"], request_for(path, identity, operation))
     if preview.get("diagnostics"):
         messages = "; ".join(item.get("message", "invalid board preview") for item in preview["diagnostics"])
         raise ValueError(messages)

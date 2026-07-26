@@ -55,6 +55,12 @@ apply decision. Apply only that saved preview. An exact existing `boards/deliver
 no-op; a differing file, symlink, non-file collision, stale revision, invalid activation, missing
 mapping, or ambiguous mapping is preserved and visibly refused.
 
+The canonical identity combines the configured project prefix and mapped investigation directory
+name. The generic preview may preserve unchanged diagnostics from its exact pre-write Store
+baseline, which remain visible in canonical scan, check, and query output; it still refuses every
+diagnostic introduced or changed by this board request. Apply remains pinned to the complete saved
+Store revision.
+
 This step creates or confirms only the explicit delivery board. It does not read or mutate the
 progress log or tickets. Keep progress and board previews/applies sequential and independent; do not
 add rollback, recovery, a journal, or a combined transaction.

@@ -35,7 +35,13 @@ class DeliveryBoardScriptTests(unittest.TestCase):
         ):
             subprocess.run(["git", *arguments], cwd=root, check=True)
 
-    def run_script(self, root: Path, preview: Path, apply: bool = False) -> subprocess.CompletedProcess[str]:
+    def run_script(
+        self,
+        root: Path,
+        preview: Path,
+        apply: bool = False,
+        selected_investigation: str = investigation,
+    ) -> subprocess.CompletedProcess[str]:
         command = [
             sys.executable,
             str(provision),
@@ -46,7 +52,7 @@ class DeliveryBoardScriptTests(unittest.TestCase):
             "--preview-file",
             str(preview),
             "--investigation",
-            investigation,
+            selected_investigation,
         ]
         if apply:
             command.append("--apply")
@@ -98,7 +104,7 @@ class DeliveryBoardScriptTests(unittest.TestCase):
             self.assertEqual(0, applied.returncode, applied.stderr)
             board = root / f"{investigation}/boards/delivery.toml"
             self.assertEqual(
-                'schema_version = 1\nid = "HMD-delivery"\ntitle = "Delivery"\n'
+                'schema_version = 1\nid = "HMD-sample-delivery"\ntitle = "Delivery"\n'
                 'status_source = "progress"\nfilter_kinds = ["ticket"]\n\n'
                 '[[columns]]\nname = "Unknown"\nstatuses = ["unknown"]\n\n'
                 '[[columns]]\nname = "In progress"\nstatuses = ["in_progress"]\n\n'
@@ -117,7 +123,7 @@ class DeliveryBoardScriptTests(unittest.TestCase):
             record = next(item for item in json.loads(scan.stdout)["snapshot"]["entries"] if item["path"] == f"{investigation}/boards/delivery.toml")
             self.assertEqual(("governed", "board"), (record["classification"], record["kind"]))
             boards = self.derived_boards(root, Path(scratch) / "index.sqlite")
-            delivery = next(board for board in boards if board["identity"]["identity"] == "HMD-delivery")
+            delivery = next(board for board in boards if board["identity"]["identity"] == "HMD-sample-delivery")
             self.assertEqual("HMD-011", delivery["columns"][0]["cards"][0]["identity"]["identity"])
             self.assertEqual(ticket_before, ticket.read_bytes())
             self.assertFalse(progress.exists())
@@ -145,6 +151,105 @@ class DeliveryBoardScriptTests(unittest.TestCase):
             self.assertIn("already differs", refused.stderr)
             self.assertTrue(json.loads(refused.stdout)["diff"])
             self.assertEqual(different, board.read_text(encoding="utf-8"))
+
+    def test_two_investigations_receive_distinct_directory_scoped_identities(self):
+        with tempfile.TemporaryDirectory() as workspace, tempfile.TemporaryDirectory() as scratch:
+            root = Path(workspace) / "root"
+            self.fixture(root)
+            second = "projects/demo/investigations/second-casefile"
+            activation = (root / "casefile.toml").read_text(encoding="utf-8")
+            (root / "casefile.toml").write_text(
+                activation.replace(
+                    f'investigations = ["{investigation}"]',
+                    f'investigations = ["{investigation}", "{second}"]',
+                ),
+                encoding="utf-8",
+            )
+
+            identities = []
+            for index, selected in enumerate((investigation, second)):
+                preview = Path(scratch) / f"preview-{index}.json"
+                result = self.run_script(root, preview, selected_investigation=selected)
+                self.assertEqual(0, result.returncode, result.stderr)
+                applied = self.run_script(root, preview, apply=True, selected_investigation=selected)
+                self.assertEqual(0, applied.returncode, applied.stderr)
+                board = root / selected / "boards/delivery.toml"
+                identities.append(
+                    next(
+                        line.removeprefix('id = "').removesuffix('"')
+                        for line in board.read_text(encoding="utf-8").splitlines()
+                        if line.startswith("id = ")
+                    )
+                )
+
+            self.assertEqual(["HMD-sample-delivery", "HMD-second-casefile-delivery"], identities)
+            self.assertEqual(len(identities), len(set(identities)))
+            scan = subprocess.run(
+                [str(self.binary), "--root", str(root), "scan"],
+                text=True,
+                capture_output=True,
+                check=True,
+            )
+            self.assertFalse(
+                any(item["code"] == "duplicate_identity" for item in json.loads(scan.stdout)["diagnostics"])
+            )
+
+    def test_unchanged_store_diagnostics_do_not_block_but_introduced_diagnostics_do(self):
+        with tempfile.TemporaryDirectory() as workspace, tempfile.TemporaryDirectory() as scratch:
+            root, preview = Path(workspace) / "root", Path(scratch) / "preview.json"
+            self.fixture(root)
+            historical = "projects/demo/investigations/z-historical"
+            activation = (root / "casefile.toml").read_text(encoding="utf-8")
+            (root / "casefile.toml").write_text(
+                activation.replace(
+                    f'investigations = ["{investigation}"]',
+                    f'investigations = ["{investigation}", "{historical}"]',
+                ),
+                encoding="utf-8",
+            )
+            historical_ticket = root / historical / "tickets/accepted/HMD-011.md"
+            historical_ticket.parent.mkdir(parents=True)
+            historical_ticket.write_bytes(
+                (root / investigation / "tickets/accepted/HMD-011.md").read_bytes()
+            )
+            before = json.loads(
+                subprocess.run(
+                    [str(self.binary), "--root", str(root), "scan"],
+                    text=True,
+                    capture_output=True,
+                    check=True,
+                ).stdout
+            )["diagnostics"]
+            self.assertTrue(before)
+
+            result = self.run_script(root, preview)
+            self.assertEqual(0, result.returncode, result.stderr)
+            applied = self.run_script(root, preview, apply=True)
+            self.assertEqual(0, applied.returncode, applied.stderr)
+            after = json.loads(
+                subprocess.run(
+                    [str(self.binary), "--root", str(root), "scan"],
+                    text=True,
+                    capture_output=True,
+                    check=True,
+                ).stdout
+            )["diagnostics"]
+            self.assertEqual(before, after)
+
+        with tempfile.TemporaryDirectory() as workspace, tempfile.TemporaryDirectory() as scratch:
+            root, preview = Path(workspace) / "root", Path(scratch) / "preview.json"
+            self.fixture(root)
+            existing = root / investigation / "boards/existing.toml"
+            existing.write_text(
+                (root / investigation / "boards/main.toml")
+                .read_text(encoding="utf-8")
+                .replace("HMD-board", "HMD-sample-delivery"),
+                encoding="utf-8",
+            )
+            refused = self.run_script(root, preview)
+            self.assertNotEqual(0, refused.returncode)
+            self.assertIn("identity also appears", refused.stderr)
+            self.assertFalse((root / investigation / "boards/delivery.toml").exists())
 
     def test_external_saved_preview_enforces_root_and_store_revisions(self):
         with tempfile.TemporaryDirectory() as workspace, tempfile.TemporaryDirectory() as scratch:

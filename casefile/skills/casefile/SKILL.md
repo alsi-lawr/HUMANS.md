@@ -24,7 +24,11 @@ When starting a new Casefile, activate the new investigation root, then use
 and apply that exact preview. The request to start the Casefile authorizes this one canonical
 `boards/delivery.toml` setup record; it does not authorize a ticket-progress transition. Stop before
 delegation if provisioning is refused or fails. An exact existing default board is a content no-op;
-never replace a differing board.
+never replace a differing board. Its identity combines the configured project prefix with the mapped
+investigation directory name so multiple investigations never reuse the project-wide board identity.
+Unchanged diagnostics from the exact pre-write Store baseline remain reported but do not block this
+write; any introduced or changed diagnostic does, and apply remains pinned to the saved whole-Store
+revision.
 
 For a new Codex Casefile, run the installed `scripts/resolve-writer-binding.py offer` against the
 active Codex home only after the delivery board is provisioned. Present every returned model/effort

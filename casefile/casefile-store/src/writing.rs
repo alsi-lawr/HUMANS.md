@@ -84,10 +84,7 @@ pub(super) fn preview(root: &Path, request: ChangeRequest) -> Result<Preview, St
         },
     );
     let proposed = scan(root, &overlay)?;
-    let mut diagnostics = proposed.diagnostics;
-    if diagnostics.is_empty() {
-        diagnostics = Vec::new();
-    }
+    let diagnostics = introduced_diagnostics(&before.diagnostics, &proposed.diagnostics);
     let diff = git_diff(
         root,
         &path,
@@ -106,6 +103,42 @@ pub(super) fn preview(root: &Path, request: ChangeRequest) -> Result<Preview, St
         diagnostics: stable(diagnostics),
         diff,
     })
+}
+
+fn introduced_diagnostics(baseline: &[Diagnostic], proposed: &[Diagnostic]) -> Vec<Diagnostic> {
+    let mut remaining_baseline = BTreeMap::new();
+    for diagnostic in baseline {
+        *remaining_baseline
+            .entry(diagnostic_key(diagnostic))
+            .or_insert(0) += 1;
+    }
+    proposed
+        .iter()
+        .filter_map(|diagnostic| {
+            let count = remaining_baseline
+                .entry(diagnostic_key(diagnostic))
+                .or_insert(0);
+            if *count == 0 {
+                Some(diagnostic.clone())
+            } else {
+                *count -= 1;
+                None
+            }
+        })
+        .collect()
+}
+
+fn diagnostic_key(
+    diagnostic: &Diagnostic,
+) -> (u32, String, String, Option<String>, Option<String>, String) {
+    (
+        diagnostic.schema_version,
+        diagnostic.path.clone(),
+        diagnostic.code.clone(),
+        diagnostic.field.clone(),
+        diagnostic.section.clone(),
+        diagnostic.message.clone(),
+    )
 }
 
 pub(super) fn apply(root: &Path, preview: Preview) -> Result<ApplyResult, StoreError> {

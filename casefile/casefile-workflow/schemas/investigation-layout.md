@@ -26,5 +26,10 @@ backups, isolated output, and command logs.
 
 New Casefiles receive the explicit `boards/delivery.toml` through
 `scripts/provision-delivery-board.py`. Existing investigations receive it only through an explicit
-`casefile-consolidate` run. The progress log remains independently created or repaired through the
-sole progress-transition script; neither record implies or mutates the other.
+`casefile-consolidate` run. Its identity is
+`<configured-prefix>-<mapped-investigation-directory-name>-delivery`, so investigations within the
+same project do not repeat a board identity. The canonical preview blocks only diagnostics
+introduced or changed by this proposed record; unchanged pre-write diagnostics remain visible and
+the whole-Store revision pins that exact baseline through apply. The progress log remains
+independently created or repaired through the sole progress-transition script; neither record
+implies or mutates the other.

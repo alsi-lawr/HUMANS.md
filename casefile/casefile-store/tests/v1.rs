@@ -1,5 +1,6 @@
 use casefile_core::{
-    ChangeRequest, Classification, Kind, ProgressEntry, ProgressStatus, RecordDraft,
+    BoardColumn, BoardDraft, BoardStatusSource, ChangeRequest, Classification, Kind, ProgressEntry,
+    ProgressStatus, RecordDraft,
 };
 use casefile_store::{ActivationState, ProgressChangeRequest, RelationshipKind, Store};
 use std::{fs, path::Path, process::Command};
@@ -910,6 +911,90 @@ fn previews_and_applies_one_path_without_touching_index() {
         fs::read(root.path().join(".git/index")).expect("index after delete")
     );
     assert!(!root.path().join(create_path).exists());
+}
+
+#[test]
+fn generic_preview_preserves_baseline_diagnostics_but_rejects_introduced_diagnostics() {
+    let root = fixture();
+    let historical = "projects/demo/investigations/z-historical";
+    fs::write(
+        root.path().join("casefile.toml"),
+        format!(
+            "schema_version = 1\n\n[projects.demo]\nprefix = \"HMD\"\ninvestigations = [\"projects/demo/investigations/sample\", \"{historical}\"]\n"
+        ),
+    )
+    .expect("activation");
+    let historical_ticket = root
+        .path()
+        .join(historical)
+        .join("tickets/accepted/HMD-011.md");
+    fs::create_dir_all(historical_ticket.parent().expect("ticket parent"))
+        .expect("ticket directory");
+    fs::copy(
+        root.path()
+            .join("projects/demo/investigations/sample/tickets/accepted/HMD-011.md"),
+        &historical_ticket,
+    )
+    .expect("historical ticket");
+    let store = Store::open(root.path()).expect("store");
+    let baseline = store.scan().expect("baseline scan").diagnostics;
+    assert!(!baseline.is_empty());
+
+    let board_path = "projects/demo/investigations/sample/boards/delivery.toml";
+    let preview = store
+        .preview(ChangeRequest::Create {
+            path: board_path.into(),
+            draft: delivery_board("HMD-sample-delivery"),
+        })
+        .expect("preview with baseline diagnostics");
+    assert!(preview.diagnostics.is_empty(), "{:#?}", preview.diagnostics);
+    store
+        .apply(preview)
+        .expect("apply with baseline diagnostics");
+    assert_eq!(baseline, store.scan().expect("resulting scan").diagnostics);
+
+    let fresh = fixture();
+    let existing = fresh
+        .path()
+        .join("projects/demo/investigations/sample/boards/main.toml");
+    let source = fs::read_to_string(&existing).expect("existing board");
+    fs::write(
+        &existing,
+        source.replace("HMD-board", "HMD-sample-delivery"),
+    )
+    .expect("colliding board identity");
+    let introduced = Store::open(fresh.path())
+        .expect("fresh store")
+        .preview(ChangeRequest::Create {
+            path: board_path.into(),
+            draft: delivery_board("HMD-sample-delivery"),
+        })
+        .expect("introduced diagnostic preview");
+    assert!(introduced.diagnostics.iter().any(|diagnostic| {
+        diagnostic.code == "duplicate_identity"
+            && diagnostic.message.contains("identity also appears")
+    }));
+    assert!(
+        Store::open(fresh.path())
+            .expect("apply store")
+            .apply(introduced)
+            .is_err()
+    );
+    assert!(!fresh.path().join(board_path).exists());
+}
+
+fn delivery_board(id: &str) -> RecordDraft {
+    RecordDraft::Board(BoardDraft {
+        id: id.into(),
+        title: "Delivery".into(),
+        status_source: BoardStatusSource::Progress,
+        filter_statuses: None,
+        filter_kinds: Some(vec!["ticket".into()]),
+        columns: vec![BoardColumn {
+            name: "Unknown".into(),
+            statuses: vec!["unknown".into()],
+        }],
+    })
 }
 
 #[test]
