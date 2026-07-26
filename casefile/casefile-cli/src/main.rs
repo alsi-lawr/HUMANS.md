@@ -25,6 +25,8 @@ enum Command {
     Check {
         #[arg(long)]
         require_activation: bool,
+        #[arg(long)]
+        investigation: Option<String>,
     },
     /// Validate a complete candidate strategy matrix through the canonical Rust parser.
     ValidateMatrix {
@@ -59,6 +61,27 @@ enum Command {
     Apply {
         #[arg(long)]
         preview: PathBuf,
+    },
+    /// Internal canonical progress preview; workflow callers use transition-ticket-progress.py.
+    ProgressPreview {
+        #[arg(long)]
+        request: PathBuf,
+    },
+    /// Apply an immutable progress preview produced by progress-preview.
+    ProgressApply {
+        #[arg(long)]
+        preview: PathBuf,
+    },
+    /// Materialize an accepted-ticket unknown bootstrap request for the workflow script.
+    ProgressBootstrap {
+        #[arg(long)]
+        investigation: String,
+        #[arg(long)]
+        operation_id_prefix: String,
+        #[arg(long)]
+        recorded_at: String,
+        #[arg(long)]
+        recorded_by: String,
     },
     /// Serve the fixed planning root on an IPv4 loopback socket.
     Serve {

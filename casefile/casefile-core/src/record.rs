@@ -27,6 +27,7 @@ pub enum Kind {
     Ticket,
     Epic,
     Board,
+    Progress,
 }
 
 impl Kind {
@@ -67,6 +68,7 @@ pub enum RecordSummary {
         title: String,
         columns: Vec<String>,
     },
+    Progress,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]

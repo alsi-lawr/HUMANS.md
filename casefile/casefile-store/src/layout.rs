@@ -73,6 +73,7 @@ pub(super) fn kind_for_path(path: &str, active: &Activation) -> Option<Kind> {
             Kind::Epic
         }),
         ["boards", name] if name.ends_with(".toml") => Some(Kind::Board),
+        ["progress", "log.toml"] => Some(Kind::Progress),
         _ => None,
     }
 }

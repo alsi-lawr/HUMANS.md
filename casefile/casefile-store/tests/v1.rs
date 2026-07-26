@@ -1,5 +1,7 @@
-use casefile_core::{ChangeRequest, Classification, Kind, RecordDraft};
-use casefile_store::{ActivationState, RelationshipKind, Store};
+use casefile_core::{
+    ChangeRequest, Classification, Kind, ProgressEntry, ProgressStatus, RecordDraft,
+};
+use casefile_store::{ActivationState, ProgressChangeRequest, RelationshipKind, Store};
 use std::{fs, path::Path, process::Command};
 use tempfile::TempDir;
 
@@ -113,6 +115,136 @@ fn scans_each_v1_kind_and_preserves_raw_material() {
             .iter()
             .find(|entry| entry.path.ends_with("legacy.txt"))
             .map(|entry| entry.classification)
+    );
+}
+
+#[test]
+fn accepted_tickets_project_unknown_and_a_valid_log_folds_progress_notes_and_progress_boards() {
+    let root = fixture();
+    let store = Store::open(root.path()).expect("store");
+    let initial = store.derived_snapshot().expect("derived");
+    let ticket = initial
+        .records
+        .iter()
+        .find(|record| record.path.ends_with("HMD-011.md"))
+        .expect("ticket");
+    assert_eq!(
+        ticket.progress.as_ref().expect("unknown progress").status,
+        ProgressStatus::Unknown
+    );
+
+    let log = "schema_version = 1\n\n[[entries]]\nid = \"start\"\nrecorded_at = \"2026-07-26T10:00:00Z\"\nrecorded_by = \"root\"\nticket_id = \"HMD-011\"\nkind = \"transition\"\nfrom = \"unknown\"\nto = \"in_progress\"\n\n[[entries]]\nid = \"quirk\"\nrecorded_at = \"2026-07-26T10:01:00Z\"\nrecorded_by = \"root\"\nticket_id = \"HMD-011\"\nkind = \"note\"\ncategory = \"quirk\"\nmessage = \"Fixture note.\"\n";
+    fs::create_dir_all(
+        root.path()
+            .join("projects/demo/investigations/sample/progress"),
+    )
+    .expect("progress directory");
+    fs::write(
+        root.path()
+            .join("projects/demo/investigations/sample/progress/log.toml"),
+        log,
+    )
+    .expect("log");
+    fs::write(root.path().join("projects/demo/investigations/sample/boards/main.toml"), "schema_version = 1\nid = \"HMD-board\"\ntitle = \"Main\"\nstatus_source = \"progress\"\nfilter_statuses = [\"in_progress\"]\nfilter_kinds = [\"ticket\"]\n\n[[columns]]\nname = \"Working\"\nstatuses = [\"in_progress\"]\n").expect("board");
+    let derived = store.derived_snapshot().expect("derived");
+    let ticket = derived
+        .records
+        .iter()
+        .find(|record| record.path.ends_with("HMD-011.md"))
+        .expect("ticket");
+    let progress = ticket.progress.as_ref().expect("progress");
+    assert_eq!(progress.status, ProgressStatus::InProgress);
+    assert_eq!(progress.notes.len(), 1);
+    assert_eq!(derived.boards[0].columns[0].cards[0].status, "in_progress");
+}
+
+#[test]
+fn malformed_and_cross_scope_progress_never_become_unknown_and_store_writer_is_preview_first_and_idempotent()
+ {
+    let root = fixture();
+    let store = Store::open(root.path()).expect("store");
+    fs::create_dir_all(
+        root.path()
+            .join("projects/demo/investigations/sample/progress"),
+    )
+    .expect("progress directory");
+    let log_path = root
+        .path()
+        .join("projects/demo/investigations/sample/progress/log.toml");
+    fs::write(&log_path, "schema_version = 1\n[[entries]]\nid = \"bad\"\n").expect("bad log");
+    let invalid = store.derived_snapshot().expect("derived");
+    let ticket = invalid
+        .records
+        .iter()
+        .find(|record| record.path.ends_with("HMD-011.md"))
+        .expect("ticket");
+    assert!(ticket.progress.is_none());
+    assert!(
+        invalid
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.code == "invalid_progress_log")
+    );
+
+    let repair = store
+        .preview_progress(ProgressChangeRequest {
+            investigation: "projects/demo/investigations/sample".into(),
+            entries: Vec::new(),
+            replacement: None,
+            replacement_source: Some("schema_version = 1\n".into()),
+            bootstrap: None,
+        })
+        .expect("repair preview");
+    assert!(repair.diagnostics.is_empty(), "{:#?}", repair.diagnostics);
+    store.apply_progress(repair).expect("repair malformed log");
+    let request = ProgressChangeRequest {
+        investigation: "projects/demo/investigations/sample".into(),
+        entries: vec![ProgressEntry::Transition {
+            id: "start-001".into(),
+            recorded_at: "2026-07-26T10:00:00Z".into(),
+            recorded_by: "root".into(),
+            ticket_id: "HMD-011".into(),
+            from: ProgressStatus::Unknown,
+            to: ProgressStatus::InProgress,
+        }],
+        replacement: None,
+        replacement_source: None,
+        bootstrap: None,
+    };
+    let preview = store.preview_progress(request.clone()).expect("preview");
+    assert!(preview.diagnostics.is_empty(), "{:#?}", preview.diagnostics);
+    assert_eq!(
+        "schema_version = 1\n",
+        fs::read_to_string(&log_path).expect("pre-preview log"),
+        "preview must not mutate"
+    );
+    let applied = store.apply_progress(preview).expect("apply");
+    assert!(!applied.no_op);
+    let retry = store.preview_progress(request).expect("retry preview");
+    assert!(retry.diagnostics.is_empty());
+    assert!(retry.no_op);
+    assert!(store.apply_progress(retry).expect("retry apply").no_op);
+    let conflict = store
+        .preview_progress(ProgressChangeRequest {
+            investigation: "projects/demo/investigations/sample".into(),
+            entries: vec![ProgressEntry::Transition {
+                id: "start-001".into(),
+                recorded_at: "2026-07-26T10:00:00Z".into(),
+                recorded_by: "root".into(),
+                ticket_id: "HMD-011".into(),
+                from: ProgressStatus::InProgress,
+                to: ProgressStatus::Complete,
+            }],
+            replacement: None,
+            replacement_source: None,
+            bootstrap: None,
+        })
+        .expect("conflict preview");
+    assert!(
+        conflict
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.code == "conflicting_progress_operation_id")
     );
 }
 

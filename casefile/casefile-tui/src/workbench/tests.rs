@@ -127,6 +127,7 @@ fn derived_record(path: &str, kind: Kind) -> DerivedRecord {
         rendered_markdown: None,
         search_text: String::new(),
         work_item: None,
+        progress: None,
         board: None,
         strategy: None,
         strategy_binding: None,

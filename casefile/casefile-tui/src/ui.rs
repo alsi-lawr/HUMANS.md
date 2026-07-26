@@ -97,6 +97,7 @@ pub(crate) fn kind_name(kind: Kind) -> &'static str {
         Kind::Ticket => "ticket",
         Kind::Epic => "epic",
         Kind::Board => "board",
+        Kind::Progress => "progress",
     }
 }
 

@@ -1,0 +1,530 @@
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    fs,
+    io::Write,
+    path::{Path, PathBuf},
+};
+
+use casefile_core::{
+    Diagnostic, ProgressEntry, ProgressLog, Revision, parse_progress_log, render_progress_log,
+    validate_progress_log,
+};
+use serde::{Deserialize, Serialize};
+use tempfile::NamedTempFile;
+use time::{OffsetDateTime, format_description::well_known::Rfc3339};
+
+use crate::{activation::activation, scanning::scan, store::StoreError};
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct ProgressChangeRequest {
+    pub investigation: String,
+    #[serde(default)]
+    pub entries: Vec<ProgressEntry>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub replacement: Option<ProgressLog>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub replacement_source: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bootstrap: Option<ProgressBootstrap>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct ProgressBootstrap {
+    pub operation_id_prefix: String,
+    pub recorded_at: String,
+    pub recorded_by: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct ProgressPreview {
+    pub request: ProgressChangeRequest,
+    pub path: String,
+    pub expected_target_revision: Option<Revision>,
+    pub expected_store_revision: Revision,
+    pub proposed_store_revision: Revision,
+    pub diagnostics: Vec<Diagnostic>,
+    pub diff: String,
+    pub no_op: bool,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct ProgressApplyResult {
+    pub path: String,
+    pub resulting_target_revision: Option<Revision>,
+    pub resulting_store_revision: Revision,
+    pub diff: String,
+    pub no_op: bool,
+}
+
+pub(super) fn preview(
+    root: &Path,
+    request: ProgressChangeRequest,
+) -> Result<ProgressPreview, StoreError> {
+    ensure_worktree(root)?;
+    let (path, scope_prefix) = progress_path(root, &request.investigation)?;
+    let before = scan(root, &BTreeMap::new())?;
+    let existing = before
+        .snapshot
+        .entries
+        .iter()
+        .find(|entry| entry.path == path);
+    let replacing = request.replacement.is_some() || request.replacement_source.is_some();
+    let existing_log = if replacing {
+        ProgressLog {
+            entries: Vec::new(),
+        }
+    } else {
+        match existing {
+            Some(entry) => parse_progress_log(
+                &path,
+                std::str::from_utf8(&entry.original_bytes)
+                    .map_err(|_| StoreError::Invalid("progress log must be UTF-8".into()))?,
+            )
+            .map_err(diagnostics_error)?,
+            None => ProgressLog {
+                entries: Vec::new(),
+            },
+        }
+    };
+    if let Some(bootstrap) = &request.bootstrap {
+        if !request.entries.is_empty()
+            || request.replacement.is_some()
+            || request.replacement_source.is_some()
+        {
+            return Ok(rejected(
+                request,
+                path,
+                before.snapshot.revision,
+                Diagnostic::new(
+                    "progress/log.toml",
+                    "invalid_progress_request",
+                    "bootstrap cannot be combined with entries or replacement",
+                ),
+            ));
+        }
+        if bootstrap.operation_id_prefix.trim().is_empty()
+            || bootstrap.recorded_by.trim().is_empty()
+            || OffsetDateTime::parse(&bootstrap.recorded_at, &Rfc3339).is_err()
+        {
+            return Ok(rejected(
+                request,
+                path,
+                before.snapshot.revision,
+                Diagnostic::new(
+                    "progress/log.toml",
+                    "invalid_progress_bootstrap",
+                    "bootstrap needs an operation ID prefix, actor, and RFC 3339 timestamp",
+                ),
+            ));
+        }
+    }
+    let proposed_log = if replacing {
+        if !request.entries.is_empty()
+            || (request.replacement.is_some() && request.replacement_source.is_some())
+        {
+            return Ok(rejected(
+                request,
+                path,
+                before.snapshot.revision,
+                Diagnostic::new(
+                    "progress/log.toml",
+                    "invalid_progress_request",
+                    "replacement cannot be combined with entries",
+                ),
+            ));
+        }
+        match (&request.replacement, &request.replacement_source) {
+            (Some(replacement), None) => replacement.clone(),
+            (None, Some(source)) => parse_progress_log(&path, source).map_err(diagnostics_error)?,
+            _ => unreachable!("exclusive replacement source"),
+        }
+    } else {
+        let mut entries = existing_log.entries.clone();
+        let existing_by_id = entries
+            .iter()
+            .map(|entry| (entry.id().to_owned(), entry.clone()))
+            .collect::<BTreeMap<_, _>>();
+        let mut requested = BTreeSet::new();
+        for entry in &request.entries {
+            if !requested.insert(entry.id()) {
+                return Ok(rejected(
+                    request,
+                    path,
+                    before.snapshot.revision,
+                    Diagnostic::new(
+                        "progress/log.toml",
+                        "invalid_progress_operation_id",
+                        "operation IDs must be unique",
+                    ),
+                ));
+            }
+            if let Some(current) = existing_by_id.get(entry.id()) {
+                if *current != *entry {
+                    return Ok(rejected(
+                        request,
+                        path,
+                        before.snapshot.revision,
+                        Diagnostic::new(
+                            "progress/log.toml",
+                            "conflicting_progress_operation_id",
+                            "operation ID is already recorded with different content",
+                        ),
+                    ));
+                }
+            } else {
+                entries.push(entry.clone());
+            }
+        }
+        ProgressLog { entries }
+    };
+    if let Err(diagnostic) = validate_progress_log(&path, &proposed_log) {
+        return Ok(rejected(
+            request,
+            path,
+            before.snapshot.revision,
+            diagnostic,
+        ));
+    }
+    let bytes = render_progress_log(&proposed_log).into_bytes();
+    let same = existing.is_some_and(|entry| entry.original_bytes == bytes);
+    let mut overlay = BTreeMap::new();
+    overlay.insert(path.clone(), Some(bytes.clone()));
+    let proposed = scan(root, &overlay)?;
+    let diagnostics = scoped_diagnostics(&proposed.diagnostics, &scope_prefix);
+    if !diagnostics.is_empty() {
+        return Ok(ProgressPreview {
+            request,
+            path,
+            expected_target_revision: existing.map(|entry| entry.content_revision.clone()),
+            expected_store_revision: before.snapshot.revision.clone(),
+            proposed_store_revision: proposed.snapshot.revision,
+            diagnostics,
+            diff: String::new(),
+            no_op: false,
+        });
+    }
+    let diff = if same {
+        String::new()
+    } else {
+        diff(
+            root,
+            &path,
+            existing.map(|entry| entry.original_bytes.as_slice()),
+            Some(&bytes),
+        )?
+    };
+    Ok(ProgressPreview {
+        request,
+        path,
+        expected_target_revision: existing.map(|entry| entry.content_revision.clone()),
+        expected_store_revision: before.snapshot.revision,
+        proposed_store_revision: proposed.snapshot.revision,
+        diagnostics,
+        diff,
+        no_op: same,
+    })
+}
+
+pub(super) fn apply(
+    root: &Path,
+    preview: ProgressPreview,
+) -> Result<ProgressApplyResult, StoreError> {
+    ensure_worktree(root)?;
+    if !preview.diagnostics.is_empty() {
+        return Err(StoreError::Invalid(
+            "progress preview contains validation diagnostics".into(),
+        ));
+    }
+    let (path, scope_prefix) = progress_path(root, &preview.request.investigation)?;
+    if path != preview.path {
+        return Err(StoreError::Invalid(
+            "progress preview target does not match request".into(),
+        ));
+    }
+    let current = scan(root, &BTreeMap::new())?;
+    if current.snapshot.revision != preview.expected_store_revision {
+        return Err(StoreError::StaleStoreRevision);
+    }
+    let current_entry = current
+        .snapshot
+        .entries
+        .iter()
+        .find(|entry| entry.path == path);
+    if current_entry.map(|entry| &entry.content_revision)
+        != preview.expected_target_revision.as_ref()
+    {
+        return Err(StoreError::StaleTargetRevision);
+    }
+    if preview.no_op {
+        return Ok(ProgressApplyResult {
+            path,
+            resulting_target_revision: current_entry.map(|entry| entry.content_revision.clone()),
+            resulting_store_revision: current.snapshot.revision,
+            diff: preview.diff,
+            no_op: true,
+        });
+    }
+    let log = materialize(&preview.request, current_entry)?;
+    validate_progress_log(&path, &log)
+        .map_err(|diagnostic| StoreError::Invalid(diagnostic.message))?;
+    let bytes = render_progress_log(&log).into_bytes();
+    atomic_write(root, &path, &bytes)?;
+    let resulting = scan(root, &BTreeMap::new())?;
+    let diagnostics = scoped_diagnostics(&resulting.diagnostics, &scope_prefix);
+    if !diagnostics.is_empty() {
+        return Err(StoreError::Invalid(
+            "post-write progress validation failed".into(),
+        ));
+    }
+    Ok(ProgressApplyResult {
+        path: path.clone(),
+        resulting_target_revision: resulting
+            .snapshot
+            .entries
+            .iter()
+            .find(|entry| entry.path == path)
+            .map(|entry| entry.content_revision.clone()),
+        resulting_store_revision: resulting.snapshot.revision,
+        diff: preview.diff,
+        no_op: false,
+    })
+}
+
+pub(super) fn bootstrap(
+    root: &Path,
+    investigation: &str,
+    operation_id_prefix: &str,
+    recorded_at: &str,
+    recorded_by: &str,
+) -> Result<ProgressChangeRequest, StoreError> {
+    progress_path(root, investigation)?;
+    // Unknown bootstrap creates the one canonical log without inventing a history. The immutable
+    // operation envelope records its caller-supplied ID prefix, actor, and time for preview/retry.
+    Ok(ProgressChangeRequest {
+        investigation: investigation.into(),
+        entries: Vec::new(),
+        replacement: None,
+        replacement_source: None,
+        bootstrap: Some(ProgressBootstrap {
+            operation_id_prefix: operation_id_prefix.into(),
+            recorded_at: recorded_at.into(),
+            recorded_by: recorded_by.into(),
+        }),
+    })
+}
+
+fn materialize(
+    request: &ProgressChangeRequest,
+    current: Option<&casefile_core::EntrySnapshot>,
+) -> Result<ProgressLog, StoreError> {
+    if let Some(replacement) = &request.replacement {
+        return Ok(replacement.clone());
+    }
+    if let Some(source) = &request.replacement_source {
+        return parse_progress_log("progress/log.toml", source).map_err(diagnostics_error);
+    }
+    let mut log = match current {
+        Some(entry) => parse_progress_log(
+            "progress/log.toml",
+            std::str::from_utf8(&entry.original_bytes)
+                .map_err(|_| StoreError::Invalid("progress log must be UTF-8".into()))?,
+        )
+        .map_err(diagnostics_error)?,
+        None => ProgressLog {
+            entries: Vec::new(),
+        },
+    };
+    let ids = log
+        .entries
+        .iter()
+        .map(|entry| (entry.id().to_owned(), entry.clone()))
+        .collect::<BTreeMap<_, _>>();
+    for entry in &request.entries {
+        match ids.get(entry.id()) {
+            Some(current) if *current == *entry => {}
+            Some(_) => {
+                return Err(StoreError::Invalid(
+                    "conflicting progress operation ID".into(),
+                ));
+            }
+            None => log.entries.push(entry.clone()),
+        }
+    }
+    Ok(log)
+}
+
+fn progress_path(root: &Path, investigation: &str) -> Result<(String, String), StoreError> {
+    if !crate::layout::safe_relative(investigation) {
+        return Err(StoreError::Invalid(
+            "investigation path must be contained".into(),
+        ));
+    }
+    let (_, active, _) = activation(root)?;
+    if !active.projects.values().any(|project| {
+        project
+            .investigations
+            .iter()
+            .any(|value| value == investigation)
+    }) {
+        return Err(StoreError::Invalid("investigation is not activated".into()));
+    }
+    Ok((
+        format!("{}/progress/log.toml", investigation.trim_end_matches('/')),
+        format!("{}/", investigation.trim_end_matches('/')),
+    ))
+}
+
+fn scoped_diagnostics(diagnostics: &[Diagnostic], prefix: &str) -> Vec<Diagnostic> {
+    diagnostics
+        .iter()
+        .filter(|diagnostic| diagnostic.path.starts_with(prefix))
+        .cloned()
+        .collect()
+}
+
+fn rejected(
+    request: ProgressChangeRequest,
+    path: String,
+    revision: Revision,
+    diagnostic: Diagnostic,
+) -> ProgressPreview {
+    ProgressPreview {
+        request,
+        path,
+        expected_target_revision: None,
+        expected_store_revision: revision.clone(),
+        proposed_store_revision: revision,
+        diagnostics: vec![diagnostic],
+        diff: String::new(),
+        no_op: false,
+    }
+}
+
+fn diagnostics_error(diagnostics: Vec<Diagnostic>) -> StoreError {
+    StoreError::Invalid(
+        diagnostics
+            .into_iter()
+            .map(|diagnostic| diagnostic.message)
+            .collect::<Vec<_>>()
+            .join("; "),
+    )
+}
+
+fn ensure_worktree(root: &Path) -> Result<(), StoreError> {
+    let status = std::process::Command::new("git")
+        .arg("-C")
+        .arg(root)
+        .args(["rev-parse", "--is-inside-work-tree"])
+        .output()?;
+    if status.status.success() && String::from_utf8_lossy(&status.stdout).trim() == "true" {
+        Ok(())
+    } else {
+        Err(StoreError::Invalid(
+            "progress preview and apply require a real Git worktree".into(),
+        ))
+    }
+}
+
+fn diff(
+    root: &Path,
+    path: &str,
+    before: Option<&[u8]>,
+    after: Option<&[u8]>,
+) -> Result<String, StoreError> {
+    // Delegate canonical diff normalisation to the existing generic writer implementation by using its stable path shape.
+    let old = before
+        .map(|bytes| {
+            tempfile::NamedTempFile::new_in(root).and_then(|mut file| {
+                file.write_all(bytes)?;
+                Ok(file)
+            })
+        })
+        .transpose()?;
+    let new = after
+        .map(|bytes| {
+            tempfile::NamedTempFile::new_in(root).and_then(|mut file| {
+                file.write_all(bytes)?;
+                Ok(file)
+            })
+        })
+        .transpose()?;
+    let output = std::process::Command::new("git")
+        .current_dir(root)
+        .args(["diff", "--no-index", "--"])
+        .arg(
+            old.as_ref()
+                .map(|file| file.path())
+                .unwrap_or_else(|| Path::new("/dev/null")),
+        )
+        .arg(
+            new.as_ref()
+                .map(|file| file.path())
+                .unwrap_or_else(|| Path::new("/dev/null")),
+        )
+        .output()?;
+    if output.status.code().is_some_and(|code| code > 1) {
+        return Err(StoreError::Invalid(
+            String::from_utf8_lossy(&output.stderr).into(),
+        ));
+    }
+    let before_exists = before.is_some();
+    let after_exists = after.is_some();
+    let source = String::from_utf8_lossy(&output.stdout);
+    Ok(source
+        .lines()
+        .map(|line| {
+            if line.starts_with("diff --git ") {
+                format!("diff --git a/{path} b/{path}")
+            } else if line.starts_with("--- ") {
+                if before_exists {
+                    format!("--- a/{path}")
+                } else {
+                    "--- /dev/null".into()
+                }
+            } else if line.starts_with("+++ ") {
+                if after_exists {
+                    format!("+++ b/{path}")
+                } else {
+                    "+++ /dev/null".into()
+                }
+            } else {
+                line.into()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+        + if source.ends_with('\n') { "\n" } else { "" })
+}
+
+fn atomic_write(root: &Path, relative: &str, bytes: &[u8]) -> Result<(), StoreError> {
+    let target = root.join(relative);
+    let parent = target
+        .parent()
+        .ok_or_else(|| StoreError::Invalid("progress target has no parent".into()))?;
+    let mut current = PathBuf::new();
+    for component in parent.components() {
+        current.push(component);
+        if let Ok(metadata) = fs::symlink_metadata(&current)
+            && metadata.file_type().is_symlink()
+        {
+            return Err(StoreError::Invalid(
+                "progress target path must not contain a symlink".into(),
+            ));
+        }
+    }
+    fs::create_dir_all(parent)?;
+    if let Ok(metadata) = fs::symlink_metadata(&target)
+        && (!metadata.file_type().is_file() || metadata.file_type().is_symlink())
+    {
+        return Err(StoreError::Invalid(
+            "progress target must be a regular non-symlink file".into(),
+        ));
+    }
+    let mut temporary = NamedTempFile::new_in(parent)?;
+    temporary.write_all(bytes)?;
+    temporary.flush()?;
+    temporary
+        .persist(&target)
+        .map_err(|error| StoreError::Io(error.error))?;
+    Ok(())
+}

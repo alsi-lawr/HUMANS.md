@@ -6,6 +6,7 @@ mod decision;
 mod diagnostic;
 mod markdown;
 mod metadata;
+mod progress;
 mod project_map;
 mod record;
 mod rendering;
@@ -14,7 +15,7 @@ mod snapshot;
 mod strategy;
 mod work_item;
 
-pub use board::{BoardColumn, BoardDraft};
+pub use board::{BoardColumn, BoardDraft, BoardStatusSource};
 pub use change::{ApplyResult, ChangeRequest, Preview};
 #[doc(hidden)]
 pub use decision::parse as parse_decision;
@@ -22,6 +23,10 @@ pub use diagnostic::{Diagnostic, SCHEMA_VERSION, stable};
 pub use markdown::{markdown_headings, validate_markdown};
 #[doc(hidden)]
 pub use metadata::arrays as parse_metadata_arrays;
+pub use progress::{
+    ProgressEntry, ProgressLog, ProgressNoteCategory, ProgressStatus, parse_progress_log,
+    render_progress_log, validate_progress_log,
+};
 #[doc(hidden)]
 pub use project_map::parse as parse_project_map;
 pub use record::{Classification, Kind, RecordDraft, RecordSummary};

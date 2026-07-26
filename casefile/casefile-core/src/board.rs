@@ -11,9 +11,19 @@ use crate::{
 pub struct BoardDraft {
     pub id: String,
     pub title: String,
+    #[serde(default)]
+    pub status_source: BoardStatusSource,
     pub filter_statuses: Option<Vec<String>>,
     pub filter_kinds: Option<Vec<String>>,
     pub columns: Vec<BoardColumn>,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BoardStatusSource {
+    #[default]
+    Disposition,
+    Progress,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -98,6 +108,21 @@ pub(crate) fn parse(path: &str, text: &str) -> Result<RecordDraft, Vec<Diagnosti
             .and_then(toml::Value::as_str)
             .unwrap_or_default()
             .into(),
+        status_source: table
+            .get("status_source")
+            .map(|value| value.clone().try_into())
+            .transpose()
+            .map_err(|_| {
+                vec![
+                    Diagnostic::new(
+                        path,
+                        "invalid_board_status_source",
+                        "status_source must be disposition or progress",
+                    )
+                    .field("status_source"),
+                ]
+            })?
+            .unwrap_or_default(),
         filter_statuses: strings(table.get("filter_statuses")),
         filter_kinds: strings(table.get("filter_kinds")),
         columns,
@@ -147,6 +172,9 @@ pub(crate) fn render(board: &BoardDraft) -> String {
         toml_string(&board.id),
         toml_string(&board.title)
     );
+    if board.status_source == BoardStatusSource::Progress {
+        output.push_str("status_source = \"progress\"\n");
+    }
     if let Some(values) = &board.filter_statuses {
         output.push_str(&format!("filter_statuses = {}\n", toml_list(values)));
     }
