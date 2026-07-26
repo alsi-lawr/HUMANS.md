@@ -45,5 +45,26 @@ make a fresh preview; do not reuse, merge, or alter the caller's replacement.
 For command examples and developer validation/package guidance, see `CONTRIBUTING.md`; user-facing
 migration and repair reference lives in the project wiki.
 
+## Provision the delivery board
+
+After the progress-log outcome is successfully applied or confirmed as an existing valid no-op, use
+`casefile-workflow/scripts/provision-delivery-board.py` for the same selected investigation. Save
+its fresh immutable preview in the current task's `.agent-workspace/<session-id>/` directory,
+outside the planning root. Show the exact target, diff, and diagnostics, then wait for an explicit
+apply decision. Apply only that saved preview. An exact existing `boards/delivery.toml` is a content
+no-op; a differing file, symlink, non-file collision, stale revision, invalid activation, missing
+mapping, or ambiguous mapping is preserved and visibly refused.
+
+The canonical identity combines the configured project prefix and mapped investigation directory
+name. Before preview and apply, preflight every activated mapping and refuse if that identity does
+not map to exactly one investigation. The generic preview may preserve unchanged diagnostics from
+its exact pre-write Store baseline, which remain visible in canonical scan, check, and query output;
+it still refuses every diagnostic introduced or changed by this board request. Apply remains pinned
+to the complete saved Store revision.
+
+This step creates or confirms only the explicit delivery board. It does not read or mutate the
+progress log or tickets. Keep progress and board previews/applies sequential and independent; do not
+add rollback, recovery, a journal, or a combined transaction.
+
 When preparing the selected balanced verification, load `references/verification-contract.md`. It
 records the candidate/no-skill evidence gate; it is not evidence that the gate ran.

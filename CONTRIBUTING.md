@@ -112,6 +112,35 @@ Its packaged source is shared by the Codex and Claude Casefile packages through
 the skill boundary changes. User-facing migration and repair guidance is in the
 [Casefile ticket progress wiki page](https://github.com/alsi-lawr/HUMANS.md/wiki/Casefile-Ticket-Progress).
 
+After a Casefile is newly activated, or after an explicit consolidation reaches a successful
+progress-log outcome, provision its canonical delivery board through the separate wrapper:
+
+```sh
+python casefile/casefile-workflow/scripts/provision-delivery-board.py \
+  --root "$CASEFILE_ROOT" --casefile casefile \
+  --preview-file "$TASK_SCRATCH/delivery-board-preview.json" \
+  --investigation "$INVESTIGATION"
+# At a consolidation gate, obtain the explicit apply decision first. New-Casefile setup already
+# authorizes this exact record. Apply only the saved preview:
+python casefile/casefile-workflow/scripts/provision-delivery-board.py \
+  --root "$CASEFILE_ROOT" --casefile casefile \
+  --preview-file "$TASK_SCRATCH/delivery-board-preview.json" \
+  --investigation "$INVESTIGATION" --apply
+```
+
+The wrapper selects the exact activated project's prefix and mapped investigation directory name
+only to construct `<PREFIX>-<INVESTIGATION-DIRECTORY>-delivery`. This keeps board identities unique
+when one project has multiple investigations with distinct final directory names. Before preview and
+apply, the wrapper preflights every activated mapping and refuses if the derived identity maps to
+anything other than exactly one investigation. The Rust `preview` and `apply` operations remain
+authoritative for board rendering, path checks, validation, Store revisions, and the one-file atomic
+write. Generic preview compares the proposed diagnostics with its exact pre-write baseline:
+unchanged baseline diagnostics remain visible to scan, check, and query but do not block the write;
+an introduced or changed diagnostic does. The whole-Store revision still pins that baseline through
+apply. The wrapper creates an absent `boards/delivery.toml`, reports exact canonical content as a
+no-op, and refuses a different target without replacement. It never reads or mutates progress or
+tickets, and consolidation keeps the progress and board writes sequential rather than transactional.
+
 ### Strategies and writer bindings
 
 Each investigation keeps the selected phase matrices in `strategy/<phase>.toml`. A complete matrix
@@ -175,11 +204,12 @@ testing governed ticket, epic, or board replacement.
 
 The TUI opens the investigation-scoped Boards view with key `6`; the browser exposes the same view
 through its Boards navigation item. Both clients consume the Store-derived board projection and
-leave ticket progress read-only. A board file under `boards/` selects delivery progress explicitly:
+leave ticket progress read-only. New and explicitly consolidated Casefiles receive this canonical
+delivery-progress board through the workflow wrapper above:
 
 ```toml
 schema_version = 1
-id = "delivery"
+id = "HMD-sample-delivery"
 title = "Delivery"
 status_source = "progress"
 filter_kinds = ["ticket"]
@@ -189,8 +219,20 @@ name = "Unknown"
 statuses = ["unknown"]
 
 [[columns]]
-name = "Active"
-statuses = ["in_progress", "in_review", "verifying", "blocked"]
+name = "In progress"
+statuses = ["in_progress"]
+
+[[columns]]
+name = "In review"
+statuses = ["in_review"]
+
+[[columns]]
+name = "Verifying"
+statuses = ["verifying"]
+
+[[columns]]
+name = "Blocked"
+statuses = ["blocked"]
 
 [[columns]]
 name = "Complete"

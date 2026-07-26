@@ -5,8 +5,12 @@ This skill uses the human-selected `casefile/verification/strategies/balanced.to
 
 The suite entries `casefile-consolidate-positive`, `casefile-consolidate-near`, and
 `casefile-consolidate-behavior` define isolated candidate and simultaneous no-skill prompt paths.
-The positive case covers an absent log; the behavioural case covers an exact malformed-log repair
-with inherited root diagnostics; the hard non-trigger combines ordinary lifecycle, generic
+The positive case covers an absent log followed by the separate default-board preview/apply gate;
+the behavioural case covers an exact malformed-log repair with inherited root diagnostics followed
+by the same board gate. Both must preserve sequential one-file authority, use the prefix-plus-
+mapped-investigation board identity, refuse an identity shared by nested mapped investigations
+before preview or apply, allow an unchanged pre-write diagnostic baseline, and refuse a differing
+board or an introduced/changed diagnostic. The hard non-trigger combines ordinary lifecycle, generic
 validation, and unrelated-cleanup work.
 
 Before release, preserve raw candidate and no-skill artifacts, fresh-context evidence, and human
