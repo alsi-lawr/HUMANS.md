@@ -88,6 +88,7 @@ const decodeKind = (value: unknown): Kind => {
     case "closeout":
     case "strategy":
     case "strategy_binding":
+    case "progress":
     case "ticket":
     case "epic":
     case "board":
