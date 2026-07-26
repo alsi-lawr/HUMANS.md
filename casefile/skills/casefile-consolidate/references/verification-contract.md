@@ -8,9 +8,10 @@ The suite entries `casefile-consolidate-positive`, `casefile-consolidate-near`, 
 The positive case covers an absent log followed by the separate default-board preview/apply gate;
 the behavioural case covers an exact malformed-log repair with inherited root diagnostics followed
 by the same board gate. Both must preserve sequential one-file authority, use the prefix-plus-
-mapped-investigation board identity, allow an unchanged pre-write diagnostic baseline, and refuse a
-differing board or an introduced/changed diagnostic. The hard non-trigger combines ordinary
-lifecycle, generic validation, and unrelated-cleanup work.
+mapped-investigation board identity, refuse an identity shared by nested mapped investigations
+before preview or apply, allow an unchanged pre-write diagnostic baseline, and refuse a differing
+board or an introduced/changed diagnostic. The hard non-trigger combines ordinary lifecycle, generic
+validation, and unrelated-cleanup work.
 
 Before release, preserve raw candidate and no-skill artifacts, fresh-context evidence, and human
 judgement. The absolute gate is a candidate pass rate of at least 0.9 with every hard non-trigger

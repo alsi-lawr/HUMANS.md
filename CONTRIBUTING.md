@@ -130,7 +130,9 @@ python casefile/casefile-workflow/scripts/provision-delivery-board.py \
 
 The wrapper selects the exact activated project's prefix and mapped investigation directory name
 only to construct `<PREFIX>-<INVESTIGATION-DIRECTORY>-delivery`. This keeps board identities unique
-when one project has multiple investigations. The Rust `preview` and `apply` operations remain
+when one project has multiple investigations with distinct final directory names. Before preview and
+apply, the wrapper preflights every activated mapping and refuses if the derived identity maps to
+anything other than exactly one investigation. The Rust `preview` and `apply` operations remain
 authoritative for board rendering, path checks, validation, Store revisions, and the one-file atomic
 write. Generic preview compares the proposed diagnostics with its exact pre-write baseline:
 unchanged baseline diagnostics remain visible to scan, check, and query but do not block the write;

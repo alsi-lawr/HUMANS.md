@@ -56,10 +56,11 @@ no-op; a differing file, symlink, non-file collision, stale revision, invalid ac
 mapping, or ambiguous mapping is preserved and visibly refused.
 
 The canonical identity combines the configured project prefix and mapped investigation directory
-name. The generic preview may preserve unchanged diagnostics from its exact pre-write Store
-baseline, which remain visible in canonical scan, check, and query output; it still refuses every
-diagnostic introduced or changed by this board request. Apply remains pinned to the complete saved
-Store revision.
+name. Before preview and apply, preflight every activated mapping and refuse if that identity does
+not map to exactly one investigation. The generic preview may preserve unchanged diagnostics from
+its exact pre-write Store baseline, which remain visible in canonical scan, check, and query output;
+it still refuses every diagnostic introduced or changed by this board request. Apply remains pinned
+to the complete saved Store revision.
 
 This step creates or confirms only the explicit delivery board. It does not read or mutate the
 progress log or tickets. Keep progress and board previews/applies sequential and independent; do not

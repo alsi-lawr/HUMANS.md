@@ -194,6 +194,52 @@ class DeliveryBoardScriptTests(unittest.TestCase):
                 any(item["code"] == "duplicate_identity" for item in json.loads(scan.stdout)["diagnostics"])
             )
 
+    def test_nested_identity_collision_refuses_preview_and_apply_without_touching_targets(self):
+        alpha = "projects/demo/investigations/alpha/shared"
+        beta = "projects/demo/investigations/beta/shared"
+        with tempfile.TemporaryDirectory() as workspace, tempfile.TemporaryDirectory() as scratch:
+            root, preview = Path(workspace) / "root", Path(scratch) / "preview.json"
+            self.fixture(root)
+            (root / "casefile.toml").write_text(
+                'schema_version = 1\n\n[projects.demo]\nprefix = "HMD"\n'
+                f'investigations = ["{alpha}", "{beta}"]\n',
+                encoding="utf-8",
+            )
+            refused = self.run_script(root, preview, selected_investigation=alpha)
+            self.assertNotEqual(0, refused.returncode)
+            self.assertIn("must map to exactly one", refused.stderr)
+            self.assertFalse(preview.exists())
+            self.assertFalse((root / alpha / "boards/delivery.toml").exists())
+            self.assertFalse((root / beta / "boards/delivery.toml").exists())
+
+        with tempfile.TemporaryDirectory() as workspace, tempfile.TemporaryDirectory() as scratch:
+            root, preview = Path(workspace) / "root", Path(scratch) / "preview.json"
+            self.fixture(root)
+            (root / "casefile.toml").write_text(
+                'schema_version = 1\n\n[projects.demo]\nprefix = "HMD"\n'
+                f'investigations = ["{alpha}"]\n',
+                encoding="utf-8",
+            )
+            prepared = self.run_script(root, preview, selected_investigation=alpha)
+            self.assertEqual(0, prepared.returncode, prepared.stderr)
+            (root / "casefile.toml").write_text(
+                'schema_version = 1\n\n[projects.demo]\nprefix = "HMD"\n'
+                f'investigations = ["{alpha}", "{beta}"]\n',
+                encoding="utf-8",
+            )
+            alpha_target = root / alpha / "boards/delivery.toml"
+            beta_target = root / beta / "boards/delivery.toml"
+            alpha_target.parent.mkdir(parents=True, exist_ok=True)
+            beta_target.parent.mkdir(parents=True, exist_ok=True)
+            alpha_target.write_text("preserve alpha\n", encoding="utf-8")
+            beta_target.write_text("preserve beta\n", encoding="utf-8")
+
+            refused = self.run_script(root, preview, apply=True, selected_investigation=alpha)
+            self.assertNotEqual(0, refused.returncode)
+            self.assertIn("must map to exactly one", refused.stderr)
+            self.assertEqual("preserve alpha\n", alpha_target.read_text(encoding="utf-8"))
+            self.assertEqual("preserve beta\n", beta_target.read_text(encoding="utf-8"))
+
     def test_unchanged_store_diagnostics_do_not_block_but_introduced_diagnostics_do(self):
         with tempfile.TemporaryDirectory() as workspace, tempfile.TemporaryDirectory() as scratch:
             root, preview = Path(workspace) / "root", Path(scratch) / "preview.json"

@@ -54,20 +54,32 @@ def invoke(casefile: str, root: Path, command: list[str], payload: object | None
 
 def board_identity(root: Path, investigation: str) -> str:
     document = tomllib.loads((root / "casefile.toml").read_text(encoding="utf-8"))
-    matches: list[tuple[object, object]] = []
-    for project in document.get("projects", {}).values():
-        if not isinstance(project, dict):
-            continue
-        for activated in project.get("investigations", []):
+    projects = document.get("projects")
+    if not isinstance(projects, dict):
+        raise ValueError("activation must contain project mappings")
+    matches: list[str] = []
+    identity_counts: dict[str, int] = {}
+    for project in projects.values():
+        prefix = project.get("prefix") if isinstance(project, dict) else None
+        investigations = project.get("investigations") if isinstance(project, dict) else None
+        if not isinstance(prefix, str) or not isinstance(investigations, list):
+            raise ValueError("activation project mappings must contain a prefix and investigations")
+        for activated in investigations:
+            if not isinstance(activated, str):
+                raise ValueError("activated investigation mappings must be strings")
+            identity = identity_for_mapping(prefix, activated)
+            identity_counts[identity] = identity_counts.get(identity, 0) + 1
             if activated == investigation:
-                matches.append((project.get("prefix"), activated))
-    if (
-        len(matches) != 1
-        or not isinstance(matches[0][0], str)
-        or not isinstance(matches[0][1], str)
-    ):
+                matches.append(identity)
+    if len(matches) != 1:
         raise ValueError("investigation must have exactly one activated project-prefix mapping")
-    prefix, mapped_investigation = matches[0]
+    identity = matches[0]
+    if identity_counts[identity] != 1:
+        raise ValueError("default board identity must map to exactly one activated investigation")
+    return identity
+
+
+def identity_for_mapping(prefix: str, mapped_investigation: str) -> str:
     directory_name = mapped_investigation.rsplit("/", 1)[-1]
     if not directory_name or directory_name in {".", ".."}:
         raise ValueError("activated investigation must have a safe directory name")
