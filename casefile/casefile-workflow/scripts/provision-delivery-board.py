@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import stat
 import subprocess
 import sys
 import tempfile
@@ -83,6 +85,36 @@ def request_for(path: str, prefix: str, operation: str) -> dict:
     }
 
 
+def planning_root(path: Path) -> Path:
+    root = Path(os.path.abspath(path))
+    try:
+        metadata = root.lstat()
+    except FileNotFoundError as error:
+        raise ValueError("planning root must be an existing directory") from error
+    if stat.S_ISLNK(metadata.st_mode):
+        raise ValueError("planning root must not be a symlink")
+    if not stat.S_ISDIR(metadata.st_mode):
+        raise ValueError("planning root must be an existing directory")
+    return root
+
+
+def require_directory_ancestors(root: Path, path: str) -> None:
+    parent = Path(path).parent
+    if parent.is_absolute() or ".." in parent.parts:
+        raise ValueError("delivery board path must remain beneath the planning root")
+    current = root
+    for component in parent.parts:
+        current /= component
+        try:
+            metadata = current.lstat()
+        except FileNotFoundError:
+            break
+        if stat.S_ISLNK(metadata.st_mode):
+            raise ValueError("delivery board path ancestors must not be symlinks")
+        if not stat.S_ISDIR(metadata.st_mode):
+            raise ValueError("delivery board path ancestors must be directories")
+
+
 def target_operation(root: Path, path: str) -> str:
     target = root / path
     try:
@@ -104,7 +136,7 @@ def main() -> int:
     parser.add_argument("--investigation", required=True)
     parser.add_argument("--apply", action="store_true", help="apply the existing preview after validating it")
     args = parser.parse_args()
-    root = args.root.resolve()
+    root = planning_root(args.root)
     if args.preview_file.resolve().is_relative_to(root):
         raise ValueError("--preview-file must be outside --root so it cannot change the saved Store revision")
 
@@ -121,6 +153,7 @@ def main() -> int:
         expected = request_for(expected_path, project_prefix(root, investigation), operation)
         if request != expected or preview.get("diagnostics"):
             raise ValueError("saved preview is not the canonical delivery-board preview")
+        require_directory_ancestors(root, expected_path)
         no_op = not preview.get("diff")
         if no_op:
             current = invoke(args.casefile, root, ["preview"], request)
@@ -148,13 +181,14 @@ def main() -> int:
         return 0
 
     investigation = args.investigation.rstrip("/")
+    path = f"{investigation}/boards/delivery.toml"
+    require_directory_ancestors(root, path)
     invoke(
         args.casefile,
         root,
         ["check", "--require-activation", "--investigation", investigation],
     )
     prefix = project_prefix(root, investigation)
-    path = f"{investigation}/boards/delivery.toml"
     operation = target_operation(root, path)
     preview = invoke(args.casefile, root, ["preview"], request_for(path, prefix, operation))
     if preview.get("diagnostics"):

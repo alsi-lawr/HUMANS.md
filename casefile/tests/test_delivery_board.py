@@ -200,6 +200,74 @@ class DeliveryBoardScriptTests(unittest.TestCase):
                 else:
                     self.assertTrue(target.is_dir())
 
+    def test_symlinked_root_is_refused_before_preview_and_apply(self):
+        with tempfile.TemporaryDirectory() as workspace, tempfile.TemporaryDirectory() as scratch:
+            real_root = Path(workspace) / "root"
+            linked_root = Path(workspace) / "linked-root"
+            preview = Path(scratch) / "preview.json"
+            self.fixture(real_root)
+            linked_root.symlink_to(real_root, target_is_directory=True)
+
+            refused_preview = self.run_script(linked_root, preview)
+            self.assertNotEqual(0, refused_preview.returncode)
+            self.assertIn("planning root must not be a symlink", refused_preview.stderr)
+            self.assertFalse((real_root / f"{investigation}/boards/delivery.toml").exists())
+
+            self.assertEqual(0, self.run_script(real_root, preview).returncode)
+            refused_apply = self.run_script(linked_root, preview, apply=True)
+            self.assertNotEqual(0, refused_apply.returncode)
+            self.assertIn("planning root must not be a symlink", refused_apply.stderr)
+            self.assertFalse((real_root / f"{investigation}/boards/delivery.toml").exists())
+
+    def test_board_ancestor_collisions_cannot_redirect_preview_or_apply(self):
+        for external_target in (False, True):
+            with self.subTest(external_target=external_target), tempfile.TemporaryDirectory() as workspace, tempfile.TemporaryDirectory() as scratch:
+                root, preview = Path(workspace) / "root", Path(scratch) / "preview.json"
+                self.fixture(root)
+                boards = root / f"{investigation}/boards"
+                external = Path(scratch) / "external-boards"
+                external.mkdir()
+                outside = external / "delivery.toml"
+                if external_target:
+                    outside.write_text("preserve external board\n", encoding="utf-8")
+                shutil.rmtree(boards)
+                boards.symlink_to(external, target_is_directory=True)
+
+                refused = self.run_script(root, preview)
+                self.assertNotEqual(0, refused.returncode)
+                self.assertIn("ancestors must not be symlinks", refused.stderr)
+                if external_target:
+                    self.assertEqual("preserve external board\n", outside.read_text(encoding="utf-8"))
+                else:
+                    self.assertFalse(outside.exists())
+
+        with tempfile.TemporaryDirectory() as workspace, tempfile.TemporaryDirectory() as scratch:
+            root, preview = Path(workspace) / "root", Path(scratch) / "preview.json"
+            self.fixture(root)
+            self.assertEqual(0, self.run_script(root, preview).returncode)
+            boards = root / f"{investigation}/boards"
+            moved = root / f"{investigation}/boards-before-redirect"
+            boards.rename(moved)
+            external = Path(scratch) / "external-boards"
+            external.mkdir()
+            boards.symlink_to(external, target_is_directory=True)
+            refused = self.run_script(root, preview, apply=True)
+            self.assertNotEqual(0, refused.returncode)
+            self.assertIn("ancestors must not be symlinks", refused.stderr)
+            self.assertFalse((external / "delivery.toml").exists())
+
+    def test_non_directory_board_ancestor_is_refused(self):
+        with tempfile.TemporaryDirectory() as workspace, tempfile.TemporaryDirectory() as scratch:
+            root, preview = Path(workspace) / "root", Path(scratch) / "preview.json"
+            self.fixture(root)
+            boards = root / f"{investigation}/boards"
+            shutil.rmtree(boards)
+            boards.write_text("collision\n", encoding="utf-8")
+            refused = self.run_script(root, preview)
+            self.assertNotEqual(0, refused.returncode)
+            self.assertIn("ancestors must be directories", refused.stderr)
+            self.assertEqual("collision\n", boards.read_text(encoding="utf-8"))
+
     def test_workflow_contracts_call_the_packaged_wrapper_at_the_required_gates(self):
         startup = (ROOT / "casefile/skills/casefile/SKILL.md").read_text(encoding="utf-8")
         consolidate = (ROOT / "casefile/skills/casefile-consolidate/SKILL.md").read_text(encoding="utf-8")
