@@ -109,6 +109,46 @@ class TicketProgressScriptTests(unittest.TestCase):
             self.assertNotEqual(0, result.returncode)
             self.assertIn("active Casefile activation", result.stderr)
 
+    def test_malformed_log_requires_exact_replacement_and_retry_is_a_no_op(self):
+        with tempfile.TemporaryDirectory() as workspace, tempfile.TemporaryDirectory() as scratch:
+            root, preview = Path(workspace) / "root", Path(scratch) / "preview.json"
+            self.fixture(root)
+            investigation = "projects/demo/investigations/sample"
+            log = root / f"{investigation}/progress/log.toml"
+            log.parent.mkdir()
+            malformed = 'schema_version = "wrong"\n'
+            log.write_text(malformed, encoding="utf-8")
+
+            bootstrap = self.run_script(root, preview, "bootstrap-unknown", "--investigation", investigation)
+            self.assertNotEqual(0, bootstrap.returncode)
+            self.assertEqual(malformed, log.read_text(encoding="utf-8"))
+
+            replacement = Path(scratch) / "caller-supplied-replacement.toml"
+            replacement.write_text("schema_version = 1\n", encoding="utf-8")
+            command = (
+                "replace", "--investigation", investigation, "--recorded-by", "root",
+                "--recorded-at", "2026-07-26T10:01:00Z", "--replacement", str(replacement),
+            )
+            preview_result = self.run_script(root, preview, *command)
+            self.assertEqual(0, preview_result.returncode, preview_result.stderr)
+            self.assertIn("schema_version", json.loads(preview_result.stdout)["diff"])
+            self.assertEqual(malformed, log.read_text(encoding="utf-8"))
+
+            applied = self.run_script(root, preview, "--apply", *command)
+            self.assertEqual(0, applied.returncode, applied.stderr)
+            self.assertEqual("schema_version = 1\n", log.read_text(encoding="utf-8"))
+            retry = self.run_script(root, preview, "--apply", *command)
+            self.assertEqual(0, retry.returncode, retry.stderr)
+            self.assertTrue(json.loads(retry.stdout)["no_op"])
+
+            check = subprocess.run(
+                [str(self.binary), "--root", str(root), "check", "--require-activation", "--investigation", investigation],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(0, check.returncode, check.stdout + check.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()

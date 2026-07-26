@@ -72,6 +72,39 @@ semantics. The SQLite adapter is a disposable derived index. The loopback server
 root at launch and embeds the tracked browser build; the browser does not parse or write planning
 files directly.
 
+### Ticket progress and consolidation
+
+`progress/log.toml` is an investigation-scoped canonical record. Ticket disposition remains the
+review decision; delivery progress is derived separately. The Rust Store and
+`casefile-workflow/scripts/transition-ticket-progress.py` are the only supported progress write
+path. Do not edit a progress log, ticket frontmatter, or a second progress file to migrate, repair,
+or update ticket delivery state.
+
+For a selected active investigation, first validate only that scope, then save the script's preview
+outside the planning root. Apply only the unchanged saved preview:
+
+```sh
+casefile --root "$CASEFILE_ROOT" check --require-activation --investigation "$INVESTIGATION"
+python casefile/casefile-workflow/scripts/transition-ticket-progress.py \
+  --root "$CASEFILE_ROOT" --casefile casefile --preview-file "$TASK_SCRATCH/progress-preview.json" \
+  bootstrap-unknown --investigation "$INVESTIGATION"
+# Obtain the explicit apply decision, then rerun with --apply and the same preview file.
+```
+
+Bootstrap creates an absent empty `progress/log.toml`; accepted tickets without entries derive as
+`unknown`. It never writes invented initialization history and an existing valid log is a no-op. For
+a malformed log, require exact caller-supplied replacement content. Before its non-mutating
+`replace` preview, copy the original bytes under a SHA-256 content-hash filename in `$TASK_SCRATCH`,
+retain that backup through closeout, and report it. The canonical writer owns atomic replacement and
+post-write validation; on stale revision or failure, make no ad-hoc repair.
+
+`casefile-consolidate` is the explicit-only skill for this narrow migration/repair work. It is not a
+legacy-layout converter, historical-progress inference tool, generic validator, or lifecycle skill.
+Its packaged source is shared by the Codex and Claude Casefile packages through
+`casefile/packaging/plugin.toml`; update its validation inventory and verification suite whenever
+the skill boundary changes. User-facing migration and repair guidance is in the
+[Casefile ticket progress wiki page](https://github.com/alsi-lawr/HUMANS.md/wiki/Casefile-Ticket-Progress).
+
 ### Strategies and writer bindings
 
 Each investigation keeps the selected phase matrices in `strategy/<phase>.toml`. A complete matrix

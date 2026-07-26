@@ -5,7 +5,15 @@ import argparse
 import json
 from pathlib import Path
 
-SKILLS = {"casefile", "casefile-investigate", "casefile-review", "casefile-implement", "casefile-switch", "casefile-close"}
+SKILLS = {
+    "casefile",
+    "casefile-investigate",
+    "casefile-review",
+    "casefile-implement",
+    "casefile-switch",
+    "casefile-close",
+    "casefile-consolidate",
+}
 FORBIDDEN = {"validator", "writer", "hook", "mcp", "tui", "react", "sqlite"}
 EXCLUDED_DIRECTORIES = {".agent-workspace", "build", "node_modules", "target"}
 

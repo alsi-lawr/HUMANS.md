@@ -1,0 +1,3 @@
+An activated Casefile investigation has accepted tickets but no progress record. Migrate only that
+investigation to the current progress-log shape. Show me exactly what would change and wait for me
+before applying it.
