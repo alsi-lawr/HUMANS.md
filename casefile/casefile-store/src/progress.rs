@@ -12,7 +12,11 @@ use casefile_core::{
 use serde::{Deserialize, Serialize};
 use tempfile::NamedTempFile;
 
-use crate::{activation::activation, scanning::scan, store::StoreError};
+use crate::{
+    activation::{ActivationState, activation},
+    scanning::scan,
+    store::StoreError,
+};
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct ProgressChangeRequest {
@@ -96,10 +100,31 @@ pub(super) fn preview(
                 ),
             ));
         }
+        if let Some(existing) = existing {
+            // Bootstrap marks a previously absent scope as adopted.  It never normalises or
+            // replaces an existing log: parsing still proves that the record is valid, but the
+            // original bytes and both revisions remain the preview/apply result.
+            let _ = parse_progress_log(
+                &path,
+                std::str::from_utf8(&existing.original_bytes)
+                    .map_err(|_| StoreError::Invalid("progress log must be UTF-8".into()))?,
+            )
+            .map_err(diagnostics_error)?;
+            let diagnostics = scoped_diagnostics(&before.diagnostics, &scope_prefix);
+            return Ok(ProgressPreview {
+                request,
+                path,
+                expected_target_revision: Some(existing.content_revision.clone()),
+                expected_store_revision: before.snapshot.revision.clone(),
+                proposed_store_revision: before.snapshot.revision,
+                no_op: diagnostics.is_empty(),
+                diagnostics,
+                diff: String::new(),
+                bootstrap_ticket_ids: Vec::new(),
+            });
+        }
     }
-    let proposed_log = if request.bootstrap && existing.is_some() {
-        existing_log.clone()
-    } else if replacing {
+    let proposed_log = if replacing {
         if !request.entries.is_empty()
             || (request.replacement.is_some() && request.replacement_source.is_some())
         {
@@ -406,7 +431,12 @@ fn progress_path(root: &Path, investigation: &str) -> Result<(String, String), S
             "investigation path must be contained".into(),
         ));
     }
-    let (_, active, _) = activation(root)?;
+    let (state, active, _) = activation(root)?;
+    if state != ActivationState::Active {
+        return Err(StoreError::Invalid(
+            "progress mutations require an active Casefile activation".into(),
+        ));
+    }
     if !active.projects.values().any(|project| {
         project
             .investigations
