@@ -1,0 +1,9 @@
+schema_version = 1
+adapter = "codex"
+role = "implementation-writer"
+model = "gpt-5.6-sol"
+reasoning_effort = "high"
+
+[resolution]
+mode = "runtime_override"
+value = "casefile-implement-ticket-batch=casefile-implement-ticket-batch-implementation-writer-runtime;casefile-implement-pipeline=casefile-implement-pipeline-implementation-writer-runtime"

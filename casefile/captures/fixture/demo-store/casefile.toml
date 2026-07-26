@@ -1,0 +1,5 @@
+schema_version = 1
+
+[projects.demo]
+prefix = "HMD"
+investigations = ["projects/demo/investigations/sample"]

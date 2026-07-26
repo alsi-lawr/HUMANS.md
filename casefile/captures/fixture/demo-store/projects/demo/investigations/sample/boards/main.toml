@@ -1,0 +1,29 @@
+schema_version = 1
+id = "HMD-sample-delivery"
+title = "Delivery"
+status_source = "progress"
+filter_kinds = ["ticket"]
+
+[[columns]]
+name = "Unknown"
+statuses = ["unknown"]
+
+[[columns]]
+name = "In progress"
+statuses = ["in_progress"]
+
+[[columns]]
+name = "In review"
+statuses = ["in_review"]
+
+[[columns]]
+name = "Verifying"
+statuses = ["verifying"]
+
+[[columns]]
+name = "Blocked"
+statuses = ["blocked"]
+
+[[columns]]
+name = "Complete"
+statuses = ["complete"]
