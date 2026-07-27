@@ -39,20 +39,30 @@ enum Command {
         #[arg(long)]
         request: PathBuf,
     },
-    /// Apply an immutable governed strategy-transition preview.
-    StrategyTransitionApply {
+    /// Preview, display, explicitly confirm, and apply a governed strategy in one provider session.
+    StrategyTransitionSession {
         #[arg(long)]
-        preview: PathBuf,
+        request: PathBuf,
     },
     /// Preview a progress-gated writer-binding request.
     WriterBindingPreview {
         #[arg(long)]
         request: PathBuf,
     },
-    /// Apply an immutable writer-binding preview.
-    WriterBindingApply {
+    /// Preview, display, explicitly confirm, and apply a writer binding in one provider session.
+    WriterBindingSession {
         #[arg(long)]
-        preview: PathBuf,
+        request: PathBuf,
+    },
+    /// Preview the canonical default delivery board through the provider.
+    DefaultDeliveryBoardPreview {
+        #[arg(long)]
+        investigation: String,
+    },
+    /// Preview, display, explicitly confirm, and apply the default board in one provider session.
+    DefaultDeliveryBoardSession {
+        #[arg(long)]
+        investigation: String,
     },
     /// Require explicit canonical in_progress state immediately before writer spawn.
     RequireWriterProgress {
@@ -85,28 +95,47 @@ enum Command {
         #[arg(long)]
         required_provider_operations: String,
     },
+    /// Preview a typed record change through the canonical provider.
     Preview {
         #[arg(long)]
         request: PathBuf,
     },
-    Apply {
+    /// Preview, display, explicitly confirm, and apply a record in one provider session.
+    RecordSession {
         #[arg(long)]
-        preview: PathBuf,
+        request: PathBuf,
     },
-    /// Internal canonical progress preview; workflow callers use transition-ticket-progress.py.
+    /// Preview a canonical progress operation through the provider.
     ProgressPreview {
         #[arg(long)]
         request: PathBuf,
     },
-    /// Apply an immutable progress preview produced by progress-preview.
-    ProgressApply {
+    /// Preview, display, explicitly confirm, and apply progress in one provider session.
+    ProgressSession {
         #[arg(long)]
-        preview: PathBuf,
+        request: PathBuf,
     },
-    /// Materialize an accepted-ticket unknown bootstrap request for the workflow script.
+    /// Preview an accepted-ticket unknown bootstrap through the provider.
     ProgressBootstrap {
         #[arg(long)]
         investigation: String,
+    },
+    /// Preview an explicit malformed-progress replacement through the canonical recovery adapter.
+    ProgressRepairPreview {
+        #[arg(long)]
+        request: PathBuf,
+    },
+    /// Apply an exact canonical malformed-progress recovery preview.
+    ProgressRepairApply {
+        #[arg(long)]
+        preview: PathBuf,
+    },
+    /// Copy one canonically validated strategy matrix to an explicit local scratch target.
+    ScratchStrategy {
+        #[arg(long)]
+        matrix: PathBuf,
+        #[arg(long)]
+        target: PathBuf,
     },
     /// Serve the fixed planning root on an IPv4 loopback socket.
     Serve {

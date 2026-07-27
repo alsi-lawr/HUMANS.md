@@ -8,7 +8,6 @@ import os
 import shutil
 import subprocess
 import sys
-import tempfile
 import tomllib
 from pathlib import Path, PurePosixPath
 
@@ -230,56 +229,24 @@ def binding_source(pair: dict) -> str:
     )
 
 
-def persist_selection(
-    casefile_executable: str,
-    planning_root: Path,
+def selection_request(
     investigation: str,
     pair: dict,
 ) -> dict:
     source = binding_source(pair)
-    with tempfile.TemporaryDirectory(prefix="casefile-writer-binding-") as temporary:
-        temporary_root = Path(temporary)
-        request = temporary_root / "request.json"
-        preview = temporary_root / "preview.json"
-        request.write_text(
-            json.dumps(
-                {
-                    "investigation": investigation,
-                    "binding_source": source,
-                }
-            ),
-            encoding="ascii",
-        )
-        preview.write_text(
-            checked(
-                [
-                    casefile_executable,
-                    "--root",
-                    str(planning_root),
-                    "writer-binding-preview",
-                    "--request",
-                    str(request),
-                ]
-            ),
-            encoding="utf-8",
-        )
-        result = json.loads(checked(
-            [
-                casefile_executable,
-                "--root",
-                str(planning_root),
-                "writer-binding-apply",
-                "--preview",
-                str(preview),
-            ]
-        ))
     return {
         "path": f"{investigation}/strategy/bindings.toml",
         "model": pair["model"],
         "reasoning_effort": pair["reasoning_effort"],
         "resolution": pair["resolution"],
-        "persisted": True,
-        "store_result": result,
+        "request": {
+            "investigation": investigation,
+            "binding_source": source,
+        },
+        "persisted": False,
+        "provider_preview_tool": "casefile_preview_writer_binding",
+        "provider_apply_tool": "casefile_apply_writer_binding",
+        "approval_required": True,
     }
 
 
@@ -451,17 +418,13 @@ def main() -> int:
         if arguments.operation == "offer":
             result = offer(arguments.codex_executable, home, profiles)
         elif arguments.operation == "select":
-            if not arguments.casefile_executable:
-                raise BindingError("Casefile executable was not found")
             investigation = safe_investigation(arguments.investigation)
             pair = selected_pair(
                 offer(arguments.codex_executable, home, profiles),
                 arguments.model,
                 arguments.reasoning_effort,
             )
-            result = persist_selection(
-                arguments.casefile_executable,
-                arguments.planning_root.expanduser().resolve(strict=True),
+            result = selection_request(
                 investigation,
                 pair,
             )

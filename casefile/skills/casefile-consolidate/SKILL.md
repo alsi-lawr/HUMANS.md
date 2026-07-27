@@ -13,18 +13,21 @@ Resolve and show the planning root and the exact investigation before doing anyt
 selected target with the canonical CLI and report root-wide diagnostics outside that scope as
 inherited context; they neither authorize a bypass nor block a valid target.
 
-Use only `casefile-workflow/scripts/transition-ticket-progress.py` for a progress mutation. Put its
-immutable preview file in the current task's `.agent-workspace/<session-id>/` directory, outside the
-planning root. Do not parse or write `progress/log.toml`, ticket Markdown, or another progress file.
+Use the fixed-root provider for progress bootstrap and append operations. Put the complete immutable
+preview in the current task's `.agent-workspace/<session-id>/` directory, outside the planning root.
+Display it, obtain explicit human approval, and apply that exact preview unchanged in the same MCP
+session. Do not parse or write `progress/log.toml`, ticket Markdown, or another progress file.
 
 ## Migrate an absent progress log
 
-First run `bootstrap-unknown` without `--apply`. Present its exact target, eligible accepted ticket
-IDs that will derive as `unknown`, proposed empty log, diff, and scoped diagnostics. It creates only
+First call `casefile_preview_progress` with the typed `bootstrap` operation. Present its exact
+target, eligible accepted ticket IDs that will derive as `unknown`, proposed empty log, diff, and
+scoped diagnostics. It creates only
 an absent `progress/log.toml` containing `schema_version = 1`; it records no invented ticket
 history.
 
-Ask for an explicit apply decision after the preview. On approval, apply the saved preview unchanged
+Ask for an explicit apply decision after the preview. On approval, call `casefile_apply_progress`
+with the saved preview unchanged
 and report the resulting path and revision. An existing valid log is a no-op. A malformed or
 noncanonical log, legacy layout, unactivated target, rejected/provisional ticket, ambiguous scope,
 or divergent preview is refused or reported without repair-by-migration.
@@ -34,11 +37,13 @@ or divergent preview is refused or reported without repair-by-migration.
 Require caller-supplied exact replacement content in a file outside the planning root. Do not infer
 state, reconstruct history, or convert legacy layouts. Before previewing, copy the malformed
 target's exact bytes to task scratch under a SHA-256 content-hash filename and report that backup
-path and retention through closeout. Then invoke the same script's `replace` action without
-`--apply` and show its complete diff, target, scoped diagnostics, and backup plan.
+path and retention through closeout. Then invoke the CLI human/recovery adapter's
+`progress-repair-preview` command and show its complete diff, target, scoped diagnostics, and backup
+plan. Whole-log replacement remains outside provider capability discovery.
 
-Wait for an explicit apply decision. Apply only the saved preview. The canonical writer performs the
-one-file atomic replacement and post-write validation; report failure without editing the original
+Wait for an explicit apply decision. Apply only the saved preview with `progress-repair-apply`. The
+canonical writer performs the one-file atomic replacement and post-write validation; report failure
+without editing the original
 yourself. A matching retry is a no-op. If the target or planning-root revision changed, stop and
 make a fresh preview; do not reuse, merge, or alter the caller's replacement.
 
@@ -47,11 +52,12 @@ migration and repair reference lives in the project wiki.
 
 ## Provision the delivery board
 
-After the progress-log outcome is successfully applied or confirmed as an existing valid no-op, use
-`casefile-workflow/scripts/provision-delivery-board.py` for the same selected investigation. Save
-its fresh immutable preview in the current task's `.agent-workspace/<session-id>/` directory,
+After the progress-log outcome is successfully applied or confirmed as an existing valid no-op,
+call `casefile_preview_default_delivery_board` for the same selected investigation. Save its fresh
+immutable preview in the current task's `.agent-workspace/<session-id>/` directory,
 outside the planning root. Show the exact target, diff, and diagnostics, then wait for an explicit
-apply decision. Apply only that saved preview. An exact existing `boards/delivery.toml` is a content
+apply decision. Apply only that saved preview unchanged with
+`casefile_apply_default_delivery_board`. An exact existing `boards/delivery.toml` is a content
 no-op; a differing file, symlink, non-file collision, stale revision, invalid activation, missing
 mapping, or ambiguous mapping is preserved and visibly refused.
 

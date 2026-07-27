@@ -71,9 +71,9 @@ export const useChangeReview = (): ChangeReview => {
         return;
       }
       const message =
-        result.value.index_error === null
+        result.value.cache.state !== "degraded"
           ? "Applied. The work queue will refresh."
-          : `Applied, but index refresh reported: ${result.value.index_error}`;
+          : `Applied, but provider cache refresh reported: ${result.value.cache.message ?? "unknown error"}`;
       setMutation({ tag: "applied", message });
       refresh();
     });

@@ -67,36 +67,42 @@ act pull_request -j validate --pull=false \
 
 ## Casefile development
 
-The Casefile Rust workspace owns canonical parsing, validation, querying, preview, and apply
-semantics. The SQLite adapter is a disposable derived index. The loopback server fixes one planning
-root at launch and embeds the tracked browser build; the browser does not parse or write planning
-files directly.
+The Casefile Rust provider owns canonical capability, snapshot, typed query, preview, and apply
+semantics over one Store baseline. The SQLite adapter is a disposable derived index retained by the
+loopback host only for all-record and relationship projections not covered by provider operations.
+The host fixes one planning root at launch and embeds the tracked browser build; it transports
+provider previews and results, and the browser never parses or writes planning files directly.
 
 ### Ticket progress and consolidation
 
 `progress/log.toml` is an investigation-scoped canonical record. Ticket disposition remains the
-review decision; delivery progress is derived separately. The Rust Store and
-`casefile-workflow/scripts/transition-ticket-progress.py` are the only supported progress write
-path. Do not edit a progress log, ticket frontmatter, or a second progress file to migrate, repair,
-or update ticket delivery state.
+review decision; delivery progress is derived separately. Provider progress preview/apply is the
+governed progress path. Do not edit a progress log, ticket frontmatter, or a second progress file to
+migrate, repair, or update ticket delivery state.
 
-For a selected active investigation, first validate only that scope, then save the script's preview
-outside the planning root. Apply only the unchanged saved preview:
+For a selected active investigation, first validate only that scope. Call the fixed-root MCP
+provider's `casefile_preview_progress`, save and display the complete preview outside the planning
+root, obtain explicit human approval, then pass that exact preview unchanged to
+`casefile_apply_progress` in the same provider session:
 
 ```sh
 casefile --root "$CASEFILE_ROOT" check --require-activation --investigation "$INVESTIGATION"
-python casefile/casefile-workflow/scripts/transition-ticket-progress.py \
-  --root "$CASEFILE_ROOT" --casefile casefile --preview-file "$TASK_SCRATCH/progress-preview.json" \
-  bootstrap-unknown --investigation "$INVESTIGATION"
-# Obtain the explicit apply decision, then rerun with --apply and the same preview file.
+# MCP: casefile_preview_progress {"operation":{"operation":"bootstrap","investigation":"..."}}
+# Show/save the complete result; after explicit approval, MCP: casefile_apply_progress {"preview":...}
 ```
 
-The same script owns ordinary transitions and typed notes. Supply the ticket's currently derived
+For local recovery when MCP is unavailable, `progress-session --request <operation.json>` keeps the
+provider alive, prints the complete preview, and applies only after the operator types its exact
+preview ID. The analogous `default-delivery-board-session`, `strategy-transition-session`, and
+`writer-binding-session` commands preserve the same one-session opaque-preview gate. Their prompt,
+not provider write capability, is the approval boundary.
+
+The same provider operation owns ordinary transitions and typed notes. Supply the ticket's currently derived
 state in `--from`, use a stable operation ID, and preserve the generated preview for the apply or
 exact retry. Notes use category `deviation` or `quirk` and never change state. Do not backfill
-stages that were not captured when they occurred; record a note instead. The `replace` action
-accepts an exact caller-supplied complete log only for malformed-log repair. No action may use a
-preview inside the planning root.
+stages that were not captured when they occurred; record a note instead. The CLI recovery-only
+`progress-repair-preview` and `progress-repair-apply` commands accept an exact caller-supplied
+complete log only for malformed-log repair. No preview may live inside the planning root.
 
 Bootstrap creates an absent empty `progress/log.toml`; accepted tickets without entries derive as
 `unknown`. It never writes invented initialization history and an existing valid log is a no-op. For
@@ -113,31 +119,25 @@ the skill boundary changes. User-facing migration and repair guidance is in the
 [Casefile ticket progress wiki page](https://github.com/alsi-lawr/HUMANS.md/wiki/Casefile-Ticket-Progress).
 
 After a Casefile is newly activated, or after an explicit consolidation reaches a successful
-progress-log outcome, provision its canonical delivery board through the separate wrapper:
+progress-log outcome, provision its canonical delivery board through the separate provider
+operation:
 
 ```sh
-python casefile/casefile-workflow/scripts/provision-delivery-board.py \
-  --root "$CASEFILE_ROOT" --casefile casefile \
-  --preview-file "$TASK_SCRATCH/delivery-board-preview.json" \
-  --investigation "$INVESTIGATION"
-# At a consolidation gate, obtain the explicit apply decision first. New-Casefile setup already
-# authorizes this exact record. Apply only the saved preview:
-python casefile/casefile-workflow/scripts/provision-delivery-board.py \
-  --root "$CASEFILE_ROOT" --casefile casefile \
-  --preview-file "$TASK_SCRATCH/delivery-board-preview.json" \
-  --investigation "$INVESTIGATION" --apply
+# MCP: casefile_preview_default_delivery_board {"investigation":"..."}
+# Display/save the complete preview. After explicit approval:
+# MCP: casefile_apply_default_delivery_board {"preview":...}
 ```
 
-The wrapper selects the exact activated project's prefix and mapped investigation directory name
+The provider selects the exact activated project's prefix and mapped investigation directory name
 only to construct `<PREFIX>-<INVESTIGATION-DIRECTORY>-delivery`. This keeps board identities unique
 when one project has multiple investigations with distinct final directory names. Before preview and
-apply, the wrapper preflights every activated mapping and refuses if the derived identity maps to
+apply, the provider preflights every activated mapping and refuses if the derived identity maps to
 anything other than exactly one investigation. The Rust `preview` and `apply` operations remain
 authoritative for board rendering, path checks, validation, Store revisions, and the one-file atomic
-write. Generic preview compares the proposed diagnostics with its exact pre-write baseline:
+write. Provider preview compares the proposed diagnostics with its exact pre-write baseline:
 unchanged baseline diagnostics remain visible to scan, check, and query but do not block the write;
 an introduced or changed diagnostic does. The whole-Store revision still pins that baseline through
-apply. The wrapper creates an absent `boards/delivery.toml`, reports exact canonical content as a
+apply. The operation creates an absent `boards/delivery.toml`, reports exact canonical content as a
 no-op, and refuses a different target without replacement. It never reads or mutates progress or
 tickets, and consolidation keeps the progress and board writes sequential rather than transactional.
 

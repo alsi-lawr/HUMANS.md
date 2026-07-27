@@ -11,9 +11,9 @@ public Store. They contain no user configuration, centralized planning data, or 
 | Browser capture  | [Viset](https://github.com/getviset/Viset) `370ef7b656378487486a498589cac6419cfcd861`                                                |
 | Terminal capture | [VHS fork](https://github.com/alsi-lawr/vhs) `bb4e27a982f4f126b3c71bbab8cbb08bad02002a`                                              |
 
-`fixture/demo-store/` is a template without a progress log. `prepare-demo-store.sh` copies it into
-task scratch, bootstraps progress, and records the visible states only through
-`transition-ticket-progress.py`. The scripts intentionally reject a release or tool revision
+`fixture/demo-store/` is a reviewed static documentation fixture, including the progress states
+shown in the captures. `prepare-demo-store.sh` copies it into task scratch and the canonical CLI
+validates it before capture. The capture tooling intentionally rejects a release or tool revision
 mismatch.
 
 ## Regenerate

@@ -1,5 +1,5 @@
-use casefile_core::{BoardStatusSource, ChangeRequest, Kind, Preview, RecordDraft};
-use casefile_store::{DerivedBoard, DerivedRecord, Indexed, Store};
+use casefile_core::{BoardStatusSource, ChangeRequest, Kind, RecordDraft};
+use casefile_store::{DerivedBoard, DerivedRecord, Indexed, ProviderPreview, Store};
 use serde_json::{Value, json};
 use std::{
     fs,
@@ -298,6 +298,11 @@ fn serve_exposes_only_the_fixed_read_contract() {
     assert!(project_decision["scope"].get("investigation").is_none());
 
     for query in [
+        json!({"query":"snapshot"}),
+        json!({"query":"tickets", "scope":{"project":"demo", "investigation":"sample"}}),
+        json!({"query":"epics", "scope":{"project":"demo", "investigation":"sample"}}),
+        json!({"query":"progress", "scope":{"project":"demo", "investigation":"sample"}}),
+        json!({"query":"strategy_transitions", "scope":{"project":"demo", "investigation":"sample"}}),
         json!({"query":"relationships", "identity":{"scope":{"project":"demo", "investigation":"sample"}, "identity":"HMD-011"}}),
         json!({"query":"boards", "scope":{"project":"demo", "investigation":"sample"}}),
         json!({"query":"diagnostics"}),
@@ -306,6 +311,9 @@ fn serve_exposes_only_the_fixed_read_contract() {
         assert_eq!(response.status, 200, "{}", response.body);
         assert!(serde_json::from_str::<Value>(&response.body).is_ok());
     }
+    let snapshot = json_request(&server, "/api/query", &json!({"query":"snapshot"}));
+    let snapshot: Value = serde_json::from_str(&snapshot.body).expect("provider snapshot");
+    assert_eq!(snapshot["capabilities"]["writes_require_external_approval"], true);
     assert!(server.index.is_file());
     assert_eq!(
         json_request(
@@ -411,8 +419,10 @@ fn serve_preserves_preview_and_gates_apply_with_capability() {
         &serde_json::to_string(&change).expect("change JSON"),
     );
     assert_eq!(preview_response.status, 200, "{}", preview_response.body);
-    let preview: Preview = serde_json::from_str(&preview_response.body).expect("preview JSON");
-    assert_eq!(preview, expected);
+    let preview: ProviderPreview =
+        serde_json::from_str(&preview_response.body).expect("preview JSON");
+    assert_eq!(preview.canonical, expected);
+    assert!(!preview.preview_id.is_empty());
 
     let preview_json = serde_json::to_string(&preview).expect("preview JSON");
     assert_eq!(
@@ -433,6 +443,22 @@ fn serve_preserves_preview_and_gates_apply_with_capability() {
             .contains("Updated through loopback")
     );
 
+    let mut altered = preview.clone();
+    altered.canonical.diff.push_str("altered");
+    let refused = request(
+        &server,
+        "POST",
+        "/api/apply",
+        &server.authority("127.0.0.1"),
+        &[
+            ("Content-Type", "application/json"),
+            ("X-Casefile-Write-Capability", &server.capability),
+        ],
+        &serde_json::to_string(&altered).expect("altered preview JSON"),
+    );
+    assert_eq!(refused.status, 400);
+    assert!(refused.body.contains("preview_integrity"));
+
     let applied = request(
         &server,
         "POST",
@@ -447,7 +473,7 @@ fn serve_preserves_preview_and_gates_apply_with_capability() {
     assert_eq!(applied.status, 200, "{}", applied.body);
     let value: Value = serde_json::from_str(&applied.body).expect("apply JSON");
     assert_eq!(value["result"]["path"], path);
-    assert!(value["index_error"].is_null());
+    assert_eq!(value["cache"]["state"], "current");
     assert!(
         fs::read_to_string(root.path().join(path))
             .expect("applied")

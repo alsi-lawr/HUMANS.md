@@ -1,10 +1,73 @@
 use serde_json::{Value, json};
 use std::{
     fs,
+    io::Write,
     path::{Path, PathBuf},
-    process::Command,
+    process::{Command, Stdio},
     sync::atomic::{AtomicUsize, Ordering},
 };
+
+#[test]
+fn progress_session_requires_post_preview_exact_id_approval() {
+    let request = json!({
+        "operation": "bootstrap",
+        "investigation": "projects/demo/investigations/sample"
+    });
+    for (approval, expected_success) in [("wrong\n", false), ("provider-preview-1\n", true)] {
+        let root = fixture();
+        for arguments in [
+            &["init", "-q"][..],
+            &["config", "user.email", "casefile@example.test"],
+            &["config", "user.name", "Casefile Test"],
+            &["add", "."],
+            &["commit", "-qm", "fixture"],
+        ] {
+            assert!(
+                Command::new("git")
+                    .current_dir(root.path())
+                    .args(arguments)
+                    .status()
+                    .expect("git")
+                    .success()
+            );
+        }
+        let request_path = root.0.with_extension("progress-operation.json");
+        fs::write(&request_path, serde_json::to_vec(&request).expect("request JSON"))
+            .expect("request");
+        let mut child = Command::new(env!("CARGO_BIN_EXE_casefile"))
+            .args(["--root"])
+            .arg(root.path())
+            .args(["progress-session", "--request"])
+            .arg(&request_path)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("progress session");
+        child
+            .stdin
+            .take()
+            .expect("session stdin")
+            .write_all(approval.as_bytes())
+            .expect("approval");
+        let output = child.wait_with_output().expect("session result");
+        fs::remove_file(&request_path).expect("remove request");
+        assert_eq!(output.status.success(), expected_success);
+        assert!(
+            String::from_utf8_lossy(&output.stdout).contains("provider-preview-1"),
+            "stdout={} stderr={}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(String::from_utf8_lossy(&output.stderr).contains("exact provider preview ID"));
+        assert_eq!(
+            root.path()
+                .join("projects/demo/investigations/sample/progress/log.toml")
+                .exists(),
+            expected_success
+        );
+    }
+}
 
 struct TemporaryRoot(PathBuf);
 
@@ -194,6 +257,26 @@ fn binding_command(root: &Path, operation: &str, document: &Path) -> std::proces
         .expect("binding command")
 }
 
+fn binding_session(root: &Path, request: &Path) -> std::process::Output {
+    let mut child = Command::new(env!("CARGO_BIN_EXE_casefile"))
+        .args(["--root"])
+        .arg(root)
+        .args(["writer-binding-session", "--request"])
+        .arg(request)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("binding session");
+    child
+        .stdin
+        .take()
+        .expect("binding stdin")
+        .write_all(b"provider-preview-1\n")
+        .expect("binding approval");
+    child.wait_with_output().expect("binding session result")
+}
+
 fn project_binding(root: &Path, strategy_id: &str) -> std::process::Output {
     Command::new(env!("CARGO_BIN_EXE_casefile"))
         .args(["--root"])
@@ -210,7 +293,7 @@ fn project_binding(root: &Path, strategy_id: &str) -> std::process::Output {
 }
 
 #[test]
-fn binding_cli_delegates_validation_activity_gate_and_single_file_replacement_to_store() {
+fn binding_cli_uses_one_provider_session_and_retains_store_governance() {
     let root = fixture();
     assert!(
         Command::new("git")
@@ -223,7 +306,6 @@ fn binding_cli_delegates_validation_activity_gate_and_single_file_replacement_to
     let io = TemporaryRoot(root.path().with_extension("io"));
     fs::create_dir(&io.0).expect("command input directory");
     let request = io.path().join("binding-request.json");
-    let preview = io.path().join("binding-preview.json");
     let target = root
         .path()
         .join("projects/demo/investigations/sample/strategy/bindings.toml");
@@ -265,14 +347,7 @@ fn binding_cli_delegates_validation_activity_gate_and_single_file_replacement_to
         .expect("request JSON"),
     )
     .expect("request");
-    let created = binding_command(root.path(), "writer-binding-preview", &request);
-    assert!(
-        created.status.success(),
-        "{}",
-        String::from_utf8_lossy(&created.stderr)
-    );
-    fs::write(&preview, created.stdout).expect("preview");
-    let applied = binding_command(root.path(), "writer-binding-apply", &preview);
+    let applied = binding_session(root.path(), &request);
     assert!(
         applied.status.success(),
         "{}",
@@ -293,14 +368,7 @@ fn binding_cli_delegates_validation_activity_gate_and_single_file_replacement_to
         .expect("request JSON"),
     )
     .expect("replacement request");
-    let replaced = binding_command(root.path(), "writer-binding-preview", &request);
-    assert!(
-        replaced.status.success(),
-        "{}",
-        String::from_utf8_lossy(&replaced.stderr)
-    );
-    fs::write(&preview, replaced.stdout).expect("preview");
-    let applied = binding_command(root.path(), "writer-binding-apply", &preview);
+    let applied = binding_session(root.path(), &request);
     assert!(
         applied.status.success(),
         "{}",

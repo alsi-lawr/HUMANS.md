@@ -1,24 +1,20 @@
 use anyhow::{Result, bail};
-use casefile_core::{ApplyResult, ChangeRequest, Diagnostic, Preview, Revision};
+use casefile_core::{ChangeRequest, Diagnostic, Revision};
 use casefile_store::{
-    DerivedBoard, DerivedIndex, DerivedRecord, DerivedRelationship, Indexed, RecordScope,
-    ScopedIdentity, Store, StoreError,
+    DerivedBoard, DerivedIndex, DerivedRecord, DerivedRelationship, Indexed, Provider,
+    ProviderApplyOutcome, ProviderPreview, ProviderQuery, ProviderQueryResult,
+    ProviderRecordApplyResult, ProviderSnapshot, RecordScope, ScopedIdentity,
 };
 use casefile_store_sqlite::SqliteIndex;
 
 pub(crate) struct Workbench {
-    store: Store,
+    provider: Provider<SqliteIndex>,
     index: SqliteIndex,
 }
 
-pub(crate) struct ApplyOutcome {
-    pub(crate) result: ApplyResult,
-    pub(crate) index_error: Option<anyhow::Error>,
-}
-
 impl Workbench {
-    pub(crate) fn new(store: Store, index: SqliteIndex) -> Self {
-        Self { store, index }
+    pub(crate) fn new(provider: Provider<SqliteIndex>, index: SqliteIndex) -> Self {
+        Self { provider, index }
     }
 
     pub(crate) fn records(
@@ -30,6 +26,14 @@ impl Workbench {
         Ok(self.index.records(&revision, scope, search)?)
     }
 
+    pub(crate) fn snapshot(&self) -> Result<ProviderSnapshot> {
+        Ok(self.provider.snapshot()?)
+    }
+
+    pub(crate) fn provider_query(&self, query: ProviderQuery) -> Result<ProviderQueryResult> {
+        Ok(self.provider.query(query)?)
+    }
+
     pub(crate) fn relationships(
         &self,
         identity: &ScopedIdentity,
@@ -39,42 +43,48 @@ impl Workbench {
     }
 
     pub(crate) fn boards(&self, scope: &RecordScope) -> Result<Indexed<Vec<DerivedBoard>>> {
-        let revision = self.refresh()?;
-        Ok(self.index.boards(&revision, scope)?)
-    }
-
-    pub(crate) fn diagnostics(&self) -> Result<Indexed<Vec<Diagnostic>>> {
-        let revision = self.refresh()?;
-        Ok(self.index.diagnostics(&revision)?)
-    }
-
-    pub(crate) fn preview(&self, request: ChangeRequest) -> Result<Preview, StoreError> {
-        self.store.preview(request)
-    }
-
-    pub(crate) fn apply(&self, preview: Preview) -> Result<ApplyOutcome, StoreError> {
-        let result = self.store.apply(preview)?;
-        let index_error = self.refresh().err();
-        Ok(ApplyOutcome {
-            result,
-            index_error,
+        let ProviderQueryResult::Boards { revision, boards } = self
+            .provider
+            .query(ProviderQuery::Boards { scope: Some(scope.clone()) })?
+        else {
+            unreachable!("board query returns boards")
+        };
+        Ok(Indexed::Current {
+            source_revision: revision,
+            value: boards,
         })
     }
 
+    pub(crate) fn diagnostics(&self) -> Result<Indexed<Vec<Diagnostic>>> {
+        let snapshot = self.provider.snapshot()?;
+        Ok(Indexed::Current {
+            source_revision: snapshot.revision,
+            value: snapshot.diagnostics,
+        })
+    }
+
+    pub(crate) fn preview(
+        &self,
+        request: ChangeRequest,
+    ) -> Result<ProviderPreview, casefile_store::ProviderError> {
+        self.provider.preview_record(request)
+    }
+
+    pub(crate) fn apply(
+        &self,
+        preview: ProviderPreview,
+    ) -> Result<ProviderApplyOutcome<ProviderRecordApplyResult>, casefile_store::ProviderError> {
+        self.provider.apply_record(preview)
+    }
+
     fn refresh(&self) -> Result<Revision> {
-        let snapshot = self.store.derived_snapshot()?;
-        match self.index.state(&snapshot.source_revision)? {
-            Indexed::Current { .. } => {}
-            Indexed::Missing | Indexed::Stale { .. } => {
-                let prepared = self.index.prepare(&snapshot)?;
-                if !matches!(
-                    self.index.publish(prepared, &self.store)?,
-                    Indexed::Current { .. }
-                ) {
-                    bail!("canonical content changed during index refresh");
-                }
-            }
+        let snapshot = self.provider.snapshot()?;
+        if !matches!(
+            self.index.state(&snapshot.revision)?,
+            Indexed::Current { .. }
+        ) {
+            bail!("provider cache did not publish the canonical revision");
         }
-        Ok(snapshot.source_revision)
+        Ok(snapshot.revision)
     }
 }

@@ -3,7 +3,7 @@ mod assets;
 mod workbench;
 
 use anyhow::{Context, Result};
-use casefile_store::Store;
+use casefile_store::{Provider, Store};
 use casefile_store_sqlite::SqliteIndex;
 use sha2::{Digest, Sha256};
 use std::{
@@ -37,7 +37,8 @@ pub fn serve(root: &Path, port: u16, index: Option<&Path>, write: bool) -> Resul
         Some(path) => std::env::current_dir()?.join(path),
         None => default_index_path(&root)?,
     };
-    let index = SqliteIndex::open(&index_path, &root)?;
+    let provider_index = SqliteIndex::open(&index_path, &root)?;
+    let compatibility_index = SqliteIndex::open(&index_path, &root)?;
     let server = Server::http(("127.0.0.1", port)).map_err(|error| anyhow::anyhow!(error))?;
     let port = server
         .server_addr()
@@ -50,7 +51,8 @@ pub fn serve(root: &Path, port: u16, index: Option<&Path>, write: bool) -> Resul
     println!("Casefile index: {}", index_path.display());
     println!("Casefile write capability: {capability}");
     std::io::stdout().flush()?;
-    let workbench = workbench::Workbench::new(Store::open(root)?, index);
+    let provider = Provider::new(Store::open(root)?, provider_index);
+    let workbench = workbench::Workbench::new(provider, compatibility_index);
     let host = api::Host::new(workbench, port, write, capability);
     for request in server.incoming_requests() {
         if let Err(error) = host.handle(request) {

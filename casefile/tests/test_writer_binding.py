@@ -177,28 +177,22 @@ class WriterBindingTests(unittest.TestCase):
         self.assertEqual("low", document["reasoning_effort"])
         self.assertEqual("runtime_override", document["resolution"]["mode"])
 
-    def test_persistence_uses_typed_preview_apply_and_has_no_activity_attestation(self):
+    def test_selection_returns_typed_provider_request_and_requires_separate_approval(self):
         pair = {
             "model": "gpt-5.6-sol",
             "reasoning_effort": "high",
             "resolution": {"mode": "runtime_override", "value": "route"},
         }
-        with mock.patch.object(
-            binding,
-            "checked",
-            side_effect=[json.dumps({"operation": "writer_binding"}), json.dumps({"no_op": False})],
-        ) as checked:
-            result = binding.persist_selection(
-                "casefile",
-                Path("/planning"),
-                "projects/demo/investigations/sample",
-                pair,
-            )
-        self.assertTrue(result["persisted"])
-        commands = [call.args[0] for call in checked.call_args_list]
-        self.assertIn("writer-binding-preview", commands[0])
-        self.assertIn("writer-binding-apply", commands[1])
-        self.assertNotIn("implementation-active", " ".join(sum(commands, [])))
+        result = binding.selection_request("projects/demo/investigations/sample", pair)
+        self.assertFalse(result["persisted"])
+        self.assertTrue(result["approval_required"])
+        self.assertEqual("casefile_preview_writer_binding", result["provider_preview_tool"])
+        self.assertEqual("casefile_apply_writer_binding", result["provider_apply_tool"])
+        self.assertEqual(
+            "projects/demo/investigations/sample",
+            result["request"]["investigation"],
+        )
+        self.assertNotIn("implementation_active", result["request"])
 
     def test_resolve_requires_canonical_ticket_progress_before_projection(self):
         with mock.patch.object(
@@ -417,7 +411,7 @@ class WriterBindingTests(unittest.TestCase):
                         }
                     ],
                 },
-            ), mock.patch.object(binding, "persist_selection") as persist, mock.patch(
+            ), mock.patch.object(binding, "selection_request") as persist, mock.patch(
                 "sys.argv",
                 [
                     "resolve-writer-binding.py",
@@ -459,7 +453,7 @@ class WriterBindingTests(unittest.TestCase):
                 ),
             ), mock.patch.object(
                 binding,
-                "persist_selection",
+                "selection_request",
                 return_value={"persisted": True},
             ) as persist:
                 with self.assertRaisesRegex(binding.BindingError, "stop before delegation"):

@@ -1,7 +1,7 @@
 use crate::{assets, workbench::Workbench};
 use anyhow::Result;
-use casefile_core::{ApplyResult, ChangeRequest, Preview};
-use casefile_store::{RecordScope, ScopedIdentity};
+use casefile_core::ChangeRequest;
+use casefile_store::{ProviderError, ProviderPreview, ProviderQuery, RecordScope, ScopedIdentity};
 use serde::{Deserialize, Serialize};
 use tiny_http::{Header, Method, Request, Response, StatusCode};
 
@@ -10,6 +10,21 @@ const CAPABILITY_HEADER: &str = "X-Casefile-Write-Capability";
 #[derive(Deserialize)]
 #[serde(tag = "query", rename_all = "snake_case", deny_unknown_fields)]
 enum Query {
+    Snapshot,
+    Tickets {
+        scope: Option<RecordScope>,
+        search: Option<String>,
+    },
+    Epics {
+        scope: Option<RecordScope>,
+        search: Option<String>,
+    },
+    Progress {
+        scope: Option<RecordScope>,
+    },
+    StrategyTransitions {
+        scope: Option<RecordScope>,
+    },
     Records {
         scope: Option<RecordScope>,
         search: Option<String>,
@@ -21,12 +36,6 @@ enum Query {
         scope: RecordScope,
     },
     Diagnostics,
-}
-
-#[derive(Serialize)]
-struct ApplyResponse {
-    result: ApplyResult,
-    index_error: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -97,6 +106,21 @@ impl ApiError {
             status: if stale { 409 } else { 400 },
             message: error.to_string(),
             code: stale.then_some("stale_revision"),
+        }
+    }
+    fn provider(error: ProviderError) -> Self {
+        match error {
+            ProviderError::Store(error) => Self::store(error),
+            ProviderError::PreviewIntegrity => Self {
+                status: 400,
+                message: ProviderError::PreviewIntegrity.to_string(),
+                code: Some("preview_integrity"),
+            },
+            other => Self {
+                status: 400,
+                message: other.to_string(),
+                code: None,
+            },
         }
     }
     fn forbidden(message: &str) -> Self {
@@ -210,6 +234,33 @@ impl Host {
     fn query(&self, body: &str) -> Result<Reply, ApiError> {
         let query: Query = serde_json::from_str(body).map_err(ApiError::request)?;
         let body = match query {
+            Query::Snapshot => serde_json::to_vec(
+                &self.workbench.snapshot().map_err(ApiError::internal)?,
+            ),
+            Query::Tickets { scope, search } => serde_json::to_vec(
+                &self
+                    .workbench
+                    .provider_query(ProviderQuery::Tickets { scope, search })
+                    .map_err(ApiError::internal)?,
+            ),
+            Query::Epics { scope, search } => serde_json::to_vec(
+                &self
+                    .workbench
+                    .provider_query(ProviderQuery::Epics { scope, search })
+                    .map_err(ApiError::internal)?,
+            ),
+            Query::Progress { scope } => serde_json::to_vec(
+                &self
+                    .workbench
+                    .provider_query(ProviderQuery::Progress { scope })
+                    .map_err(ApiError::internal)?,
+            ),
+            Query::StrategyTransitions { scope } => serde_json::to_vec(
+                &self
+                    .workbench
+                    .provider_query(ProviderQuery::StrategyTransitions { scope })
+                    .map_err(ApiError::internal)?,
+            ),
             Query::Records { scope, search } => serde_json::to_vec(
                 &self
                     .workbench
@@ -239,7 +290,7 @@ impl Host {
 
     fn preview(&self, body: &str) -> Result<Reply, ApiError> {
         let request: ChangeRequest = serde_json::from_str(body).map_err(ApiError::request)?;
-        Reply::json(&self.workbench.preview(request).map_err(ApiError::request)?)
+        Reply::json(&self.workbench.preview(request).map_err(ApiError::provider)?)
     }
 
     fn apply(&self, request: &Request, body: &str) -> Result<Reply, ApiError> {
@@ -251,12 +302,9 @@ impl Host {
                 "write capability is missing or invalid",
             ));
         }
-        let preview: Preview = serde_json::from_str(body).map_err(ApiError::request)?;
-        let outcome = self.workbench.apply(preview).map_err(ApiError::store)?;
-        Reply::json(&ApplyResponse {
-            result: outcome.result,
-            index_error: outcome.index_error.map(|error| error.to_string()),
-        })
+        let preview: ProviderPreview = serde_json::from_str(body).map_err(ApiError::request)?;
+        let outcome = self.workbench.apply(preview).map_err(ApiError::provider)?;
+        Reply::json(&outcome)
     }
 }
 

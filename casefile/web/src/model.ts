@@ -165,6 +165,9 @@ export type Relationship = Readonly<{
 }>;
 export type ChangeRequest = Readonly<{ operation: "replace"; path: string; draft: RecordDraft }>;
 export type Preview = Readonly<{
+  preview_id: string;
+  rendered_bytes: ReadonlyArray<number> | null;
+  no_op: boolean;
   request: ChangeRequest;
   expected_target_revision: string | null;
   expected_store_revision: string;
@@ -178,8 +181,13 @@ export type ApplyResponse = Readonly<{
     resulting_target_revision: string | null;
     resulting_store_revision: string;
     diff: string;
+    no_op: boolean;
   }>;
-  index_error: string | null;
+  cache: Readonly<{
+    state: "not_configured" | "current" | "degraded";
+    source_revision?: string;
+    message?: string;
+  }>;
 }>;
 
 export const toChangeRequest = (path: string, draft: Draft): ChangeRequest =>
