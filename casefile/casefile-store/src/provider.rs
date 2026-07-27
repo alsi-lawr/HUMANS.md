@@ -5,7 +5,7 @@ use crate::{
 };
 use casefile_core::{
     ApplyResult, BoardColumn, BoardDraft, BoardStatusSource, ChangeRequest, Diagnostic, Kind,
-    Preview, ProgressEntry, ProgressLog, RecordDraft, Revision,
+    Preview, ProgressEntry, RecordDraft, Revision,
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -190,10 +190,6 @@ pub enum ProgressOperation {
     Append {
         investigation: String,
         entries: Vec<ProgressEntry>,
-    },
-    Replace {
-        investigation: String,
-        log: ProgressLog,
     },
 }
 
@@ -448,13 +444,6 @@ impl<C: ProviderCache> Provider<C> {
                 investigation: investigation.clone(),
                 entries: entries.clone(),
                 replacement: None,
-                replacement_source: None,
-                bootstrap: false,
-            },
-            ProgressOperation::Replace { investigation, log } => ProgressChangeRequest {
-                investigation: investigation.clone(),
-                entries: Vec::new(),
-                replacement: Some(log.clone()),
                 replacement_source: None,
                 bootstrap: false,
             },

@@ -2,9 +2,9 @@ use casefile_core::{
     ChangeRequest, Diagnostic, Kind, ProgressEntry, ProgressStatus, RecordDraft, Revision,
 };
 use casefile_store::{
-    ActivationState, CacheState, NoCache, ProgressOperation, Provider, ProviderCache,
-    ProviderError, ProviderMutationState, ProviderOperation, ProviderQuery, ProviderQueryResult,
-    Store,
+    ActivationState, CacheState, NoCache, ProgressOperation, ProgressProjection, Provider,
+    ProviderCache, ProviderError, ProviderMutationState, ProviderOperation, ProviderQuery,
+    ProviderQueryResult, Store,
 };
 use std::{fs, path::Path, process::Command};
 use tempfile::TempDir;
@@ -70,6 +70,30 @@ fn snapshot_negotiates_one_single_scan_v1_baseline_and_queries_store_projections
     let root = fixture();
     let store = Store::open(root.path()).expect("store");
     let provider = Provider::without_cache(store.clone());
+    provider
+        .apply_progress(
+            provider
+                .bootstrap_progress(INVESTIGATION)
+                .expect("bootstrap preview"),
+        )
+        .expect("bootstrap apply");
+    provider
+        .apply_progress(
+            provider
+                .preview_progress(ProgressOperation::Append {
+                    investigation: INVESTIGATION.into(),
+                    entries: vec![ProgressEntry::Transition {
+                        id: "query-progress".into(),
+                        recorded_at: "2026-07-27T00:30:00Z".into(),
+                        recorded_by: "root".into(),
+                        ticket_id: "HMD-011".into(),
+                        from: ProgressStatus::Unknown,
+                        to: ProgressStatus::InProgress,
+                    }],
+                })
+                .expect("progress preview"),
+        )
+        .expect("progress apply");
     let snapshot = provider.snapshot_for_protocol(1).expect("snapshot");
     assert_eq!(snapshot.activation, ActivationState::Active);
     assert_eq!(snapshot.capabilities.protocol_version, 1);
@@ -98,16 +122,69 @@ fn snapshot_negotiates_one_single_scan_v1_baseline_and_queries_store_projections
     ));
 
     let derived = store.derived_snapshot().expect("derived");
+    let tickets = derived
+        .records
+        .iter()
+        .filter(|record| record.kind == Some(Kind::Ticket))
+        .cloned()
+        .collect::<Vec<_>>();
+    let epics = derived
+        .records
+        .iter()
+        .filter(|record| record.kind == Some(Kind::Epic))
+        .cloned()
+        .collect::<Vec<_>>();
+    let progress = tickets
+        .iter()
+        .filter(|record| record.progress.is_some())
+        .cloned()
+        .map(|record| ProgressProjection { record })
+        .collect::<Vec<_>>();
     assert_eq!(snapshot.revision, derived.source_revision);
     assert_eq!(snapshot.diagnostics, derived.diagnostics);
-    assert_eq!(
-        snapshot.projections.tickets.len(),
-        derived
-            .records
-            .iter()
-            .filter(|record| record.kind == Some(Kind::Ticket))
-            .count()
-    );
+    assert_eq!(snapshot.projections.tickets, tickets);
+    assert_eq!(snapshot.projections.epics, epics);
+    assert_eq!(snapshot.projections.boards, derived.boards);
+    assert_eq!(snapshot.projections.progress, progress);
+
+    for (query, expected) in [
+        (
+            ProviderQuery::Tickets {
+                scope: None,
+                search: None,
+            },
+            ProviderQueryResult::Records {
+                revision: derived.source_revision.clone(),
+                records: tickets,
+            },
+        ),
+        (
+            ProviderQuery::Epics {
+                scope: None,
+                search: None,
+            },
+            ProviderQueryResult::Records {
+                revision: derived.source_revision.clone(),
+                records: epics,
+            },
+        ),
+        (
+            ProviderQuery::Boards { scope: None },
+            ProviderQueryResult::Boards {
+                revision: derived.source_revision.clone(),
+                boards: derived.boards,
+            },
+        ),
+        (
+            ProviderQuery::Progress { scope: None },
+            ProviderQueryResult::Progress {
+                revision: derived.source_revision.clone(),
+                progress,
+            },
+        ),
+    ] {
+        assert_eq!(provider.query(query).expect("query"), expected);
+    }
     match provider
         .query(ProviderQuery::Tickets {
             scope: None,
@@ -335,17 +412,28 @@ fn progress_preview_integrity_covers_bootstrap_transition_replay_no_op_and_confl
     let transition = provider
         .preview_progress(operation.clone())
         .expect("transition preview");
-    provider
-        .apply_progress(transition)
-        .expect("transition apply");
-    let replay = provider
-        .preview_progress(operation)
-        .expect("replay preview");
-    assert!(replay.canonical.no_op);
+    assert!(
+        !provider
+            .apply_progress(transition.clone())
+            .expect("transition apply")
+            .result
+            .no_op
+    );
     assert!(
         provider
-            .apply_progress(replay)
-            .expect("replay apply")
+            .apply_progress(transition)
+            .expect("original exact preview replay")
+            .result
+            .no_op
+    );
+    let repreview = provider
+        .preview_progress(operation)
+        .expect("completed-operation preview");
+    assert!(repreview.canonical.no_op);
+    assert!(
+        provider
+            .apply_progress(repreview)
+            .expect("completed-operation apply")
             .result
             .no_op
     );
@@ -380,13 +468,16 @@ fn default_board_is_named_exact_preview_with_preflight_collision_and_byte_preser
         .preview_default_delivery_board(INVESTIGATION)
         .expect("board preview");
     assert!(!preview.no_op);
-    assert!(
-        preview
-            .canonical
-            .request
-            .path()
-            .ends_with("boards/delivery.toml")
-    );
+    match &preview.canonical.request {
+        ChangeRequest::Create {
+            path,
+            draft: RecordDraft::Board(board),
+        } => {
+            assert_eq!(path, &format!("{INVESTIGATION}/boards/delivery.toml"));
+            assert_eq!(board.id, "HMD-sample-delivery");
+        }
+        other => panic!("unexpected default-board request: {other:?}"),
+    }
     let board = root.path().join(INVESTIGATION).join("boards/delivery.toml");
     let mut altered = preview.clone();
     altered.investigation.push_str("-altered");
@@ -487,6 +578,109 @@ fn default_board_is_named_exact_preview_with_preflight_collision_and_byte_preser
     );
     assert!(provider.apply_default_delivery_board(collision).is_err());
     assert_eq!(fs::read(&board).expect("collision preserved"), different);
+}
+
+#[test]
+fn default_board_refuses_missing_and_ambiguous_activation_mappings_before_preview() {
+    let root = fixture();
+    let provider = Provider::without_cache(Store::open(root.path()).expect("store"));
+    assert!(matches!(
+        provider.preview_default_delivery_board("projects/demo/investigations/missing"),
+        Err(ProviderError::DefaultBoardMapping(_))
+    ));
+    assert!(
+        !root
+            .path()
+            .join("projects/demo/investigations/missing/boards/delivery.toml")
+            .exists()
+    );
+
+    fs::write(
+        root.path().join("casefile.toml"),
+        format!(
+            "schema_version = 1\n\n[projects.demo]\nprefix = \"HMD\"\ninvestigations = [\"{INVESTIGATION}\", \"{INVESTIGATION}\"]\n"
+        ),
+    )
+    .expect("ambiguous activation mapping");
+    assert!(matches!(
+        provider.preview_default_delivery_board(INVESTIGATION),
+        Err(ProviderError::DefaultBoardMapping(_))
+    ));
+    assert!(
+        !root
+            .path()
+            .join(INVESTIGATION)
+            .join("boards/delivery.toml")
+            .exists()
+    );
+}
+
+#[test]
+fn default_board_scopes_baseline_diagnostics_to_its_investigation() {
+    let unrelated = fixture();
+    let other_investigation = "projects/demo/investigations/other";
+    fs::write(
+        unrelated.path().join("casefile.toml"),
+        format!(
+            "schema_version = 1\n\n[projects.demo]\nprefix = \"HMD\"\ninvestigations = [\"{INVESTIGATION}\", \"{other_investigation}\"]\n"
+        ),
+    )
+    .expect("second investigation mapping");
+    fs::create_dir_all(unrelated.path().join(other_investigation))
+        .expect("other investigation directory");
+    fs::write(
+        unrelated
+            .path()
+            .join(other_investigation)
+            .join("request.md"),
+        "# Request\n",
+    )
+    .expect("unrelated invalid request");
+    let unrelated_store = Store::open(unrelated.path()).expect("store");
+    assert!(
+        unrelated_store
+            .scan()
+            .expect("scan")
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.path == format!("{other_investigation}/request.md"))
+    );
+    let unrelated_provider = Provider::without_cache(unrelated_store);
+    let preview = unrelated_provider
+        .preview_default_delivery_board(INVESTIGATION)
+        .expect("unrelated diagnostic does not block preview");
+    assert!(preview.canonical.diagnostics.is_empty());
+
+    let scoped = fixture();
+    fs::write(
+        scoped.path().join(INVESTIGATION).join("request.md"),
+        "# Request\n",
+    )
+    .expect("scoped invalid request");
+    let scoped_provider = Provider::without_cache(Store::open(scoped.path()).expect("store"));
+    let preview = scoped_provider
+        .preview_default_delivery_board(INVESTIGATION)
+        .expect("scoped diagnostic preview");
+    assert!(!preview.canonical.diagnostics.is_empty());
+    assert!(
+        preview
+            .canonical
+            .diagnostics
+            .iter()
+            .all(|diagnostic| diagnostic.path.starts_with(&format!("{INVESTIGATION}/")))
+    );
+    assert!(
+        scoped_provider
+            .apply_default_delivery_board(preview)
+            .is_err()
+    );
+    assert!(
+        !scoped
+            .path()
+            .join(INVESTIGATION)
+            .join("boards/delivery.toml")
+            .exists()
+    );
 }
 
 struct FailingCache;
