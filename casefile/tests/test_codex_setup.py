@@ -204,12 +204,26 @@ class CodexSetupTests(unittest.TestCase):
         for version in ("v1", "v2"):
             with self.subTest(version=version), tempfile.TemporaryDirectory() as temporary:
                 plugin, home, original, catalog, _ = self.fixture(Path(temporary))
+                catalog["models"] = [
+                    model
+                    for model in catalog["models"]
+                    if model["slug"] != "gpt-5.3-codex-spark"
+                ]
                 other = home / f"models-casefile-{'v2' if version == 'v1' else 'v1'}.json"
                 other.write_bytes(b'{"unowned": true}\n')
                 fake = FakeCodex(catalog)
                 with self.fake_command(fake):
                     plan = setup.prepare(plugin, home, "codex", version)
                     self.assertEqual(version, setup.preview(plan)["multi_agent_version"])
+                    self.assertIn("gpt-5.3-codex-spark", plan["skipped"])
+                    self.assertNotIn("gpt-5.3-codex-spark", plan["patched"])
+                    self.assertNotIn(
+                        "gpt-5.3-codex-spark",
+                        {
+                            model["slug"]
+                            for model in json.loads(plan["catalog"])["models"]
+                        },
+                    )
                     result = setup.install(plan)
                     receipt_path, receipt = setup.receipt(home, Path(result["receipt"]))
                     self.assertEqual(version, receipt["multi_agent_version"])
@@ -318,22 +332,23 @@ class CodexSetupTests(unittest.TestCase):
             self.assertIn("gpt-5.3-codex-spark", plan["patched"])
             self.assertEqual([["codex", "debug", "models"]], [call for call in fake.calls if call[1:3] == ["debug", "models"]])
 
-    def test_missing_required_spark_is_rejected(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            plugin, home, _, catalog, _ = self.fixture(Path(temporary))
-            fallback = {
-                "models": [
-                    model
-                    for model in catalog["models"]
-                    if model["slug"] != "gpt-5.3-codex-spark"
-                ]
-            }
-            with self.fake_command(FakeCodex(fallback)):
-                with self.assertRaisesRegex(
-                    setup.SetupError,
-                    "catalog lacks required models: gpt-5.3-codex-spark",
-                ):
-                    setup.prepare(plugin, home, "codex")
+    def test_missing_each_required_v1_model_is_rejected(self):
+        for missing in sorted(setup.V1_SELECTOR_MODELS):
+            with self.subTest(missing=missing), tempfile.TemporaryDirectory() as temporary:
+                plugin, home, original, catalog, _ = self.fixture(Path(temporary))
+                fallback = {
+                    "models": [
+                        model for model in catalog["models"] if model["slug"] != missing
+                    ]
+                }
+                with self.fake_command(FakeCodex(fallback)):
+                    with self.assertRaisesRegex(
+                        setup.SetupError,
+                        f"catalog lacks required models: {missing}",
+                    ):
+                        setup.prepare(plugin, home, "codex", "v1")
+                self.assertEqual(original, (home / "config.toml").read_bytes())
+                self.assertFalse((home / "models-casefile-v1.json").exists())
 
     def test_config_conflict_rejects_before_model_export(self):
         conflicts = {
@@ -387,23 +402,28 @@ class CodexSetupTests(unittest.TestCase):
                     any(call[1:3] == ["debug", "models"] for call in fake.calls)
                 )
 
-    def test_effective_catalog_must_retain_required_spark(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            _, home, _, catalog, _ = self.fixture(Path(temporary))
-            catalog["models"] = [
-                model
-                for model in catalog["models"]
-                if model["slug"] != "gpt-5.3-codex-spark"
-            ]
-            with self.fake_command(FakeCodex(catalog)):
-                with self.assertRaisesRegex(
-                    setup.SetupError,
-                    "effective catalog lacks required models: gpt-5.3-codex-spark",
-                ):
+    def test_effective_v1_and_v2_catalogs_allow_missing_optional_spark(self):
+        for version in ("v1", "v2"):
+            with self.subTest(version=version), tempfile.TemporaryDirectory() as temporary:
+                _, home, _, catalog, _ = self.fixture(Path(temporary))
+                catalog["models"] = [
+                    model
+                    for model in catalog["models"]
+                    if model["slug"] != "gpt-5.3-codex-spark"
+                ]
+                if version == "v1":
+                    for model in catalog["models"]:
+                        if model["slug"] in setup.V1_SELECTOR_MODELS:
+                            model["multi_agent_version"] = None
+                else:
+                    for model in catalog["models"]:
+                        model["multi_agent_version"] = "v2"
+                with self.fake_command(FakeCodex(catalog)):
                     setup.verify_effective_catalog(
                         {
                             "executable": "codex",
                             "environment": {"CODEX_HOME": str(home)},
+                            "multi_agent_version": version,
                         }
                     )
 

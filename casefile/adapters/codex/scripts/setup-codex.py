@@ -36,6 +36,8 @@ REQUIRED_MODELS = {
     "gpt-5.6-luna",
     "gpt-5.3-codex-spark",
 }
+OPTIONAL_ACTIVE_CATALOG_MODELS = {"gpt-5.3-codex-spark"}
+ACTIVE_CATALOG_REQUIRED_MODELS = REQUIRED_MODELS - OPTIONAL_ACTIVE_CATALOG_MODELS
 V1_SELECTOR_MODELS = {"gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"}
 MULTI_AGENT_VERSIONS = {"v1", "v2"}
 V2_MINIMUM_CODEX_VERSION = (0, 145, 0)
@@ -199,7 +201,7 @@ def catalog_override(
     by_id = {model.get("slug"): model for model in models if isinstance(model, dict)}
     if None in by_id or len(by_id) != len(models):
         raise SetupError("catalog has missing or duplicate model IDs")
-    missing = sorted(REQUIRED_MODELS - by_id.keys())
+    missing = sorted(ACTIVE_CATALOG_REQUIRED_MODELS - by_id.keys())
     if missing:
         raise SetupError(f"catalog lacks required models: {', '.join(missing)}")
 
@@ -228,7 +230,7 @@ def catalog_override(
         for selector in selectors:
             set_selector(model, selector)
         patched.append(model_id)
-    if not REQUIRED_MODELS <= set(patched):
+    if not ACTIVE_CATALOG_REQUIRED_MODELS <= set(patched):
         raise SetupError("required models were not patched")
     if version == "v1":
         if any(output[model].get("multi_agent_version") is not None for model in V1_SELECTOR_MODELS):
@@ -572,7 +574,7 @@ def verify_effective_catalog(plan: dict) -> None:
     selected = {
         model.get("slug"): model for model in models if isinstance(model, dict)
     }
-    missing = sorted(REQUIRED_MODELS - selected.keys())
+    missing = sorted(ACTIVE_CATALOG_REQUIRED_MODELS - selected.keys())
     if missing:
         raise SetupError(
             f"effective catalog lacks required models: {', '.join(missing)}"
