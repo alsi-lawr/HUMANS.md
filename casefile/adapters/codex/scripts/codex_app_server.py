@@ -320,7 +320,9 @@ def authenticated_model_catalog(
                     cwd=acquisition_home,
                 ) as server:
                     server.initialize()
-                    account = server.request("account/read", {"refreshToken": True})
+                    account = server.request("account/read", {"refreshToken": False})
+                    if not isinstance(account.get("account"), dict):
+                        account = server.request("account/read", {"refreshToken": True})
                     if not isinstance(account.get("account"), dict):
                         raise AppServerError(
                             "selected Codex file authentication is unavailable"
