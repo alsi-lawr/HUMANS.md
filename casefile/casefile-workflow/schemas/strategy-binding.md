@@ -13,6 +13,10 @@ Casefiles. A present invalid or unmatched binding is not a fallback: clients rec
 unresolved state and no effective writer pair. Before implementation is selected, a valid binding is
 pending.
 
-Replacing a binding is an adapter/runtime operation, never a client edit. It must be refused while
-an implementation writer or correction is active and atomically replace only `bindings.toml`.
+Replacing a binding is a typed preview/apply operation, never a client edit. The request contains no
+caller activity assertion. The Store derives activity from one valid canonical progress log:
+`in_progress`, `in_review`, `verifying`, and `blocked` refuse replacement, while `unknown` and
+`complete` permit it; missing, malformed, conflicting, or unsupported progress fails closed. Every
+writer spawn separately requires an explicit current `in_progress` transition for its exact ticket.
+An accepted binding preview atomically replaces only `bindings.toml`.
 Repository Git history is the history authority; no binding archive or journal is maintained.

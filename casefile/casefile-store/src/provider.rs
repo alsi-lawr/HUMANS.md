@@ -1,11 +1,12 @@
 use crate::{
-    ActivationState, DerivedBoard, DerivedIndex, DerivedRecord, DerivedSnapshot, Indexed,
-    ProgressApplyResult, ProgressChangeRequest, ProgressPreview, RecordScope, RevisionSource,
-    ScanResult, Store, StoreError,
+    ActivationState, DerivedBoard, DerivedIndex, DerivedRecord, DerivedSnapshot,
+    GovernedApplyResult, Indexed, ProgressApplyResult, ProgressChangeRequest, ProgressPreview,
+    RecordScope, RevisionSource, ScanResult, Store, StoreError, StrategyTransitionPreview,
+    StrategyTransitionRequest, WriterBindingPreview, WriterBindingRequest,
 };
 use casefile_core::{
     ApplyResult, BoardColumn, BoardDraft, BoardStatusSource, ChangeRequest, Diagnostic, Kind,
-    Preview, ProgressEntry, RecordDraft, Revision,
+    Preview, ProgressEntry, RecordDraft, RecordSummary, Revision, StrategyTransitionRecord,
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -26,6 +27,7 @@ pub enum ProviderOperation {
     QueryEpics,
     QueryBoards,
     QueryProgress,
+    QueryStrategyTransitions,
     PreviewRecordDraft,
     ApplyRecordDraft,
     BootstrapProgress,
@@ -33,6 +35,10 @@ pub enum ProviderOperation {
     ApplyProgress,
     PreviewDefaultDeliveryBoard,
     ApplyDefaultDeliveryBoard,
+    PreviewStrategyTransition,
+    ApplyStrategyTransition,
+    PreviewWriterBinding,
+    ApplyWriterBinding,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -62,6 +68,14 @@ pub struct ProviderProjections {
     pub epics: Vec<DerivedRecord>,
     pub boards: Vec<DerivedBoard>,
     pub progress: Vec<ProgressProjection>,
+    pub strategy_transitions: Vec<StrategyTransitionProjection>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct StrategyTransitionProjection {
+    pub path: String,
+    pub scope: RecordScope,
+    pub record: StrategyTransitionRecord,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -99,6 +113,9 @@ pub enum ProviderQuery {
     Progress {
         scope: Option<RecordScope>,
     },
+    StrategyTransitions {
+        scope: Option<RecordScope>,
+    },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -115,6 +132,10 @@ pub enum ProviderQueryResult {
     Progress {
         revision: Revision,
         progress: Vec<ProgressProjection>,
+    },
+    StrategyTransitions {
+        revision: Revision,
+        transitions: Vec<StrategyTransitionProjection>,
     },
 }
 
@@ -201,6 +222,20 @@ pub struct ProviderProgressPreview {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProviderStrategyTransitionPreview {
+    pub preview_id: String,
+    pub canonical: StrategyTransitionPreview,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProviderWriterBindingPreview {
+    pub preview_id: String,
+    pub canonical: WriterBindingPreview,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct DefaultBoardPreview {
     pub preview_id: String,
     pub investigation: String,
@@ -250,6 +285,8 @@ enum StoredPreview {
     Record(Preview, Option<Vec<u8>>, bool),
     Progress(ProgressOperation, ProgressPreview),
     Board(String, Preview, Vec<u8>, bool),
+    StrategyTransition(StrategyTransitionPreview),
+    WriterBinding(WriterBindingPreview),
 }
 
 #[derive(Default)]
@@ -301,7 +338,7 @@ impl<C: ProviderCache> Provider<C> {
     fn snapshot_from_scan(&self, scan: ScanResult) -> ProviderSnapshot {
         let derived = self.store.derive_snapshot(&scan);
         let cache = self.refresh_cache(&derived);
-        let projections = projections(&derived);
+        let projections = projections(&derived, &scan);
         ProviderSnapshot {
             capabilities: capabilities(scan.activation),
             activation: scan.activation,
@@ -358,6 +395,17 @@ impl<C: ProviderCache> Provider<C> {
                     })
                     .collect(),
             },
+            ProviderQuery::StrategyTransitions { scope } => {
+                ProviderQueryResult::StrategyTransitions {
+                    revision,
+                    transitions: baseline
+                        .projections
+                        .strategy_transitions
+                        .into_iter()
+                        .filter(|item| scope.as_ref().is_none_or(|scope| &item.scope == scope))
+                        .collect(),
+                }
+            }
         })
     }
 
@@ -593,6 +641,64 @@ impl<C: ProviderCache> Provider<C> {
         })
     }
 
+    pub fn preview_strategy_transition(
+        &self,
+        request: StrategyTransitionRequest,
+    ) -> Result<ProviderStrategyTransitionPreview, ProviderError> {
+        let baseline = self.require_mutation()?;
+        let canonical = self.store.preview_strategy_transition(request)?;
+        if canonical.expected_store_revision != baseline.snapshot.revision {
+            return Err(ProviderError::ConcurrentBaseline);
+        }
+        let preview_id = self.remember(StoredPreview::StrategyTransition(canonical.clone()));
+        Ok(ProviderStrategyTransitionPreview {
+            preview_id,
+            canonical,
+        })
+    }
+
+    pub fn apply_strategy_transition(
+        &self,
+        preview: ProviderStrategyTransitionPreview,
+    ) -> Result<ProviderApplyOutcome<GovernedApplyResult>, ProviderError> {
+        self.require_mutation()?;
+        self.verify(
+            &preview.preview_id,
+            &StoredPreview::StrategyTransition(preview.canonical.clone()),
+        )?;
+        let result = self.store.apply_strategy_transition(preview.canonical)?;
+        self.outcome(result)
+    }
+
+    pub fn preview_writer_binding(
+        &self,
+        request: WriterBindingRequest,
+    ) -> Result<ProviderWriterBindingPreview, ProviderError> {
+        let baseline = self.require_mutation()?;
+        let canonical = self.store.preview_writer_binding(request)?;
+        if canonical.expected_store_revision != baseline.snapshot.revision {
+            return Err(ProviderError::ConcurrentBaseline);
+        }
+        let preview_id = self.remember(StoredPreview::WriterBinding(canonical.clone()));
+        Ok(ProviderWriterBindingPreview {
+            preview_id,
+            canonical,
+        })
+    }
+
+    pub fn apply_writer_binding(
+        &self,
+        preview: ProviderWriterBindingPreview,
+    ) -> Result<ProviderApplyOutcome<GovernedApplyResult>, ProviderError> {
+        self.require_mutation()?;
+        self.verify(
+            &preview.preview_id,
+            &StoredPreview::WriterBinding(preview.canonical.clone()),
+        )?;
+        let result = self.store.apply_writer_binding(preview.canonical)?;
+        self.outcome(result)
+    }
+
     fn require_mutation(&self) -> Result<ScanResult, ProviderError> {
         let scan = self.store.scan()?;
         if scan.activation == ActivationState::Active {
@@ -663,6 +769,7 @@ fn capabilities(activation: ActivationState) -> ProviderCapabilities {
         ProviderOperation::QueryEpics,
         ProviderOperation::QueryBoards,
         ProviderOperation::QueryProgress,
+        ProviderOperation::QueryStrategyTransitions,
     ];
     let (mutation, operations) = if activation == ActivationState::Active {
         let mut operations = reads;
@@ -674,6 +781,10 @@ fn capabilities(activation: ActivationState) -> ProviderCapabilities {
             ProviderOperation::ApplyProgress,
             ProviderOperation::PreviewDefaultDeliveryBoard,
             ProviderOperation::ApplyDefaultDeliveryBoard,
+            ProviderOperation::PreviewStrategyTransition,
+            ProviderOperation::ApplyStrategyTransition,
+            ProviderOperation::PreviewWriterBinding,
+            ProviderOperation::ApplyWriterBinding,
         ]);
         (ProviderMutationState::ReadWrite, operations)
     } else {
@@ -698,7 +809,7 @@ fn capabilities(activation: ActivationState) -> ProviderCapabilities {
     }
 }
 
-fn projections(derived: &DerivedSnapshot) -> ProviderProjections {
+fn projections(derived: &DerivedSnapshot, scan: &ScanResult) -> ProviderProjections {
     let tickets = derived
         .records
         .iter()
@@ -722,6 +833,26 @@ fn projections(derived: &DerivedSnapshot) -> ProviderProjections {
         epics,
         boards: derived.boards.clone(),
         progress,
+        strategy_transitions: scan
+            .snapshot
+            .entries
+            .iter()
+            .filter_map(|entry| match &entry.summary {
+                Some(RecordSummary::StrategyTransition { record }) => scan
+                    .scope_for_path(&entry.path)
+                    .and_then(|(project, investigation)| {
+                        investigation.map(|investigation| StrategyTransitionProjection {
+                            path: entry.path.clone(),
+                            scope: RecordScope {
+                                project: project.into(),
+                                investigation: Some(investigation.into()),
+                            },
+                            record: record.as_ref().clone(),
+                        })
+                    }),
+                _ => None,
+            })
+            .collect(),
     }
 }
 

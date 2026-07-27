@@ -2,7 +2,9 @@ use casefile_core::{
     BoardColumn, BoardDraft, BoardStatusSource, ChangeRequest, Classification, Kind, ProgressEntry,
     ProgressStatus, RecordDraft,
 };
-use casefile_store::{ActivationState, ProgressChangeRequest, RelationshipKind, Store};
+use casefile_store::{
+    ActivationState, ProgressChangeRequest, RelationshipKind, Store, WriterBindingRequest,
+};
 use std::{fs, path::Path, process::Command};
 use tempfile::TempDir;
 
@@ -1264,18 +1266,30 @@ fn binding_replacement_is_guarded_single_file_and_atomic() {
     let root = fixture();
     let store = Store::open(root.path()).expect("store");
     let investigation = "projects/demo/investigations/sample";
-    assert!(
-        store
-            .replace_strategy_binding(investigation, BINDING, true)
-            .is_err()
-    );
-    store
-        .replace_strategy_binding(investigation, BINDING, false)
-        .expect("create");
+    full_implementation(root.path());
+    let bootstrap = store
+        .preview_progress(
+            store
+                .bootstrap_progress(investigation)
+                .expect("bootstrap request"),
+        )
+        .expect("bootstrap preview");
+    store.apply_progress(bootstrap).expect("bootstrap apply");
+    let preview = store
+        .preview_writer_binding(WriterBindingRequest {
+            investigation: investigation.into(),
+            binding_source: BINDING.into(),
+        })
+        .expect("binding preview");
+    store.apply_writer_binding(preview).expect("create");
     let alternate = BINDING.replace("gpt-5.6-terra", "gpt-5.6-luna");
-    store
-        .replace_strategy_binding(investigation, &alternate, false)
-        .expect("replace");
+    let preview = store
+        .preview_writer_binding(WriterBindingRequest {
+            investigation: investigation.into(),
+            binding_source: alternate.clone(),
+        })
+        .expect("replacement preview");
+    store.apply_writer_binding(preview).expect("replace");
     assert_eq!(
         alternate,
         fs::read_to_string(path(root.path(), "strategy/bindings.toml")).expect("current")
@@ -1298,7 +1312,10 @@ fn binding_replacement_is_guarded_single_file_and_atomic() {
     );
     assert!(
         store
-            .replace_strategy_binding(investigation, "not = [toml", false)
+            .preview_writer_binding(WriterBindingRequest {
+                investigation: investigation.into(),
+                binding_source: "not = [toml".into(),
+            })
             .is_err()
     );
     assert_eq!(

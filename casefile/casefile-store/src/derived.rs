@@ -357,6 +357,9 @@ fn summary_title(summary: &RecordSummary) -> String {
         | RecordSummary::Board { title, .. } => title.clone(),
         RecordSummary::Strategy { strategy_id, .. } => strategy_id.clone(),
         RecordSummary::StrategyBinding { binding } => format!("{} writer binding", binding.adapter),
+        RecordSummary::StrategyTransition { record } => {
+            format!("{} strategy transition", record.selected_strategy_id)
+        }
         RecordSummary::Activation { .. } => "Casefile activation".into(),
         RecordSummary::ProjectMap { .. } => "Project map".into(),
         RecordSummary::Progress => "Ticket progress".into(),

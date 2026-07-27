@@ -50,6 +50,9 @@ pub(super) fn kind_for_path(path: &str, active: &Activation) -> Option<Kind> {
         ["final-disposition.md"] => Some(Kind::Closeout),
         ["implementation-plan", "PLAN.md"] => Some(Kind::Plan),
         ["strategy", "bindings.toml"] => Some(Kind::StrategyBinding),
+        ["strategy", "transitions", name] if name.ends_with(".toml") && name.contains('-') => {
+            Some(Kind::StrategyTransition)
+        }
         ["strategy", name]
             if matches!(
                 *name,

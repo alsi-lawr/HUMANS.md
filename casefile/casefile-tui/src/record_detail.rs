@@ -310,6 +310,23 @@ fn overview_lines(
                     lines.extend(binding_state_lines(state));
                 }
             }
+            RecordSummary::StrategyTransition { record } => {
+                lines.push(
+                    Line::from(safe_inline(&record.operation_id))
+                        .style(Style::default().fg(ACCENT).bold()),
+                );
+                lines.push(label_line("Phase", safe_inline(&record.phase)));
+                lines.push(label_line(
+                    "Strategy",
+                    format!(
+                        "{} -> {}",
+                        safe_inline(&record.previous_strategy_id),
+                        safe_inline(&record.selected_strategy_id)
+                    ),
+                ));
+                lines.push(label_line("Recorded", safe_inline(&record.recorded_at)));
+                lines.push(label_line("Rationale", safe_inline(&record.rationale)));
+            }
             RecordSummary::Activation { projects } | RecordSummary::ProjectMap { projects } => {
                 lines.push(Line::from("Projects").style(Style::default().fg(ACCENT).bold()));
                 for project in projects {

@@ -1,12 +1,18 @@
 # Strategy Transition Schema
 
-A transition record contains schema version, UTC timestamp, phase, mode (`governed` or `ad-hoc`),
-previous and selected strategy IDs, selected matrix path and SHA-256, preserved root binding,
-preserved work or task-scratch paths, active ownership inventory, available capabilities, human
-rationale, backup identity, and whether governed state was updated. Planning is a governed phase.
-Ad-hoc task-scratch transitions require neither tickets nor a durable casefile.
+A governed transition is a strict schema-version-1 TOML record at
+`strategy/transitions/<UTC-token>-<operation-id>.toml`. The filename is deterministic from its
+RFC-3339 `recorded_at` value and lowercase hyphenated `operation_id`. The record carries the phase,
+previous and selected strategy IDs, selected-matrix origin and SHA-256, expected Store and matrix
+revisions, proposed matrix revision, preserved root binding, governed-update fact, human rationale,
+available capabilities, preserved safe work paths, and active ownership claims.
 
-The transition is invalid when the complete selected matrix is malformed, root binding changes, work
-disappears, capabilities are unavailable, or two active owners overlap. Governed replacement and
-transition creation are one rollback-verified transaction. Ad-hoc records preserve the complete
-selected matrix beside the transition.
+Only the governed strategy-transition preview/apply operation creates this record. It validates the
+complete selected matrix through the canonical Rust parser, requires the selected phase to match the
+governed target, preserves `root`, checks required capabilities, and rejects overlapping active
+owners. The selected matrix and transition record are one failure-atomic, rollback-verified
+transaction. Exact operation replay is a content no-op; reuse of its deterministic identity with
+different content is refused.
+
+No transition backup, journal, or preview-history artifact is created. Git is the durable history
+authority. Historical pre-schema transition and backup files remain raw and untouched.

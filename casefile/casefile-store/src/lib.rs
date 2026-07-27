@@ -3,6 +3,7 @@
 
 mod activation;
 mod derived;
+mod governance;
 mod index;
 mod layout;
 mod progress;
@@ -19,6 +20,10 @@ pub use derived::{
     DerivedTicketProgress, EffectiveWriterBinding, RecordScope, RelationshipKind, ScopedIdentity,
     StrategyBindingState, WriterBindingSource,
 };
+pub use governance::{
+    GovernedApplyResult, GovernedChange, GovernedOperationKind, StrategyTransitionPreview,
+    StrategyTransitionRequest, WriterBindingPreview, WriterBindingRequest,
+};
 pub use index::{DerivedIndex, Indexed, RevisionSource};
 pub use progress::{ProgressApplyResult, ProgressChangeRequest, ProgressPreview};
 pub use provider::{
@@ -26,7 +31,8 @@ pub use provider::{
     ProgressOperation, ProgressProjection, Provider, ProviderApplyOutcome, ProviderCache,
     ProviderCapabilities, ProviderError, ProviderMutationState, ProviderOperation, ProviderPreview,
     ProviderProgressPreview, ProviderProjections, ProviderQuery, ProviderQueryResult,
-    ProviderRecordApplyResult, ProviderSnapshot,
+    ProviderRecordApplyResult, ProviderSnapshot, ProviderStrategyTransitionPreview,
+    ProviderWriterBindingPreview, StrategyTransitionProjection,
 };
 pub use scanning::ScanResult;
 pub use store::{Store, StoreError};

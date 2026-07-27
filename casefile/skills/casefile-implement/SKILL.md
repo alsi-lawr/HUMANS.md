@@ -33,9 +33,11 @@ mutation only after the human rejects the expansion or amends the governing deci
 Complete a ticket only after the recorded flow accepts it. See the brief
 [correction-escalation case study](references/correction-escalation-case-study.md).
 
-For Codex, immediately before every implementation-writer spawn, run the installed
-`scripts/resolve-writer-binding.py resolve` with the planning root, active investigation, and exact
-selected implementation strategy ID. This applies equally to the first ticket, later batches,
+For Codex, immediately before every implementation-writer spawn, first successfully transition the
+applicable ticket to canonical `in_progress`, then run the installed
+`scripts/resolve-writer-binding.py resolve` with the planning root, active investigation, exact
+selected implementation strategy ID, and exact ticket ID. The resolver independently requires that
+current progress before returning a spawn. This applies equally to the first ticket, later batches,
 pipeline overlap, resume, and every correction round. Delegate with exactly the returned `spawn`
 object: V1 returns a named agent type; V2 returns a model-free role plus explicit model, reasoning,
 and bounded history override. Never reuse an earlier resolution without revalidation.
@@ -43,8 +45,8 @@ and bounded history override. Never reuse an earlier resolution without revalida
 If resolution says the persisted or matrix-derived pair is invalid or unavailable, stop before
 delegation and before any planning/source mutation. Run `offer`, present its complete current list,
 state when Sol/high is unavailable, and request a new explicit selection. Replace the binding with
-`select --implementation-active false` only after confirming no implementation writer or correction
-is active. Never substitute Sol/high or another pair silently. A missing binding in a historical
+`select`; canonical Store progress derives whether implementation or correction work is inactive
+and fails closed rather than accepting a caller assertion. Never substitute Sol/high or another pair silently. A missing binding in a historical
 Casefile is not an error: the resolver returns the selected matrix writer default after checking its
 current availability.
 

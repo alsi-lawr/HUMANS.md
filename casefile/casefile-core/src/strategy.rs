@@ -69,6 +69,24 @@ pub struct BindingResolution {
     pub value: String,
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct StrategyBindingWire {
+    schema_version: i64,
+    adapter: String,
+    role: String,
+    model: String,
+    reasoning_effort: String,
+    resolution: BindingResolutionWire,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct BindingResolutionWire {
+    mode: String,
+    value: String,
+}
+
 pub fn parse(path: &str, text: &str) -> Result<RecordSummary, Vec<Diagnostic>> {
     let value: toml::Value = toml::from_str(text)
         .map_err(|error| vec![Diagnostic::new(path, "invalid_toml", error.to_string())])?;
@@ -129,39 +147,46 @@ pub fn parse_projection(
 }
 
 pub fn parse_binding(path: &str, text: &str) -> Result<RecordSummary, Vec<Diagnostic>> {
-    let value: toml::Value = toml::from_str(text)
+    let wire: StrategyBindingWire = toml::from_str(text)
         .map_err(|error| vec![Diagnostic::new(path, "invalid_toml", error.to_string())])?;
-    let table = table(path, &value, "strategy binding")?;
-    schema(path, table)?;
-    let role = string(path, table, "role", "invalid_strategy_binding")?;
-    if role != "implementation-writer" {
+    if wire.schema_version != i64::from(SCHEMA_VERSION) {
+        return Err(vec![Diagnostic::new(
+            path,
+            "invalid_schema_version",
+            "schema_version must be 1",
+        )]);
+    }
+    if wire.role != "implementation-writer" {
         return Err(vec![
             Diagnostic::new(path, "binding_role", "role must be implementation-writer")
                 .field("role"),
         ]);
     }
-    let resolution = table
-        .get("resolution")
-        .and_then(toml::Value::as_table)
-        .ok_or_else(|| {
-            vec![
-                Diagnostic::new(
-                    path,
-                    "invalid_strategy_binding",
-                    "resolution must be a TOML table",
-                )
-                .field("resolution"),
-            ]
-        })?;
+    if [
+        wire.adapter.as_str(),
+        wire.model.as_str(),
+        wire.reasoning_effort.as_str(),
+        wire.resolution.mode.as_str(),
+        wire.resolution.value.as_str(),
+    ]
+    .iter()
+    .any(|value| value.is_empty())
+    {
+        return Err(vec![Diagnostic::new(
+            path,
+            "invalid_strategy_binding",
+            "binding string fields must be non-empty",
+        )]);
+    }
     Ok(RecordSummary::StrategyBinding {
         binding: StrategyBinding {
-            adapter: string(path, table, "adapter", "invalid_strategy_binding")?,
-            role,
-            model: string(path, table, "model", "invalid_strategy_binding")?,
-            reasoning_effort: string(path, table, "reasoning_effort", "invalid_strategy_binding")?,
+            adapter: wire.adapter,
+            role: wire.role,
+            model: wire.model,
+            reasoning_effort: wire.reasoning_effort,
             resolution: BindingResolution {
-                mode: string(path, resolution, "mode", "invalid_strategy_binding")?,
-                value: string(path, resolution, "value", "invalid_strategy_binding")?,
+                mode: wire.resolution.mode,
+                value: wire.resolution.value,
             },
         },
     })

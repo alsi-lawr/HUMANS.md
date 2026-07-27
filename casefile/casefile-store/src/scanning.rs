@@ -9,7 +9,8 @@ use crate::{
 use casefile_core::{
     CasefileSnapshot, Classification, Diagnostic, EntrySnapshot, Kind, RecordDraft, RecordSummary,
     Revision, parse_decision, parse_metadata_arrays, parse_progress_log, parse_project_map,
-    parse_request, parse_strategy, parse_strategy_binding, parse_strategy_projection, stable,
+    parse_request, parse_strategy, parse_strategy_binding, parse_strategy_projection,
+    parse_strategy_transition, stable,
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -189,6 +190,9 @@ fn classify(
             );
         }
     };
+    if kind == Kind::StrategyTransition && is_legacy_strategy_transition(text) {
+        return (Classification::Raw, None, None, None, Vec::new());
+    }
     let result = match kind {
         Kind::Ticket | Kind::Epic | Kind::Board => casefile_core::parse_draft(path, kind, text)
             .map(|draft| match draft {
@@ -229,6 +233,17 @@ fn classify(
         Kind::StrategyBinding => {
             parse_strategy_binding(path, text).map(|summary| (None, Some(summary)))
         }
+        Kind::StrategyTransition => parse_strategy_transition(path, text).map(|record| {
+            (
+                Some(format!(
+                    "strategy-transition:{path}:{}",
+                    record.operation_id
+                )),
+                Some(RecordSummary::StrategyTransition {
+                    record: Box::new(record),
+                }),
+            )
+        }),
         Kind::Progress => {
             parse_progress_log(path, text).map(|_| (None, Some(RecordSummary::Progress)))
         }
@@ -244,6 +259,30 @@ fn classify(
         ),
         Err(diagnostics) => (Classification::Invalid, Some(kind), None, None, diagnostics),
     }
+}
+
+fn is_legacy_strategy_transition(text: &str) -> bool {
+    let Ok(value) = toml::from_str::<toml::Value>(text) else {
+        return false;
+    };
+    value
+        .get("schema_version")
+        .and_then(toml::Value::as_integer)
+        == Some(1)
+        && value.get("operation_id").is_none()
+        && value
+            .get("timestamp")
+            .and_then(toml::Value::as_str)
+            .is_some()
+        && value.get("mode").and_then(toml::Value::as_str).is_some()
+        && value
+            .get("selected_matrix")
+            .and_then(toml::Value::as_str)
+            .is_some()
+        && value
+            .get("backup_path")
+            .and_then(toml::Value::as_str)
+            .is_some()
 }
 
 fn project_map_entry(

@@ -104,11 +104,23 @@ fn snapshot_negotiates_one_single_scan_v1_baseline_and_queries_store_projections
     );
     assert!(snapshot.capabilities.writes_require_external_approval);
     assert!(
-        !snapshot
+        snapshot
+            .capabilities
+            .operations
+            .contains(&ProviderOperation::ApplyStrategyTransition)
+    );
+    assert!(
+        snapshot
+            .capabilities
+            .operations
+            .contains(&ProviderOperation::ApplyWriterBinding)
+    );
+    assert!(
+        snapshot
             .capabilities
             .operations
             .iter()
-            .any(|operation| format!("{operation:?}").contains("Strategy"))
+            .all(|operation| !format!("{operation:?}").contains("Scratch"))
     );
     assert!(
         snapshot

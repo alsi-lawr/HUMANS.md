@@ -105,7 +105,10 @@ pub(super) fn preview(root: &Path, request: ChangeRequest) -> Result<Preview, St
     })
 }
 
-fn introduced_diagnostics(baseline: &[Diagnostic], proposed: &[Diagnostic]) -> Vec<Diagnostic> {
+pub(super) fn introduced_diagnostics(
+    baseline: &[Diagnostic],
+    proposed: &[Diagnostic],
+) -> Vec<Diagnostic> {
     let mut remaining_baseline = BTreeMap::new();
     for diagnostic in baseline {
         *remaining_baseline
@@ -215,7 +218,7 @@ fn rejected(request: ChangeRequest, revision: Revision, diagnostic: Diagnostic) 
     }
 }
 
-fn ensure_worktree(root: &Path) -> Result<(), StoreError> {
+pub(super) fn ensure_worktree(root: &Path) -> Result<(), StoreError> {
     let status = Command::new("git")
         .arg("-C")
         .arg(root)
@@ -229,7 +232,7 @@ fn ensure_worktree(root: &Path) -> Result<(), StoreError> {
         ))
     }
 }
-fn git_diff(
+pub(super) fn git_diff(
     root: &Path,
     path: &str,
     before: Option<&[u8]>,

@@ -10,7 +10,7 @@ use std::{ffi::OsString, path::PathBuf, process::ExitCode};
 #[derive(Parser)]
 #[command(
     name = "casefile",
-    about = "Compact Casefile v1 scanner and one-path writer"
+    about = "Compact Casefile v1 scanner and governed writer"
 )]
 struct Cli {
     #[arg(long, default_value = ".")]
@@ -33,19 +33,32 @@ enum Command {
         #[arg(long)]
         matrix: PathBuf,
     },
-    /// Persist a validated writer binding through the Store transaction boundary.
-    ReplaceStrategyBinding {
+    /// Preview a governed strategy transition request.
+    StrategyTransitionPreview {
+        #[arg(long)]
+        request: PathBuf,
+    },
+    /// Apply an immutable governed strategy-transition preview.
+    StrategyTransitionApply {
+        #[arg(long)]
+        preview: PathBuf,
+    },
+    /// Preview a progress-gated writer-binding request.
+    WriterBindingPreview {
+        #[arg(long)]
+        request: PathBuf,
+    },
+    /// Apply an immutable writer-binding preview.
+    WriterBindingApply {
+        #[arg(long)]
+        preview: PathBuf,
+    },
+    /// Require explicit canonical in_progress state immediately before writer spawn.
+    RequireWriterProgress {
         #[arg(long)]
         investigation: String,
         #[arg(long)]
-        source: PathBuf,
-        #[arg(
-            long,
-            required = true,
-            action = clap::ArgAction::Set,
-            value_parser = clap::value_parser!(bool)
-        )]
-        implementation_active: bool,
+        ticket_id: String,
     },
     /// Project the selected implementation writer through the canonical Store-derived state.
     ProjectWriterBinding {

@@ -24,6 +24,7 @@ pub enum Kind {
     Closeout,
     Strategy,
     StrategyBinding,
+    StrategyTransition,
     Ticket,
     Epic,
     Board,
@@ -56,6 +57,9 @@ pub enum RecordSummary {
     },
     StrategyBinding {
         binding: crate::strategy::StrategyBinding,
+    },
+    StrategyTransition {
+        record: Box<crate::strategy_transition::StrategyTransitionRecord>,
     },
     WorkItem {
         id: String,

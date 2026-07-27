@@ -57,6 +57,11 @@ class WriterBindingTests(unittest.TestCase):
     def setUpClass(cls):
         cls.profiles = binding.load_profiles(PROFILES_PATH)
 
+    def setUp(self):
+        progress = mock.patch.object(binding, "require_writer_progress")
+        progress.start()
+        self.addCleanup(progress.stop)
+
     def test_complete_predicate_filters_visibility_selector_resolution_and_effort(self):
         catalog = {
             "models": [
@@ -172,6 +177,48 @@ class WriterBindingTests(unittest.TestCase):
         self.assertEqual("low", document["reasoning_effort"])
         self.assertEqual("runtime_override", document["resolution"]["mode"])
 
+    def test_persistence_uses_typed_preview_apply_and_has_no_activity_attestation(self):
+        pair = {
+            "model": "gpt-5.6-sol",
+            "reasoning_effort": "high",
+            "resolution": {"mode": "runtime_override", "value": "route"},
+        }
+        with mock.patch.object(
+            binding,
+            "checked",
+            side_effect=[json.dumps({"operation": "writer_binding"}), json.dumps({"no_op": False})],
+        ) as checked:
+            result = binding.persist_selection(
+                "casefile",
+                Path("/planning"),
+                "projects/demo/investigations/sample",
+                pair,
+            )
+        self.assertTrue(result["persisted"])
+        commands = [call.args[0] for call in checked.call_args_list]
+        self.assertIn("writer-binding-preview", commands[0])
+        self.assertIn("writer-binding-apply", commands[1])
+        self.assertNotIn("implementation-active", " ".join(sum(commands, [])))
+
+    def test_resolve_requires_canonical_ticket_progress_before_projection(self):
+        with mock.patch.object(
+            binding,
+            "require_writer_progress",
+            side_effect=binding.BindingError("ticket is not in_progress"),
+        ), mock.patch.object(binding, "binding_projection") as projection:
+            with self.assertRaisesRegex(binding.BindingError, "not in_progress"):
+                binding.resolve_spawn(
+                    "codex",
+                    Path("/home"),
+                    PROFILES_PATH,
+                    "casefile",
+                    Path("/planning"),
+                    "projects/demo/investigations/sample",
+                    "casefile-implement-ticket-batch",
+                    "HMD-011",
+                )
+            projection.assert_not_called()
+
     def test_v1_and_v2_resolve_alternate_binding_for_resume_and_correction(self):
         catalog_v1 = {
             "models": [
@@ -210,6 +257,7 @@ class WriterBindingTests(unittest.TestCase):
                         Path("/planning"),
                         "projects/demo/investigations/sample",
                         strategy_id,
+                        "HMD-011",
                     )
                     second = binding.resolve_spawn(
                         "codex",
@@ -219,6 +267,7 @@ class WriterBindingTests(unittest.TestCase):
                         Path("/planning"),
                         "projects/demo/investigations/sample",
                         strategy_id,
+                        "HMD-011",
                     )
                     self.assertEqual(first, second)
                     self.assertEqual("binding", first["binding_source"])
@@ -272,6 +321,7 @@ class WriterBindingTests(unittest.TestCase):
                     Path("/planning"),
                     "projects/demo/investigations/sample",
                     "casefile-implement-ticket-batch",
+                    "HMD-011",
                 )
                 second = binding.resolve_spawn(
                     "codex",
@@ -281,6 +331,7 @@ class WriterBindingTests(unittest.TestCase):
                     Path("/planning"),
                     "projects/demo/investigations/sample",
                     "casefile-implement-ticket-batch",
+                    "HMD-011",
                 )
             self.assertEqual(first, second)
             self.assertEqual(2, active_catalog.call_count)
@@ -310,6 +361,7 @@ class WriterBindingTests(unittest.TestCase):
                     Path("/planning"),
                     "projects/demo/investigations/sample",
                     "casefile-implement-ticket-batch",
+                    "HMD-011",
                 )
         for state in ("pending", "unresolved", "invalid"):
             with self.subTest(state=state), mock.patch.object(
@@ -324,6 +376,7 @@ class WriterBindingTests(unittest.TestCase):
                         Path("/planning"),
                         "projects/demo/investigations/sample",
                         "casefile-implement-ticket-batch",
+                        "HMD-011",
                     )
 
         for malformed in (
@@ -343,6 +396,7 @@ class WriterBindingTests(unittest.TestCase):
                         Path("/planning"),
                         "projects/demo/investigations/sample",
                         "casefile-implement-ticket-batch",
+                        "HMD-011",
                     )
 
     def test_unavailable_selection_never_calls_persistence_bridge(self):
@@ -384,8 +438,6 @@ class WriterBindingTests(unittest.TestCase):
                     "gpt-5.3-codex-spark",
                     "--reasoning-effort",
                     "low",
-                    "--implementation-active",
-                    "false",
                 ],
             ):
                 self.assertEqual(1, binding.main())
@@ -419,6 +471,7 @@ class WriterBindingTests(unittest.TestCase):
                         root,
                         "projects/demo/investigations/sample",
                         "casefile-implement-ticket-batch",
+                        "HMD-011",
                     )
                 persist.assert_not_called()
 
@@ -454,8 +507,6 @@ class WriterBindingTests(unittest.TestCase):
                         "gpt-5.6-terra",
                         "--reasoning-effort",
                         "medium",
-                        "--implementation-active",
-                        "false",
                     ],
                 ):
                     self.assertEqual(0, binding.main())

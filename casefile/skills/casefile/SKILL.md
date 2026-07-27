@@ -35,8 +35,8 @@ active Codex home only after the delivery board is provisioned. Present every re
 pair, identify Sol/high as the recommendation, and require an explicit exact choice. If the offer
 marks Sol/high unavailable, say so and present every remaining valid pair without recommending an
 unselectable pair. Do not infer a recommendation as consent. Persist only the confirmed pair with
-the resolver's `select` command and `--implementation-active false`; it delegates to the canonical
-Casefile binding transaction. If offering or persistence fails, stop without further planning or
+the resolver's `select` command; it delegates the inactivity decision and immutable preview/apply to
+canonical Store progress and the Casefile binding transaction. If offering or persistence fails, stop without further planning or
 source mutation and surface the diagnostic. This selection gate is Codex-only; do not change Claude
 startup. Existing Casefiles being resumed without a binding retain their selected implementation
 matrix default and do not receive a start-time backfill.

@@ -6,6 +6,8 @@ use casefile_core::{
 };
 use casefile_store::{
     ActivationState, ProgressChangeRequest, ProgressPreview, Store, StrategyBindingState,
+    StrategyTransitionPreview, StrategyTransitionRequest, WriterBindingPreview,
+    WriterBindingRequest,
 };
 use serde::Serialize;
 use std::{fs, path::PathBuf, process::ExitCode};
@@ -111,17 +113,36 @@ pub(super) fn execute(root: PathBuf, command: Command) -> Result<ExitCode> {
             print_json(&store.bootstrap_progress(&investigation)?)?;
             Ok(ExitCode::SUCCESS)
         }
-        Command::ReplaceStrategyBinding {
+        Command::StrategyTransitionPreview { request } => {
+            let request: StrategyTransitionRequest = read_json(&request)?;
+            print_json(&store.preview_strategy_transition(request)?)?;
+            Ok(ExitCode::SUCCESS)
+        }
+        Command::StrategyTransitionApply { preview } => {
+            let preview: StrategyTransitionPreview = read_json(&preview)?;
+            print_json(&store.apply_strategy_transition(preview)?)?;
+            Ok(ExitCode::SUCCESS)
+        }
+        Command::WriterBindingPreview { request } => {
+            let request: WriterBindingRequest = read_json(&request)?;
+            print_json(&store.preview_writer_binding(request)?)?;
+            Ok(ExitCode::SUCCESS)
+        }
+        Command::WriterBindingApply { preview } => {
+            let preview: WriterBindingPreview = read_json(&preview)?;
+            print_json(&store.apply_writer_binding(preview)?)?;
+            Ok(ExitCode::SUCCESS)
+        }
+        Command::RequireWriterProgress {
             investigation,
-            source,
-            implementation_active,
+            ticket_id,
         } => {
-            let source = fs::read_to_string(&source)
-                .with_context(|| format!("read {}", source.display()))?;
-            store.replace_strategy_binding(&investigation, &source, implementation_active)?;
+            store.require_writer_progress(&investigation, &ticket_id)?;
             print_json(&serde_json::json!({
-                "path": format!("{}/strategy/bindings.toml", investigation.trim_end_matches('/')),
-                "replaced": true,
+                "investigation": investigation,
+                "ticket_id": ticket_id,
+                "status": "in_progress",
+                "writer_spawn_permitted": true,
             }))?;
             Ok(ExitCode::SUCCESS)
         }

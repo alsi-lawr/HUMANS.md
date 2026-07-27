@@ -13,6 +13,7 @@ mod rendering;
 mod request;
 mod snapshot;
 mod strategy;
+mod strategy_transition;
 mod work_item;
 
 pub use board::{BoardColumn, BoardDraft, BoardStatusSource};
@@ -42,6 +43,10 @@ pub use strategy::{
 pub use strategy::{
     parse as parse_strategy, parse_binding as parse_strategy_binding,
     parse_projection as parse_strategy_projection, validate_matrix as validate_strategy_matrix,
+};
+pub use strategy_transition::{
+    ActiveOwnership, StrategyTransitionRecord, parse_strategy_transition,
+    render_strategy_transition, validate_strategy_transition,
 };
 pub use work_item::WorkItemDraft;
 
