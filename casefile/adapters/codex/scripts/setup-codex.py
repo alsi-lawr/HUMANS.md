@@ -55,6 +55,10 @@ SCALAR_BEGIN = b"# >>> casefile setup scalars >>>\n"
 SCALAR_END = b"# <<< casefile setup scalars <<<\n"
 TABLE_BEGIN = b"\n# >>> casefile setup tables >>>\n"
 TABLE_END = b"# <<< casefile setup tables <<<\n"
+FEATURE_BEGIN = b"# >>> casefile setup feature keys >>>\n"
+FEATURE_END = b"# <<< casefile setup feature keys <<<\n"
+AGENT_BEGIN = b"# >>> casefile setup agent keys >>>\n"
+AGENT_END = b"# <<< casefile setup agent keys <<<\n"
 LEGACY_PATHS: tuple[str, ...] = ()
 
 
@@ -258,6 +262,25 @@ def marked(begin: bytes, payload: bytes, end: bytes) -> bytes:
     return begin + payload.rstrip(b"\n") + b"\n" + end
 
 
+def insert_table_keys(current: bytes, name: str, payload: bytes) -> bytes:
+    lines = current.splitlines(keepends=True)
+    matches = []
+    for index, line in enumerate(lines):
+        try:
+            header = tomllib.loads(line.decode("utf-8"))
+        except (UnicodeError, tomllib.TOMLDecodeError):
+            continue
+        if header == {name: {}}:
+            matches.append(index)
+    if len(matches) != 1:
+        raise SetupError(f"[{name}] cannot be merged safely")
+    position = matches[0] + 1
+    prefix = b"".join(lines[:position])
+    if prefix and not prefix.endswith((b"\n", b"\r")):
+        prefix += b"\n"
+    return prefix + payload + b"".join(lines[position:])
+
+
 def config_candidate(
     current: bytes,
     root: Path,
@@ -267,17 +290,9 @@ def config_candidate(
     planning_root: Path,
 ) -> bytes:
     document = tomllib.loads(current.decode("utf-8")) if current else {}
-    conflicts = {
-        key
-        for key in ("model_catalog_json", "features", "agents")
-        if key in document
-    }
+    conflicts = {key for key in ("model_catalog_json",) if key in document}
     if isinstance(document.get("mcp_servers"), dict) and "casefile" in document["mcp_servers"]:
         conflicts.add("mcp_servers.casefile")
-    if conflicts:
-        raise SetupError(
-            "managed config already exists; clean it before setup: " + ", ".join(sorted(conflicts))
-        )
     version = multi_agent_version(version)
     fragment = (root / "config/config-fragment.toml.in").read_text(encoding="ascii")
     fragment = fragment.replace("__HUMANS_MD_PLUGIN_ROOT__", str(root).replace("\\", "/"))
@@ -285,6 +300,64 @@ def config_candidate(
     fragment = fragment.replace("__CASEFILE_MULTI_AGENT_V2__", "false" if version == "v1" else "true")
     fragment = fragment.replace("__CASEFILE_EXECUTABLE__", json.dumps(str(binary)))
     fragment = fragment.replace("__CASEFILE_PLANNING_ROOT__", json.dumps(str(planning_root)))
+    managed = tomllib.loads(fragment)
+
+    existing_features = document.get("features")
+    if existing_features is not None and not isinstance(existing_features, dict):
+        conflicts.add("features")
+    elif isinstance(existing_features, dict):
+        additions = []
+        for name, value in managed["features"].items():
+            if name in existing_features and existing_features[name] != value:
+                conflicts.add(f"features.{name}")
+            elif name not in existing_features:
+                additions.append(f"{name} = {'true' if value else 'false'}")
+        if additions:
+            current = insert_table_keys(
+                current,
+                "features",
+                marked(
+                    FEATURE_BEGIN,
+                    ("\n".join(additions) + "\n").encode("ascii"),
+                    FEATURE_END,
+                ),
+            )
+        _, fragment = fragment.split("\n[mcp_servers.casefile]\n", 1)
+        fragment = "[mcp_servers.casefile]\n" + fragment
+
+    existing_agents = document.get("agents")
+    if existing_agents is not None and not isinstance(existing_agents, dict):
+        conflicts.add("agents")
+    elif isinstance(existing_agents, dict):
+        additions = []
+        for name in ("max_depth", "max_threads"):
+            required = managed["agents"][name]
+            if name not in existing_agents:
+                additions.append(f"{name} = {required}")
+            elif (
+                isinstance(existing_agents[name], bool)
+                or not isinstance(existing_agents[name], int)
+                or existing_agents[name] < required
+            ):
+                conflicts.add(f"agents.{name}")
+        profiles = set(managed["agents"]) - {"max_depth", "max_threads"}
+        conflicts.update(f"agents.{name}" for name in profiles & set(existing_agents))
+        if additions:
+            current = insert_table_keys(
+                current,
+                "agents",
+                marked(
+                    AGENT_BEGIN,
+                    ("\n".join(additions) + "\n").encode("ascii"),
+                    AGENT_END,
+                ),
+            )
+        fragment = fragment.replace("\n[agents]\nmax_depth = 2\nmax_threads = 6\n", "\n", 1)
+
+    if conflicts:
+        raise SetupError(
+            "managed config keys conflict with setup: " + ", ".join(sorted(conflicts))
+        )
     scalar_block = marked(
         SCALAR_BEGIN,
         f"model_catalog_json = {json.dumps(str(catalog))}\n".encode("utf-8"),
@@ -298,19 +371,26 @@ def config_candidate(
 
 def unowned_config(data: bytes) -> bytes:
     ranges = []
-    for name, begin, end in (
-        ("scalars", SCALAR_BEGIN, SCALAR_END),
-        ("tables", TABLE_BEGIN, TABLE_END),
+    for name, begin, end, required in (
+        ("scalars", SCALAR_BEGIN, SCALAR_END, True),
+        ("tables", TABLE_BEGIN, TABLE_END, True),
+        ("feature keys", FEATURE_BEGIN, FEATURE_END, False),
+        ("agent keys", AGENT_BEGIN, AGENT_END, False),
     ):
-        if data.count(begin) != 1 or data.count(end) != 1:
+        expected = 1 if required else 0
+        if data.count(begin) != data.count(end) or data.count(begin) not in {expected, 1}:
             raise SetupError(f"managed config block is missing or duplicated: {name}")
+        if not data.count(begin):
+            continue
         start = data.index(begin)
         stop = data.index(end, start) + len(end)
         ranges.append((start, stop))
     ranges.sort()
-    if ranges[0][1] > ranges[1][0]:
+    if any(first[1] > second[0] for first, second in zip(ranges, ranges[1:])):
         raise SetupError("managed config blocks overlap")
-    result = data[: ranges[0][0]] + data[ranges[0][1] : ranges[1][0]] + data[ranges[1][1] :]
+    result = data
+    for start, stop in reversed(ranges):
+        result = result[:start] + result[stop:]
     if result:
         tomllib.loads(result.decode("utf-8"))
     return result
@@ -638,7 +718,7 @@ def preview(plan: dict) -> dict:
         "receipt_root": str(home / "backups/casefile"),
         "patched_models": plan["patched"],
         "skipped_optional_models": plan["skipped"],
-        "config_ownership": "marked blocks",
+        "config_ownership": "marked key and table blocks",
         "restart_required": True,
         "planning_root": str(plan["planning_root"]),
         "casefile_executable": str(plan["binary"]),

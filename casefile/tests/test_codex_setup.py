@@ -145,6 +145,8 @@ class CodexSetupTests(unittest.TestCase):
         original = (
             b'model = "gpt-5.5"\npersonality = "pragmatic"\n'
             b'\n[mcp_servers.unrelated]\ncommand = "/unrelated/server"\n'
+            b'\n[features]\ndefault_mode_request_user_input = true\n'
+            b'\n[agents]\nmax_threads = 12\n'
         )
         (home / "config.toml").write_bytes(original)
         legacy = home / "skills/investigation-solo"
@@ -410,7 +412,7 @@ class CodexSetupTests(unittest.TestCase):
     def test_config_conflict_rejects_before_model_export(self):
         conflicts = {
             "model_catalog_json": 'model_catalog_json = "other.json"\n',
-            "features": "[features]\nmulti_agent = true\n",
+            "features": "[features]\nmulti_agent = false\n",
             "agents": "[agents]\nmax_threads = 1\n",
             "mcp_servers.casefile": '[mcp_servers.casefile]\ncommand = "/unowned"\n',
         }
@@ -420,7 +422,7 @@ class CodexSetupTests(unittest.TestCase):
                 (home / "config.toml").write_text(config, encoding="ascii")
                 fake = FakeCodex(catalog)
                 with self.fake_command(fake):
-                    with self.assertRaisesRegex(setup.SetupError, "managed config already exists"):
+                    with self.assertRaisesRegex(setup.SetupError, "managed config keys conflict"):
                         setup.prepare(plugin, home, "codex")
                 self.assertEqual(0, fake.model_acquisition_calls)
 
