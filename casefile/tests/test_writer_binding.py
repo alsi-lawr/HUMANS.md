@@ -156,8 +156,11 @@ class WriterBindingTests(unittest.TestCase):
                     }
                 ]
             }
+            acquisition = {"projection": projection, "raw": {"models": []}}
             with mock.patch.object(
-                binding.codex_app_server, "model_projection", return_value=projection
+                binding.codex_app_server,
+                "authenticated_model_catalog",
+                return_value=acquisition,
             ) as model_list:
                 active = binding.active_catalog("codex", home)
             model_list.assert_called_once()
@@ -177,7 +180,9 @@ class WriterBindingTests(unittest.TestCase):
                 }
             )
             with mock.patch.object(
-                binding.codex_app_server, "model_projection", return_value=projection
+                binding.codex_app_server,
+                "authenticated_model_catalog",
+                return_value=acquisition,
             ), self.assertRaisesRegex(binding.BindingError, "IDs differ"):
                 binding.active_catalog("codex", home)
 

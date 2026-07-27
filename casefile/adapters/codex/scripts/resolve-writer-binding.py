@@ -156,9 +156,12 @@ def owned_catalog(home: Path, runtime: str) -> dict:
 def active_catalog(executable: str, home: Path) -> dict:
     environment = {**os.environ, "CODEX_HOME": str(home)}
     try:
-        projection = codex_app_server.model_projection(executable, environment)
+        acquisition = codex_app_server.authenticated_model_catalog(
+            executable, home, environment
+        )
     except codex_app_server.AppServerError as error:
         raise BindingError(f"Codex model availability failed: {error}") from error
+    projection = acquisition["projection"]
     projected = catalog_models(projection, "Codex model projection")
     configured = catalog_models(
         owned_catalog(home, active_runtime(home)), "active Casefile catalog"

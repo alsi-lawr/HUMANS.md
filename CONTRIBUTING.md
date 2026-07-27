@@ -307,12 +307,16 @@ not edit a strategy or binding.
 
 The Codex adapter owns the selected Casefile model catalog and multi-agent runtime. Setup defaults
 to V1; V2 requires Codex 0.145.0 or newer. Codex setup confirms Sol, Terra, Luna, and Spark through
-app-server `model/list`; fresh setup then reads the Codex-owned raw cache once to construct the
-Casefile catalog, while upgrades reuse the active receipt-owned catalog. Casefile never invokes a
-debug model command or writes, configures, packages, or distributes Codex's cache. The Claude
-adapter supplies workflow skills, matrices, role agents, and a separate Casefile MCP binding
-transaction without owning the standing contract. Neither adapter removes the shared marketplace or
-sibling plugins.
+app-server `model/list` in a private configuration-free home. Fresh setup and upgrade both use the
+new Codex-owned cache from that request to construct the Casefile catalog; upgrades use the active
+receipt-owned catalog only to validate selectors before replacement. File-auth homes are refreshed
+by Codex itself before a temporary credential copy is made, while environment API-key auth can be
+used directly. Keyring-only homes fail closed because Codex keyring identity is home-derived and is
+not assumed to cross into the private home. The temporary home is removed and selected configuration
+and model-cache bytes must remain unchanged. Casefile never invokes a debug model command or writes,
+configures, packages, or distributes Codex's selected-home cache. The Claude adapter supplies
+workflow skills, matrices, role agents, and a separate Casefile MCP binding transaction without
+owning the standing contract. Neither adapter removes the shared marketplace or sibling plugins.
 
 The source CLI is optional infrastructure, not part of installed plugin setup:
 

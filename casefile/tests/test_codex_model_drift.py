@@ -84,6 +84,14 @@ class CodexModelDriftTests(unittest.TestCase):
         self.assertIn("codex_app_server.py", workflow)
         self.assertIn("model projection", workflow)
         self.assertNotIn("codex debug", workflow)
+        self.assertIn("continue-on-error: true", workflow)
+        self.assertIn("steps.acquisition.outcome != 'success'", workflow)
+        self.assertEqual(2, workflow.count("steps.acquisition.outcome == 'success'"))
+        summary = workflow.index("drift issues were left untouched")
+        compare = workflow.index("Compare declared profile fields")
+        maintain = workflow.index("Maintain one labelled drift issue")
+        self.assertLess(summary, compare)
+        self.assertLess(compare, maintain)
 
     def test_declared_overrides_and_missing_optional_models_are_not_drift(self):
         code, output = self.run_check(catalog(self.profiles, {"gpt-5.5"}))

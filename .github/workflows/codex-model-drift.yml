@@ -21,6 +21,8 @@ jobs:
         with:
           node-version: "lts/*"
       - name: Read latest stable model projection
+        id: acquisition
+        continue-on-error: true
         run: |
           npm install --global @openai/codex
           export CODEX_HOME="$RUNNER_TEMP/codex-home"
@@ -29,7 +31,12 @@ jobs:
             --codex-executable codex \
             --codex-home "$CODEX_HOME" \
             --output "$RUNNER_TEMP/codex-models.json"
+      - name: Report unavailable authenticated acquisition
+        if: steps.acquisition.outcome != 'success'
+        run: |
+          echo "Authenticated Codex model acquisition is unavailable; drift issues were left untouched." >> "$GITHUB_STEP_SUMMARY"
       - name: Compare declared profile fields
+        if: steps.acquisition.outcome == 'success'
         id: drift
         continue-on-error: true
         run: |
@@ -38,6 +45,7 @@ jobs:
             --profiles casefile/adapters/codex/profiles.toml \
             --output "$RUNNER_TEMP/codex-model-drift.md"
       - name: Maintain one labelled drift issue
+        if: steps.acquisition.outcome == 'success'
         env:
           GH_TOKEN: ${{ github.token }}
           DRIFT_OUTCOME: ${{ steps.drift.outcome }}

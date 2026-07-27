@@ -45,7 +45,7 @@ class FakeCodex:
         self.installed = True
         self.marketplace = True
         self.calls: list[list[str]] = []
-        self.model_projection_calls = 0
+        self.model_acquisition_calls = 0
 
     def result(self, args, value, code=0):
         return subprocess.CompletedProcess(args, code, json.dumps(value), "")
@@ -156,40 +156,37 @@ class CodexSetupTests(unittest.TestCase):
     def fake_command(self, fake):
         previous = setup.command
         previous_probe = setup.casefile_runtime.probe
-        previous_projection = setup.codex_app_server.model_projection
+        previous_acquisition = setup.codex_app_server.authenticated_model_catalog
 
-        def projection(_executable, environment):
-            fake.model_projection_calls += 1
-            home = Path(environment["CODEX_HOME"])
-            config = home / "config.toml"
-            document = (
-                tomllib.loads(config.read_text(encoding="ascii"))
-                if config.is_file()
-                else {}
-            )
-            if "model_catalog_json" not in document:
-                (home / "models_cache.json").write_bytes(setup.canonical(fake.raw_catalog))
+        def acquisition(_executable, selected_home, environment):
+            fake.model_acquisition_calls += 1
+            self.assertEqual(selected_home, Path(environment["CODEX_HOME"]))
             return {
-                "models": [
-                    {
-                        "slug": model["slug"],
-                        "display_name": model["display_name"],
-                        "visibility": model["visibility"],
-                        "supported_reasoning_levels": model["supported_reasoning_levels"],
-                    }
-                    for model in fake.catalog["models"]
-                ]
+                "projection": {
+                    "models": [
+                        {
+                            "slug": model["slug"],
+                            "display_name": model["display_name"],
+                            "visibility": model["visibility"],
+                            "supported_reasoning_levels": model[
+                                "supported_reasoning_levels"
+                            ],
+                        }
+                        for model in fake.catalog["models"]
+                    ]
+                },
+                "raw": fake.raw_catalog,
             }
 
         setup.command = fake
         setup.casefile_runtime.probe = lambda *_: None
-        setup.codex_app_server.model_projection = projection
+        setup.codex_app_server.authenticated_model_catalog = acquisition
         try:
             yield
         finally:
             setup.command = previous
             setup.casefile_runtime.probe = previous_probe
-            setup.codex_app_server.model_projection = previous_projection
+            setup.codex_app_server.authenticated_model_catalog = previous_acquisition
 
     def test_active_models_install_and_uninstall_preserve_unowned_config(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -218,7 +215,7 @@ class CodexSetupTests(unittest.TestCase):
                 self.assertFalse(fake.installed)
                 self.assertTrue(fake.marketplace)
                 self.assertEqual("installed", result["status"])
-                self.assertEqual(3, fake.model_projection_calls)
+                self.assertEqual(3, fake.model_acquisition_calls)
                 self.assertFalse(any("debug" in call for call in fake.calls))
 
     def test_v1_and_v2_lifecycle_record_selected_catalog_and_preserve_other_variant(self):
@@ -330,10 +327,13 @@ class CodexSetupTests(unittest.TestCase):
                 owned["upgrade_owned_marker"] = "retained"
                 owned_catalog.write_bytes(setup.canonical(owned))
                 (home / "models_cache.json").write_bytes(b"not JSON\n")
+                catalog["upgrade_fresh_marker"] = "retained"
                 upgrade_plan = setup.prepare(plugin, home, "codex")
                 self.assertEqual(
-                    "retained", json.loads(upgrade_plan["catalog"])["upgrade_owned_marker"]
+                    "retained", json.loads(upgrade_plan["catalog"])["upgrade_fresh_marker"]
                 )
+                self.assertNotIn("upgrade_owned_marker", json.loads(upgrade_plan["catalog"]))
+                self.assertEqual(b"not JSON\n", (home / "models_cache.json").read_bytes())
                 upgraded = setup.install(upgrade_plan)
                 receipt_path, receipt = setup.receipt(home, Path(upgraded["receipt"]))
                 self.assertEqual(6, receipt["schema_version"])
@@ -365,7 +365,8 @@ class CodexSetupTests(unittest.TestCase):
                 plan = setup.prepare(plugin, home, "codex")
             self.assertIn("gpt-5.3-codex-spark", plan["patched"])
             self.assertEqual("retained", json.loads(plan["catalog"])["fresh_raw_marker"])
-            self.assertEqual(1, fake.model_projection_calls)
+            self.assertEqual(b"not JSON\n", (home / "models_cache.json").read_bytes())
+            self.assertEqual(1, fake.model_acquisition_calls)
             self.assertFalse(any("debug" in call for call in fake.calls))
 
     def test_missing_each_required_model_is_rejected_before_v1_or_v2_mutation(self):
@@ -421,7 +422,7 @@ class CodexSetupTests(unittest.TestCase):
                 with self.fake_command(fake):
                     with self.assertRaisesRegex(setup.SetupError, "managed config already exists"):
                         setup.prepare(plugin, home, "codex")
-                self.assertEqual(0, fake.model_projection_calls)
+                self.assertEqual(0, fake.model_acquisition_calls)
 
     def test_writer_profile_and_runtime_override_drift_reject_before_model_export(self):
         for route in ("named", "runtime"):
@@ -454,7 +455,7 @@ class CodexSetupTests(unittest.TestCase):
                 with self.fake_command(fake):
                     with self.assertRaisesRegex(setup.SetupError, diagnostic):
                         setup.prepare(plugin, home, "codex", "v2")
-                self.assertEqual(0, fake.model_projection_calls)
+                self.assertEqual(0, fake.model_acquisition_calls)
 
     def test_effective_v1_and_v2_catalogs_require_spark(self):
         for version in ("v1", "v2"):

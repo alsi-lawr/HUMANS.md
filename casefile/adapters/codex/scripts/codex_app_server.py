@@ -6,8 +6,10 @@ import argparse
 import json
 import os
 import queue
+import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 from pathlib import Path
@@ -38,6 +40,7 @@ class AppServer:
         executable: str,
         environment: dict[str, str] | None = None,
         timeout: float = DEFAULT_TIMEOUT,
+        cwd: Path | None = None,
     ) -> None:
         if timeout <= 0:
             raise AppServerError("app-server timeout must be positive")
@@ -45,6 +48,7 @@ class AppServer:
         self.process = subprocess.Popen(
             [executable, "app-server", "--stdio"],
             env=environment,
+            cwd=cwd,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -74,8 +78,7 @@ class AppServer:
             self.stderr.append(line.rstrip("\r\n"))
 
     def _diagnostic(self) -> str:
-        detail = "\n".join(self.stderr).strip()
-        return detail or "no diagnostic output"
+        return "diagnostic output suppressed" if self.stderr else "no diagnostic output"
 
     def send(self, message: dict) -> None:
         if self.process.poll() is not None:
@@ -232,37 +235,136 @@ def normalize(models: list[object]) -> list[dict]:
     return result
 
 
-def model_projection(
-    executable: str,
-    environment: dict[str, str] | None = None,
-    timeout: float = DEFAULT_TIMEOUT,
-) -> dict:
+def _model_projection(server: AppServer) -> dict:
     models: list[object] = []
     cursor: str | None = None
     seen_cursors: set[str] = set()
-    with AppServer(executable, environment, timeout) as server:
-        server.initialize()
-        for _ in range(MAX_PAGES):
-            result = server.request(
-                "model/list",
-                {"cursor": cursor, "includeHidden": True, "limit": PAGE_LIMIT},
-            )
-            page = result.get("data")
-            next_cursor = result.get("nextCursor")
-            if not isinstance(page, list) or not (
-                next_cursor is None or isinstance(next_cursor, str) and next_cursor
-            ):
-                raise AppServerError("app-server model/list returned an invalid page")
-            models.extend(page)
-            if next_cursor is None:
-                break
-            if next_cursor in seen_cursors:
-                raise AppServerError("app-server model/list repeated a pagination cursor")
-            seen_cursors.add(next_cursor)
-            cursor = next_cursor
-        else:
-            raise AppServerError("app-server model/list exceeded the pagination limit")
+    for _ in range(MAX_PAGES):
+        result = server.request(
+            "model/list",
+            {"cursor": cursor, "includeHidden": True, "limit": PAGE_LIMIT},
+        )
+        page = result.get("data")
+        next_cursor = result.get("nextCursor")
+        if not isinstance(page, list) or not (
+            next_cursor is None or isinstance(next_cursor, str) and next_cursor
+        ):
+            raise AppServerError("app-server model/list returned an invalid page")
+        models.extend(page)
+        if next_cursor is None:
+            break
+        if next_cursor in seen_cursors:
+            raise AppServerError("app-server model/list repeated a pagination cursor")
+        seen_cursors.add(next_cursor)
+        cursor = next_cursor
+    else:
+        raise AppServerError("app-server model/list exceeded the pagination limit")
     return {"models": normalize(models)}
+
+
+def _raw_catalog(path: Path) -> dict:
+    if path.is_symlink() or not path.is_file():
+        raise AppServerError("authenticated model/list did not produce a safe model cache")
+    try:
+        value = json.loads(path.read_bytes())
+    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        raise AppServerError("authenticated model/list produced an invalid model cache") from error
+    if not isinstance(value, dict) or not isinstance(value.get("models"), list):
+        raise AppServerError("authenticated model/list produced an unsupported model cache")
+    return value
+
+
+def _identifiers(document: dict, field: str, label: str) -> set[str]:
+    identifiers: list[str] = []
+    for model in document["models"]:
+        identifier = model.get(field) if isinstance(model, dict) else None
+        if not isinstance(identifier, str) or not identifier:
+            raise AppServerError(f"{label} contains a model without an ID")
+        identifiers.append(identifier)
+    if len(identifiers) != len(set(identifiers)):
+        raise AppServerError(f"{label} contains duplicate model IDs")
+    return set(identifiers)
+
+
+def _protected_bytes(path: Path) -> bytes | None:
+    if path.is_symlink():
+        raise AppServerError("selected Codex configuration or model cache is unsafe")
+    return path.read_bytes() if path.is_file() else None
+
+
+def authenticated_model_catalog(
+    executable: str,
+    selected_home: Path,
+    environment: dict[str, str] | None = None,
+    timeout: float = DEFAULT_TIMEOUT,
+) -> dict:
+    selected_home = selected_home.expanduser().resolve(strict=True)
+    source_auth = selected_home / "auth.json"
+    if source_auth.exists() and (source_auth.is_symlink() or not source_auth.is_file()):
+        raise AppServerError("selected Codex authentication state is unsafe")
+    protected = {
+        path: _protected_bytes(path)
+        for path in (selected_home / "config.toml", selected_home / "models_cache.json")
+    }
+    try:
+        with tempfile.TemporaryDirectory(prefix="casefile-codex-models-") as temporary:
+            acquisition_home = Path(temporary)
+            os.chmod(acquisition_home, 0o700)
+            base_environment = dict(environment or os.environ)
+            if source_auth.is_file():
+                refresh_environment = dict(base_environment)
+                refresh_environment["CODEX_HOME"] = str(selected_home)
+                refresh_environment["PWD"] = str(acquisition_home)
+                with AppServer(
+                    executable,
+                    refresh_environment,
+                    timeout,
+                    cwd=acquisition_home,
+                ) as server:
+                    server.initialize()
+                    account = server.request("account/read", {"refreshToken": True})
+                    if not isinstance(account.get("account"), dict):
+                        raise AppServerError(
+                            "selected Codex file authentication is unavailable"
+                        )
+                if not source_auth.is_file() or source_auth.is_symlink():
+                    raise AppServerError("selected Codex file authentication became unsafe")
+            elif not base_environment.get("OPENAI_API_KEY"):
+                raise AppServerError(
+                    "authenticated acquisition requires safe Codex file auth or OPENAI_API_KEY"
+                )
+            if source_auth.is_file():
+                target_auth = acquisition_home / "auth.json"
+                shutil.copyfile(source_auth, target_auth)
+                os.chmod(target_auth, 0o600)
+            isolated_environment = dict(base_environment)
+            isolated_environment["CODEX_HOME"] = str(acquisition_home)
+            isolated_environment["PWD"] = str(acquisition_home)
+            with AppServer(
+                executable,
+                isolated_environment,
+                timeout,
+                cwd=acquisition_home,
+            ) as server:
+                server.initialize()
+                account = server.request("account/read", {"refreshToken": False})
+                if not isinstance(account.get("account"), dict):
+                    raise AppServerError("authenticated Codex model acquisition is unavailable")
+                projection = _model_projection(server)
+                raw = _raw_catalog(acquisition_home / "models_cache.json")
+            projection_ids = _identifiers(projection, "slug", "Codex model projection")
+            raw_ids = _identifiers(raw, "slug", "Codex model cache")
+            if projection_ids != raw_ids:
+                raise AppServerError(
+                    "authenticated model projection IDs differ from the fresh Codex model cache"
+                )
+            result = {"projection": projection, "raw": raw}
+    finally:
+        if any(_protected_bytes(path) != before for path, before in protected.items()):
+            raise AppServerError(
+                "authenticated acquisition changed selected Codex configuration or model cache"
+            )
+    return result
 
 
 def canonical(value: object) -> str:
@@ -272,17 +374,19 @@ def canonical(value: object) -> str:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--codex-executable", default="codex")
-    parser.add_argument("--codex-home", type=Path)
+    parser.add_argument("--codex-home", type=Path, required=True)
     parser.add_argument("--output", type=Path)
     parser.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT)
     arguments = parser.parse_args()
     environment = dict(os.environ)
-    if arguments.codex_home is not None:
-        environment["CODEX_HOME"] = str(arguments.codex_home.expanduser().resolve())
     try:
-        output = canonical(
-            model_projection(arguments.codex_executable, environment, arguments.timeout)
+        acquired = authenticated_model_catalog(
+            arguments.codex_executable,
+            arguments.codex_home,
+            environment,
+            arguments.timeout,
         )
+        output = canonical(acquired["projection"])
         if arguments.output is None:
             sys.stdout.write(output)
         else:

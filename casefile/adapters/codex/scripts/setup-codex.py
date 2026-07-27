@@ -483,9 +483,9 @@ def require_v2(executable: str, environment: dict[str, str]) -> tuple[int, int, 
     return version
 
 
-def available_models(executable: str, environment: dict[str, str]) -> dict:
+def acquire_models(executable: str, home: Path, environment: dict[str, str]) -> dict:
     try:
-        return codex_app_server.model_projection(executable, environment)
+        return codex_app_server.authenticated_model_catalog(executable, home, environment)
     except codex_app_server.AppServerError as error:
         raise SetupError(f"Codex model availability failed: {error}") from error
 
@@ -539,6 +539,25 @@ def cross_check_catalog(projection_ids: set[str], raw: dict, label: str) -> None
         raise SetupError(f"{label} differs from Codex model projection: {'; '.join(details)}")
 
 
+def verify_catalog_selectors(document: dict, version: str, label: str) -> None:
+    version = multi_agent_version(version)
+    models = document.get("models")
+    if not isinstance(models, list):
+        raise SetupError(f"{label} has no model list")
+    selected = {
+        model.get("slug"): model for model in models if isinstance(model, dict)
+    }
+    if version == "v1":
+        for model_id in V1_SELECTOR_MODELS:
+            model = selected.get(model_id)
+            if not isinstance(model, dict) or model.get("multi_agent_version") is not None:
+                raise SetupError(f"{label} did not activate V1 for {model_id}")
+    else:
+        for model_id, model in selected.items():
+            if model.get("multi_agent_version") != "v2":
+                raise SetupError(f"{label} did not activate V2 for {model_id}")
+
+
 def prepare(
     root: Path,
     home: Path,
@@ -571,11 +590,15 @@ def prepare(
         current = unowned_config(current)
     # Refuse a managed configuration before asking Codex to refresh its authenticated catalog.
     config = config_candidate(current, root, catalog_path, version, binary, planning)
-    projection = available_models(executable, environment)
+    acquired = acquire_models(executable, home, environment)
+    projection = acquired["projection"]
     projection_ids = require_available_models(projection)
-    source_path = catalog_path if previous is not None else home / "models_cache.json"
-    raw = raw_catalog(source_path)
-    cross_check_catalog(projection_ids, raw, "Codex catalog source")
+    raw = acquired["raw"]
+    cross_check_catalog(projection_ids, raw, "fresh Codex model cache")
+    if previous is not None:
+        owned = raw_catalog(catalog_path)
+        cross_check_catalog(projection_ids, owned, "active Casefile catalog")
+        verify_catalog_selectors(owned, version, "active Casefile catalog")
     catalog, patched, skipped = catalog_override(raw, root / "config/profiles.toml", version)
     return {
         "root": root,
@@ -633,29 +656,13 @@ def doctor(plan: dict) -> None:
 
 def verify_effective_catalog(plan: dict) -> None:
     version = multi_agent_version(plan.get("multi_agent_version", "v1"))
-    projection = available_models(plan["executable"], plan["environment"])
+    acquired = acquire_models(plan["executable"], plan["home"], plan["environment"])
+    projection = acquired["projection"]
     projection_ids = require_available_models(projection)
     catalog_path = plan["home"] / f"models-casefile-{version}.json"
     document = raw_catalog(catalog_path)
     cross_check_catalog(projection_ids, document, "written Casefile catalog")
-    models = document["models"]
-    selected = {
-        model.get("slug"): model for model in models if isinstance(model, dict)
-    }
-    missing = sorted(REQUIRED_MODELS - selected.keys())
-    if missing:
-        raise SetupError(
-            f"effective catalog lacks required models: {', '.join(missing)}"
-        )
-    if version == "v1":
-        for model_id in V1_SELECTOR_MODELS:
-            model = selected.get(model_id)
-            if not isinstance(model, dict) or model.get("multi_agent_version") is not None:
-                raise SetupError(f"effective catalog did not activate V1 for {model_id}")
-    else:
-        for model_id, model in selected.items():
-            if model.get("multi_agent_version") != "v2":
-                raise SetupError(f"effective catalog did not activate V2 for {model_id}")
+    verify_catalog_selectors(document, version, "effective catalog")
 
 
 def install(plan: dict) -> dict:
