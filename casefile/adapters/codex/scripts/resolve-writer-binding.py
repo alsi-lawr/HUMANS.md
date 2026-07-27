@@ -29,6 +29,7 @@ RECOMMENDED_MODEL = "gpt-5.6-sol"
 RECOMMENDED_EFFORT = "high"
 STRATEGIES = (
     "casefile-implement-ticket-batch",
+    "casefile-implement-ticket-batch-look-ahead",
     "casefile-implement-pipeline",
 )
 RUNTIMES = ("v1", "v2")

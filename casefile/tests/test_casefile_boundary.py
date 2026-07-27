@@ -49,6 +49,7 @@ class CasefileBoundaryTests(unittest.TestCase):
         profiles = tomllib.loads((codex / "profiles.toml").read_text(encoding="ascii"))
         strategies = {
             "casefile-implement-ticket-batch",
+            "casefile-implement-ticket-batch-look-ahead",
             "casefile-implement-pipeline",
         }
         defaults = [
@@ -57,7 +58,7 @@ class CasefileBoundaryTests(unittest.TestCase):
             if row["role"] == "implementation-writer"
         ]
         self.assertEqual(strategies, {row["strategy_id"] for row in defaults})
-        self.assertEqual(2, len(defaults))
+        self.assertEqual(3, len(defaults))
         for row in defaults:
             matrix = tomllib.loads(
                 (codex / "matrices" / f"{row['strategy_id']}.toml").read_text(

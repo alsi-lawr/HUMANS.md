@@ -25,6 +25,26 @@ description = "Casefile casefile-implement-ticket-batch verification-reviewer."
 config_file = "__HUMANS_MD_PLUGIN_ROOT__/agents/casefile-implement-ticket-batch-verification-reviewer.toml"
 nickname_candidates = ["Verifier", "Checker"]
 
+[agents.casefile-implement-ticket-batch-look-ahead-implementation-writer]
+description = "Casefile ticket-batch-with-look-ahead implementation writer."
+config_file = "__HUMANS_MD_PLUGIN_ROOT__/agents/casefile-implement-ticket-batch-look-ahead-implementation-writer.toml"
+nickname_candidates = ["Builder", "Implementer"]
+
+[agents.casefile-implement-ticket-batch-look-ahead-look-ahead-investigator]
+description = "Casefile ticket-batch-with-look-ahead read-only investigator."
+config_file = "__HUMANS_MD_PLUGIN_ROOT__/agents/casefile-implement-ticket-batch-look-ahead-look-ahead-investigator.toml"
+nickname_candidates = ["Scout", "Pathfinder"]
+
+[agents.casefile-implement-ticket-batch-look-ahead-atomic-ticket-reviewer]
+description = "Casefile ticket-batch-with-look-ahead exact-commit reviewer."
+config_file = "__HUMANS_MD_PLUGIN_ROOT__/agents/casefile-implement-ticket-batch-look-ahead-atomic-ticket-reviewer.toml"
+nickname_candidates = ["Reviewer", "Auditor"]
+
+[agents.casefile-implement-ticket-batch-look-ahead-verification-reviewer]
+description = "Casefile ticket-batch-with-look-ahead focused verifier."
+config_file = "__HUMANS_MD_PLUGIN_ROOT__/agents/casefile-implement-ticket-batch-look-ahead-verification-reviewer.toml"
+nickname_candidates = ["Verifier", "Checker"]
+
 [agents.casefile-implement-pipeline-implementation-writer]
 description = "Casefile pipeline implementation writer."
 config_file = "__HUMANS_MD_PLUGIN_ROOT__/agents/casefile-implement-pipeline-implementation-writer.toml"
@@ -173,6 +193,11 @@ nickname_candidates = ["Builder", "Implementer"]
 [agents.casefile-implement-ticket-batch-implementation-writer-runtime]
 description = "Casefile casefile-implement-ticket-batch implementation writer with a validated runtime binding."
 config_file = "__HUMANS_MD_PLUGIN_ROOT__/agents/casefile-implement-ticket-batch-implementation-writer-runtime.toml"
+nickname_candidates = ["Builder", "Implementer"]
+
+[agents.casefile-implement-ticket-batch-look-ahead-implementation-writer-runtime]
+description = "Casefile ticket-batch-with-look-ahead implementation writer with a validated runtime binding."
+config_file = "__HUMANS_MD_PLUGIN_ROOT__/agents/casefile-implement-ticket-batch-look-ahead-implementation-writer-runtime.toml"
 nickname_candidates = ["Builder", "Implementer"]
 
 [agents.casefile-implement-pipeline-implementation-writer-runtime]

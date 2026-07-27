@@ -48,6 +48,10 @@ identity and 12-tool Provider contract, and receipt-binds the host directly to
 Every governed write still requires the complete Provider preview to be shown and explicitly
 approved before that exact preview is applied.
 
+Implementation offers three explicit governed shapes: a strictly serial ticket batch, a serial
+ticket batch with one read-only look-ahead, and a bounded pipeline that may overlap one independent,
+write-disjoint next ticket with exact-commit review.
+
 ## Project
 
 [Documentation](https://github.com/alsi-lawr/HUMANS.md/wiki) |

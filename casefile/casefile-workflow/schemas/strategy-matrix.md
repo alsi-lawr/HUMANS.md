@@ -15,5 +15,6 @@ them.
 implementation pipeline adds `[coordination.pipeline]` with a positive active-ticket limit and
 boolean read-only look-ahead, dependency-independence, disjoint-write-path, immutable-review-commit,
 and correction-preemption gates. Absence of that table means no implementation overlap is
-authorised. Worker minima cannot exceed capacity. A spawning worker needs nesting depth of at least
-two. Validate the complete selected matrix before delegation and after every strategy switch.
+authorised, including when the matrix declares a read-only look-ahead worker. Worker minima cannot
+exceed capacity. A spawning worker needs nesting depth of at least two. Validate the complete
+selected matrix before delegation and after every strategy switch.

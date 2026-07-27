@@ -1,8 +1,8 @@
 ---
 name: casefile-implement
 description:
-  "Use to implement approved Casefile tickets through a human-selected serial or bounded pipeline
-  strategy with exclusive writes and recorded review."
+  "Use to implement approved Casefile tickets through a human-selected serial, look-ahead, or
+  bounded pipeline strategy with exclusive writes and recorded review."
 ---
 
 # Casefile Implement
@@ -10,7 +10,10 @@ description:
 Require the accepted dependency-safe plan. Present the compatible implementation strategies,
 recommend one from ticket independence and runtime capabilities, and wait for explicit selection:
 
-- [Ticket batch](references/ticket-batch.md) for serial implementation and review.
+- [Ticket batch](references/ticket-batch.md) for serial implementation and review without
+  speculative next-ticket work.
+- [Ticket batch with look-ahead](references/ticket-batch-look-ahead.md) for serial implementation
+  with one read-only preflight of the next accepted ticket.
 - [Pipeline](references/pipeline.md) for bounded look-ahead and overlap of one independent next
   ticket with review.
 
@@ -27,10 +30,10 @@ follow-up. Reviewers propose a class with evidence; the root has final classific
   surviving one correction is also a contention.
 - A follow-up is optional hardening that does not block acceptance.
 
-Do not route a contention to a writer as though it were accepted scope. Stop ticket-batch work or
-drain a pipeline to serial state, present the evidence and concrete choice to the human, and resume
-mutation only after the human rejects the expansion or amends the governing decision or ticket.
-Complete a ticket only after the recorded flow accepts it. See the brief
+Do not route a contention to a writer as though it were accepted scope. Stop batch work or drain a
+pipeline to serial state, present the evidence and concrete choice to the human, and resume mutation
+only after the human rejects the expansion or amends the governing decision or ticket. Complete a
+ticket only after the recorded flow accepts it. See the brief
 [correction-escalation case study](references/correction-escalation-case-study.md).
 
 For Codex, immediately before every implementation-writer spawn, first successfully transition the

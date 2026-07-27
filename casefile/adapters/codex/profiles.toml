@@ -26,6 +26,38 @@ reasoning = "medium"
 agent_file = "agents/casefile-implement-ticket-batch-verification-reviewer.toml"
 
 [[matrix_profiles]]
+strategy_id = "casefile-implement-ticket-batch-look-ahead"
+role = "implementation-writer"
+profile = "casefile-implement-ticket-batch-look-ahead-implementation-writer"
+model = "gpt-5.6-sol"
+reasoning = "high"
+agent_file = "agents/casefile-implement-ticket-batch-look-ahead-implementation-writer.toml"
+
+[[matrix_profiles]]
+strategy_id = "casefile-implement-ticket-batch-look-ahead"
+role = "look-ahead-investigator"
+profile = "casefile-implement-ticket-batch-look-ahead-look-ahead-investigator"
+model = "gpt-5.6-luna"
+reasoning = "medium"
+agent_file = "agents/casefile-implement-ticket-batch-look-ahead-look-ahead-investigator.toml"
+
+[[matrix_profiles]]
+strategy_id = "casefile-implement-ticket-batch-look-ahead"
+role = "atomic-ticket-reviewer"
+profile = "casefile-implement-ticket-batch-look-ahead-atomic-ticket-reviewer"
+model = "gpt-5.6-terra"
+reasoning = "xhigh"
+agent_file = "agents/casefile-implement-ticket-batch-look-ahead-atomic-ticket-reviewer.toml"
+
+[[matrix_profiles]]
+strategy_id = "casefile-implement-ticket-batch-look-ahead"
+role = "verification-reviewer"
+profile = "casefile-implement-ticket-batch-look-ahead-verification-reviewer"
+model = "gpt-5.6-terra"
+reasoning = "medium"
+agent_file = "agents/casefile-implement-ticket-batch-look-ahead-verification-reviewer.toml"
+
+[[matrix_profiles]]
 strategy_id = "casefile-implement-pipeline"
 role = "implementation-writer"
 profile = "casefile-implement-pipeline-implementation-writer"
@@ -221,7 +253,7 @@ visibility = "hide"
 
 [[writer_profiles]]
 multi_agent_version = "v1"
-strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-pipeline"]
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline"]
 role = "implementation-writer"
 profile = "casefile-implementation-writer-gpt-5-6-sol-low"
 model = "gpt-5.6-sol"
@@ -230,7 +262,7 @@ agent_file = "agents/casefile-implementation-writer-gpt-5-6-sol-low.toml"
 
 [[writer_profiles]]
 multi_agent_version = "v1"
-strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-pipeline"]
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline"]
 role = "implementation-writer"
 profile = "casefile-implementation-writer-gpt-5-6-sol-medium"
 model = "gpt-5.6-sol"
@@ -239,7 +271,7 @@ agent_file = "agents/casefile-implementation-writer-gpt-5-6-sol-medium.toml"
 
 [[writer_profiles]]
 multi_agent_version = "v1"
-strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-pipeline"]
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline"]
 role = "implementation-writer"
 profile = "casefile-implementation-writer-gpt-5-6-sol-high"
 model = "gpt-5.6-sol"
@@ -248,7 +280,7 @@ agent_file = "agents/casefile-implementation-writer-gpt-5-6-sol-high.toml"
 
 [[writer_profiles]]
 multi_agent_version = "v1"
-strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-pipeline"]
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline"]
 role = "implementation-writer"
 profile = "casefile-implementation-writer-gpt-5-6-sol-xhigh"
 model = "gpt-5.6-sol"
@@ -257,7 +289,7 @@ agent_file = "agents/casefile-implementation-writer-gpt-5-6-sol-xhigh.toml"
 
 [[writer_profiles]]
 multi_agent_version = "v1"
-strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-pipeline"]
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline"]
 role = "implementation-writer"
 profile = "casefile-implementation-writer-gpt-5-6-sol-max"
 model = "gpt-5.6-sol"
@@ -266,7 +298,7 @@ agent_file = "agents/casefile-implementation-writer-gpt-5-6-sol-max.toml"
 
 [[writer_profiles]]
 multi_agent_version = "v1"
-strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-pipeline"]
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline"]
 role = "implementation-writer"
 profile = "casefile-implementation-writer-gpt-5-6-sol-ultra"
 model = "gpt-5.6-sol"
@@ -275,7 +307,7 @@ agent_file = "agents/casefile-implementation-writer-gpt-5-6-sol-ultra.toml"
 
 [[writer_profiles]]
 multi_agent_version = "v1"
-strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-pipeline"]
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline"]
 role = "implementation-writer"
 profile = "casefile-implementation-writer-gpt-5-6-terra-low"
 model = "gpt-5.6-terra"
@@ -284,7 +316,7 @@ agent_file = "agents/casefile-implementation-writer-gpt-5-6-terra-low.toml"
 
 [[writer_profiles]]
 multi_agent_version = "v1"
-strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-pipeline"]
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline"]
 role = "implementation-writer"
 profile = "casefile-implementation-writer-gpt-5-6-terra-medium"
 model = "gpt-5.6-terra"
@@ -293,7 +325,7 @@ agent_file = "agents/casefile-implementation-writer-gpt-5-6-terra-medium.toml"
 
 [[writer_profiles]]
 multi_agent_version = "v1"
-strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-pipeline"]
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline"]
 role = "implementation-writer"
 profile = "casefile-implementation-writer-gpt-5-6-terra-high"
 model = "gpt-5.6-terra"
@@ -302,7 +334,7 @@ agent_file = "agents/casefile-implementation-writer-gpt-5-6-terra-high.toml"
 
 [[writer_profiles]]
 multi_agent_version = "v1"
-strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-pipeline"]
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline"]
 role = "implementation-writer"
 profile = "casefile-implementation-writer-gpt-5-6-terra-xhigh"
 model = "gpt-5.6-terra"
@@ -311,7 +343,7 @@ agent_file = "agents/casefile-implementation-writer-gpt-5-6-terra-xhigh.toml"
 
 [[writer_profiles]]
 multi_agent_version = "v1"
-strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-pipeline"]
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline"]
 role = "implementation-writer"
 profile = "casefile-implementation-writer-gpt-5-6-terra-max"
 model = "gpt-5.6-terra"
@@ -320,7 +352,7 @@ agent_file = "agents/casefile-implementation-writer-gpt-5-6-terra-max.toml"
 
 [[writer_profiles]]
 multi_agent_version = "v1"
-strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-pipeline"]
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline"]
 role = "implementation-writer"
 profile = "casefile-implementation-writer-gpt-5-6-terra-ultra"
 model = "gpt-5.6-terra"
@@ -329,7 +361,7 @@ agent_file = "agents/casefile-implementation-writer-gpt-5-6-terra-ultra.toml"
 
 [[writer_profiles]]
 multi_agent_version = "v1"
-strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-pipeline"]
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline"]
 role = "implementation-writer"
 profile = "casefile-implementation-writer-gpt-5-6-luna-low"
 model = "gpt-5.6-luna"
@@ -338,7 +370,7 @@ agent_file = "agents/casefile-implementation-writer-gpt-5-6-luna-low.toml"
 
 [[writer_profiles]]
 multi_agent_version = "v1"
-strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-pipeline"]
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline"]
 role = "implementation-writer"
 profile = "casefile-implementation-writer-gpt-5-6-luna-medium"
 model = "gpt-5.6-luna"
@@ -347,7 +379,7 @@ agent_file = "agents/casefile-implementation-writer-gpt-5-6-luna-medium.toml"
 
 [[writer_profiles]]
 multi_agent_version = "v1"
-strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-pipeline"]
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline"]
 role = "implementation-writer"
 profile = "casefile-implementation-writer-gpt-5-6-luna-high"
 model = "gpt-5.6-luna"
@@ -356,7 +388,7 @@ agent_file = "agents/casefile-implementation-writer-gpt-5-6-luna-high.toml"
 
 [[writer_profiles]]
 multi_agent_version = "v1"
-strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-pipeline"]
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline"]
 role = "implementation-writer"
 profile = "casefile-implementation-writer-gpt-5-6-luna-xhigh"
 model = "gpt-5.6-luna"
@@ -365,7 +397,7 @@ agent_file = "agents/casefile-implementation-writer-gpt-5-6-luna-xhigh.toml"
 
 [[writer_profiles]]
 multi_agent_version = "v1"
-strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-pipeline"]
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline"]
 role = "implementation-writer"
 profile = "casefile-implementation-writer-gpt-5-6-luna-max"
 model = "gpt-5.6-luna"
@@ -378,6 +410,16 @@ strategy_id = "casefile-implement-ticket-batch"
 role = "implementation-writer"
 profile = "casefile-implement-ticket-batch-implementation-writer-runtime"
 agent_file = "agents/casefile-implement-ticket-batch-implementation-writer-runtime.toml"
+model_override = true
+reasoning_override = true
+fork_turns = 3
+
+[[writer_runtime_overrides]]
+multi_agent_version = "v2"
+strategy_id = "casefile-implement-ticket-batch-look-ahead"
+role = "implementation-writer"
+profile = "casefile-implement-ticket-batch-look-ahead-implementation-writer-runtime"
+agent_file = "agents/casefile-implement-ticket-batch-look-ahead-implementation-writer-runtime.toml"
 model_override = true
 reasoning_override = true
 fork_turns = 3

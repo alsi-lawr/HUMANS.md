@@ -360,13 +360,21 @@ def verify_config(
         row.get("multi_agent_version") != "v1"
         or row.get("role") != "implementation-writer"
         or set(row.get("strategy_ids", []))
-        != {"casefile-implement-ticket-batch", "casefile-implement-pipeline"}
+        != {
+            "casefile-implement-ticket-batch",
+            "casefile-implement-ticket-batch-look-ahead",
+            "casefile-implement-pipeline",
+        }
         for row in writer_rows
     ):
         raise SetupError("V1 writer profile catalog is incomplete or unsupported")
     if {
         row.get("strategy_id") for row in override_rows
-    } != {"casefile-implement-ticket-batch", "casefile-implement-pipeline"} or any(
+    } != {
+        "casefile-implement-ticket-batch",
+        "casefile-implement-ticket-batch-look-ahead",
+        "casefile-implement-pipeline",
+    } or any(
         row.get("multi_agent_version") != "v2"
         or row.get("role") != "implementation-writer"
         or row.get("model_override") is not True

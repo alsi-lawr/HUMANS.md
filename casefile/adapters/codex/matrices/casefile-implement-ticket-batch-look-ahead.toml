@@ -1,0 +1,55 @@
+schema_version = 1
+strategy_id = "casefile-implement-ticket-batch-look-ahead"
+phase = "implementation"
+adapter = "codex"
+
+[orchestrator]
+binding = "root"
+
+[limits]
+max_concurrent_subagents = 4
+max_depth = 1
+
+[requirements]
+capabilities = ["subagents", "shared_writable_planning", "exclusive_writer"]
+
+[[workers]]
+role = "implementation-writer"
+platform_profile = "casefile-implement-ticket-batch-look-ahead-implementation-writer"
+model = "gpt-5.6-sol"
+reasoning = "high"
+minimum_count = 1
+maximum_count = 1
+can_spawn_subagents = false
+
+[[workers]]
+role = "look-ahead-investigator"
+platform_profile = "casefile-implement-ticket-batch-look-ahead-look-ahead-investigator"
+model = "gpt-5.6-luna"
+reasoning = "medium"
+minimum_count = 1
+maximum_count = 1
+can_spawn_subagents = false
+
+[[workers]]
+role = "atomic-ticket-reviewer"
+platform_profile = "casefile-implement-ticket-batch-look-ahead-atomic-ticket-reviewer"
+model = "gpt-5.6-terra"
+reasoning = "xhigh"
+minimum_count = 1
+maximum_count = 1
+can_spawn_subagents = false
+
+[[workers]]
+role = "verification-reviewer"
+platform_profile = "casefile-implement-ticket-batch-look-ahead-verification-reviewer"
+model = "gpt-5.6-terra"
+reasoning = "medium"
+minimum_count = 1
+maximum_count = 1
+can_spawn_subagents = false
+
+[coordination]
+batch_when_capacity_exceeded = true
+candidate_review_before_ticket = false
+shared_ticket_storage_required = true
