@@ -215,6 +215,12 @@ fn serve_exposes_only_the_fixed_read_contract() {
         assert_eq!(asset.status, 200);
         assert!(asset.headers.contains(content_type));
         assert!(!asset.body.is_empty());
+        if path == "/assets/app.js" {
+            assert!(!asset.body.contains("index_error"));
+            assert!(asset.body.contains("preview_id"));
+            assert!(asset.body.contains("rendered_bytes"));
+            assert!(asset.body.contains("provider cache refresh"));
+        }
     }
     assert_eq!(
         request(

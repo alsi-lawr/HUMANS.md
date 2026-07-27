@@ -181,10 +181,14 @@ resolve the canonical projection and revalidate the pair against a fresh offer. 
 delegation for pending, unresolved, invalid, or newly unavailable state; obtain explicit reselection
 while implementation is inactive.
 
-Binding replacement uses the Casefile CLI's `replace-strategy-binding` operation. It validates the
-candidate and atomically replaces only `strategy/bindings.toml` with a temporary-file rename. It
-must be refused while implementation or correction work is active. Git history is the only history
-boundary: do not add an archive, journal, second state file, or client-side write path.
+Binding replacement remains a root-authorized decision. Use the resolver's `select` command only to
+materialize the confirmed typed request, pass that request to the Provider's writer-binding preview,
+display the complete immutable preview, obtain explicit human approval, and apply that exact
+unchanged preview through the Provider. The Provider derives inactivity from one valid canonical
+progress log: accepted tickets may be `unknown` or `complete`, active non-complete stages refuse the
+replacement, and missing, malformed, or conflicting progress fails closed. Provider capability is
+not approval. Git history is the only history boundary: do not add an archive, journal, second state
+file, or client-side write path.
 
 ### Workbench development
 
