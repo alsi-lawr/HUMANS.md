@@ -6,8 +6,43 @@ import argparse
 import json
 import shutil
 import subprocess
+import sys
 import tempfile
+from os import PathLike
 from pathlib import Path
+from typing import Sequence
+
+
+class SmokeError(RuntimeError):
+    pass
+
+
+def run_checked(
+    arguments: Sequence[str | PathLike[str]], input_text: str | None = None
+) -> subprocess.CompletedProcess[str]:
+    command = [str(argument) for argument in arguments]
+    result = subprocess.run(
+        command,
+        input=input_text,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="backslashreplace",
+    )
+    if result.returncode:
+        raise SmokeError(
+            json.dumps(
+                {
+                    "command": command,
+                    "exit_code": result.returncode,
+                    "stderr": result.stderr,
+                    "stdout": result.stdout,
+                },
+                ensure_ascii=True,
+                sort_keys=True,
+            )
+        )
+    return result
 
 
 def main() -> int:
@@ -16,12 +51,10 @@ def main() -> int:
     parser.add_argument("--version", required=True)
     args = parser.parse_args()
     executable = args.executable.resolve(strict=True)
-    version = subprocess.run([executable, "--version"], check=True, capture_output=True, text=True)
+    version = run_checked([executable, "--version"])
     if args.version not in version.stdout:
         raise SystemExit(f"version output does not contain {args.version!r}: {version.stdout!r}")
-    compatibility = subprocess.run(
-        [executable, "mcp-compatibility"], check=True, capture_output=True, text=True
-    )
+    compatibility = run_checked([executable, "mcp-compatibility"])
     contract = json.loads(compatibility.stdout)
     if contract.get("identity") != "casefile" or contract.get("provider_protocol_version") != 1:
         raise SystemExit("unexpected Casefile compatibility contract")
@@ -36,9 +69,9 @@ def main() -> int:
                 {"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}},
             )
         ) + "\n"
-        result = subprocess.run(
+        result = run_checked(
             [executable, "mcp-package", "--planning-root", root.resolve()],
-            input=requests, capture_output=True, text=True, check=True,
+            input_text=requests,
         )
     responses = [json.loads(line) for line in result.stdout.splitlines()]
     if responses[0]["result"]["serverInfo"]["name"] != "casefile":
@@ -50,4 +83,8 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    try:
+        raise SystemExit(main())
+    except SmokeError as error:
+        print(f"Casefile smoke command failed: {error}", file=sys.stderr)
+        raise SystemExit(1) from None

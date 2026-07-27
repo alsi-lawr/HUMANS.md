@@ -6,10 +6,7 @@ use casefile_core::{
     Classification, Diagnostic, EntrySnapshot, Kind, RecordDraft, RecordSummary,
     parse_metadata_arrays, parse_progress_log,
 };
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    path::Path,
-};
+use std::collections::{BTreeMap, BTreeSet};
 
 pub(super) fn cross_validate(entries: &[EntrySnapshot], active: &Activation) -> Vec<Diagnostic> {
     let mut diagnostics = Vec::new();
@@ -148,10 +145,7 @@ pub(super) fn cross_validate(entries: &[EntrySnapshot], active: &Activation) -> 
                     }
                 }
                 for attachment in attachments {
-                    let target = Path::new(&entry.path)
-                        .parent()
-                        .map(|parent| parent.join(&attachment))
-                        .and_then(|path| path.to_str().map(str::to_owned));
+                    let target = attachment_target(&entry.path, &attachment);
                     if !target
                         .as_deref()
                         .is_some_and(|path| safe_relative(path) && paths.contains(path))
@@ -183,6 +177,15 @@ pub(super) fn cross_validate(entries: &[EntrySnapshot], active: &Activation) -> 
     diagnostics
 }
 
+fn attachment_target(entry_path: &str, attachment: &str) -> Option<String> {
+    if !safe_relative(attachment) {
+        return None;
+    }
+    let (parent, _) = entry_path.rsplit_once('/')?;
+    let target = format!("{parent}/{attachment}");
+    safe_relative(&target).then_some(target)
+}
+
 fn has_cycle(
     node: &str,
     graph: &BTreeMap<String, Vec<String>>,
@@ -203,4 +206,25 @@ fn has_cycle(
     visiting.remove(node);
     checked.insert(node.into());
     result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::attachment_target;
+
+    #[test]
+    fn attachment_targets_keep_canonical_store_separators() {
+        let evidence = "projects/demo/investigations/sample/evidence/observation.md";
+        assert_eq!(
+            attachment_target(evidence, "attachment.txt").as_deref(),
+            Some("projects/demo/investigations/sample/evidence/attachment.txt")
+        );
+        assert_eq!(
+            attachment_target(evidence, "nested/attachment.txt").as_deref(),
+            Some("projects/demo/investigations/sample/evidence/nested/attachment.txt")
+        );
+        for unsafe_attachment in ["../attachment.txt", "/attachment.txt"] {
+            assert_eq!(attachment_target(evidence, unsafe_attachment), None);
+        }
+    }
 }
