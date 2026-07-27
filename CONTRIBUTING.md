@@ -73,6 +73,41 @@ loopback host only for all-record and relationship projections not covered by pr
 The host fixes one planning root at launch and embeds the tracked browser build; it transports
 provider previews and results, and the browser never parses or writes planning files directly.
 
+### Native MCP package boundary
+
+The generated Codex and Claude Casefile packages each declare one local stdio MCP server through
+their root `.mcp.json`. The declaration passes exactly one absolute `CASEFILE_PLANNING_ROOT` to the
+shared package launcher. Neither the launcher nor the adapter infers a planning root from the
+working directory, repository layout, or another environment fallback.
+
+By default, the launcher runs the package-local Rust workspace with `cargo run --locked` and keeps
+Cargo output under the user's external Casefile cache, never under the plugin or planning Store.
+This requires a functioning Cargo/Rust toolchain plus an available dependency cache or network. A
+missing prerequisite, invalid or mismatched root, unsupported MCP or Provider protocol, absent
+required capability, build failure, or incompatible executable refuses startup before tools or
+planning mutation are exposed. There is no prebuilt Casefile binary in the package. An external
+executable is considered only through an explicit absolute override and only after its identity,
+protocol versions, and complete Provider operation contract pass the compatibility probe.
+
+MCP is a thin transport over the canonical typed Provider: capability and snapshot share one Store
+baseline, queries are Store-derived, and every governed mutation is revision-pinned preview/apply.
+The complete immutable Provider preview must be displayed and explicitly approved by a human before
+the exact unchanged preview is applied in the same live Provider session. Technical capability is
+not consent.
+
+Activated current-v1 Stores operate in place without conversion. Unactivated, invalid, unsupported,
+and early legacy activation layouts remain read-only or unsupported with actionable diagnostics; do
+not automatically activate, repair, upgrade, or infer history. The CLI remains the human and
+recovery adapter, including malformed-progress repair that is intentionally absent from MCP. The
+project-map validator, package and CI validators, model-drift checks, and Codex writer catalog
+resolver retain their distinct responsibilities.
+
+The Provider owns governed strategy transitions and writer-binding replacement. The only ad-hoc
+strategy path is `casefile scratch-strategy`, a bounded CLI-only operation requiring an explicit
+target outside the configured Store; it creates no Provider-visible governed record. The superseded
+`provision-delivery-board.py`, `transition-ticket-progress.py`, and `switch-strategy.py` workflow
+scripts are retired. Do not restore them or present scratch output as configured-Store authority.
+
 ### Ticket progress and consolidation
 
 `progress/log.toml` is an investigation-scoped canonical record. Ticket disposition remains the
@@ -97,12 +132,13 @@ preview ID. The analogous `default-delivery-board-session`, `strategy-transition
 `writer-binding-session` commands preserve the same one-session opaque-preview gate. Their prompt,
 not provider write capability, is the approval boundary.
 
-The same provider operation owns ordinary transitions and typed notes. Supply the ticket's currently derived
-state in `--from`, use a stable operation ID, and preserve the generated preview for the apply or
-exact retry. Notes use category `deviation` or `quirk` and never change state. Do not backfill
-stages that were not captured when they occurred; record a note instead. The CLI recovery-only
-`progress-repair-preview` and `progress-repair-apply` commands accept an exact caller-supplied
-complete log only for malformed-log repair. No preview may live inside the planning root.
+The same provider operation owns ordinary transitions and typed notes. Supply the ticket's currently
+derived state in `--from`, use a stable operation ID, and preserve the generated preview for the
+apply or exact retry. Notes use category `deviation` or `quirk` and never change state. Do not
+backfill stages that were not captured when they occurred; record a note instead. The CLI
+recovery-only `progress-repair-preview` and `progress-repair-apply` commands accept an exact
+caller-supplied complete log only for malformed-log repair. No preview may live inside the planning
+root.
 
 Bootstrap creates an absent empty `progress/log.toml`; accepted tickets without entries derive as
 `unknown`. It never writes invented initialization history and an existing valid log is a no-op. For

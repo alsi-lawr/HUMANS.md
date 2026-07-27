@@ -16,11 +16,11 @@ coding guidance.
 
 ## Install
 
-Add the `humans-md` marketplace at `v0.3.4`, then install the identities you need. Start with core;
+Add the `humans-md` marketplace at `v0.4.0`, then install the identities you need. Start with core;
 Casefile and coding remain optional siblings.
 
 ```sh
-codex plugin marketplace add alsi-lawr/humans-md-marketplace --ref v0.3.4
+codex plugin marketplace add alsi-lawr/humans-md-marketplace --ref v0.4.0
 codex plugin add humans-md@humans-md
 # optional siblings
 codex plugin add casefile@humans-md
@@ -28,7 +28,7 @@ codex plugin add coding@humans-md
 ```
 
 ```sh
-claude plugin marketplace add alsi-lawr/humans-md-marketplace@v0.3.4
+claude plugin marketplace add alsi-lawr/humans-md-marketplace@v0.4.0
 claude plugin install humans-md@humans-md --scope user
 # optional siblings
 claude plugin install casefile@humans-md --scope user
@@ -39,6 +39,13 @@ claude plugin install coding@humans-md --scope user
 `casefile` owns Casefile workflows and Codex model, selected multi-agent runtime, profile, and role
 integration. `coding` owns Git contribution, README, skill-generation, and generic verification
 guidance. Removing one plugin never removes the shared marketplace or another plugin.
+
+The Casefile plugin declares the same local stdio MCP server in Codex and Claude. Set one absolute
+`CASEFILE_PLANNING_ROOT` for an activated current-v1 Store. Its default launcher runs the package's
+locked Rust source with `cargo run --locked`, so a working Cargo/Rust toolchain and dependency cache
+or network are prerequisites; an external executable is used only when explicitly configured and its
+Casefile protocol and capabilities match. Every governed write still requires the complete Provider
+preview to be shown and explicitly approved before that exact preview is applied.
 
 ## Project
 

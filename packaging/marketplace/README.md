@@ -10,3 +10,8 @@ marketplace.
 
 This repository is generated. Release tags contain installable trees; source and contribution
 history belong in the source repository.
+
+The Casefile package declares a fixed-root local stdio MCP server. Supply one absolute activated
+planning Store with `CASEFILE_PLANNING_ROOT`; the default source-coherent launcher requires Cargo,
+Rust, and an available dependency cache or network because it runs the packaged lockfile with
+`cargo run --locked`. A compatible external executable is accepted only as an explicit override.
