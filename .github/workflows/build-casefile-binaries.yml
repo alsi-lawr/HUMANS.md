@@ -1,0 +1,128 @@
+name: Build Casefile executable matrix
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_commit:
+        description: Exact 40-character source commit to build
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.target }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            binary: casefile
+          - runner: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-musl
+            binary: casefile
+          - runner: macos-15-intel
+            target: x86_64-apple-darwin
+            binary: casefile
+          - runner: macos-latest
+            target: aarch64-apple-darwin
+            binary: casefile
+          - runner: windows-latest
+            target: x86_64-pc-windows-msvc
+            binary: casefile.exe
+          - runner: windows-11-arm
+            target: aarch64-pc-windows-msvc
+            binary: casefile.exe
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.source_commit }}
+      - name: Verify exact source identity
+        shell: bash
+        env:
+          EXPECTED_SOURCE: ${{ inputs.source_commit }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SOURCE"
+          test "$(printf %s "$EXPECTED_SOURCE" | wc -c | tr -d ' ')" = 40
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - name: Install musl linker
+        if: runner.os == 'Linux'
+        shell: bash
+        run: sudo apt-get update && sudo apt-get install --yes musl-tools
+      - name: Build locked release executable
+        shell: bash
+        run: cargo build --locked --release --manifest-path casefile/Cargo.toml --target '${{ matrix.target }}' -p casefile-cli
+      - name: Strip Unix executable
+        if: runner.os != 'Windows'
+        shell: bash
+        run: strip 'casefile/target/${{ matrix.target }}/release/${{ matrix.binary }}'
+      - name: Run native identity, compatibility, and stdio smoke
+        shell: bash
+        run: |
+          mkdir -p 'matrix/${{ matrix.target }}'
+          cp 'casefile/target/${{ matrix.target }}/release/${{ matrix.binary }}' 'matrix/${{ matrix.target }}/${{ matrix.binary }}'
+          python scripts/smoke-casefile-mcp.py --executable 'matrix/${{ matrix.target }}/${{ matrix.binary }}' --version 0.4.0 | tee 'matrix/${{ matrix.target }}/smoke.json'
+      - uses: actions/upload-artifact@v7
+        with:
+          name: casefile-${{ matrix.target }}
+          path: matrix/${{ matrix.target }}
+          if-no-files-found: error
+
+  assemble:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.source_commit }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: casefile-*
+          path: matrix-input
+      - name: Normalize target inputs and assemble immutable matrix
+        shell: bash
+        env:
+          SOURCE_COMMIT: ${{ inputs.source_commit }}
+        run: |
+          for target in x86_64-unknown-linux-musl aarch64-unknown-linux-musl x86_64-apple-darwin aarch64-apple-darwin x86_64-pc-windows-msvc aarch64-pc-windows-msvc; do
+            mkdir -p "inputs/$target"
+            cp "matrix-input/casefile-$target/"casefile* "inputs/$target/"
+            mkdir -p native-smoke
+            cp "matrix-input/casefile-$target/smoke.json" "native-smoke/$target.json"
+          done
+          python scripts/casefile_artifacts.py assemble --input-root inputs --artifact-root casefile-runtime --version 0.4.0 --source-commit "$SOURCE_COMMIT"
+          python scripts/casefile_artifacts.py verify --artifact-root casefile-runtime --version 0.4.0 --source-commit "$SOURCE_COMMIT"
+          sha256sum casefile-runtime/artifacts.json | tee casefile-runtime-manifest.sha256
+      - name: Prove symmetric package overlay without rebuilding
+        shell: bash
+        env:
+          SOURCE_COMMIT: ${{ inputs.source_commit }}
+        run: |
+          python scripts/package-plugin.py build --all --casefile-artifact-root casefile-runtime --casefile-source-commit "$SOURCE_COMMIT"
+          python scripts/package-plugin.py check --all --casefile-artifact-root casefile-runtime --casefile-source-commit "$SOURCE_COMMIT"
+          diff -r build/marketplace/plugins/codex/casefile/runtime build/marketplace/plugins/claude/casefile/runtime
+          find build/marketplace/plugins/codex/casefile -type f -printf '%P\0' | sort -z | xargs -0 -I{} sha256sum 'build/marketplace/plugins/codex/casefile/{}' > codex-casefile-inventory.sha256
+          find build/marketplace/plugins/claude/casefile -type f -printf '%P\0' | sort -z | xargs -0 -I{} sha256sum 'build/marketplace/plugins/claude/casefile/{}' > claude-casefile-inventory.sha256
+      - uses: actions/upload-artifact@v7
+        with:
+          name: casefile-runtime-${{ inputs.source_commit }}
+          path: |
+            casefile-runtime
+            casefile-runtime-manifest.sha256
+            codex-casefile-inventory.sha256
+            claude-casefile-inventory.sha256
+            native-smoke
+          if-no-files-found: error
+          retention-days: 90

@@ -61,6 +61,16 @@ pub(super) fn print_compatibility() -> Result<()> {
     Ok(())
 }
 
+pub(super) fn serve_package(planning_root: &Path) -> Result<()> {
+    let required = REQUIRED_PROVIDER_OPERATIONS.join(",");
+    serve(
+        planning_root,
+        planning_root,
+        PROVIDER_PROTOCOL_VERSION,
+        &required,
+    )
+}
+
 pub(super) fn serve(
     planning_root: &Path,
     expected_root: &Path,

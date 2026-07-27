@@ -12,13 +12,24 @@ import shutil
 import subprocess
 import tempfile
 import tomllib
+import importlib.util
 from pathlib import Path, PurePosixPath
+
+try:
+    import casefile_runtime
+except ModuleNotFoundError:
+    _runtime_path = Path(__file__).resolve().parents[2] / "shared/casefile_runtime.py"
+    _runtime_spec = importlib.util.spec_from_file_location("casefile_runtime", _runtime_path)
+    if _runtime_spec is None or _runtime_spec.loader is None:
+        raise
+    casefile_runtime = importlib.util.module_from_spec(_runtime_spec)
+    _runtime_spec.loader.exec_module(casefile_runtime)
 
 
 PLUGIN_ID = "casefile@humans-md"
 MARKETPLACE = "humans-md"
-RECEIPT_SCHEMA = 5
-RECEIPT_SCHEMAS = {4, 5}
+RECEIPT_SCHEMA = 6
+RECEIPT_SCHEMAS = {4, 5, 6}
 REQUIRED_MODELS = {
     "gpt-5.6-sol",
     "gpt-5.6-terra",
@@ -107,10 +118,10 @@ def plugin_root(path: Path) -> tuple[Path, dict]:
     if manifest.get("name") != "casefile" or not isinstance(manifest.get("version"), str):
         raise SetupError("installed plugin identity is not casefile")
     for relative in (
-        ".mcp.json",
         "config/config-fragment.toml.in",
         "config/profiles.toml",
-        "scripts/casefile-mcp-launcher.py",
+        "runtime/artifacts.json",
+        "scripts/casefile_runtime.py",
         "scripts/resolve-writer-binding.py",
     ):
         if not (root / relative).is_file():
@@ -234,13 +245,22 @@ def marked(begin: bytes, payload: bytes, end: bytes) -> bytes:
     return begin + payload.rstrip(b"\n") + b"\n" + end
 
 
-def config_candidate(current: bytes, root: Path, catalog: Path, version: str) -> bytes:
+def config_candidate(
+    current: bytes,
+    root: Path,
+    catalog: Path,
+    version: str,
+    binary: Path,
+    planning_root: Path,
+) -> bytes:
     document = tomllib.loads(current.decode("utf-8")) if current else {}
     conflicts = {
         key
         for key in ("model_catalog_json", "features", "agents")
         if key in document
     }
+    if isinstance(document.get("mcp_servers"), dict) and "casefile" in document["mcp_servers"]:
+        conflicts.add("mcp_servers.casefile")
     if conflicts:
         raise SetupError(
             "managed config already exists; clean it before setup: " + ", ".join(sorted(conflicts))
@@ -250,6 +270,8 @@ def config_candidate(current: bytes, root: Path, catalog: Path, version: str) ->
     fragment = fragment.replace("__HUMANS_MD_PLUGIN_ROOT__", str(root).replace("\\", "/"))
     fragment = fragment.replace("__CASEFILE_MULTI_AGENT_V1__", "true" if version == "v1" else "false")
     fragment = fragment.replace("__CASEFILE_MULTI_AGENT_V2__", "false" if version == "v1" else "true")
+    fragment = fragment.replace("__CASEFILE_EXECUTABLE__", json.dumps(str(binary)))
+    fragment = fragment.replace("__CASEFILE_PLANNING_ROOT__", json.dumps(str(planning_root)))
     scalar_block = marked(
         SCALAR_BEGIN,
         f"model_catalog_json = {json.dumps(str(catalog))}\n".encode("utf-8"),
@@ -257,7 +279,7 @@ def config_candidate(current: bytes, root: Path, catalog: Path, version: str) ->
     )
     table_block = marked(TABLE_BEGIN, fragment.encode("ascii"), TABLE_END)
     data = scalar_block + current + table_block
-    verify_config(data, root, catalog, version)
+    verify_config(data, root, catalog, version, binary, planning_root)
     return data
 
 
@@ -281,7 +303,14 @@ def unowned_config(data: bytes) -> bytes:
     return result
 
 
-def verify_config(data: bytes, root: Path, catalog: Path, version: str) -> None:
+def verify_config(
+    data: bytes,
+    root: Path,
+    catalog: Path,
+    version: str,
+    binary: Path | None = None,
+    planning_root: Path | None = None,
+) -> None:
     document = tomllib.loads(data.decode("utf-8"))
     version = multi_agent_version(version)
     profiles = tomllib.loads((root / "config/profiles.toml").read_text(encoding="ascii"))
@@ -291,6 +320,12 @@ def verify_config(data: bytes, root: Path, catalog: Path, version: str) -> None:
     expected_features = {"multi_agent": version == "v1", "multi_agent_v2": version == "v2"}
     if {name: features.get(name) for name in expected_features} != expected_features:
         raise SetupError(f"{version.upper()} feature flags are incorrect")
+    if binary is not None and planning_root is not None:
+        server = document.get("mcp_servers", {}).get("casefile", {})
+        if server.get("command") != str(binary) or server.get("args") != [
+            "mcp-package", "--planning-root", str(planning_root)
+        ]:
+            raise SetupError("Casefile MCP binding is incorrect")
     agents = document.get("agents", {})
     matrix_rows = profiles.get("matrix_profiles", [])
     writer_rows = profiles.get("writer_profiles", [])
@@ -402,13 +437,16 @@ def restore(home: Path, source: Path, entries: list[dict]) -> None:
             raise SetupError(f"restore verification failed: {path}")
 
 
-def managed(home: Path, version: str = "v1") -> list[Path]:
+def managed(home: Path, version: str = "v1", binary: Path | None = None) -> list[Path]:
     version = multi_agent_version(version)
-    return [
+    paths = [
         home / "config.toml",
         home / f"models-casefile-{version}.json",
         *(home / relative for relative in LEGACY_PATHS),
     ]
+    if binary is not None:
+        paths.append(binary)
+    return paths
 
 
 def pointer(home: Path) -> Path:
@@ -432,9 +470,22 @@ def require_v2(executable: str, environment: dict[str, str]) -> tuple[int, int, 
     return version
 
 
-def prepare(root: Path, home: Path, executable: str, version: str = "v1") -> dict:
+def prepare(
+    root: Path,
+    home: Path,
+    executable: str,
+    planning_root: Path | str | None = None,
+    version: str = "v1",
+) -> dict:
+    if isinstance(planning_root, str) and planning_root in MULTI_AGENT_VERSIONS:
+        version = planning_root
+        planning_root = None
     version = multi_agent_version(version)
     root, manifest = plugin_root(root)
+    planning = casefile_runtime.planning_root(planning_root or root)
+    runtime = casefile_runtime.select(root, manifest["version"])
+    binary = casefile_runtime.destination(home, manifest["version"], runtime["target"])
+    casefile_runtime.probe(runtime["source"], manifest["version"], planning)
     environment = {**os.environ, "CODEX_HOME": str(home)}
     plugin = discover(executable, environment, manifest["version"])
     if version == "v2":
@@ -442,8 +493,15 @@ def prepare(root: Path, home: Path, executable: str, version: str = "v1") -> dic
     catalog_path = home / f"models-casefile-{version}.json"
     config_path = home / "config.toml"
     current = config_path.read_bytes() if config_path.is_file() else b""
+    previous = receipt(home, None) if pointer(home).is_file() else None
+    if previous is not None:
+        if previous[1].get("plugin_version") == manifest["version"]:
+            raise SetupError("this Casefile version is already installed")
+        if receipt_multi_agent_version(previous[1]) != version:
+            raise SetupError("upgrade must retain the installed multi-agent version")
+        current = unowned_config(current)
     # Refuse a managed configuration before asking Codex to refresh its authenticated catalog.
-    config = config_candidate(current, root, catalog_path, version)
+    config = config_candidate(current, root, catalog_path, version, binary, planning)
     try:
         raw = json.loads(checked([executable, "debug", "models"], environment))
     except json.JSONDecodeError as error:
@@ -461,6 +519,10 @@ def prepare(root: Path, home: Path, executable: str, version: str = "v1") -> dic
         "patched": patched,
         "skipped": skipped,
         "legacy": [str(path) for path in managed(home)[3:] if path.exists()],
+        "planning_root": planning,
+        "runtime": runtime,
+        "binary": binary,
+        "previous": previous,
     }
 
 
@@ -477,6 +539,9 @@ def preview(plan: dict) -> dict:
         "skipped_optional_models": plan["skipped"],
         "config_ownership": "marked blocks",
         "restart_required": True,
+        "planning_root": str(plan["planning_root"]),
+        "casefile_executable": str(plan["binary"]),
+        "casefile_target": plan["runtime"]["target"],
     }
 
 
@@ -524,10 +589,11 @@ def verify_effective_catalog(plan: dict) -> None:
 
 
 def install(plan: dict) -> dict:
-    plan = prepare(plan["root"], plan["home"], plan["executable"], plan["multi_agent_version"])
+    plan = prepare(
+        plan["root"], plan["home"], plan["executable"], plan["planning_root"],
+        plan["multi_agent_version"],
+    )
     home = plan["home"]
-    if pointer(home).exists():
-        raise SetupError("an active humans-md receipt already exists")
     secure_dir(home / "backups/casefile")
     receipt_dir = Path(
         tempfile.mkdtemp(
@@ -536,13 +602,27 @@ def install(plan: dict) -> dict:
         )
     )
     secure_dir(receipt_dir)
-    paths = managed(home, plan["multi_agent_version"])
-    before = snapshot(home, paths, receipt_dir / "before")
+    paths = managed(home, plan["multi_agent_version"], plan["binary"])
+    rollback = snapshot(home, [*paths, pointer(home)], receipt_dir / "rollback")
+    if plan["previous"] is None:
+        before = snapshot(home, paths, receipt_dir / "before")
+    else:
+        previous_path, previous_value = plan["previous"]
+        before = copy.deepcopy(previous_value["before"])
+        before.append({"path": plan["binary"].relative_to(home).as_posix(), "existed": False})
+        copy_path(previous_path.parent / "before", receipt_dir / "before")
     try:
-        config, catalog = paths
+        config, catalog = paths[:2]
+        casefile_runtime.atomic_copy(plan["runtime"]["source"], plan["binary"])
+        if casefile_runtime.sha256(plan["binary"]) != plan["runtime"]["sha256"]:
+            raise SetupError("installed Casefile executable hash differs from manifest")
+        casefile_runtime.probe(plan["binary"], plan["version"], plan["planning_root"])
         atomic_write(config, plan["config"], 0o600)
         atomic_write(catalog, plan["catalog"], 0o600)
-        verify_config(config.read_bytes(), plan["root"], catalog, plan["multi_agent_version"])
+        verify_config(
+            config.read_bytes(), plan["root"], catalog, plan["multi_agent_version"],
+            plan["binary"], plan["planning_root"],
+        )
         if catalog.read_bytes() != plan["catalog"]:
             raise SetupError("written setup bytes differ from preview")
         doctor(plan)
@@ -558,6 +638,17 @@ def install(plan: dict) -> dict:
             "before": before,
             "remove_plugin": True,
             "remove_marketplace": False,
+            "casefile_binary": str(plan["binary"].relative_to(home)),
+            "owned_binaries": [
+                *(
+                    plan["previous"][1].get("owned_binaries", [])
+                    if plan["previous"] is not None
+                    else []
+                ),
+                str(plan["binary"].relative_to(home)),
+            ],
+            "planning_root": str(plan["planning_root"]),
+            "artifact_sha256": plan["runtime"]["sha256"],
         }
         receipt_data = canonical(receipt)
         receipt_path = receipt_dir / "receipt.json"
@@ -566,8 +657,7 @@ def install(plan: dict) -> dict:
         atomic_write(pointer(home), canonical({"receipt": str(receipt_path)}))
         return {"status": "installed", "receipt": str(receipt_path), "multi_agent_version": plan["multi_agent_version"], "restart_required": True}
     except BaseException as error:
-        restore(home, receipt_dir / "before", before)
-        pointer(home).unlink(missing_ok=True)
+        restore(home, receipt_dir / "rollback", rollback)
         atomic_write(
             receipt_dir / "failure.json",
             canonical({"status": "failed", "error": str(error), "rollback_verified": True}),
@@ -607,7 +697,11 @@ def receipt(home: Path, explicit: Path | None) -> tuple[Path, dict]:
         raise SetupError("receipt backup inventory is invalid")
     version = receipt_multi_agent_version(value)
     expected = [path.relative_to(home) for path in managed(home, version)]
-    if len(inventory) != len(expected):
+    owned = value.get("owned_binaries", [])
+    if not isinstance(owned, list) or any(not isinstance(item, str) for item in owned):
+        raise SetupError("receipt Casefile binary inventory is invalid")
+    expected.extend(Path(*PurePosixPath(item.replace("\\", "/")).parts) for item in owned)
+    if len(inventory) != len(expected) or len(set(expected)) != len(expected):
         raise SetupError("receipt backup inventory is incomplete")
     for entry, relative in zip(inventory, expected, strict=True):
         if not isinstance(entry, dict) or not isinstance(entry.get("path"), str) or not isinstance(
@@ -617,6 +711,12 @@ def receipt(home: Path, explicit: Path | None) -> tuple[Path, dict]:
         normalized = entry["path"].replace("\\", "/")
         if normalized != relative.as_posix():
             raise SetupError("unsafe receipt path")
+        if relative not in expected[:2] and (
+            relative.is_absolute()
+            or ".." in relative.parts
+            or relative.parts[:2] != ("casefile", "runtime")
+        ):
+            raise SetupError("unsafe receipt binary path")
     if not isinstance(value.get("remove_plugin"), bool) or not isinstance(
         value.get("remove_marketplace"), bool
     ):
@@ -673,7 +773,11 @@ def show_uninstall_diffs(home: Path, path: Path, value: dict) -> None:
 
 
 def uninstall(home: Path, executable: str, path: Path, value: dict) -> dict:
-    current = managed(home, receipt_multi_agent_version(value))
+    binaries = [
+        home / Path(*PurePosixPath(relative.replace("\\", "/")).parts)
+        for relative in value.get("owned_binaries", [])
+    ]
+    current = [*managed(home, receipt_multi_agent_version(value)), *binaries]
     config = current[0]
     rollback_dir = home / "backups/casefile" / (
         "uninstall-" + datetime.datetime.now(datetime.UTC).strftime("%Y%m%dT%H%M%SZ")
@@ -721,6 +825,7 @@ def main() -> int:
     subparsers = parser.add_subparsers(dest="operation", required=True)
     install_parser = subparsers.add_parser("install")
     install_parser.add_argument("--plugin-root", type=Path, required=True)
+    install_parser.add_argument("--planning-root", type=Path, required=True)
     default_home = Path(os.environ.get("CODEX_HOME", "~/.codex"))
     install_parser.add_argument("--codex-home", type=Path, default=default_home)
     install_parser.add_argument("--codex-executable", default=shutil.which("codex"))
@@ -741,7 +846,10 @@ def main() -> int:
             if len(selections) > 1:
                 raise SetupError("pass --multi-agent-version at most once")
             selected_version = selections[0] if selections else "v1"
-            plan = prepare(arguments.plugin_root, home, arguments.codex_executable, selected_version)
+            plan = prepare(
+                arguments.plugin_root, home, arguments.codex_executable,
+                arguments.planning_root, selected_version,
+            )
             print(json.dumps(preview(plan), indent=2, sort_keys=True))
             if not arguments.apply:
                 print("preview only; no files changed")

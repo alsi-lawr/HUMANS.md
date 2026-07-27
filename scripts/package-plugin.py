@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import os
 import re
@@ -12,6 +13,18 @@ import tempfile
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
+
+try:
+    from casefile_artifacts import ArtifactError, load as load_casefile_artifacts
+except ModuleNotFoundError:
+    _artifact_path = Path(__file__).resolve().with_name("casefile_artifacts.py")
+    _artifact_spec = importlib.util.spec_from_file_location("casefile_artifacts", _artifact_path)
+    if _artifact_spec is None or _artifact_spec.loader is None:
+        raise
+    _artifact_module = importlib.util.module_from_spec(_artifact_spec)
+    _artifact_spec.loader.exec_module(_artifact_module)
+    ArtifactError = _artifact_module.ArtifactError
+    load_casefile_artifacts = _artifact_module.load
 
 
 NAME = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
@@ -88,6 +101,11 @@ def read_manifest(path: Path, root: Path) -> dict:
         for field in ("copy", "template"):
             if field in adapter and not isinstance(adapter[field], list):
                 raise PackageError(f"vendors.{vendor}.{field} must be an array")
+    artifacts = document.get("casefile_artifacts")
+    if artifacts is not None:
+        if not isinstance(artifacts, dict) or set(artifacts) != {"destination"}:
+            raise PackageError("casefile_artifacts must contain only destination")
+        safe_relative(artifacts["destination"], "casefile_artifacts.destination")
     return document
 
 
@@ -200,12 +218,54 @@ def render_templates(
         add_file(files, destination, FileSpec(data, 0o644))
 
 
-def expected_files(root: Path, document: dict, vendor: str) -> dict[Path, FileSpec]:
+def overlay_casefile_artifacts(
+    files: dict[Path, FileSpec],
+    document: dict,
+    artifact_root: Path | None,
+    source_commit: str | None,
+) -> None:
+    config = document.get("casefile_artifacts")
+    if config is None:
+        return
+    if artifact_root is None:
+        raise PackageError("Casefile package requires --casefile-artifact-root")
+    if source_commit is None:
+        raise PackageError("Casefile package requires --casefile-source-commit")
+    try:
+        manifest = load_casefile_artifacts(
+            artifact_root, document["version"], source_commit
+        )
+    except ArtifactError as error:
+        raise PackageError(str(error)) from error
+    destination = safe_relative(config["destination"], "casefile_artifacts.destination")
+    add_file(
+        files,
+        destination / "artifacts.json",
+        FileSpec((artifact_root / "artifacts.json").read_bytes(), 0o644),
+    )
+    for row in manifest["artifacts"]:
+        relative = safe_relative(row["path"], "artifact.path")
+        mode = 0o644 if row["target"].endswith("windows-msvc") else 0o755
+        add_file(
+            files,
+            destination / relative,
+            FileSpec((artifact_root / relative).read_bytes(), mode),
+        )
+
+
+def expected_files(
+    root: Path,
+    document: dict,
+    vendor: str,
+    artifact_root: Path | None = None,
+    source_commit: str | None = None,
+) -> dict[Path, FileSpec]:
     adapter = document["vendors"][vendor]
     files: dict[Path, FileSpec] = {}
     copy_resources(root, files, document["shared"], "shared")
     copy_resources(root, files, adapter.get("copy", []), f"vendors.{vendor}.copy")
     render_templates(root, files, adapter.get("template", []), document, vendor)
+    overlay_casefile_artifacts(files, document, artifact_root, source_commit)
     return dict(sorted(files.items(), key=lambda item: item[0].as_posix()))
 
 
@@ -213,7 +273,12 @@ def paths_overlap(left: Path, right: Path) -> bool:
     return left == right or left in right.parents or right in left.parents
 
 
-def package_specs(root: Path, manifest_paths: list[Path]) -> list[PackageSpec]:
+def package_specs(
+    root: Path,
+    manifest_paths: list[Path],
+    artifact_root: Path | None = None,
+    source_commit: str | None = None,
+) -> list[PackageSpec]:
     specs: list[PackageSpec] = []
     outputs: list[tuple[Path, str]] = []
     for manifest in manifest_paths:
@@ -235,7 +300,7 @@ def package_specs(root: Path, manifest_paths: list[Path]) -> list[PackageSpec]:
                     plugin=document["name"],
                     vendor=vendor,
                     output=output,
-                    files=expected_files(root, document, vendor),
+                    files=expected_files(root, document, vendor, artifact_root, source_commit),
                 )
             )
     return specs
@@ -318,10 +383,22 @@ def main() -> int:
     selection.add_argument("--all", action="store_true")
     selection.add_argument("--manifest", type=Path)
     parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parent.parent)
+    parser.add_argument("--casefile-artifact-root", type=Path)
+    parser.add_argument("--casefile-source-commit")
     arguments = parser.parse_args()
     root = arguments.root.resolve()
     try:
-        for spec in package_specs(root, manifests(arguments, root)):
+        artifact_root = (
+            arguments.casefile_artifact_root.expanduser().resolve(strict=True)
+            if arguments.casefile_artifact_root is not None
+            else None
+        )
+        for spec in package_specs(
+            root,
+            manifests(arguments, root),
+            artifact_root,
+            arguments.casefile_source_commit,
+        ):
             output = root / spec.output
             if arguments.command == "build":
                 build(output, spec.files)

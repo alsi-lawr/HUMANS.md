@@ -35,6 +35,10 @@ pub(super) fn execute(root: PathBuf, command: Command) -> Result<ExitCode> {
         mcp::print_compatibility()?;
         return Ok(ExitCode::SUCCESS);
     }
+    if let Command::McpPackage { planning_root } = &command {
+        mcp::serve_package(planning_root)?;
+        return Ok(ExitCode::SUCCESS);
+    }
     if let Command::McpStdio {
         planning_root,
         expected_root,
@@ -285,7 +289,7 @@ pub(super) fn execute(root: PathBuf, command: Command) -> Result<ExitCode> {
         Command::ScratchStrategy { .. } => {
             unreachable!("scratch strategy handled before opening the store")
         }
-        Command::McpCompatibility | Command::McpStdio { .. } => {
+        Command::McpCompatibility | Command::McpPackage { .. } | Command::McpStdio { .. } => {
             unreachable!("MCP commands handled before opening the store")
         }
         Command::Tui { editor, editor_arg } => tui::run(

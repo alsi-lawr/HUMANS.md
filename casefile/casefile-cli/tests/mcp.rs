@@ -44,6 +44,12 @@ fn command(root: &Path) -> Command {
     command
 }
 
+fn package_command(root: &Path) -> Command {
+    let mut command = Command::new(env!("CARGO_BIN_EXE_casefile"));
+    command.arg("mcp-package").arg("--planning-root").arg(root);
+    command
+}
+
 fn session(root: &Path, requests: &[Value]) -> std::process::Output {
     let mut child = command(root)
         .stdin(Stdio::piped())
@@ -245,6 +251,52 @@ fn adapter_never_infers_root_or_accepts_incompatible_mcp_protocol() {
             .contains("unsupported MCP protocol")
     );
     assert_eq!(responses[1]["error"]["code"], -32002);
+}
+
+#[test]
+fn packaged_command_internalizes_the_launcher_contract() {
+    let root = fixture();
+    let input = [
+        json!({"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25"}}),
+        json!({"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}),
+    ]
+    .into_iter()
+    .map(|value| serde_json::to_string(&value).expect("request"))
+    .collect::<Vec<_>>()
+    .join("\n")
+        + "\n";
+    let mut child = package_command(root.path())
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("MCP process");
+    child
+        .stdin
+        .take()
+        .expect("stdin")
+        .write_all(input.as_bytes())
+        .expect("requests");
+    let output = child.wait_with_output().expect("output");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let responses = output
+        .stdout
+        .split(|byte| *byte == b'\n')
+        .filter(|line| !line.is_empty())
+        .map(|line| serde_json::from_slice::<Value>(line).expect("response"))
+        .collect::<Vec<_>>();
+    assert_eq!(responses[0]["result"]["serverInfo"]["name"], "casefile");
+    assert_eq!(
+        responses[1]["result"]["tools"]
+            .as_array()
+            .expect("tools")
+            .len(),
+        12
+    );
 }
 
 #[test]

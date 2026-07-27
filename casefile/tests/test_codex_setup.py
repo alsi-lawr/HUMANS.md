@@ -3,6 +3,7 @@ from __future__ import annotations
 import contextlib
 import io
 import json
+import hashlib
 import shutil
 import subprocess
 import sys
@@ -80,27 +81,47 @@ class CodexSetupTests(unittest.TestCase):
         plugin = root / "plugin"
         (plugin / ".codex-plugin").mkdir(parents=True)
         (plugin / ".codex-plugin/plugin.json").write_text(
-            json.dumps({"name": "casefile", "version": PLUGIN_VERSION, "mcpServers": "./.mcp.json"}) + "\n",
+            json.dumps({"name": "casefile", "version": PLUGIN_VERSION}) + "\n",
             encoding="ascii",
         )
-        (plugin / ".mcp.json").write_text(
-            json.dumps({"mcpServers": {"casefile": {"command": "launcher", "args": []}}}) + "\n",
-            encoding="ascii",
-        )
+        (plugin / "casefile.toml").write_text("schema_version = 1\n", encoding="ascii")
+        (plugin / "projects.toml").write_text("schema_version = 1\nprojects = []\n", encoding="ascii")
         (plugin / "config").mkdir()
         for name in ("config-fragment.toml.in", "profiles.toml"):
             shutil.copy2(ROOT / "casefile/adapters/codex" / name, plugin / "config" / name)
         shutil.copytree(ROOT / "casefile/adapters/codex/catalog", plugin / "config/catalog")
         shutil.copytree(ROOT / "casefile/adapters/codex/agents", plugin / "agents")
         (plugin / "scripts").mkdir()
-        shutil.copy2(
-            ROOT / "casefile/scripts/casefile-mcp-launcher.py",
-            plugin / "scripts/casefile-mcp-launcher.py",
-        )
+        shutil.copy2(ROOT / "casefile/adapters/shared/casefile_runtime.py", plugin / "scripts/casefile_runtime.py")
         shutil.copy2(
             ROOT / "casefile/adapters/codex/scripts/resolve-writer-binding.py",
             plugin / "scripts/resolve-writer-binding.py",
         )
+        runtime_source = (
+            "#!/usr/bin/env python3\nimport json,sys\n"
+            f"version={PLUGIN_VERSION!r}\n"
+            f"operations={sorted(setup.casefile_runtime.REQUIRED_OPERATIONS)!r}\n"
+            "if sys.argv[1:] == ['--version']: print('casefile '+version)\n"
+            "elif sys.argv[1:] == ['mcp-compatibility']: print(json.dumps({'identity':'casefile','provider_protocol_version':1,'required_provider_operations':operations}))\n"
+            "elif sys.argv[1:2] == ['mcp-package']:\n"
+            " data=[json.loads(line) for line in sys.stdin if line.strip()]\n"
+            " for row in data:\n"
+            "  result={'serverInfo':{'name':'casefile'}} if row['method']=='initialize' else {'tools':[{} for _ in range(12)]}\n"
+            "  print(json.dumps({'jsonrpc':'2.0','id':row['id'],'result':result}))\n"
+            "else: raise SystemExit(2)\n"
+        ).encode("ascii")
+        rows = []
+        for target in (
+            "aarch64-apple-darwin", "aarch64-pc-windows-msvc", "aarch64-unknown-linux-musl",
+            "x86_64-apple-darwin", "x86_64-pc-windows-msvc", "x86_64-unknown-linux-musl",
+        ):
+            name = "casefile.exe" if target.endswith("windows-msvc") else "casefile"
+            binary = plugin / "runtime/bin" / target / name
+            binary.parent.mkdir(parents=True, exist_ok=True)
+            binary.write_bytes(runtime_source)
+            binary.chmod(0o755)
+            rows.append({"path":binary.relative_to(plugin / 'runtime').as_posix(),"sha256":hashlib.sha256(runtime_source).hexdigest(),"size":len(runtime_source),"target":target})
+        (plugin / "runtime/artifacts.json").write_text(json.dumps({"schema_version":1,"version":PLUGIN_VERSION,"source_commit":"1"*40,"artifacts":rows}, indent=2, sort_keys=True)+"\n", encoding="ascii")
         (plugin / "templates").mkdir()
         shutil.copy2(ROOT / "AGENTS.md", plugin / "templates/AGENTS.md")
 
@@ -126,7 +147,10 @@ class CodexSetupTests(unittest.TestCase):
         }
         home = root / "codex-home"
         home.mkdir()
-        original = b'model = "gpt-5.5"\npersonality = "pragmatic"\n'
+        original = (
+            b'model = "gpt-5.5"\npersonality = "pragmatic"\n'
+            b'\n[mcp_servers.unrelated]\ncommand = "/unrelated/server"\n'
+        )
         (home / "config.toml").write_bytes(original)
         legacy = home / "skills/investigation-solo"
         legacy.mkdir(parents=True)
@@ -242,11 +266,35 @@ class CodexSetupTests(unittest.TestCase):
                 setup.uninstall(home, "codex", checked_path, receipt)
             self.assertEqual(original, (home / "config.toml").read_bytes())
 
+    def test_legacy_receipt_upgrades_side_by_side_and_uninstalls_to_original(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            plugin, home, original, catalog, _ = self.fixture(Path(temporary))
+            fake = FakeCodex(catalog)
+            with self.fake_command(fake):
+                first = setup.install(setup.prepare(plugin, home, "codex"))
+                first_path = Path(first["receipt"])
+                legacy = json.loads(first_path.read_bytes())
+                legacy["schema_version"] = 5
+                legacy["plugin_version"] = "0.3.4"
+                legacy.pop("casefile_binary")
+                legacy.pop("planning_root")
+                legacy.pop("artifact_sha256")
+                legacy.pop("owned_binaries")
+                legacy["before"] = legacy["before"][:2]
+                first_path.write_bytes(setup.canonical(legacy))
+                upgraded = setup.install(setup.prepare(plugin, home, "codex"))
+                receipt_path, receipt = setup.receipt(home, Path(upgraded["receipt"]))
+                self.assertEqual(6, receipt["schema_version"])
+                self.assertTrue((home / receipt["casefile_binary"]).is_file())
+                setup.uninstall(home, "codex", receipt_path, receipt)
+            self.assertEqual(original, (home / "config.toml").read_bytes())
+
     def test_cli_rejects_multiple_runtime_selections(self):
         with tempfile.TemporaryDirectory() as temporary:
             plugin, home, _, _, _ = self.fixture(Path(temporary))
             arguments = [
                 "setup-codex.py", "install", "--plugin-root", str(plugin),
+                "--planning-root", str(plugin),
                 "--codex-home", str(home), "--codex-executable", "codex",
                 "--multi-agent-version", "v1", "--multi-agent-version", "v2",
             ]
@@ -287,6 +335,7 @@ class CodexSetupTests(unittest.TestCase):
             "model_catalog_json": 'model_catalog_json = "other.json"\n',
             "features": "[features]\nmulti_agent = true\n",
             "agents": "[agents]\nmax_threads = 1\n",
+            "mcp_servers.casefile": '[mcp_servers.casefile]\ncommand = "/unowned"\n',
         }
         for name, config in conflicts.items():
             with self.subTest(name=name), tempfile.TemporaryDirectory() as temporary:

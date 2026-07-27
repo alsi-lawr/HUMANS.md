@@ -6,10 +6,23 @@ on:
         description: Synchronized plugin version to publish
         required: true
         type: string
+      source_commit:
+        description: Reviewed source commit used by the binary build
+        required: true
+        type: string
+      binary_run_id:
+        description: Reviewed Build Casefile executable matrix workflow run ID
+        required: true
+        type: string
+      matrix_manifest_sha256:
+        description: Reviewed SHA-256 of artifacts.json
+        required: true
+        type: string
 concurrency:
   group: humans-md-marketplace-release
   cancel-in-progress: false
 permissions:
+  actions: read
   contents: read
 jobs:
   publish:
@@ -22,6 +35,25 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
+      - name: Require the reviewed source commit
+        env:
+          SOURCE_COMMIT: ${{ inputs.source_commit }}
+        run: test "$GITHUB_SHA" = "$SOURCE_COMMIT"
+      - name: Download the explicitly reviewed Casefile binary run
+        uses: actions/download-artifact@v8
+        with:
+          name: casefile-runtime-${{ inputs.source_commit }}
+          path: reviewed-casefile-artifact
+          run-id: ${{ inputs.binary_run_id }}
+          github-token: ${{ github.token }}
+      - name: Verify reviewed executable matrix identity
+        env:
+          SOURCE_COMMIT: ${{ inputs.source_commit }}
+          VERSION: ${{ inputs.version }}
+          EXPECTED_MANIFEST_SHA256: ${{ inputs.matrix_manifest_sha256 }}
+        run: |
+          test "$(sha256sum reviewed-casefile-artifact/casefile-runtime/artifacts.json | cut -d' ' -f1)" = "$EXPECTED_MANIFEST_SHA256"
+          python scripts/casefile_artifacts.py verify --artifact-root reviewed-casefile-artifact/casefile-runtime --version "$VERSION" --source-commit "$SOURCE_COMMIT"
       - name: Build Casefile web assets
         working-directory: casefile/web
         run: |
@@ -40,11 +72,13 @@ jobs:
           PY
       - name: Build and validate the marketplace tree
         run: |
-          python scripts/package-plugin.py build --all
+          python scripts/package-plugin.py build --all --casefile-artifact-root reviewed-casefile-artifact/casefile-runtime --casefile-source-commit "$GITHUB_SHA"
           python scripts/build-marketplace-catalog.py
           cp -R packaging/marketplace/. build/marketplace/
           cp LICENSE build/marketplace/LICENSE
-          python scripts/package-plugin.py check --all
+          python scripts/package-plugin.py check --all --casefile-artifact-root reviewed-casefile-artifact/casefile-runtime --casefile-source-commit "$GITHUB_SHA"
+          diff -r reviewed-casefile-artifact/casefile-runtime build/marketplace/plugins/codex/casefile/runtime
+          diff -r reviewed-casefile-artifact/casefile-runtime build/marketplace/plugins/claude/casefile/runtime
           python scripts/validate-package-roots.py
           python casefile/scripts/validate-casefile.py --source build/marketplace/plugins/codex/casefile
           python casefile/scripts/validate-casefile.py --source build/marketplace/plugins/claude/casefile

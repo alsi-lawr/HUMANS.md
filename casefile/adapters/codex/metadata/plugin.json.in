@@ -23,7 +23,6 @@
     "websiteURL": ${repository_url_json}
   },
   "license": ${license_json},
-  "mcpServers": "./.mcp.json",
   "name": ${name_json},
   "repository": ${repository_url_json},
   "version": ${version_json}

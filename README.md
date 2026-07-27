@@ -40,12 +40,13 @@ claude plugin install coding@humans-md --scope user
 integration. `coding` owns Git contribution, README, skill-generation, and generic verification
 guidance. Removing one plugin never removes the shared marketplace or another plugin.
 
-The Casefile plugin declares the same local stdio MCP server in Codex and Claude. Set one absolute
-`CASEFILE_PLANNING_ROOT` for an activated current-v1 Store. Its default launcher runs the package's
-locked Rust source with `cargo run --locked`, so a working Cargo/Rust toolchain and dependency cache
-or network are prerequisites; an external executable is used only when explicitly configured and its
-Casefile protocol and capabilities match. Every governed write still requires the complete Provider
-preview to be shown and explicitly approved before that exact preview is applied.
+The Casefile plugin bundles the complete supported Linux, macOS, and Windows x64/ARM64 executable
+matrix. After installing it, invoke its host-specific Casefile setup skill with one absolute
+activated current-v1 planning Store. Setup verifies and installs the matching executable, probes its
+identity and 12-tool Provider contract, and receipt-binds the host directly to
+`casefile mcp-package`. MCP startup then needs no Cargo, Python, Node, network, or `PATH` lookup.
+Every governed write still requires the complete Provider preview to be shown and explicitly
+approved before that exact preview is applied.
 
 ## Project
 

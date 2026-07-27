@@ -130,6 +130,8 @@ class CasefileBoundaryTests(unittest.TestCase):
             .replace("__HUMANS_MD_PLUGIN_ROOT__", "/plugin")
             .replace("__CASEFILE_MULTI_AGENT_V1__", "true")
             .replace("__CASEFILE_MULTI_AGENT_V2__", "false")
+            .replace("__CASEFILE_EXECUTABLE__", '"/runtime/casefile"')
+            .replace("__CASEFILE_PLANNING_ROOT__", '"/planning"')
         )
         agents = tomllib.loads(fragment)["agents"]
         for row in [*defaults, *profiles["writer_profiles"], *overrides]:

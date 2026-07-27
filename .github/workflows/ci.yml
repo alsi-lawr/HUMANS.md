@@ -52,16 +52,10 @@ jobs:
           python coding/scripts/validate-skill.py --all --root coding
       - name: Build and validate package inventory
         run: |
-          python scripts/package-plugin.py build --all
-          python scripts/build-marketplace-catalog.py
-          cp -R packaging/marketplace/. build/marketplace/
-          cp LICENSE build/marketplace/LICENSE
-          python scripts/package-plugin.py check --all
-          python scripts/validate-package-roots.py
-          python casefile/scripts/validate-casefile.py --source build/marketplace/plugins/codex/casefile
-          python casefile/scripts/validate-casefile.py --source build/marketplace/plugins/claude/casefile
-          python coding/scripts/validate-skill.py --all --root build/marketplace/plugins/codex/coding
-          python coding/scripts/validate-skill.py --all --root build/marketplace/plugins/claude/coding
+          python scripts/package-plugin.py build --manifest humans-md/packaging/plugin.toml
+          python scripts/package-plugin.py build --manifest coding/packaging/plugin.toml
+          python scripts/package-plugin.py check --manifest humans-md/packaging/plugin.toml
+          python scripts/package-plugin.py check --manifest coding/packaging/plugin.toml
       - name: Strict Claude package validation
         run: |
           npm install --global @anthropic-ai/claude-code
@@ -69,27 +63,29 @@ jobs:
       - name: Isolated Codex sibling lifecycle smoke
         run: |
           npm install --global @openai/codex
-          for removed in coding casefile humans-md; do
+          cp -R packaging/marketplace/. build/marketplace/
+          cp LICENSE build/marketplace/LICENSE
+          for removed in coding humans-md; do
             export CODEX_HOME="$RUNNER_TEMP/codex-$removed"
             mkdir -p "$CODEX_HOME"
             codex plugin marketplace add "$GITHUB_WORKSPACE/build/marketplace" --json
-            for plugin in humans-md casefile coding; do codex plugin add "$plugin@humans-md" --json; done
+            for plugin in humans-md coding; do codex plugin add "$plugin@humans-md" --json; done
             codex plugin list --available --json | python scripts/check-codex-discovery.py
             codex plugin remove "$removed@humans-md" --json
-            expected="humans-md,casefile,coding"; expected="${expected/$removed,}"; expected="${expected/,$removed/}"; expected="${expected/$removed/}"
+            expected="humans-md,coding"; expected="${expected/$removed,}"; expected="${expected/,$removed/}"; expected="${expected/$removed/}"
             codex plugin list --json | python scripts/check-plugin-state.py --expected "$expected"
             codex plugin marketplace list --json | grep -q '"humans-md"'
           done
       - name: Isolated Claude sibling lifecycle smoke
         run: |
           npm install --global @anthropic-ai/claude-code
-          for removed in coding casefile humans-md; do
+          for removed in coding humans-md; do
             export CLAUDE_CONFIG_DIR="$RUNNER_TEMP/claude-$removed"
             mkdir -p "$CLAUDE_CONFIG_DIR"
             claude plugin marketplace add "$GITHUB_WORKSPACE/build/marketplace"
-            for plugin in humans-md casefile coding; do claude plugin install "$plugin@humans-md" --scope user; done
+            for plugin in humans-md coding; do claude plugin install "$plugin@humans-md" --scope user; done
             claude plugin uninstall "$removed@humans-md" --scope user
-            expected="humans-md,casefile,coding"; expected="${expected/$removed,}"; expected="${expected/,$removed/}"; expected="${expected/$removed/}"
+            expected="humans-md,coding"; expected="${expected/$removed,}"; expected="${expected/,$removed/}"; expected="${expected/$removed/}"
             claude plugin list --json | python scripts/check-claude-plugin-state.py --expected "$expected" --absent "$removed"
             claude plugin marketplace list --json | grep -q 'humans-md'
           done

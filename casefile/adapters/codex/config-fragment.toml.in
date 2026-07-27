@@ -2,6 +2,10 @@
 multi_agent = __CASEFILE_MULTI_AGENT_V1__
 multi_agent_v2 = __CASEFILE_MULTI_AGENT_V2__
 
+[mcp_servers.casefile]
+command = __CASEFILE_EXECUTABLE__
+args = ["mcp-package", "--planning-root", __CASEFILE_PLANNING_ROOT__]
+
 [agents]
 max_depth = 2
 max_threads = 6

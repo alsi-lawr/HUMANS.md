@@ -2,6 +2,7 @@
 """Validate Casefile-owned source or generated package boundaries."""
 from __future__ import annotations
 import argparse
+import hashlib
 import json
 from pathlib import Path
 
@@ -16,6 +17,11 @@ SKILLS = {
 }
 FORBIDDEN = {"validator", "writer", "hook", "mcp", "tui", "react", "sqlite"}
 EXCLUDED_DIRECTORIES = {".agent-workspace", "build", "node_modules", "target"}
+MATRIX = {
+    "x86_64-unknown-linux-musl", "aarch64-unknown-linux-musl",
+    "x86_64-apple-darwin", "aarch64-apple-darwin",
+    "x86_64-pc-windows-msvc", "aarch64-pc-windows-msvc",
+}
 
 def owned_markdown(root: Path):
     return (
@@ -42,28 +48,30 @@ def main() -> int:
         version = metadata.get("version")
         if metadata.get("name") != "casefile" or not isinstance(version, str) or not version:
             errors.append("generated Casefile metadata lacks its package identity")
-        mcp_path = root / ".mcp.json"
+        for relative in (".mcp.json", "Cargo.toml", "Cargo.lock", "scripts/casefile-mcp-launcher.py"):
+            if (root / relative).exists():
+                errors.append(f"generated Casefile package retains source-launch input {relative}")
+        if "mcpServers" in metadata:
+            errors.append("generated Casefile metadata retains an automatic MCP declaration")
+        setup = "scripts/setup-codex.py" if codex.exists() else "scripts/setup-claude.py"
+        if not (root / setup).is_file() or not (root / "scripts/casefile_runtime.py").is_file():
+            errors.append("generated Casefile package lacks receipt-backed runtime setup")
         try:
-            mcp = json.loads(mcp_path.read_text(encoding="ascii"))
+            raw = (root / "runtime/artifacts.json").read_bytes()
+            manifest = json.loads(raw.decode("ascii"))
         except (OSError, UnicodeError, json.JSONDecodeError):
-            mcp = None
-            errors.append("generated Casefile package lacks a valid root .mcp.json")
-        servers = mcp.get("mcpServers") if isinstance(mcp, dict) else None
-        if not isinstance(servers, dict) or list(servers) != ["casefile"]:
-            errors.append("generated Casefile package must declare exactly one Casefile MCP server")
-        else:
-            declaration = servers["casefile"]
-            arguments = declaration.get("args") if isinstance(declaration, dict) else None
-            command = declaration.get("command") if isinstance(declaration, dict) else None
-            if not isinstance(command, str) or not command.endswith("/scripts/casefile-mcp-launcher.py"):
-                errors.append("generated Casefile MCP declaration has an invalid launcher")
-            if arguments != ["--planning-root", "${CASEFILE_PLANNING_ROOT}"]:
-                errors.append("generated Casefile MCP declaration lacks its one explicit planning root")
-        if codex.exists() and metadata.get("mcpServers") != "./.mcp.json":
-            errors.append("generated Codex package does not natively reference .mcp.json")
-        for relative in ("Cargo.toml", "Cargo.lock", "scripts/casefile-mcp-launcher.py"):
-            if not (root / relative).is_file():
-                errors.append(f"generated Casefile MCP runtime lacks {relative}")
+            manifest = None
+            errors.append("generated Casefile package lacks a valid artifact manifest")
+        if isinstance(manifest, dict):
+            rows = manifest.get("artifacts")
+            targets = {row.get("target") for row in rows if isinstance(row, dict)} if isinstance(rows, list) else set()
+            if manifest.get("version") != version or targets != MATRIX or len(rows or []) != 6:
+                errors.append("generated Casefile artifact matrix is incomplete or version-mismatched")
+            else:
+                for row in rows:
+                    path = root / "runtime" / row.get("path", "")
+                    if not path.is_file() or path.stat().st_size != row.get("size") or hashlib.sha256(path.read_bytes()).hexdigest() != row.get("sha256"):
+                        errors.append(f"generated Casefile artifact is invalid: {row.get('target')}")
     elif not (root / "casefile-workflow").is_dir():
         errors.append("source lacks Casefile workflow assets")
     if errors:

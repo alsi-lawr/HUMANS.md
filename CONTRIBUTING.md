@@ -75,19 +75,19 @@ provider previews and results, and the browser never parses or writes planning f
 
 ### Native MCP package boundary
 
-The generated Codex and Claude Casefile packages each declare one local stdio MCP server through
-their root `.mcp.json`. The declaration passes exactly one absolute `CASEFILE_PLANNING_ROOT` to the
-shared package launcher. Neither the launcher nor the adapter infers a planning root from the
-working directory, repository layout, or another environment fallback.
+The generated Codex and Claude Casefile packages contain byte-identical copies of the complete
+supported executable matrix and its source-bound SHA-256 manifest. They contain no `.mcp.json`,
+package-local Cargo workspace, or source launcher. Host-specific receipt-backed setup requires one
+explicit absolute planning root, verifies the complete matrix and selected artifact, atomically
+installs the matching executable in a stable versioned user path, probes the exact identity,
+protocol, capabilities, and 12-tool stdio surface, then registers
+`casefile mcp-package --planning-root <absolute-root>` directly. Runtime startup needs no Cargo,
+Rust, Python, Node, network, or `PATH` lookup.
 
-By default, the launcher runs the package-local Rust workspace with `cargo run --locked` and keeps
-Cargo output under the user's external Casefile cache, never under the plugin or planning Store.
-This requires a functioning Cargo/Rust toolchain plus an available dependency cache or network. A
-missing prerequisite, invalid or mismatched root, unsupported MCP or Provider protocol, absent
-required capability, build failure, or incompatible executable refuses startup before tools or
-planning mutation are exposed. There is no prebuilt Casefile binary in the package. An external
-executable is considered only through an explicit absolute override and only after its identity,
-protocol versions, and complete Provider operation contract pass the compatibility probe.
+At the 0.4.0 candidate boundary, Codex 0.145.0 and Claude Code 2.1.217 expose no direct marketplace
+OS/architecture selector. Both packages therefore carry all six binaries. Claude npm indirection was
+deliberately rejected for this release to keep one symmetric artifact, provenance, and validation
+path. These are dated compatibility facts, not permanent host limitations.
 
 MCP is a thin transport over the canonical typed Provider: capability and snapshot share one Store
 baseline, queries are Store-derived, and every governed mutation is revision-pinned preview/apply.
@@ -299,8 +299,8 @@ not edit a strategy or binding.
 
 The Codex adapter owns the selected Casefile model catalog and multi-agent runtime. Setup defaults
 to V1; V2 requires Codex 0.145.0 or newer. The Claude adapter supplies workflow skills, matrices,
-and role agents without owning the standing contract. Neither adapter removes the shared marketplace
-or sibling plugins.
+role agents, and a separate Casefile MCP binding transaction without owning the standing contract.
+Neither adapter removes the shared marketplace or sibling plugins.
 
 The source CLI is optional infrastructure, not part of installed plugin setup:
 
@@ -327,6 +327,10 @@ evidence without credentials, caches, or raw session logs.
 
 The three `*/packaging/plugin.toml` manifests are the package-version authority. Package metadata is
 rendered from those manifests; do not hard-code a release version in generated templates or tests.
+Casefile package generation additionally requires `--casefile-artifact-root` and the exact reviewed
+source commit. `.github/workflows/build-casefile-binaries.yml` is the build-only six-host matrix;
+publication downloads one explicitly identified prior run, verifies version, source, manifest
+digest, size, format, and hashes, and never recompiles release binaries.
 
 The Casefile browser build under `casefile/casefile-server/web/` is tracked and embedded by Rust.
 After changing `casefile/web/`, rebuild it and verify that the committed assets are intentional.

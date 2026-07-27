@@ -6,33 +6,11 @@ repository = "alsi-lawr/HUMANS.md"
 repository_url = "https://github.com/alsi-lawr/HUMANS.md"
 license = "MIT"
 description = "Governed Casefile workflows with fixed-root local Provider and MCP integration."
+[casefile_artifacts]
+destination = "runtime"
 [[shared]]
 source = "casefile/LICENSE"
 destination = "LICENSE"
-[[shared]]
-source = "casefile/Cargo.toml"
-destination = "Cargo.toml"
-[[shared]]
-source = "casefile/Cargo.lock"
-destination = "Cargo.lock"
-[[shared]]
-source = "casefile/casefile-core"
-destination = "casefile-core"
-[[shared]]
-source = "casefile/casefile-store"
-destination = "casefile-store"
-[[shared]]
-source = "casefile/casefile-store-sqlite"
-destination = "casefile-store-sqlite"
-[[shared]]
-source = "casefile/casefile-server"
-destination = "casefile-server"
-[[shared]]
-source = "casefile/casefile-tui"
-destination = "casefile-tui"
-[[shared]]
-source = "casefile/casefile-cli"
-destination = "casefile-cli"
 [[shared]]
 source = "casefile/casefile-workflow"
 destination = "casefile-workflow"
@@ -45,18 +23,11 @@ destination = "verification"
 [[shared]]
 source = "casefile/scripts/validate-casefile.py"
 destination = "scripts/validate-casefile.py"
-[[shared]]
-source = "casefile/scripts/casefile-mcp-launcher.py"
-destination = "scripts/casefile-mcp-launcher.py"
 [vendors.codex]
 output = "build/marketplace/plugins/codex/casefile"
 [[vendors.codex.template]]
 source = "casefile/adapters/codex/metadata/plugin.json.in"
 destination = ".codex-plugin/plugin.json"
-format = "json"
-[[vendors.codex.template]]
-source = "casefile/adapters/codex/mcp.json.in"
-destination = ".mcp.json"
 format = "json"
 [[vendors.codex.copy]]
 source = "casefile/adapters/codex/agents"
@@ -80,6 +51,9 @@ destination = "config/profiles.toml"
 source = "casefile/adapters/codex/scripts"
 destination = "scripts"
 [[vendors.codex.copy]]
+source = "casefile/adapters/shared/casefile_runtime.py"
+destination = "scripts/casefile_runtime.py"
+[[vendors.codex.copy]]
 source = "casefile/adapters/codex/skills"
 destination = "skills"
 [vendors.claude]
@@ -87,10 +61,6 @@ output = "build/marketplace/plugins/claude/casefile"
 [[vendors.claude.template]]
 source = "casefile/adapters/claude/metadata/plugin.json.in"
 destination = ".claude-plugin/plugin.json"
-format = "json"
-[[vendors.claude.template]]
-source = "casefile/adapters/claude/mcp.json.in"
-destination = ".mcp.json"
 format = "json"
 [[vendors.claude.copy]]
 source = "casefile/adapters/claude/agents"
@@ -101,3 +71,12 @@ destination = "matrices"
 [[vendors.claude.copy]]
 source = "casefile/adapters/claude/profiles.toml"
 destination = "config/profiles.toml"
+[[vendors.claude.copy]]
+source = "casefile/adapters/claude/scripts"
+destination = "scripts"
+[[vendors.claude.copy]]
+source = "casefile/adapters/claude/skills"
+destination = "skills"
+[[vendors.claude.copy]]
+source = "casefile/adapters/shared/casefile_runtime.py"
+destination = "scripts/casefile_runtime.py"

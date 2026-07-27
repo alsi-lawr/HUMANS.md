@@ -11,6 +11,7 @@ use std::{ffi::OsString, path::PathBuf, process::ExitCode};
 #[derive(Parser)]
 #[command(
     name = "casefile",
+    version,
     about = "Compact Casefile v1 scanner and governed writer"
 )]
 struct Cli {
@@ -80,6 +81,12 @@ enum Command {
     },
     /// Print the adapter/provider compatibility contract for explicit launcher verification.
     McpCompatibility,
+    /// Serve the packaged MCP contract with one explicit planning Store root.
+    McpPackage {
+        /// One explicit, absolute planning Store root. No default or environment fallback exists.
+        #[arg(long)]
+        planning_root: PathBuf,
+    },
     /// Serve the canonical provider as a fixed-root local stdio MCP server.
     McpStdio {
         /// One explicit, absolute planning Store root. No default or environment fallback exists.
