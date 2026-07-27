@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import struct
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from _load import ROOT, script
 
@@ -12,7 +14,33 @@ setup = script("casefile/adapters/claude/scripts/setup-claude.py")
 TARGETS = sorted(set(setup.casefile_runtime.TARGETS.values()))
 
 
+def native_stub(target: str) -> bytes:
+    if target.endswith("linux-musl"):
+        data = bytearray(64)
+        data[:4] = b"\x7fELF"
+        data[4:6] = b"\x02\x01"
+        struct.pack_into("<H", data, 18, 183 if target.startswith("aarch64") else 62)
+    elif target.endswith("darwin"):
+        data = bytearray(64)
+        data[:4] = b"\xcf\xfa\xed\xfe"
+        struct.pack_into("<I", data, 4, 0x0100000C if target.startswith("aarch64") else 0x01000007)
+    else:
+        data = bytearray(128)
+        data[:2] = b"MZ"
+        struct.pack_into("<I", data, 0x3C, 64)
+        data[64:68] = b"PE\0\0"
+        struct.pack_into("<H", data, 68, 0xAA64 if target.startswith("aarch64") else 0x8664)
+    return bytes(data)
+
+
 class ClaudeSetupTests(unittest.TestCase):
+    def setUp(self):
+        self.probe = mock.patch.object(setup.casefile_runtime, "probe", return_value=None)
+        self.probe.start()
+
+    def tearDown(self):
+        self.probe.stop()
+
     def test_host_target_normalizes_supported_vendor_spellings(self):
         self.assertEqual("x86_64-unknown-linux-musl", setup.casefile_runtime.host_target("Linux", "AMD64"))
         self.assertEqual("aarch64-unknown-linux-musl", setup.casefile_runtime.host_target("Linux", "arm64"))
@@ -23,21 +51,11 @@ class ClaudeSetupTests(unittest.TestCase):
         plugin = root / "plugin"
         (plugin / ".claude-plugin").mkdir(parents=True)
         (plugin / ".claude-plugin/plugin.json").write_text(json.dumps({"name":"casefile","version":"0.4.0"})+"\n", encoding="ascii")
-        runtime_source = (
-            "#!/usr/bin/env python3\nimport json,sys\n"
-            "ops=" + repr(sorted(setup.casefile_runtime.REQUIRED_OPERATIONS)) + "\n"
-            "if sys.argv[1:] == ['--version']: print('casefile 0.4.0')\n"
-            "elif sys.argv[1:] == ['mcp-compatibility']: print(json.dumps({'identity':'casefile','provider_protocol_version':1,'required_provider_operations':ops}))\n"
-            "elif sys.argv[1:2] == ['mcp-package']:\n"
-            " for row in [json.loads(line) for line in sys.stdin if line.strip()]:\n"
-            "  result={'serverInfo':{'name':'casefile'}} if row['method']=='initialize' else {'tools':[{} for _ in range(12)]}\n"
-            "  print(json.dumps({'jsonrpc':'2.0','id':row['id'],'result':result}))\n"
-            "else: raise SystemExit(2)\n"
-        ).encode("ascii")
         rows=[]
         for target in TARGETS:
             name="casefile.exe" if target.endswith("windows-msvc") else "casefile"
             path=plugin/"runtime/bin"/target/name
+            runtime_source = native_stub(target)
             path.parent.mkdir(parents=True, exist_ok=True); path.write_bytes(runtime_source); path.chmod(0o755)
             rows.append({"path":path.relative_to(plugin/"runtime").as_posix(),"sha256":hashlib.sha256(runtime_source).hexdigest(),"size":len(runtime_source),"target":target})
         (plugin/"runtime/artifacts.json").write_text(json.dumps({"schema_version":1,"version":"0.4.0","source_commit":"1"*40,"artifacts":rows},indent=2,sort_keys=True)+"\n",encoding="ascii")
@@ -46,7 +64,7 @@ class ClaudeSetupTests(unittest.TestCase):
         claude=root/"claude"
         claude.write_text("""#!/usr/bin/env python3
 import json,os,pathlib,sys
-state=pathlib.Path(os.environ['CLAUDE_CONFIG_DIR'])/'fake-mcp.json'
+state=pathlib.Path(os.environ['CLAUDE_CONFIG_DIR'])/'.claude.json'
 args=sys.argv[1:]
 if args[:3]==['mcp','add','--scope']:
  i=args.index('--'); value={'command':args[i+1],'args':args[i+2:]}
@@ -72,7 +90,7 @@ else: raise SystemExit(2)
             receipt=json.loads(Path(result["receipt"]).read_text())
             binary=Path(receipt["binary"])
             self.assertTrue(binary.is_file())
-            binding=json.loads((home/"fake-mcp.json").read_text())
+            binding=json.loads((home/".claude.json").read_text())
             self.assertEqual(str(binary),binding["command"])
             self.assertEqual(["mcp-package","--planning-root",str(planning)],binding["args"])
             self.assertEqual("preview",setup.uninstall(home,str(claude),False)["status"])
@@ -82,21 +100,28 @@ else: raise SystemExit(2)
     def test_unowned_binding_and_tampered_matrix_refuse_before_mutation(self):
         with tempfile.TemporaryDirectory() as temporary:
             plugin, planning, home, claude = self.fixture(Path(temporary))
-            (home/"fake-mcp.json").write_text('{}',encoding="ascii")
+            (home/".claude.json").write_text('{}',encoding="ascii")
             with self.assertRaisesRegex(setup.SetupError,"unowned"):
                 setup.prepare(plugin,home,str(claude),planning)
             self.assertFalse((home/"casefile").exists())
 
-    def test_registration_verification_failure_removes_binding_and_copied_binary(self):
+    def test_corrupt_registration_and_remove_failure_restore_absent_fresh_state(self):
         with tempfile.TemporaryDirectory() as temporary:
             plugin, planning, home, claude = self.fixture(Path(temporary))
             (home / "corrupt-add").touch()
+            (home / "fail-remove").touch()
             plan = setup.prepare(plugin, home, str(claude), planning)
-            with self.assertRaisesRegex(setup.SetupError, "rollback attempted"):
+            with self.assertRaisesRegex(setup.SetupError, "rollback verified"):
                 setup.install(plan)
-            self.assertFalse((home / "fake-mcp.json").exists())
+            self.assertFalse((home / ".claude.json").exists())
             self.assertFalse(plan["binary"].exists())
             self.assertFalse(setup.pointer(home).exists())
+            failure = next((home / "casefile/receipts").glob("*/failure.json"))
+            state = json.loads(failure.read_text(encoding="ascii"))
+            self.assertTrue(state["rollback_verified"])
+            self.assertFalse(state["binding_present"])
+            self.assertFalse(state["binary_present"])
+            self.assertFalse(state["pointer_present"])
 
     def test_uninstall_failure_restores_binding_binary_and_pointer(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -109,7 +134,7 @@ else: raise SystemExit(2)
                 setup.uninstall(home, str(claude), True)
             self.assertTrue(binary.is_file())
             self.assertTrue(setup.pointer(home).is_file())
-            binding = json.loads((home / "fake-mcp.json").read_text())
+            binding = json.loads((home / ".claude.json").read_text())
             self.assertEqual(str(binary), binding["command"])
 
     def test_tampered_matrix_refuses_before_mutation(self):
@@ -120,6 +145,42 @@ else: raise SystemExit(2)
             with self.assertRaisesRegex(setup.casefile_runtime.RuntimeError,"size|hash"):
                 setup.prepare(plugin,home,str(claude),planning)
             self.assertFalse((home/"casefile").exists())
+
+    def test_self_consistent_script_artifact_refuses_before_copy_or_binding(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            plugin, planning, home, claude = self.fixture(Path(temporary))
+            manifest_path = plugin / "runtime/artifacts.json"
+            manifest = json.loads(manifest_path.read_text(encoding="ascii"))
+            target = setup.casefile_runtime.host_target()
+            row = next(item for item in manifest["artifacts"] if item["target"] == target)
+            script = b"#!/usr/bin/env python3\nprint('not native')\n"
+            (plugin / "runtime" / row["path"]).write_bytes(script)
+            row["size"] = len(script)
+            row["sha256"] = hashlib.sha256(script).hexdigest()
+            manifest_path.write_bytes(setup.casefile_runtime.canonical(manifest))
+            with self.assertRaisesRegex(setup.casefile_runtime.RuntimeError, "executable format"):
+                setup.prepare(plugin, home, str(claude), planning)
+            self.assertFalse((home / ".claude.json").exists())
+            self.assertFalse((home / "casefile").exists())
+            self.assertFalse(setup.pointer(home).exists())
+
+    def test_self_consistent_malformed_matrix_layout_refuses_before_mutation(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            plugin, planning, home, claude = self.fixture(Path(temporary))
+            manifest_path = plugin / "runtime/artifacts.json"
+            manifest = json.loads(manifest_path.read_text(encoding="ascii"))
+            row = manifest["artifacts"][0]
+            source = plugin / "runtime" / row["path"]
+            replacement = plugin / "runtime/bin/unexpected/casefile"
+            replacement.parent.mkdir(parents=True)
+            source.replace(replacement)
+            row["path"] = replacement.relative_to(plugin / "runtime").as_posix()
+            manifest_path.write_bytes(setup.casefile_runtime.canonical(manifest))
+            with self.assertRaisesRegex(setup.casefile_runtime.RuntimeError, "path is invalid"):
+                setup.prepare(plugin, home, str(claude), planning)
+            self.assertFalse((home / ".claude.json").exists())
+            self.assertFalse((home / "casefile").exists())
+            self.assertFalse(setup.pointer(home).exists())
 
 
 if __name__ == "__main__": unittest.main()

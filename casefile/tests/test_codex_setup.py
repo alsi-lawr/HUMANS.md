@@ -5,6 +5,7 @@ import io
 import json
 import hashlib
 import shutil
+import struct
 import subprocess
 import sys
 import tempfile
@@ -20,6 +21,19 @@ setup = script("casefile/adapters/codex/scripts/setup-codex.py")
 PLUGIN_VERSION = tomllib.loads(
     (ROOT / "casefile/packaging/plugin.toml").read_text(encoding="ascii")
 )["version"]
+
+
+def native_stub(target: str) -> bytes:
+    if target.endswith("linux-musl"):
+        data = bytearray(64); data[:4] = b"\x7fELF"; data[4:6] = b"\x02\x01"
+        struct.pack_into("<H", data, 18, 183 if target.startswith("aarch64") else 62)
+    elif target.endswith("darwin"):
+        data = bytearray(64); data[:4] = b"\xcf\xfa\xed\xfe"
+        struct.pack_into("<I", data, 4, 0x0100000C if target.startswith("aarch64") else 0x01000007)
+    else:
+        data = bytearray(128); data[:2] = b"MZ"; struct.pack_into("<I", data, 0x3C, 64)
+        data[64:68] = b"PE\0\0"; struct.pack_into("<H", data, 68, 0xAA64 if target.startswith("aarch64") else 0x8664)
+    return bytes(data)
 
 
 class FakeCodex:
@@ -97,19 +111,6 @@ class CodexSetupTests(unittest.TestCase):
             ROOT / "casefile/adapters/codex/scripts/resolve-writer-binding.py",
             plugin / "scripts/resolve-writer-binding.py",
         )
-        runtime_source = (
-            "#!/usr/bin/env python3\nimport json,sys\n"
-            f"version={PLUGIN_VERSION!r}\n"
-            f"operations={sorted(setup.casefile_runtime.REQUIRED_OPERATIONS)!r}\n"
-            "if sys.argv[1:] == ['--version']: print('casefile '+version)\n"
-            "elif sys.argv[1:] == ['mcp-compatibility']: print(json.dumps({'identity':'casefile','provider_protocol_version':1,'required_provider_operations':operations}))\n"
-            "elif sys.argv[1:2] == ['mcp-package']:\n"
-            " data=[json.loads(line) for line in sys.stdin if line.strip()]\n"
-            " for row in data:\n"
-            "  result={'serverInfo':{'name':'casefile'}} if row['method']=='initialize' else {'tools':[{} for _ in range(12)]}\n"
-            "  print(json.dumps({'jsonrpc':'2.0','id':row['id'],'result':result}))\n"
-            "else: raise SystemExit(2)\n"
-        ).encode("ascii")
         rows = []
         for target in (
             "aarch64-apple-darwin", "aarch64-pc-windows-msvc", "aarch64-unknown-linux-musl",
@@ -118,6 +119,7 @@ class CodexSetupTests(unittest.TestCase):
             name = "casefile.exe" if target.endswith("windows-msvc") else "casefile"
             binary = plugin / "runtime/bin" / target / name
             binary.parent.mkdir(parents=True, exist_ok=True)
+            runtime_source = native_stub(target)
             binary.write_bytes(runtime_source)
             binary.chmod(0o755)
             rows.append({"path":binary.relative_to(plugin / 'runtime').as_posix(),"sha256":hashlib.sha256(runtime_source).hexdigest(),"size":len(runtime_source),"target":target})
@@ -160,11 +162,14 @@ class CodexSetupTests(unittest.TestCase):
     @contextlib.contextmanager
     def fake_command(self, fake):
         previous = setup.command
+        previous_probe = setup.casefile_runtime.probe
         setup.command = fake
+        setup.casefile_runtime.probe = lambda *_: None
         try:
             yield
         finally:
             setup.command = previous
+            setup.casefile_runtime.probe = previous_probe
 
     def test_active_models_install_and_uninstall_preserve_unowned_config(self):
         with tempfile.TemporaryDirectory() as temporary:

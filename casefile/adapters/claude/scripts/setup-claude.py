@@ -61,6 +61,10 @@ def pointer(home: Path) -> Path:
     return home / "casefile/state/current.json"
 
 
+def user_config(home: Path) -> Path:
+    return home / ".claude.json"
+
+
 def plugin(root: Path) -> tuple[Path, dict]:
     root = root.expanduser().resolve(strict=True)
     try:
@@ -111,6 +115,8 @@ def prepare(root: Path, home: Path, executable: str, planning: Path) -> dict:
     planning = casefile_runtime.planning_root(planning)
     selected = casefile_runtime.select(root, manifest["version"])
     destination = casefile_runtime.destination(home, manifest["version"], selected["target"])
+    if destination.exists() or destination.is_symlink():
+        raise SetupError("the versioned Casefile executable path is already occupied")
     casefile_runtime.probe(selected["source"], manifest["version"], planning)
     environment = {**os.environ, "CLAUDE_CONFIG_DIR": str(home)}
     active = read_receipt(home)
@@ -157,6 +163,11 @@ def install(plan: dict) -> dict:
     binaries = list(previous_value.get("owned_binaries", [])) if previous_value else []
     copied = False
     registration_started = False
+    config = user_config(plan["home"])
+    if config.is_symlink() or (config.exists() and not config.is_file()):
+        raise SetupError("Claude user configuration is unsafe")
+    config_before = config.read_bytes() if config.is_file() else None
+    pointer_before = pointer(plan["home"]).read_bytes() if pointer(plan["home"]).is_file() else None
     try:
         casefile_runtime.atomic_copy(plan["selected"]["source"], plan["binary"])
         copied = True
@@ -179,18 +190,47 @@ def install(plan: dict) -> dict:
         atomic_write(pointer(plan["home"]), canonical({"receipt": str(receipt_path)}))
         return {"status": "installed", "receipt": str(receipt_path), "restart_required": True}
     except BaseException as error:
-        if registration_started:
-            subprocess.run([plan["executable"], "mcp", "remove", "--scope", "user", SERVER], env=plan["environment"], capture_output=True)
-        if previous_value is not None:
-            old = {**plan, "binary": Path(previous_value["binary"]), "planning_root": Path(previous_value["planning_root"])}
-            try:
-                register(old)
-            except BaseException:
-                pass
-        if copied:
+        rollback_error = None
+        try:
+            if registration_started:
+                if config_before is None:
+                    config.unlink(missing_ok=True)
+                else:
+                    atomic_write(config, config_before)
+            binding = current_binding(plan["executable"], plan["environment"])
+            if previous_value is None:
+                if binding is not None:
+                    raise SetupError("fresh-install binding remains after configuration restore")
+            elif (
+                binding is None
+                or previous_value["binary"] not in binding
+                or previous_value["planning_root"] not in binding
+            ):
+                raise SetupError("previous binding was not restored")
+        except BaseException as rollback_failure:
+            rollback_error = rollback_failure
+        if rollback_error is None and copied:
             plan["binary"].unlink(missing_ok=True)
-        atomic_write(receipt_dir / "failure.json", canonical({"status":"failed","error":str(error),"rollback_verified":current_binding(plan["executable"], plan["environment"]) is None if previous_value is None else True}))
-        raise SetupError(f"Claude setup failed; rollback attempted: {error}") from error
+        pointer_after = pointer(plan["home"])
+        pointer_matches = (
+            not pointer_after.exists()
+            if pointer_before is None
+            else pointer_after.is_file() and pointer_after.read_bytes() == pointer_before
+        )
+        rollback_verified = rollback_error is None and pointer_matches
+        atomic_write(receipt_dir / "failure.json", canonical({
+            "status": "failed", "error": str(error),
+            "rollback_verified": rollback_verified,
+            "rollback_error": None if rollback_error is None else str(rollback_error),
+            "binding_present": current_binding(plan["executable"], plan["environment"]) is not None,
+            "binary_present": plan["binary"].exists(),
+            "pointer_present": pointer(plan["home"]).exists(),
+        }))
+        if not rollback_verified:
+            raise SetupError(
+                f"Claude setup failed and rollback is unverified: {error}; {rollback_error}"
+            ) from error
+        raise SetupError(f"Claude setup failed; rollback verified: {error}") from error
 
 
 def uninstall(home: Path, executable: str, apply: bool) -> dict:

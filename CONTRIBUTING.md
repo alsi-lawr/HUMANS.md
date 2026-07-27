@@ -53,9 +53,16 @@ python scripts/test-all.py
 python scripts/validate-package-roots.py
 python casefile/scripts/validate-casefile.py --source casefile
 python coding/scripts/validate-skill.py --all --root coding
-python scripts/package-plugin.py build --all
-python scripts/package-plugin.py check --all
+python scripts/package-plugin.py build --manifest humans-md/packaging/plugin.toml
+python scripts/package-plugin.py check --manifest humans-md/packaging/plugin.toml
+python scripts/package-plugin.py build --manifest coding/packaging/plugin.toml
+python scripts/package-plugin.py check --manifest coding/packaging/plugin.toml
 ```
+
+Those ordinary source checks deliberately exclude the Casefile release package. A Casefile package
+requires the reviewed six-host artifact described under
+[Packages and generated assets](#packages-and-generated-assets); it never compiles a substitute
+binary locally.
 
 `nix flake check` evaluates the flake. CI can also be replayed from inside the shell with a cached
 runner image:
@@ -338,13 +345,29 @@ After changing `casefile/web/`, rebuild it and verify that the committed assets 
 To validate the full generated marketplace tree:
 
 ```sh
-python scripts/package-plugin.py build --all
+export SOURCE_COMMIT="$(git rev-parse HEAD)"
+export CASEFILE_ARTIFACT_ROOT="/absolute/path/to/reviewed-handoff/casefile-runtime"
+export VERSION="$(python -c 'import pathlib,tomllib; print(tomllib.loads(pathlib.Path("casefile/packaging/plugin.toml").read_text(encoding="ascii"))["version"])')"
+
+python scripts/casefile_artifacts.py verify \
+  --artifact-root "$CASEFILE_ARTIFACT_ROOT" \
+  --version "$VERSION" \
+  --source-commit "$SOURCE_COMMIT"
+python scripts/package-plugin.py build --all \
+  --casefile-artifact-root "$CASEFILE_ARTIFACT_ROOT" \
+  --casefile-source-commit "$SOURCE_COMMIT"
 python scripts/build-marketplace-catalog.py
 cp -R packaging/marketplace/. build/marketplace/
 cp LICENSE build/marketplace/LICENSE
-python scripts/package-plugin.py check --all
+python scripts/package-plugin.py check --all \
+  --casefile-artifact-root "$CASEFILE_ARTIFACT_ROOT" \
+  --casefile-source-commit "$SOURCE_COMMIT"
 python scripts/validate-package-roots.py
 ```
+
+The reviewed handoff is the downloaded output of one successful `Build Casefile executable matrix`
+run at `SOURCE_COMMIT`. Record its run ID and `artifacts.json` SHA-256 with the candidate. Do not
+use locally invented fixture artifacts for a release candidate.
 
 Generated marketplace history is published from source; do not edit the marketplace repository by
 hand.
@@ -362,8 +385,14 @@ For a release:
 2. Run the full source and package checks.
 3. Merge a green release pull request.
 4. Create an annotated source tag on the release merge and publish a GitHub Release for that tag.
-5. Dispatch `publish-marketplace.yml` with the manifest version.
-6. Verify the annotated marketplace tag, generated versions, and `Source-Commit` provenance.
+5. After separate authorization, run the build-only Casefile matrix at the exact reviewed source
+   commit. Record the successful workflow run ID, download and verify its complete native-smoke and
+   package-inventory handoff, and record the reviewed `artifacts.json` SHA-256.
+6. Dispatch `publish-marketplace.yml` with all four reviewed inputs: `version`, `source_commit`,
+   `binary_run_id`, and `matrix_manifest_sha256`. The workflow rejects another workflow, a failed or
+   incomplete run, a different source SHA, or an incomplete handoff and never rebuilds binaries.
+7. Verify the annotated marketplace tag, generated versions, `Source-Commit` provenance, packaged
+   executable hashes, and hosted install lifecycle.
 
 Release, history rewrite, branch deletion, and repository-setting changes require explicit human
 authority.

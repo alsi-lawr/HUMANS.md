@@ -7,6 +7,7 @@ import os
 import platform
 import re
 import shutil
+import struct
 import subprocess
 import tempfile
 from pathlib import Path, PurePosixPath
@@ -47,6 +48,42 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def executable_name(target: str) -> str:
+    return "casefile.exe" if target.endswith("windows-msvc") else "casefile"
+
+
+def artifact_path(target: str) -> str:
+    return f"bin/{target}/{executable_name(target)}"
+
+
+def validate_native_executable(path: Path, target: str) -> None:
+    data = path.read_bytes()
+    if target.endswith("linux-musl"):
+        if len(data) < 20 or data[:4] != b"\x7fELF" or data[4:6] != b"\x02\x01":
+            raise RuntimeError(f"wrong executable format for {target}: expected 64-bit little-endian ELF")
+        expected = 183 if target.startswith("aarch64") else 62
+        if struct.unpack_from("<H", data, 18)[0] != expected:
+            raise RuntimeError(f"wrong executable architecture for {target}")
+    elif target.endswith("apple-darwin"):
+        if len(data) < 8 or data[:4] not in {b"\xfe\xed\xfa\xcf", b"\xcf\xfa\xed\xfe"}:
+            raise RuntimeError(f"wrong executable format for {target}: expected 64-bit Mach-O")
+        endian = ">" if data[:4] == b"\xfe\xed\xfa\xcf" else "<"
+        expected = 0x0100000C if target.startswith("aarch64") else 0x01000007
+        if struct.unpack_from(f"{endian}I", data, 4)[0] != expected:
+            raise RuntimeError(f"wrong executable architecture for {target}")
+    else:
+        if len(data) < 64 or data[:2] != b"MZ":
+            raise RuntimeError(f"wrong executable format for {target}: expected PE")
+        offset = struct.unpack_from("<I", data, 0x3C)[0]
+        expected = 0xAA64 if target.startswith("aarch64") else 0x8664
+        if (
+            len(data) < offset + 6
+            or data[offset : offset + 4] != b"PE\0\0"
+            or struct.unpack_from("<H", data, offset + 4)[0] != expected
+        ):
+            raise RuntimeError(f"wrong executable architecture for {target}")
+
+
 def host_target(system: str | None = None, machine: str | None = None) -> str:
     system = system or platform.system()
     machine = machine or platform.machine()
@@ -82,6 +119,8 @@ def select(plugin_root: Path, version: str, target: str | None = None) -> dict:
     rows = manifest.get("artifacts")
     if not isinstance(rows, list) or len(rows) != 6:
         raise RuntimeError("Casefile artifact matrix is incomplete")
+    if [row.get("target") if isinstance(row, dict) else None for row in rows] != sorted(MATRIX):
+        raise RuntimeError("Casefile artifact matrix must use the complete sorted target order")
     by_target = {}
     for row in rows:
         if not isinstance(row, dict) or set(row) != {"path", "sha256", "size", "target"}:
@@ -90,8 +129,8 @@ def select(plugin_root: Path, version: str, target: str | None = None) -> dict:
         if row_target not in MATRIX or row_target in by_target:
             raise RuntimeError("Casefile artifact matrix has duplicate or unsupported targets")
         relative = row.get("path")
-        if not isinstance(relative, str):
-            raise RuntimeError("Casefile artifact path is invalid")
+        if relative != artifact_path(row_target):
+            raise RuntimeError(f"Casefile artifact path is invalid for {row_target}")
         pure = PurePosixPath(relative)
         if pure.is_absolute() or ".." in pure.parts or "\\" in relative:
             raise RuntimeError("Casefile artifact path is unsafe")
@@ -100,6 +139,7 @@ def select(plugin_root: Path, version: str, target: str | None = None) -> dict:
             raise RuntimeError("Casefile artifact is missing, unsafe, or has the wrong size")
         if sha256(candidate) != row.get("sha256"):
             raise RuntimeError("Casefile artifact hash mismatch")
+        validate_native_executable(candidate, row_target)
         by_target[row_target] = (row, candidate)
     if set(by_target) != MATRIX:
         raise RuntimeError("Casefile artifact matrix is incomplete")
@@ -108,12 +148,17 @@ def select(plugin_root: Path, version: str, target: str | None = None) -> dict:
     selected = selected_pair[0] if selected_pair else None
     if selected is None:
         raise RuntimeError(f"Casefile artifact matrix lacks host target {target}")
-    relative = selected.get("path")
-    if not isinstance(relative, str):
-        raise RuntimeError("Casefile artifact path is invalid")
-    pure = PurePosixPath(relative)
-    if pure.is_absolute() or ".." in pure.parts or "\\" in relative:
-        raise RuntimeError("Casefile artifact path is unsafe")
+    expected_files = {
+        Path("artifacts.json"),
+        *(Path(*PurePosixPath(artifact_path(item)).parts) for item in MATRIX),
+    }
+    actual_files = {
+        path.relative_to(runtime)
+        for path in runtime.rglob("*")
+        if path.is_file() or path.is_symlink()
+    }
+    if actual_files != expected_files:
+        raise RuntimeError("Casefile artifact root inventory is incomplete or contains extra files")
     source = selected_pair[1]
     return {"target": target, "source": source, "sha256": selected["sha256"], "manifest": manifest}
 

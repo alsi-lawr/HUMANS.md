@@ -39,6 +39,11 @@ jobs:
         env:
           SOURCE_COMMIT: ${{ inputs.source_commit }}
         run: test "$GITHUB_SHA" = "$SOURCE_COMMIT"
+      - name: Resolve the reviewed binary workflow run
+        env:
+          BINARY_RUN_ID: ${{ inputs.binary_run_id }}
+          GH_TOKEN: ${{ github.token }}
+        run: gh api "repos/$GITHUB_REPOSITORY/actions/runs/$BINARY_RUN_ID" > "$RUNNER_TEMP/casefile-binary-run.json"
       - name: Download the explicitly reviewed Casefile binary run
         uses: actions/download-artifact@v8
         with:
@@ -51,9 +56,15 @@ jobs:
           SOURCE_COMMIT: ${{ inputs.source_commit }}
           VERSION: ${{ inputs.version }}
           EXPECTED_MANIFEST_SHA256: ${{ inputs.matrix_manifest_sha256 }}
+          BINARY_RUN_ID: ${{ inputs.binary_run_id }}
         run: |
-          test "$(sha256sum reviewed-casefile-artifact/casefile-runtime/artifacts.json | cut -d' ' -f1)" = "$EXPECTED_MANIFEST_SHA256"
-          python scripts/casefile_artifacts.py verify --artifact-root reviewed-casefile-artifact/casefile-runtime --version "$VERSION" --source-commit "$SOURCE_COMMIT"
+          python scripts/validate-casefile-handoff.py \
+            --handoff-root reviewed-casefile-artifact \
+            --run-metadata "$RUNNER_TEMP/casefile-binary-run.json" \
+            --run-id "$BINARY_RUN_ID" \
+            --version "$VERSION" \
+            --source-commit "$SOURCE_COMMIT" \
+            --manifest-sha256 "$EXPECTED_MANIFEST_SHA256"
       - name: Build Casefile web assets
         working-directory: casefile/web
         run: |
