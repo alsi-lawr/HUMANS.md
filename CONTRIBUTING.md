@@ -313,10 +313,11 @@ receipt-owned catalog only to validate selectors before replacement. File-auth h
 by Codex itself before a temporary credential copy is made, while environment API-key auth can be
 used directly. Keyring-only homes fail closed because Codex keyring identity is home-derived and is
 not assumed to cross into the private home. The temporary home is removed and selected configuration
-and model-cache bytes must remain unchanged. Casefile never invokes a debug model command or writes,
-configures, packages, or distributes Codex's selected-home cache. The Claude adapter supplies
-workflow skills, matrices, role agents, and a separate Casefile MCP binding transaction without
-owning the standing contract. Neither adapter removes the shared marketplace or sibling plugins.
+must remain unchanged. Casefile never invokes a debug model command or directly writes, configures,
+packages, or distributes Codex's selected-home cache; Codex may refresh its own cache while
+refreshing authentication. The Claude adapter supplies workflow skills, matrices, role agents, and a
+separate Casefile MCP binding transaction without owning the standing contract. Neither adapter
+removes the shared marketplace or sibling plugins.
 
 The source CLI is optional infrastructure, not part of installed plugin setup:
 

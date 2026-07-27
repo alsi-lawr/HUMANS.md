@@ -288,7 +288,7 @@ def _identifiers(document: dict, field: str, label: str) -> set[str]:
 
 def _protected_bytes(path: Path) -> bytes | None:
     if path.is_symlink():
-        raise AppServerError("selected Codex configuration or model cache is unsafe")
+        raise AppServerError("selected Codex configuration is unsafe")
     return path.read_bytes() if path.is_file() else None
 
 
@@ -302,10 +302,8 @@ def authenticated_model_catalog(
     source_auth = selected_home / "auth.json"
     if source_auth.exists() and (source_auth.is_symlink() or not source_auth.is_file()):
         raise AppServerError("selected Codex authentication state is unsafe")
-    protected = {
-        path: _protected_bytes(path)
-        for path in (selected_home / "config.toml", selected_home / "models_cache.json")
-    }
+    config_path = selected_home / "config.toml"
+    protected_config = _protected_bytes(config_path)
     try:
         with tempfile.TemporaryDirectory(prefix="casefile-codex-models-") as temporary:
             acquisition_home = Path(temporary)
@@ -360,10 +358,8 @@ def authenticated_model_catalog(
                 )
             result = {"projection": projection, "raw": raw}
     finally:
-        if any(_protected_bytes(path) != before for path, before in protected.items()):
-            raise AppServerError(
-                "authenticated acquisition changed selected Codex configuration or model cache"
-            )
+        if _protected_bytes(config_path) != protected_config:
+            raise AppServerError("authenticated acquisition changed selected Codex configuration")
     return result
 
 

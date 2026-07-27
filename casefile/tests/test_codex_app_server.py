@@ -47,6 +47,9 @@ for line in sys.stdin:
         print(json.dumps({"method": "configWarning", "params": {"summary": "ignored"}}), flush=True)
     elif message.get("method") == "account/read":
         account = None if mode == "unauthenticated" else {"type": "chatgpt"}
+        if message["params"].get("refreshToken"):
+            with open(os.path.join(home, "models_cache.json"), "w", encoding="ascii") as stream:
+                json.dump({"models": [{"slug": "selected-home-refreshed"}]}, stream)
         print(json.dumps({"id": message["id"], "result": {"account": account, "requiresOpenaiAuth": True}}), flush=True)
     elif message.get("method") == "model/list":
         if mode == "timeout":
@@ -138,7 +141,7 @@ class CodexAppServerTests(unittest.TestCase):
                     str(self.executable(root)), home, dict(os.environ), timeout=1
                 )
             self.assertEqual(selected_config, (home / "config.toml").read_bytes())
-            self.assertEqual(selected_cache, (home / "models_cache.json").read_bytes())
+            self.assertNotEqual(selected_cache, (home / "models_cache.json").read_bytes())
             self.assertEqual(
                 b'{"models": [{"slug": "casefile-owned"}]}\n',
                 active_catalog.read_bytes(),
