@@ -1,7 +1,4 @@
-use crate::{
-    activation::{Activation, investigation_identity, project_for, scope_for},
-    scanning::ScanResult,
-};
+use crate::scanning::ScanResult;
 use casefile_core::{
     BoardDraft, BoardStatusSource, Classification, Diagnostic, EntrySnapshot, Kind, ProgressEntry,
     ProgressNoteCategory, ProgressStatus, RecordDraft, RecordSummary, Revision, StrategyBinding,
@@ -211,16 +208,16 @@ fn strategy_metadata_by_scope<'a>(
     metadata_by_scope
 }
 
-pub(super) fn derive_snapshot(scan: &ScanResult, active: &Activation) -> DerivedSnapshot {
+pub(super) fn derive_snapshot(scan: &ScanResult) -> DerivedSnapshot {
     let scopes = scan
         .snapshot
         .entries
         .iter()
-        .map(|entry| record_scope(&entry.path, active))
+        .map(|entry| record_scope(&entry.path, scan))
         .collect::<Vec<_>>();
     let strategy_metadata =
         strategy_metadata_by_scope(scan.snapshot.entries.iter().zip(scopes.iter().cloned()));
-    let (progress, invalid_progress_scopes) = progress_by_scope(scan, active);
+    let (progress, invalid_progress_scopes) = progress_by_scope(scan);
     let records = scan
         .snapshot
         .entries
@@ -254,7 +251,7 @@ pub(super) fn derive_snapshot(scan: &ScanResult, active: &Activation) -> Derived
                 Some(RecordDraft::Board(board)) => (None, Some(board)),
                 None => (None, None),
             };
-            let progress_identity = identity_for_progress(&entry.path, &work_item, active);
+            let progress_identity = identity_for_progress(&entry.path, &work_item, scan);
             let ticket_progress = progress_identity
                 .as_ref()
                 .and_then(|(scope, ticket)| {
@@ -343,7 +340,7 @@ pub(super) fn derive_snapshot(scan: &ScanResult, active: &Activation) -> Derived
         })
         .collect::<Vec<_>>();
     let relationships = derive_relationships(&records);
-    let boards = derive_boards(&records, active);
+    let boards = derive_boards(&records, scan);
     DerivedSnapshot {
         source_revision: scan.snapshot.revision.clone(),
         records,
@@ -369,19 +366,18 @@ fn summary_title(summary: &RecordSummary) -> String {
 fn identity_for_progress<'a>(
     path: &str,
     item: &'a Option<WorkItemDraft>,
-    active: &Activation,
+    scan: &ScanResult,
 ) -> Option<(RecordScope, &'a str)> {
     let item = item.as_ref()?;
     if item.status != "accepted" {
         return None;
     }
-    let scope = record_scope(path, active)?;
+    let scope = record_scope(path, scan)?;
     Some((scope, item.id.as_str()))
 }
 
 fn progress_by_scope(
     scan: &ScanResult,
-    active: &Activation,
 ) -> (
     BTreeMap<RecordScope, BTreeMap<String, DerivedTicketProgress>>,
     BTreeSet<RecordScope>,
@@ -394,7 +390,7 @@ fn progress_by_scope(
         .iter()
         .filter(|entry| entry.kind == Some(Kind::Progress))
     {
-        let Some(scope) = record_scope(&entry.path, active) else {
+        let Some(scope) = record_scope(&entry.path, scan) else {
             continue;
         };
         if entry.classification != Classification::Governed
@@ -539,13 +535,11 @@ fn binding_state(
     }
 }
 
-fn record_scope(path: &str, active: &Activation) -> Option<RecordScope> {
-    let project = project_for(path, active)?;
+fn record_scope(path: &str, scan: &ScanResult) -> Option<RecordScope> {
+    let (project, investigation) = scan.scope_for_path(path)?;
     Some(RecordScope {
         project: project.into(),
-        investigation: scope_for(path, active)
-            .and_then(|value| investigation_identity(project, value))
-            .map(Into::into),
+        investigation: investigation.map(Into::into),
     })
 }
 
@@ -605,7 +599,7 @@ fn derive_relationships(records: &[DerivedRecord]) -> Vec<DerivedRelationship> {
     result
 }
 
-fn derive_boards(records: &[DerivedRecord], active: &Activation) -> Vec<DerivedBoard> {
+fn derive_boards(records: &[DerivedRecord], scan: &ScanResult) -> Vec<DerivedBoard> {
     let mut boards = Vec::new();
     for record in records.iter().filter(|record| {
         record.kind == Some(Kind::Board) && record.classification == Classification::Governed
@@ -618,7 +612,7 @@ fn derive_boards(records: &[DerivedRecord], active: &Activation) -> Vec<DerivedB
         else {
             continue;
         };
-        let Some(scope) = record_scope(&record.path, active) else {
+        let Some(scope) = record_scope(&record.path, scan) else {
             continue;
         };
         let identity = ScopedIdentity {

@@ -16,13 +16,15 @@ pub enum ActivationState {
     Invalid,
 }
 
-#[derive(Default, Deserialize)]
+#[derive(Clone, Debug, Default, Eq, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub(super) struct Activation {
     schema_version: Option<i64>,
     #[serde(default)]
     pub(super) projects: BTreeMap<String, Project>,
 }
-#[derive(Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub(super) struct Project {
     pub(super) prefix: String,
     pub(super) investigations: Vec<String>,
@@ -91,6 +93,20 @@ pub(super) fn activation(
         ActivationState::Invalid
     };
     Ok((state, activation, stable(diagnostics)))
+}
+
+pub(super) fn activation_from_scan(
+    scan: &crate::scanning::ScanResult,
+) -> Result<Activation, StoreError> {
+    let entry = scan
+        .snapshot
+        .entries
+        .iter()
+        .find(|entry| entry.path == "casefile.toml")
+        .ok_or_else(|| StoreError::Invalid("active scan is missing casefile.toml".into()))?;
+    let text = std::str::from_utf8(&entry.original_bytes)
+        .map_err(|_| StoreError::Invalid("activation must be UTF-8 TOML".into()))?;
+    toml::from_str(text).map_err(|error| StoreError::Invalid(error.to_string()))
 }
 
 pub(super) fn activation_entry(

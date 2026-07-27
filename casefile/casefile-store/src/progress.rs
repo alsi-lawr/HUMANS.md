@@ -40,6 +40,8 @@ pub struct ProgressPreview {
     pub proposed_store_revision: Revision,
     pub diagnostics: Vec<Diagnostic>,
     pub diff: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub proposed_bytes: Option<Vec<u8>>,
     pub no_op: bool,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub bootstrap_ticket_ids: Vec<String>,
@@ -120,6 +122,7 @@ pub(super) fn preview(
                 no_op: diagnostics.is_empty(),
                 diagnostics,
                 diff: String::new(),
+                proposed_bytes: Some(existing.original_bytes.clone()),
                 bootstrap_ticket_ids: Vec::new(),
             });
         }
@@ -211,6 +214,7 @@ pub(super) fn preview(
             proposed_store_revision: proposed.snapshot.revision,
             diagnostics,
             diff: String::new(),
+            proposed_bytes: Some(bytes),
             no_op: false,
             bootstrap_ticket_ids,
         });
@@ -233,6 +237,7 @@ pub(super) fn preview(
         proposed_store_revision: proposed.snapshot.revision,
         diagnostics,
         diff,
+        proposed_bytes: Some(bytes),
         no_op: same,
         bootstrap_ticket_ids,
     })
@@ -473,6 +478,7 @@ fn rejected(
         proposed_store_revision: revision,
         diagnostics: vec![diagnostic],
         diff: String::new(),
+        proposed_bytes: None,
         no_op: false,
         bootstrap_ticket_ids: Vec::new(),
     }

@@ -1,5 +1,4 @@
 use crate::{
-    activation::activation,
     derived::{DerivedSnapshot, derive_snapshot},
     index::RevisionSource,
     progress::{self, ProgressApplyResult, ProgressChangeRequest, ProgressPreview},
@@ -52,8 +51,11 @@ impl Store {
 
     pub fn derived_snapshot(&self) -> Result<DerivedSnapshot, StoreError> {
         let scan = self.scan()?;
-        let (_, active, _) = activation(&self.root)?;
-        Ok(derive_snapshot(&scan, &active))
+        Ok(derive_snapshot(&scan))
+    }
+
+    pub fn derive_snapshot(&self, scan: &ScanResult) -> DerivedSnapshot {
+        derive_snapshot(scan)
     }
 
     pub fn preview(&self, request: ChangeRequest) -> Result<Preview, StoreError> {

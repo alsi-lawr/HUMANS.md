@@ -6,6 +6,7 @@ mod derived;
 mod index;
 mod layout;
 mod progress;
+mod provider;
 mod scanning;
 mod store;
 mod validation;
@@ -20,5 +21,12 @@ pub use derived::{
 };
 pub use index::{DerivedIndex, Indexed, RevisionSource};
 pub use progress::{ProgressApplyResult, ProgressChangeRequest, ProgressPreview};
+pub use provider::{
+    CacheState, DefaultBoardApplyResult, DefaultBoardPreview, NoCache, PROVIDER_PROTOCOL_VERSION,
+    ProgressOperation, ProgressProjection, Provider, ProviderApplyOutcome, ProviderCache,
+    ProviderCapabilities, ProviderError, ProviderMutationState, ProviderOperation, ProviderPreview,
+    ProviderProgressPreview, ProviderProjections, ProviderQuery, ProviderQueryResult,
+    ProviderRecordApplyResult, ProviderSnapshot,
+};
 pub use scanning::ScanResult;
 pub use store::{Store, StoreError};
