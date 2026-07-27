@@ -1,4 +1,4 @@
-use crate::{Command, editor::EditorConfig, tui};
+use crate::{Command, editor::EditorConfig, mcp, tui};
 use anyhow::{Context, Result};
 use casefile_core::{
     ChangeRequest, Classification, Diagnostic, Kind, Preview, RecordSummary, Revision,
@@ -28,6 +28,25 @@ struct WriterBindingProjection {
 }
 
 pub(super) fn execute(root: PathBuf, command: Command) -> Result<ExitCode> {
+    if matches!(command, Command::McpCompatibility) {
+        mcp::print_compatibility()?;
+        return Ok(ExitCode::SUCCESS);
+    }
+    if let Command::McpStdio {
+        planning_root,
+        expected_root,
+        expected_provider_protocol,
+        required_provider_operations,
+    } = &command
+    {
+        mcp::serve(
+            planning_root,
+            expected_root,
+            *expected_provider_protocol,
+            required_provider_operations,
+        )?;
+        return Ok(ExitCode::SUCCESS);
+    }
     if let Command::ValidateMatrix { matrix } = &command {
         let source = fs::read_to_string(matrix)?;
         casefile_core::validate_strategy_matrix(&source).map_err(|diagnostics| {
@@ -195,6 +214,9 @@ pub(super) fn execute(root: PathBuf, command: Command) -> Result<ExitCode> {
         Command::Serve { .. } => unreachable!("serve handled before opening the store"),
         Command::ValidateMatrix { .. } => {
             unreachable!("validation handled before opening the store")
+        }
+        Command::McpCompatibility | Command::McpStdio { .. } => {
+            unreachable!("MCP commands handled before opening the store")
         }
         Command::Tui { editor, editor_arg } => tui::run(
             &store,

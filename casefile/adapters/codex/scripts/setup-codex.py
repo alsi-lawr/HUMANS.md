@@ -107,8 +107,10 @@ def plugin_root(path: Path) -> tuple[Path, dict]:
     if manifest.get("name") != "casefile" or not isinstance(manifest.get("version"), str):
         raise SetupError("installed plugin identity is not casefile")
     for relative in (
+        ".mcp.json",
         "config/config-fragment.toml.in",
         "config/profiles.toml",
+        "scripts/casefile-mcp-launcher.py",
         "scripts/resolve-writer-binding.py",
     ):
         if not (root / relative).is_file():

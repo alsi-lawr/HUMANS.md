@@ -42,6 +42,28 @@ def main() -> int:
         version = metadata.get("version")
         if metadata.get("name") != "casefile" or not isinstance(version, str) or not version:
             errors.append("generated Casefile metadata lacks its package identity")
+        mcp_path = root / ".mcp.json"
+        try:
+            mcp = json.loads(mcp_path.read_text(encoding="ascii"))
+        except (OSError, UnicodeError, json.JSONDecodeError):
+            mcp = None
+            errors.append("generated Casefile package lacks a valid root .mcp.json")
+        servers = mcp.get("mcpServers") if isinstance(mcp, dict) else None
+        if not isinstance(servers, dict) or list(servers) != ["casefile"]:
+            errors.append("generated Casefile package must declare exactly one Casefile MCP server")
+        else:
+            declaration = servers["casefile"]
+            arguments = declaration.get("args") if isinstance(declaration, dict) else None
+            command = declaration.get("command") if isinstance(declaration, dict) else None
+            if not isinstance(command, str) or not command.endswith("/scripts/casefile-mcp-launcher.py"):
+                errors.append("generated Casefile MCP declaration has an invalid launcher")
+            if arguments != ["--planning-root", "${CASEFILE_PLANNING_ROOT}"]:
+                errors.append("generated Casefile MCP declaration lacks its one explicit planning root")
+        if codex.exists() and metadata.get("mcpServers") != "./.mcp.json":
+            errors.append("generated Codex package does not natively reference .mcp.json")
+        for relative in ("Cargo.toml", "Cargo.lock", "scripts/casefile-mcp-launcher.py"):
+            if not (root / relative).is_file():
+                errors.append(f"generated Casefile MCP runtime lacks {relative}")
     elif not (root / "casefile-workflow").is_dir():
         errors.append("source lacks Casefile workflow assets")
     if errors:

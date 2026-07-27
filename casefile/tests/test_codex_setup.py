@@ -80,7 +80,11 @@ class CodexSetupTests(unittest.TestCase):
         plugin = root / "plugin"
         (plugin / ".codex-plugin").mkdir(parents=True)
         (plugin / ".codex-plugin/plugin.json").write_text(
-            json.dumps({"name": "casefile", "version": PLUGIN_VERSION}) + "\n",
+            json.dumps({"name": "casefile", "version": PLUGIN_VERSION, "mcpServers": "./.mcp.json"}) + "\n",
+            encoding="ascii",
+        )
+        (plugin / ".mcp.json").write_text(
+            json.dumps({"mcpServers": {"casefile": {"command": "launcher", "args": []}}}) + "\n",
             encoding="ascii",
         )
         (plugin / "config").mkdir()
@@ -89,6 +93,10 @@ class CodexSetupTests(unittest.TestCase):
         shutil.copytree(ROOT / "casefile/adapters/codex/catalog", plugin / "config/catalog")
         shutil.copytree(ROOT / "casefile/adapters/codex/agents", plugin / "agents")
         (plugin / "scripts").mkdir()
+        shutil.copy2(
+            ROOT / "casefile/scripts/casefile-mcp-launcher.py",
+            plugin / "scripts/casefile-mcp-launcher.py",
+        )
         shutil.copy2(
             ROOT / "casefile/adapters/codex/scripts/resolve-writer-binding.py",
             plugin / "scripts/resolve-writer-binding.py",

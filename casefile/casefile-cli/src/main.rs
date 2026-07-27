@@ -1,6 +1,7 @@
 mod commands;
 mod edit;
 mod editor;
+mod mcp;
 mod tui;
 
 use anyhow::Result;
@@ -66,6 +67,23 @@ enum Command {
         investigation: String,
         #[arg(long)]
         strategy_id: String,
+    },
+    /// Print the adapter/provider compatibility contract for explicit launcher verification.
+    McpCompatibility,
+    /// Serve the canonical provider as a fixed-root local stdio MCP server.
+    McpStdio {
+        /// One explicit, absolute planning Store root. No default or environment fallback exists.
+        #[arg(long)]
+        planning_root: PathBuf,
+        /// Canonical root identity supplied by the launcher for conflict detection.
+        #[arg(long)]
+        expected_root: PathBuf,
+        /// Provider protocol version required by the launcher.
+        #[arg(long)]
+        expected_provider_protocol: u32,
+        /// Comma-separated provider operations required by the launcher.
+        #[arg(long)]
+        required_provider_operations: String,
     },
     Preview {
         #[arg(long)]
