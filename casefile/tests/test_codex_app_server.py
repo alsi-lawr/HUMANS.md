@@ -141,7 +141,7 @@ class CodexAppServerTests(unittest.TestCase):
                     str(self.executable(root)), home, dict(os.environ), timeout=1
                 )
             self.assertEqual(selected_config, (home / "config.toml").read_bytes())
-            self.assertNotEqual(selected_cache, (home / "models_cache.json").read_bytes())
+            self.assertEqual(selected_cache, (home / "models_cache.json").read_bytes())
             self.assertEqual(
                 b'{"models": [{"slug": "casefile-owned"}]}\n',
                 active_catalog.read_bytes(),
