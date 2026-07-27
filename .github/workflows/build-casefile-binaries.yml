@@ -1,6 +1,9 @@
 name: Build Casefile executable matrix
 
 on:
+  push:
+    branches:
+      - "casefile/build-*"
   workflow_dispatch:
     inputs:
       source_commit:
@@ -12,7 +15,41 @@ permissions:
   contents: read
 
 jobs:
+  source:
+    runs-on: ubuntu-latest
+    outputs:
+      source_commit: ${{ steps.resolve.outputs.source_commit }}
+    steps:
+      - name: Resolve exact source identity
+        id: resolve
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PUSH_DELETED: ${{ github.event.deleted }}
+          PUSH_SOURCE: ${{ github.sha }}
+          REF_NAME: ${{ github.ref_name }}
+          DISPATCH_SOURCE: ${{ inputs.source_commit }}
+        run: |
+          case "$EVENT_NAME" in
+            push)
+              test "$PUSH_DELETED" = "false"
+              [[ "$REF_NAME" =~ ^casefile/build-[^/]*$ ]]
+              SOURCE_COMMIT="$PUSH_SOURCE"
+              ;;
+            workflow_dispatch)
+              SOURCE_COMMIT="$DISPATCH_SOURCE"
+              ;;
+            *)
+              echo "unsupported Casefile binary build event: $EVENT_NAME" >&2
+              exit 1
+              ;;
+          esac
+          [[ "$SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          echo "source_commit=$SOURCE_COMMIT" >> "$GITHUB_OUTPUT"
+          echo "Casefile binary source: $SOURCE_COMMIT ($EVENT_NAME from $REF_NAME)"
+
   build:
+    needs: source
     name: ${{ matrix.target }}
     strategy:
       fail-fast: false
@@ -40,14 +77,14 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: ${{ inputs.source_commit }}
+          ref: ${{ needs.source.outputs.source_commit }}
       - name: Verify exact source identity
         shell: bash
         env:
-          EXPECTED_SOURCE: ${{ inputs.source_commit }}
+          EXPECTED_SOURCE: ${{ needs.source.outputs.source_commit }}
         run: |
           test "$(git rev-parse HEAD)" = "$EXPECTED_SOURCE"
-          test "$(printf %s "$EXPECTED_SOURCE" | wc -c | tr -d ' ')" = 40
+          [[ "$EXPECTED_SOURCE" =~ ^[0-9a-f]{40}$ ]]
       - uses: actions/setup-python@v6
         with:
           python-version: "3.14"
@@ -73,42 +110,69 @@ jobs:
           python scripts/smoke-casefile-mcp.py --executable 'matrix/${{ matrix.target }}/${{ matrix.binary }}' --version 0.4.0 | tee 'matrix/${{ matrix.target }}/smoke.json'
       - uses: actions/upload-artifact@v7
         with:
-          name: casefile-${{ matrix.target }}
+          name: casefile-${{ needs.source.outputs.source_commit }}-${{ matrix.target }}
           path: matrix/${{ matrix.target }}
           if-no-files-found: error
 
   assemble:
-    needs: build
+    needs: [source, build]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: ${{ inputs.source_commit }}
+          ref: ${{ needs.source.outputs.source_commit }}
+      - name: Verify exact source identity
+        shell: bash
+        env:
+          EXPECTED_SOURCE: ${{ needs.source.outputs.source_commit }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SOURCE"
+          [[ "$EXPECTED_SOURCE" =~ ^[0-9a-f]{40}$ ]]
       - uses: actions/setup-python@v6
         with:
           python-version: "3.14"
       - uses: actions/download-artifact@v8
         with:
-          pattern: casefile-*
+          pattern: casefile-${{ needs.source.outputs.source_commit }}-*
           path: matrix-input
       - name: Normalize target inputs and assemble immutable matrix
         shell: bash
         env:
-          SOURCE_COMMIT: ${{ inputs.source_commit }}
+          SOURCE_COMMIT: ${{ needs.source.outputs.source_commit }}
+          BUILD_EVENT: ${{ github.event_name }}
+          BUILD_REF_NAME: ${{ github.ref_name }}
+          BUILD_RUN_ID: ${{ github.run_id }}
         run: |
           for target in x86_64-unknown-linux-musl aarch64-unknown-linux-musl x86_64-apple-darwin aarch64-apple-darwin x86_64-pc-windows-msvc aarch64-pc-windows-msvc; do
             mkdir -p "inputs/$target"
-            cp "matrix-input/casefile-$target/"casefile* "inputs/$target/"
+            cp "matrix-input/casefile-$SOURCE_COMMIT-$target/"casefile* "inputs/$target/"
             mkdir -p native-smoke
-            cp "matrix-input/casefile-$target/smoke.json" "native-smoke/$target.json"
+            cp "matrix-input/casefile-$SOURCE_COMMIT-$target/smoke.json" "native-smoke/$target.json"
           done
           python scripts/casefile_artifacts.py assemble --input-root inputs --artifact-root casefile-runtime --version 0.4.0 --source-commit "$SOURCE_COMMIT"
           python scripts/casefile_artifacts.py verify --artifact-root casefile-runtime --version 0.4.0 --source-commit "$SOURCE_COMMIT"
           sha256sum casefile-runtime/artifacts.json | tee casefile-runtime-manifest.sha256
+          python - <<'PY'
+          import json, os, pathlib
+          event = os.environ["BUILD_EVENT"]
+          provenance = {
+              "event": event,
+              "head_branch": os.environ["BUILD_REF_NAME"] if event == "push" else None,
+              "run_id": int(os.environ["BUILD_RUN_ID"]),
+              "schema_version": 1,
+              "source_commit": os.environ["SOURCE_COMMIT"],
+              "workflow_name": "Build Casefile executable matrix",
+              "workflow_path": ".github/workflows/build-casefile-binaries.yml",
+          }
+          pathlib.Path("casefile-build-provenance.json").write_text(
+              json.dumps(provenance, indent=2, sort_keys=True, ensure_ascii=True) + "\n",
+              encoding="ascii",
+          )
+          PY
       - name: Prove symmetric package overlay without rebuilding
         shell: bash
         env:
-          SOURCE_COMMIT: ${{ inputs.source_commit }}
+          SOURCE_COMMIT: ${{ needs.source.outputs.source_commit }}
         run: |
           python scripts/package-plugin.py build --all --casefile-artifact-root casefile-runtime --casefile-source-commit "$SOURCE_COMMIT"
           python scripts/package-plugin.py check --all --casefile-artifact-root casefile-runtime --casefile-source-commit "$SOURCE_COMMIT"
@@ -117,9 +181,10 @@ jobs:
           find build/marketplace/plugins/claude/casefile -type f -printf '%P\0' | sort -z | xargs -0 -I{} sha256sum 'build/marketplace/plugins/claude/casefile/{}' > claude-casefile-inventory.sha256
       - uses: actions/upload-artifact@v7
         with:
-          name: casefile-runtime-${{ inputs.source_commit }}
+          name: casefile-runtime-${{ needs.source.outputs.source_commit }}
           path: |
             casefile-runtime
+            casefile-build-provenance.json
             casefile-runtime-manifest.sha256
             codex-casefile-inventory.sha256
             claude-casefile-inventory.sha256

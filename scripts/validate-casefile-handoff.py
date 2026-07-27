@@ -25,6 +25,7 @@ except ModuleNotFoundError:
 
 WORKFLOW_NAME = "Build Casefile executable matrix"
 WORKFLOW_PATH = ".github/workflows/build-casefile-binaries.yml"
+BUILD_BRANCH = re.compile(r"^casefile/build-[^/]*$")
 INVENTORY_LINE = re.compile(r"^([0-9a-f]{64})  (.+)$")
 
 
@@ -42,13 +43,12 @@ def read_json(path: Path, label: str) -> dict:
     return value
 
 
-def validate_run(path: Path, run_id: str, source: str) -> None:
+def validate_run(path: Path, run_id: str, source: str) -> dict:
     run = read_json(path, "workflow run metadata")
     expected = {
         "id": int(run_id),
         "name": WORKFLOW_NAME,
         "path": WORKFLOW_PATH,
-        "event": "workflow_dispatch",
         "status": "completed",
         "conclusion": "success",
         "head_sha": source,
@@ -56,6 +56,31 @@ def validate_run(path: Path, run_id: str, source: str) -> None:
     mismatches = [f"{key}={run.get(key)!r}" for key, value in expected.items() if run.get(key) != value]
     if mismatches:
         raise HandoffError("workflow run is not the reviewed binary build: " + ", ".join(mismatches))
+    event = run.get("event")
+    if event == "workflow_dispatch":
+        return run
+    if event == "push" and isinstance(run.get("head_branch"), str) and BUILD_BRANCH.fullmatch(run["head_branch"]):
+        return run
+    raise HandoffError(
+        "workflow run is not an allowed Casefile binary event: "
+        f"event={event!r}, head_branch={run.get('head_branch')!r}"
+    )
+
+
+def validate_provenance(path: Path, run: dict, source: str) -> None:
+    provenance = read_json(path, "retained build provenance")
+    head_branch = run.get("head_branch") if run["event"] == "push" else None
+    expected = {
+        "event": run["event"],
+        "head_branch": head_branch,
+        "run_id": run["id"],
+        "schema_version": 1,
+        "source_commit": source,
+        "workflow_name": WORKFLOW_NAME,
+        "workflow_path": WORKFLOW_PATH,
+    }
+    if provenance != expected:
+        raise HandoffError("retained build provenance differs from the reviewed workflow run")
 
 
 def read_inventory(path: Path) -> dict[str, str]:
@@ -90,7 +115,8 @@ def validate_handoff(
     manifest_sha256: str,
 ) -> None:
     root = root.resolve(strict=True)
-    validate_run(run_metadata, run_id, source)
+    run = validate_run(run_metadata, run_id, source)
+    validate_provenance(root / "casefile-build-provenance.json", run, source)
     runtime = root / "casefile-runtime"
     manifest = load(runtime, version, source)
     actual_manifest_hash = digest(runtime / "artifacts.json")

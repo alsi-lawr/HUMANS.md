@@ -366,8 +366,12 @@ python scripts/validate-package-roots.py
 ```
 
 The reviewed handoff is the downloaded output of one successful `Build Casefile executable matrix`
-run at `SOURCE_COMMIT`. Record its run ID and `artifacts.json` SHA-256 with the candidate. Do not
-use locally invented fixture artifacts for a release candidate.
+run at `SOURCE_COMMIT`. Before that workflow exists on the default branch, its only bootstrap is a
+separately approved push of the exact reviewed commit to a branch matching `casefile/build-*`. Once
+the workflow exists on the default branch, use `workflow_dispatch` with the explicit source-commit
+input. Record the run ID, event, head branch, retained build provenance, and `artifacts.json`
+SHA-256 with the candidate. Neither build event authorizes publication. Do not use locally invented
+fixture artifacts for a release candidate.
 
 Generated marketplace history is published from source; do not edit the marketplace repository by
 hand.
@@ -385,9 +389,10 @@ For a release:
 2. Run the full source and package checks.
 3. Merge a green release pull request.
 4. Create an annotated source tag on the release merge and publish a GitHub Release for that tag.
-5. After separate authorization, run the build-only Casefile matrix at the exact reviewed source
-   commit. Record the successful workflow run ID, download and verify its complete native-smoke and
-   package-inventory handoff, and record the reviewed `artifacts.json` SHA-256.
+5. After separate authorization, obtain the build-only Casefile matrix at the exact reviewed source
+   commit through the permitted scoped bootstrap or normal manual-dispatch path. Record the
+   successful workflow run ID and event, download and verify its build provenance, complete
+   native-smoke and package-inventory handoff, and record the reviewed `artifacts.json` SHA-256.
 6. Dispatch `publish-marketplace.yml` with all four reviewed inputs: `version`, `source_commit`,
    `binary_run_id`, and `matrix_manifest_sha256`. The workflow rejects another workflow, a failed or
    incomplete run, a different source SHA, or an incomplete handoff and never rebuilds binaries.
