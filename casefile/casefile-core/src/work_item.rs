@@ -6,6 +6,7 @@ use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 use crate::{
     diagnostic::Diagnostic,
     markdown::markdown_headings,
+    metadata::{split_closing, strip_opening},
     record::{Kind, RecordDraft},
 };
 
@@ -236,14 +237,14 @@ pub(crate) fn render(item: &WorkItemDraft) -> String {
 }
 
 fn split_frontmatter<'a>(path: &str, text: &'a str) -> Result<(&'a str, &'a str), Vec<Diagnostic>> {
-    let rest = text.strip_prefix("---\n").ok_or_else(|| {
+    let rest = strip_opening(text).ok_or_else(|| {
         vec![Diagnostic::new(
             path,
             "missing_frontmatter",
             "work item needs YAML frontmatter",
         )]
     })?;
-    let (frontmatter, body) = rest.split_once("\n---\n").ok_or_else(|| {
+    let (frontmatter, body) = split_closing(rest).ok_or_else(|| {
         vec![Diagnostic::new(
             path,
             "invalid_frontmatter",

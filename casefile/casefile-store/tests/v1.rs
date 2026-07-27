@@ -39,6 +39,22 @@ fn copy_tree(from: &Path, to: &Path) {
         }
     }
 }
+
+fn rewrite_fixture_with_crlf(from: &Path, to: &Path) {
+    for entry in fs::read_dir(from).expect("fixture entries") {
+        let entry = entry.expect("fixture entry");
+        let target = to.join(entry.file_name());
+        if entry.file_type().expect("fixture type").is_dir() {
+            rewrite_fixture_with_crlf(&entry.path(), &target);
+        } else {
+            let bytes = fs::read(entry.path()).expect("fixture file");
+            let text = String::from_utf8(bytes).expect("text fixture");
+            fs::write(target, text.replace("\r\n", "\n").replace('\n', "\r\n"))
+                .expect("CRLF fixture file");
+        }
+    }
+}
+
 fn command(root: &Path, args: impl IntoIterator<Item = &'static str>) {
     let status = Command::new("git")
         .current_dir(root)
@@ -119,6 +135,38 @@ fn scans_each_v1_kind_and_preserves_raw_material() {
             .find(|entry| entry.path.ends_with("legacy.txt"))
             .map(|entry| entry.classification)
     );
+}
+
+#[test]
+fn scans_the_current_v1_fixture_with_windows_line_endings() {
+    let root = fixture();
+    let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/minimum");
+    rewrite_fixture_with_crlf(&source, root.path());
+
+    let result = Store::open(root.path())
+        .expect("store")
+        .scan()
+        .expect("scan");
+
+    assert!(result.diagnostics.is_empty(), "{:#?}", result.diagnostics);
+    for path in [
+        "projects/demo/investigations/sample/epics/accepted/HMD-E-001.md",
+        "projects/demo/investigations/sample/tickets/accepted/HMD-011.md",
+    ] {
+        let entry = result
+            .snapshot
+            .entries
+            .iter()
+            .find(|entry| entry.path == path)
+            .expect("work item");
+        assert_eq!(entry.classification, Classification::Governed);
+        assert!(
+            entry
+                .original_bytes
+                .windows(2)
+                .any(|bytes| bytes == b"\r\n")
+        );
+    }
 }
 
 #[test]

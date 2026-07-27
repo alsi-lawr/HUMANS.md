@@ -62,6 +62,21 @@ def main() -> int:
         root = Path(directory)
         fixture = Path(__file__).resolve().parent.parent / "casefile/casefile-store/tests/fixtures/minimum"
         shutil.copytree(fixture, root, dirs_exist_ok=True)
+        investigation = "projects/demo/investigations/sample"
+        validation = run_checked(
+            [
+                executable,
+                "--root",
+                root.resolve(),
+                "check",
+                "--require-activation",
+                "--investigation",
+                investigation,
+            ]
+        )
+        check = json.loads(validation.stdout)
+        if check.get("activation") != "active" or check.get("valid") is not True:
+            raise SystemExit(f"unexpected scoped Casefile validation result: {validation.stdout}")
         requests = "\n".join(
             json.dumps(value, separators=(",", ":"))
             for value in (
