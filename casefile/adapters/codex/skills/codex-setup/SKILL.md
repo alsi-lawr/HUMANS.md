@@ -12,4 +12,6 @@ Require one explicit absolute activated planning Store root. Run
 without `--apply`, review the plan, then ask once before applying. Omit `--multi-agent-version` for
 the compatible V1 default, or pass `--multi-agent-version v2` with Codex 0.145.0 or newer. This
 lifecycle owns only Casefile model-catalog, selected multi-agent feature, profile, and role
-configuration. It never installs or replaces `AGENTS.md`.
+configuration. Setup requires authenticated app-server availability for Sol, Terra, Luna, and Spark
+before mutation and never invokes a Codex debug model command. It never installs or replaces
+`AGENTS.md`.

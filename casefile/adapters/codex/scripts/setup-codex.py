@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import copy
 import datetime
+import importlib.util
 import json
 import os
 import re
@@ -12,7 +13,6 @@ import shutil
 import subprocess
 import tempfile
 import tomllib
-import importlib.util
 from pathlib import Path, PurePosixPath
 
 try:
@@ -25,6 +25,18 @@ except ModuleNotFoundError:
     casefile_runtime = importlib.util.module_from_spec(_runtime_spec)
     _runtime_spec.loader.exec_module(casefile_runtime)
 
+try:
+    import codex_app_server
+except ModuleNotFoundError:
+    _app_server_path = Path(__file__).resolve().with_name("codex_app_server.py")
+    _app_server_spec = importlib.util.spec_from_file_location(
+        "codex_app_server", _app_server_path
+    )
+    if _app_server_spec is None or _app_server_spec.loader is None:
+        raise
+    codex_app_server = importlib.util.module_from_spec(_app_server_spec)
+    _app_server_spec.loader.exec_module(codex_app_server)
+
 
 PLUGIN_ID = "casefile@humans-md"
 MARKETPLACE = "humans-md"
@@ -36,8 +48,6 @@ REQUIRED_MODELS = {
     "gpt-5.6-luna",
     "gpt-5.3-codex-spark",
 }
-OPTIONAL_ACTIVE_CATALOG_MODELS = {"gpt-5.3-codex-spark"}
-ACTIVE_CATALOG_REQUIRED_MODELS = REQUIRED_MODELS - OPTIONAL_ACTIVE_CATALOG_MODELS
 V1_SELECTOR_MODELS = {"gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"}
 MULTI_AGENT_VERSIONS = {"v1", "v2"}
 V2_MINIMUM_CODEX_VERSION = (0, 145, 0)
@@ -124,6 +134,7 @@ def plugin_root(path: Path) -> tuple[Path, dict]:
         "config/profiles.toml",
         "runtime/artifacts.json",
         "scripts/casefile_runtime.py",
+        "scripts/codex_app_server.py",
         "scripts/resolve-writer-binding.py",
     ):
         if not (root / relative).is_file():
@@ -201,7 +212,7 @@ def catalog_override(
     by_id = {model.get("slug"): model for model in models if isinstance(model, dict)}
     if None in by_id or len(by_id) != len(models):
         raise SetupError("catalog has missing or duplicate model IDs")
-    missing = sorted(ACTIVE_CATALOG_REQUIRED_MODELS - by_id.keys())
+    missing = sorted(REQUIRED_MODELS - by_id.keys())
     if missing:
         raise SetupError(f"catalog lacks required models: {', '.join(missing)}")
 
@@ -230,7 +241,7 @@ def catalog_override(
         for selector in selectors:
             set_selector(model, selector)
         patched.append(model_id)
-    if not ACTIVE_CATALOG_REQUIRED_MODELS <= set(patched):
+    if not REQUIRED_MODELS <= set(patched):
         raise SetupError("required models were not patched")
     if version == "v1":
         if any(output[model].get("multi_agent_version") is not None for model in V1_SELECTOR_MODELS):
@@ -472,6 +483,62 @@ def require_v2(executable: str, environment: dict[str, str]) -> tuple[int, int, 
     return version
 
 
+def available_models(executable: str, environment: dict[str, str]) -> dict:
+    try:
+        return codex_app_server.model_projection(executable, environment)
+    except codex_app_server.AppServerError as error:
+        raise SetupError(f"Codex model availability failed: {error}") from error
+
+
+def catalog_ids(document: dict, label: str) -> set[str]:
+    models = document.get("models")
+    if not isinstance(models, list):
+        raise SetupError(f"{label} has no model list")
+    identifiers: list[str] = []
+    for model in models:
+        identifier = model.get("slug") if isinstance(model, dict) else None
+        if not isinstance(identifier, str) or not identifier:
+            raise SetupError(f"{label} has a model without an ID")
+        identifiers.append(identifier)
+    if len(set(identifiers)) != len(identifiers):
+        raise SetupError(f"{label} has duplicate model IDs")
+    return set(identifiers)
+
+
+def require_available_models(projection: dict) -> set[str]:
+    identifiers = catalog_ids(projection, "Codex model projection")
+    missing = sorted(REQUIRED_MODELS - identifiers)
+    if missing:
+        raise SetupError(f"Codex lacks required models: {', '.join(missing)}")
+    return identifiers
+
+
+def raw_catalog(path: Path) -> dict:
+    if path.is_symlink() or not path.is_file():
+        raise SetupError(f"Codex catalog source is missing or unsafe: {path}")
+    try:
+        data = path.read_bytes()
+        value = json.loads(data)
+    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        raise SetupError(f"Codex catalog source is invalid: {path}: {error}") from error
+    if not isinstance(value, dict):
+        raise SetupError(f"Codex catalog source is not an object: {path}")
+    return value
+
+
+def cross_check_catalog(projection_ids: set[str], raw: dict, label: str) -> None:
+    raw_ids = catalog_ids(raw, label)
+    if raw_ids != projection_ids:
+        missing = sorted(projection_ids - raw_ids)
+        extra = sorted(raw_ids - projection_ids)
+        details = []
+        if missing:
+            details.append("missing " + ", ".join(missing))
+        if extra:
+            details.append("unexpected " + ", ".join(extra))
+        raise SetupError(f"{label} differs from Codex model projection: {'; '.join(details)}")
+
+
 def prepare(
     root: Path,
     home: Path,
@@ -504,10 +571,11 @@ def prepare(
         current = unowned_config(current)
     # Refuse a managed configuration before asking Codex to refresh its authenticated catalog.
     config = config_candidate(current, root, catalog_path, version, binary, planning)
-    try:
-        raw = json.loads(checked([executable, "debug", "models"], environment))
-    except json.JSONDecodeError as error:
-        raise SetupError("active catalog export is invalid JSON") from error
+    projection = available_models(executable, environment)
+    projection_ids = require_available_models(projection)
+    source_path = catalog_path if previous is not None else home / "models_cache.json"
+    raw = raw_catalog(source_path)
+    cross_check_catalog(projection_ids, raw, "Codex catalog source")
     catalog, patched, skipped = catalog_override(raw, root / "config/profiles.toml", version)
     return {
         "root": root,
@@ -565,16 +633,16 @@ def doctor(plan: dict) -> None:
 
 def verify_effective_catalog(plan: dict) -> None:
     version = multi_agent_version(plan.get("multi_agent_version", "v1"))
-    document = checked_json(
-        [plan["executable"], "debug", "models"], plan["environment"]
-    )
-    models = document.get("models")
-    if not isinstance(models, list):
-        raise SetupError("effective catalog has no model list")
+    projection = available_models(plan["executable"], plan["environment"])
+    projection_ids = require_available_models(projection)
+    catalog_path = plan["home"] / f"models-casefile-{version}.json"
+    document = raw_catalog(catalog_path)
+    cross_check_catalog(projection_ids, document, "written Casefile catalog")
+    models = document["models"]
     selected = {
         model.get("slug"): model for model in models if isinstance(model, dict)
     }
-    missing = sorted(ACTIVE_CATALOG_REQUIRED_MODELS - selected.keys())
+    missing = sorted(REQUIRED_MODELS - selected.keys())
     if missing:
         raise SetupError(
             f"effective catalog lacks required models: {', '.join(missing)}"

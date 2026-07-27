@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compare only profile-relevant fields in a fresh Codex model export."""
+"""Compare profile-relevant fields in Codex's stable app-server projection."""
 from __future__ import annotations
 
 import argparse
@@ -42,13 +42,6 @@ def compare(catalog: dict, profiles: dict) -> list[str]:
                 findings.append(
                     f"Model `{model_id}` field `{field}` changed from `{expected}` to `{model.get(field)}`."
                 )
-        for selector in target.get("null_selectors", []):
-            current: object = model
-            for part in selector.split("."):
-                if not isinstance(current, dict) or part not in current:
-                    findings.append(f"Model `{model_id}` no longer exposes selector `{selector}`.")
-                    break
-                current = current[part]
     return findings
 
 
@@ -66,7 +59,7 @@ def main() -> int:
     body = [
         "# Codex model profile drift",
         "",
-        "This report compares required model IDs, required reasoning levels, declared expected fields, and declared selector paths. It contains no catalog payload and makes no instruction edits.",
+        "This report compares required model IDs, visibility, display names, and required reasoning levels from Codex's stable app-server projection. Raw runtime selectors are intentionally verified by setup lifecycle tests instead. It contains no catalog payload and makes no instruction edits.",
         "",
     ]
     if findings:

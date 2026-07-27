@@ -20,12 +20,15 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: "lts/*"
-      - name: Export latest bundled model catalog
+      - name: Read latest stable model projection
         run: |
           npm install --global @openai/codex
           export CODEX_HOME="$RUNNER_TEMP/codex-home"
           mkdir -p "$CODEX_HOME"
-          codex debug models --bundled > "$RUNNER_TEMP/codex-models.json"
+          python casefile/adapters/codex/scripts/codex_app_server.py \
+            --codex-executable codex \
+            --codex-home "$CODEX_HOME" \
+            --output "$RUNNER_TEMP/codex-models.json"
       - name: Compare declared profile fields
         id: drift
         continue-on-error: true
@@ -50,5 +53,5 @@ jobs:
               gh issue create --title "$title" --label "$label" --body-file "$RUNNER_TEMP/codex-model-drift.md"
             fi
           elif [ -n "$issue" ]; then
-            gh issue close "$issue" --comment "Latest bundled export has no declared profile-relevant drift."
+            gh issue close "$issue" --comment "Latest app-server projection has no declared profile-relevant drift."
           fi

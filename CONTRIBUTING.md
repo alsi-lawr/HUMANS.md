@@ -211,8 +211,9 @@ Rust-owned typed projection and diagnostics; do not add another TOML parser to a
 
 ### Codex offer and spawn resolution
 
-`casefile/adapters/codex/scripts/resolve-writer-binding.py` reads the active effective catalog from
-the configured Codex home. It offers only visible model/effort pairs that match the selected
+`casefile/adapters/codex/scripts/resolve-writer-binding.py` reads visible models and reasoning
+efforts through Codex app-server's stable `model/list` method, then validates runtime selectors from
+the configured receipt-owned Casefile catalog. It offers only pairs that match the selected
 multi-agent runtime and have a verified packaged resolution for both implementation strategies. V1
 requires an exact generated named profile for the pair. V2 requires each strategy's runtime wrapper,
 a positive fork context, and explicit model and effort overrides at spawn.
@@ -305,9 +306,13 @@ effective runtime facts plus limits, requirements, coordination, and pipeline co
 not edit a strategy or binding.
 
 The Codex adapter owns the selected Casefile model catalog and multi-agent runtime. Setup defaults
-to V1; V2 requires Codex 0.145.0 or newer. The Claude adapter supplies workflow skills, matrices,
-role agents, and a separate Casefile MCP binding transaction without owning the standing contract.
-Neither adapter removes the shared marketplace or sibling plugins.
+to V1; V2 requires Codex 0.145.0 or newer. Codex setup confirms Sol, Terra, Luna, and Spark through
+app-server `model/list`; fresh setup then reads the Codex-owned raw cache once to construct the
+Casefile catalog, while upgrades reuse the active receipt-owned catalog. Casefile never invokes a
+debug model command or writes, configures, packages, or distributes Codex's cache. The Claude
+adapter supplies workflow skills, matrices, role agents, and a separate Casefile MCP binding
+transaction without owning the standing contract. Neither adapter removes the shared marketplace or
+sibling plugins.
 
 The source CLI is optional infrastructure, not part of installed plugin setup:
 

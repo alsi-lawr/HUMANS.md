@@ -106,7 +106,82 @@ class WriterBindingTests(unittest.TestCase):
             with self.assertRaisesRegex(binding.BindingError, "exactly one"):
                 binding.active_runtime(home)
 
-    def test_v2_offers_visible_optional_and_spark_pairs_but_not_hidden_models(self):
+    def test_active_catalog_uses_app_server_availability_and_owned_selectors(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            home = Path(temporary)
+            catalog_path = home / "models-casefile-v2.json"
+            catalog_path.write_text(
+                json.dumps(
+                    {
+                        "models": [
+                            {
+                                "slug": "gpt-5.6-sol",
+                                "multi_agent_version": "v2",
+                                "visibility": "hide",
+                                "supported_reasoning_levels": [{"effort": "low"}],
+                            }
+                        ]
+                    }
+                ),
+                encoding="ascii",
+            )
+            (home / "config.toml").write_text(
+                f'model_catalog_json = {json.dumps(str(catalog_path))}\n'
+                "[features]\nmulti_agent = false\nmulti_agent_v2 = true\n",
+                encoding="ascii",
+            )
+            receipt_path = home / "backups/casefile/install/receipt.json"
+            receipt_path.parent.mkdir(parents=True)
+            receipt_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 6,
+                        "status": "installed",
+                        "multi_agent_version": "v2",
+                        "before": [{"path": "models-casefile-v2.json", "existed": False}],
+                    }
+                ),
+                encoding="ascii",
+            )
+            pointer = home / "state/casefile/current.json"
+            pointer.parent.mkdir(parents=True)
+            pointer.write_text(json.dumps({"receipt": str(receipt_path)}), encoding="ascii")
+            projection = {
+                "models": [
+                    {
+                        "slug": "gpt-5.6-sol",
+                        "display_name": "Sol",
+                        "visibility": "list",
+                        "supported_reasoning_levels": [{"effort": "high"}],
+                    }
+                ]
+            }
+            with mock.patch.object(
+                binding.codex_app_server, "model_projection", return_value=projection
+            ) as model_list:
+                active = binding.active_catalog("codex", home)
+            model_list.assert_called_once()
+            self.assertEqual("list", active["models"][0]["visibility"])
+            self.assertEqual(
+                [{"effort": "high"}],
+                active["models"][0]["supported_reasoning_levels"],
+            )
+            self.assertEqual("v2", active["models"][0]["multi_agent_version"])
+
+            projection["models"].append(
+                {
+                    "slug": "gpt-5.3-codex-spark",
+                    "display_name": "Spark",
+                    "visibility": "list",
+                    "supported_reasoning_levels": [{"effort": "low"}],
+                }
+            )
+            with mock.patch.object(
+                binding.codex_app_server, "model_projection", return_value=projection
+            ), self.assertRaisesRegex(binding.BindingError, "IDs differ"):
+                binding.active_catalog("codex", home)
+
+    def test_v2_offers_visible_optional_models_and_required_spark_but_not_hidden_models(self):
         catalog = {
             "models": [
                 model("gpt-5.6-sol", ("high",)),

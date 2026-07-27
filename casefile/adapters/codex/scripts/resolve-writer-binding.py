@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import os
 import shutil
@@ -10,6 +11,18 @@ import subprocess
 import sys
 import tomllib
 from pathlib import Path, PurePosixPath
+
+try:
+    import codex_app_server
+except ModuleNotFoundError:
+    _app_server_path = Path(__file__).resolve().with_name("codex_app_server.py")
+    _app_server_spec = importlib.util.spec_from_file_location(
+        "codex_app_server", _app_server_path
+    )
+    if _app_server_spec is None or _app_server_spec.loader is None:
+        raise
+    codex_app_server = importlib.util.module_from_spec(_app_server_spec)
+    _app_server_spec.loader.exec_module(codex_app_server)
 
 
 RECOMMENDED_MODEL = "gpt-5.6-sol"
@@ -19,6 +32,7 @@ STRATEGIES = (
     "casefile-implement-pipeline",
 )
 RUNTIMES = ("v1", "v2")
+RECEIPT_SCHEMAS = {4, 5, 6}
 
 
 class BindingError(RuntimeError):
@@ -73,15 +87,90 @@ def active_runtime(home: Path) -> str:
     raise BindingError("Codex Casefile setup must enable exactly one supported multi-agent runtime")
 
 
+def read_json(path: Path, label: str) -> dict:
+    if path.is_symlink() or not path.is_file():
+        raise BindingError(f"{label} is missing or unsafe: {path}")
+    try:
+        value = json.loads(path.read_bytes())
+    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        raise BindingError(f"{label} is invalid: {error}") from error
+    if not isinstance(value, dict):
+        raise BindingError(f"{label} is not an object")
+    return value
+
+
+def catalog_models(document: dict, label: str) -> dict[str, dict]:
+    models = document.get("models")
+    if not isinstance(models, list):
+        raise BindingError(f"{label} has no model list")
+    by_id: dict[str, dict] = {}
+    for model in models:
+        identifier = model.get("slug") if isinstance(model, dict) else None
+        if not isinstance(identifier, str) or not identifier:
+            raise BindingError(f"{label} has a model without an ID")
+        if identifier in by_id:
+            raise BindingError(f"{label} has duplicate model IDs")
+        by_id[identifier] = model
+    return by_id
+
+
+def owned_catalog(home: Path, runtime: str) -> dict:
+    config_path = home / "config.toml"
+    try:
+        config = tomllib.loads(config_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, tomllib.TOMLDecodeError) as error:
+        raise BindingError(f"Codex Casefile setup is not readable: {error}") from error
+    expected = (home / f"models-casefile-{runtime}.json").resolve()
+    configured = config.get("model_catalog_json")
+    if not isinstance(configured, str) or Path(configured).expanduser().resolve() != expected:
+        raise BindingError("Codex is not configured with the active Casefile-owned catalog")
+    pointer_path = home / "state/casefile/current.json"
+    pointer = read_json(pointer_path, "Casefile setup pointer")
+    receipt_value = pointer.get("receipt")
+    if not isinstance(receipt_value, str) or not receipt_value:
+        raise BindingError("Casefile setup pointer lacks a receipt")
+    receipt_path = Path(receipt_value).expanduser().resolve()
+    receipt_root = (home / "backups/casefile").resolve()
+    if receipt_root not in receipt_path.parents or receipt_path.name != "receipt.json":
+        raise BindingError("Casefile setup receipt is outside the owned backup root")
+    receipt = read_json(receipt_path, "Casefile setup receipt")
+    receipt_runtime = receipt.get("multi_agent_version", "v1")
+    if (
+        receipt.get("schema_version") not in RECEIPT_SCHEMAS
+        or receipt.get("status") != "installed"
+        or receipt_runtime != runtime
+    ):
+        raise BindingError("Casefile setup receipt does not own the active runtime")
+    inventory = receipt.get("before")
+    expected_relative = expected.relative_to(home.resolve()).as_posix()
+    if not isinstance(inventory, list) or not any(
+        isinstance(item, dict)
+        and item.get("path") == expected_relative
+        and isinstance(item.get("existed"), bool)
+        for item in inventory
+    ):
+        raise BindingError("Casefile setup receipt does not own the configured catalog path")
+    return read_json(expected, "active Casefile catalog")
+
+
 def active_catalog(executable: str, home: Path) -> dict:
     environment = {**os.environ, "CODEX_HOME": str(home)}
     try:
-        value = json.loads(checked([executable, "debug", "models"], environment))
-    except json.JSONDecodeError as error:
-        raise BindingError("Codex returned an invalid effective catalog") from error
-    if not isinstance(value, dict) or not isinstance(value.get("models"), list):
-        raise BindingError("Codex effective catalog has no model list")
-    return value
+        projection = codex_app_server.model_projection(executable, environment)
+    except codex_app_server.AppServerError as error:
+        raise BindingError(f"Codex model availability failed: {error}") from error
+    projected = catalog_models(projection, "Codex model projection")
+    configured = catalog_models(
+        owned_catalog(home, active_runtime(home)), "active Casefile catalog"
+    )
+    if set(projected) != set(configured):
+        raise BindingError("active Casefile catalog IDs differ from Codex model projection")
+    result = {"models": []}
+    for identifier, model in projected.items():
+        combined = dict(model)
+        combined["multi_agent_version"] = configured[identifier].get("multi_agent_version")
+        result["models"].append(combined)
+    return result
 
 
 def resolution_rows(profiles: dict, runtime: str, model: str, effort: str) -> list[dict]:

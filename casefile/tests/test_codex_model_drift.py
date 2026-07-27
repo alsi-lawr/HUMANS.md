@@ -77,12 +77,20 @@ class CodexModelDriftTests(unittest.TestCase):
         }
         self.assertEqual(setup.REQUIRED_MODELS, required)
 
+    def test_scheduled_drift_uses_stable_app_server_projection(self):
+        workflow = (ROOT / ".github/workflows/codex-model-drift.yml").read_text(
+            encoding="ascii"
+        )
+        self.assertIn("codex_app_server.py", workflow)
+        self.assertIn("model projection", workflow)
+        self.assertNotIn("codex debug", workflow)
+
     def test_declared_overrides_and_missing_optional_models_are_not_drift(self):
         code, output = self.run_check(catalog(self.profiles, {"gpt-5.5"}))
         self.assertEqual(0, code)
         self.assertIn("No profile-relevant drift detected.", output)
 
-    def test_missing_required_models_and_selector_path_are_drift(self):
+    def test_missing_required_models_and_visibility_are_drift(self):
         current = catalog(
             self.profiles,
             {"gpt-5.6-sol", "gpt-5.3-codex-spark", "gpt-5.5"},
@@ -90,13 +98,13 @@ class CodexModelDriftTests(unittest.TestCase):
         terra = next(
             model for model in current["models"] if model["slug"] == "gpt-5.6-terra"
         )
-        del terra["multi_agent_version"]
+        terra["visibility"] = "hide"
         code, output = self.run_check(current)
         self.assertEqual(1, code)
         self.assertIn("Required model `gpt-5.6-sol` is missing.", output)
         self.assertIn("Required model `gpt-5.3-codex-spark` is missing.", output)
         self.assertIn(
-            "Model `gpt-5.6-terra` no longer exposes selector `multi_agent_version`.",
+            "Model `gpt-5.6-terra` field `visibility` changed from `list` to `hide`.",
             output,
         )
         self.assertNotIn("gpt-5.5", output)
