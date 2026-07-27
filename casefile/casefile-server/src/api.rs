@@ -234,9 +234,9 @@ impl Host {
     fn query(&self, body: &str) -> Result<Reply, ApiError> {
         let query: Query = serde_json::from_str(body).map_err(ApiError::request)?;
         let body = match query {
-            Query::Snapshot => serde_json::to_vec(
-                &self.workbench.snapshot().map_err(ApiError::internal)?,
-            ),
+            Query::Snapshot => {
+                serde_json::to_vec(&self.workbench.snapshot().map_err(ApiError::internal)?)
+            }
             Query::Tickets { scope, search } => serde_json::to_vec(
                 &self
                     .workbench
@@ -290,7 +290,12 @@ impl Host {
 
     fn preview(&self, body: &str) -> Result<Reply, ApiError> {
         let request: ChangeRequest = serde_json::from_str(body).map_err(ApiError::request)?;
-        Reply::json(&self.workbench.preview(request).map_err(ApiError::provider)?)
+        Reply::json(
+            &self
+                .workbench
+                .preview(request)
+                .map_err(ApiError::provider)?,
+        )
     }
 
     fn apply(&self, request: &Request, body: &str) -> Result<Reply, ApiError> {

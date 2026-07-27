@@ -45,10 +45,10 @@ and bounded history override. Never reuse an earlier resolution without revalida
 If resolution says the persisted or matrix-derived pair is invalid or unavailable, stop before
 delegation and before any planning/source mutation. Run `offer`, present its complete current list,
 state when Sol/high is unavailable, and request a new explicit selection. Replace the binding with
-`select`; canonical Store progress derives whether implementation or correction work is inactive
-and fails closed rather than accepting a caller assertion. Never substitute Sol/high or another pair silently. A missing binding in a historical
-Casefile is not an error: the resolver returns the selected matrix writer default after checking its
-current availability.
+`select`; canonical Store progress derives whether implementation or correction work is inactive and
+fails closed rather than accepting a caller assertion. Never substitute Sol/high or another pair
+silently. A missing binding in a historical Casefile is not an error: the resolver returns the
+selected matrix writer default after checking its current availability.
 
 Keep per-ticket review and verification focused on that ticket's acceptance criteria, changed
 surfaces, and concrete findings. Reserve full workspace, package, and authenticated gates for the

@@ -43,9 +43,10 @@ impl Workbench {
     }
 
     pub(crate) fn boards(&self, scope: &RecordScope) -> Result<Indexed<Vec<DerivedBoard>>> {
-        let ProviderQueryResult::Boards { revision, boards } = self
-            .provider
-            .query(ProviderQuery::Boards { scope: Some(scope.clone()) })?
+        let ProviderQueryResult::Boards { revision, boards } =
+            self.provider.query(ProviderQuery::Boards {
+                scope: Some(scope.clone()),
+            })?
         else {
             unreachable!("board query returns boards")
         };
@@ -73,7 +74,8 @@ impl Workbench {
     pub(crate) fn apply(
         &self,
         preview: ProviderPreview,
-    ) -> Result<ProviderApplyOutcome<ProviderRecordApplyResult>, casefile_store::ProviderError> {
+    ) -> Result<ProviderApplyOutcome<ProviderRecordApplyResult>, casefile_store::ProviderError>
+    {
         self.provider.apply_record(preview)
     }
 

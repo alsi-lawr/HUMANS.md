@@ -32,8 +32,11 @@ fn progress_session_requires_post_preview_exact_id_approval() {
             );
         }
         let request_path = root.0.with_extension("progress-operation.json");
-        fs::write(&request_path, serde_json::to_vec(&request).expect("request JSON"))
-            .expect("request");
+        fs::write(
+            &request_path,
+            serde_json::to_vec(&request).expect("request JSON"),
+        )
+        .expect("request");
         let mut child = Command::new(env!("CARGO_BIN_EXE_casefile"))
             .args(["--root"])
             .arg(root.path())

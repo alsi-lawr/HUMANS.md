@@ -18,5 +18,5 @@ caller activity assertion. The Store derives activity from one valid canonical p
 `in_progress`, `in_review`, `verifying`, and `blocked` refuse replacement, while `unknown` and
 `complete` permit it; missing, malformed, conflicting, or unsupported progress fails closed. Every
 writer spawn separately requires an explicit current `in_progress` transition for its exact ticket.
-An accepted binding preview atomically replaces only `bindings.toml`.
-Repository Git history is the history authority; no binding archive or journal is maintained.
+An accepted binding preview atomically replaces only `bindings.toml`. Repository Git history is the
+history authority; no binding archive or journal is maintained.

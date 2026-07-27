@@ -319,7 +319,10 @@ fn serve_exposes_only_the_fixed_read_contract() {
     }
     let snapshot = json_request(&server, "/api/query", &json!({"query":"snapshot"}));
     let snapshot: Value = serde_json::from_str(&snapshot.body).expect("provider snapshot");
-    assert_eq!(snapshot["capabilities"]["writes_require_external_approval"], true);
+    assert_eq!(
+        snapshot["capabilities"]["writes_require_external_approval"],
+        true
+    );
     assert!(server.index.is_file());
     assert_eq!(
         json_request(

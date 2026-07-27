@@ -81,9 +81,7 @@ pub(super) fn execute(root: PathBuf, command: Command) -> Result<ExitCode> {
         | Command::StrategyTransitionSession { request }
         | Command::WriterBindingPreview { request }
         | Command::WriterBindingSession { request } => require_external_payload(&root, request)?,
-        Command::ProgressRepairApply { preview } => {
-            require_external_payload(&root, preview)?
-        }
+        Command::ProgressRepairApply { preview } => require_external_payload(&root, preview)?,
         _ => {}
     }
     let store = Store::open(&root)?;
@@ -210,8 +208,7 @@ pub(super) fn execute(root: PathBuf, command: Command) -> Result<ExitCode> {
         }
         Command::DefaultDeliveryBoardPreview { investigation } => {
             print_json(
-                &Provider::without_cache(store)
-                    .preview_default_delivery_board(investigation)?,
+                &Provider::without_cache(store).preview_default_delivery_board(investigation)?,
             )?;
             Ok(ExitCode::SUCCESS)
         }
@@ -306,9 +303,10 @@ fn scratch_strategy(planning_root: &Path, matrix: &Path, target: &Path) -> Resul
     if !target.is_absolute() {
         anyhow::bail!("scratch strategy target must be an explicit absolute path");
     }
-    if target.components().any(|component| {
-        matches!(component, Component::CurDir | Component::ParentDir)
-    }) {
+    if target
+        .components()
+        .any(|component| matches!(component, Component::CurDir | Component::ParentDir))
+    {
         anyhow::bail!("scratch strategy target must be lexically normalized");
     }
     let planning_root = fs::canonicalize(planning_root).context("canonicalize planning root")?;
@@ -335,7 +333,10 @@ fn scratch_strategy(planning_root: &Path, matrix: &Path, target: &Path) -> Resul
         );
     }
     fs::create_dir_all(&target_parent).context("create scratch target parent")?;
-    if target.symlink_metadata().is_ok_and(|metadata| metadata.file_type().is_symlink()) {
+    if target
+        .symlink_metadata()
+        .is_ok_and(|metadata| metadata.file_type().is_symlink())
+    {
         anyhow::bail!("scratch strategy target must not be a symlink");
     }
     let source = fs::read_to_string(&matrix).context("read scratch matrix")?;
@@ -348,10 +349,12 @@ fn scratch_strategy(planning_root: &Path, matrix: &Path, target: &Path) -> Resul
                 .join("; ")
         )
     })?;
-    let temporary = tempfile::NamedTempFile::new_in(&target_parent)
-        .context("create scratch temporary")?;
+    let temporary =
+        tempfile::NamedTempFile::new_in(&target_parent).context("create scratch temporary")?;
     fs::write(temporary.path(), source.as_bytes()).context("write scratch temporary")?;
-    temporary.persist(&target).map_err(|error| anyhow::anyhow!(error.error))?;
+    temporary
+        .persist(&target)
+        .map_err(|error| anyhow::anyhow!(error.error))?;
     print_json(&serde_json::json!({
         "operation": "local_scratch_strategy",
         "target": target,
@@ -376,7 +379,8 @@ fn canonical_future_directory(path: &Path) -> Result<PathBuf> {
             .parent()
             .ok_or_else(|| anyhow::anyhow!("scratch target has no existing ancestor"))?;
     }
-    let mut resolved = fs::canonicalize(existing).context("canonicalize scratch target ancestor")?;
+    let mut resolved =
+        fs::canonicalize(existing).context("canonicalize scratch target ancestor")?;
     for component in missing.into_iter().rev() {
         resolved.push(component);
     }

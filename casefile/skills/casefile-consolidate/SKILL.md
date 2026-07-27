@@ -22,15 +22,13 @@ session. Do not parse or write `progress/log.toml`, ticket Markdown, or another 
 
 First call `casefile_preview_progress` with the typed `bootstrap` operation. Present its exact
 target, eligible accepted ticket IDs that will derive as `unknown`, proposed empty log, diff, and
-scoped diagnostics. It creates only
-an absent `progress/log.toml` containing `schema_version = 1`; it records no invented ticket
-history.
+scoped diagnostics. It creates only an absent `progress/log.toml` containing `schema_version = 1`;
+it records no invented ticket history.
 
 Ask for an explicit apply decision after the preview. On approval, call `casefile_apply_progress`
-with the saved preview unchanged
-and report the resulting path and revision. An existing valid log is a no-op. A malformed or
-noncanonical log, legacy layout, unactivated target, rejected/provisional ticket, ambiguous scope,
-or divergent preview is refused or reported without repair-by-migration.
+with the saved preview unchanged and report the resulting path and revision. An existing valid log
+is a no-op. A malformed or noncanonical log, legacy layout, unactivated target, rejected/provisional
+ticket, ambiguous scope, or divergent preview is refused or reported without repair-by-migration.
 
 ## Repair one malformed log
 
@@ -43,23 +41,23 @@ plan. Whole-log replacement remains outside provider capability discovery.
 
 Wait for an explicit apply decision. Apply only the saved preview with `progress-repair-apply`. The
 canonical writer performs the one-file atomic replacement and post-write validation; report failure
-without editing the original
-yourself. A matching retry is a no-op. If the target or planning-root revision changed, stop and
-make a fresh preview; do not reuse, merge, or alter the caller's replacement.
+without editing the original yourself. A matching retry is a no-op. If the target or planning-root
+revision changed, stop and make a fresh preview; do not reuse, merge, or alter the caller's
+replacement.
 
 For command examples and developer validation/package guidance, see `CONTRIBUTING.md`; user-facing
 migration and repair reference lives in the project wiki.
 
 ## Provision the delivery board
 
-After the progress-log outcome is successfully applied or confirmed as an existing valid no-op,
-call `casefile_preview_default_delivery_board` for the same selected investigation. Save its fresh
-immutable preview in the current task's `.agent-workspace/<session-id>/` directory,
-outside the planning root. Show the exact target, diff, and diagnostics, then wait for an explicit
-apply decision. Apply only that saved preview unchanged with
-`casefile_apply_default_delivery_board`. An exact existing `boards/delivery.toml` is a content
-no-op; a differing file, symlink, non-file collision, stale revision, invalid activation, missing
-mapping, or ambiguous mapping is preserved and visibly refused.
+After the progress-log outcome is successfully applied or confirmed as an existing valid no-op, call
+`casefile_preview_default_delivery_board` for the same selected investigation. Save its fresh
+immutable preview in the current task's `.agent-workspace/<session-id>/` directory, outside the
+planning root. Show the exact target, diff, and diagnostics, then wait for an explicit apply
+decision. Apply only that saved preview unchanged with `casefile_apply_default_delivery_board`. An
+exact existing `boards/delivery.toml` is a content no-op; a differing file, symlink, non-file
+collision, stale revision, invalid activation, missing mapping, or ambiguous mapping is preserved
+and visibly refused.
 
 The canonical identity combines the configured project prefix and mapped investigation directory
 name. Before preview and apply, preflight every activated mapping and refuse if that identity does
