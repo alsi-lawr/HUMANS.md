@@ -41,9 +41,8 @@ plan. Whole-log replacement remains outside provider capability discovery.
 
 Wait for an explicit apply decision. Apply only the saved preview with `progress-repair-apply`. The
 canonical writer performs the one-file atomic replacement and post-write validation; report failure
-without editing the original yourself. A matching retry is a no-op. If the target or planning-root
-revision changed, stop and make a fresh preview; do not reuse, merge, or alter the caller's
-replacement.
+without editing the original yourself. A matching retry is a no-op. If the target revision changed,
+stop and make a fresh preview; do not reuse, merge, or alter the caller's replacement.
 
 For command examples and developer validation/package guidance, see `CONTRIBUTING.md`; user-facing
 migration and repair reference lives in the project wiki.
