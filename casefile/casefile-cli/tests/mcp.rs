@@ -123,14 +123,39 @@ fn fixed_root_session_negotiates_and_exposes_canonical_snapshot_and_query() {
         .collect::<Vec<_>>();
     assert_eq!(responses.len(), 4);
     assert_eq!(responses[0]["result"]["protocolVersion"], "2025-11-25");
-    assert_eq!(
-        responses[1]["result"]["tools"]
-            .as_array()
-            .expect("tools")
-            .len(),
-        12
+    let tools = responses[1]["result"]["tools"].as_array().expect("tools");
+    assert_eq!(tools.len(), 12);
+    assert!(
+        tools
+            .iter()
+            .all(|tool| tool["inputSchema"]["additionalProperties"] != true),
+        "tool argument roots must not be unconstrained objects"
     );
-    let snapshot = &responses[2]["result"]["structuredContent"];
+    let schema = |name: &str| {
+        &tools
+            .iter()
+            .find(|tool| tool["name"] == name)
+            .expect("named tool")["inputSchema"]
+    };
+    assert_eq!(
+        schema("casefile_query")["oneOf"].as_array().unwrap().len(),
+        5
+    );
+    assert_eq!(
+        schema("casefile_preview_progress")["required"],
+        json!(["operation"])
+    );
+    assert_eq!(
+        schema("casefile_apply_progress")["required"],
+        json!(["preview"])
+    );
+    let response = |id: i64| {
+        responses
+            .iter()
+            .find(|response| response["id"] == id)
+            .expect("response ID")
+    };
+    let snapshot = &response(3)["result"]["structuredContent"];
     assert_eq!(snapshot["activation"], "active");
     assert_eq!(snapshot["capabilities"]["protocol_version"], 1);
     assert_eq!(
@@ -140,7 +165,7 @@ fn fixed_root_session_negotiates_and_exposes_canonical_snapshot_and_query() {
             .len(),
         1
     );
-    let query = &responses[3]["result"]["structuredContent"];
+    let query = &response(4)["result"]["structuredContent"];
     assert_eq!(query["result"], "records");
     assert_eq!(query["records"].as_array().expect("records").len(), 1);
     assert_eq!(

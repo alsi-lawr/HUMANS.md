@@ -13,10 +13,13 @@ use std::{
     fs,
     io::{self, BufRead, Write},
     path::{Path, PathBuf},
+    sync::{Arc, Mutex, RwLock, mpsc},
+    thread,
 };
 
 const MCP_PROTOCOL_VERSIONS: &[&str] = &["2024-11-05", "2025-03-26", "2025-06-18", "2025-11-25"];
 const MAX_MESSAGE_BYTES: usize = 8 * 1024 * 1024;
+const TOOL_WORKERS: usize = 16;
 const REQUIRED_PROVIDER_OPERATIONS: &[&str] = &[
     "snapshot",
     "query_tickets",
@@ -210,14 +213,28 @@ fn operation_name(operation: &ProviderOperation) -> &'static str {
 }
 
 struct Session {
-    provider: Provider,
+    tools: ToolService,
     initialized: bool,
+}
+
+#[derive(Clone)]
+struct ToolService {
+    provider: Arc<Provider>,
+    access: Arc<RwLock<()>>,
+}
+
+struct QueuedToolCall {
+    request_id: Value,
+    params: Option<Value>,
 }
 
 impl Session {
     fn new(provider: Provider) -> Self {
         Self {
-            provider,
+            tools: ToolService {
+                provider: Arc::new(provider),
+                access: Arc::new(RwLock::new(())),
+            },
             initialized: false,
         }
     }
@@ -225,34 +242,78 @@ impl Session {
     fn run(mut self) -> Result<()> {
         let stdin = io::stdin();
         let mut input = stdin.lock();
-        let stdout = io::stdout();
-        let mut output = stdout.lock();
+        let output = Arc::new(Mutex::new(io::stdout()));
+        let (sender, receiver) = mpsc::channel::<QueuedToolCall>();
+        let receiver = Arc::new(Mutex::new(receiver));
+        let workers = (0..TOOL_WORKERS)
+            .map(|_| {
+                let receiver = Arc::clone(&receiver);
+                let output = Arc::clone(&output);
+                let tools = self.tools.clone();
+                thread::spawn(move || -> Result<()> {
+                    loop {
+                        let call = {
+                            let receiver = receiver.lock().expect("MCP tool receiver");
+                            receiver.recv()
+                        };
+                        let Ok(call) = call else {
+                            return Ok(());
+                        };
+                        let response = tools.call_tool(call.request_id, call.params.as_ref());
+                        let mut output = output.lock().expect("MCP stdout");
+                        write_message(&mut *output, response)?;
+                    }
+                })
+            })
+            .collect::<Vec<_>>();
         let mut line = String::new();
-        loop {
+        let read_result = loop {
             line.clear();
-            let bytes = input
-                .read_line(&mut line)
-                .context("read MCP stdio request")?;
+            let bytes = match input.read_line(&mut line) {
+                Ok(bytes) => bytes,
+                Err(error) => break Err(error).context("read MCP stdio request"),
+            };
             if bytes == 0 {
-                return Ok(());
+                break Ok(());
             }
             if bytes > MAX_MESSAGE_BYTES {
-                bail!("MCP stdio request exceeds {MAX_MESSAGE_BYTES} bytes");
+                break Err(anyhow::anyhow!(
+                    "MCP stdio request exceeds {MAX_MESSAGE_BYTES} bytes"
+                ));
             }
             let request: Value = match serde_json::from_str(line.trim_end()) {
                 Ok(request) => request,
                 Err(error) => {
+                    let mut output = output.lock().expect("MCP stdout");
                     write_message(
-                        &mut output,
+                        &mut *output,
                         error_response(Value::Null, -32700, &format!("parse error: {error}")),
                     )?;
                     continue;
                 }
             };
-            if let Some(response) = self.handle(request)? {
-                write_message(&mut output, response)?;
+            if self.initialized && is_tool_call(&request) {
+                let object = request.as_object().expect("validated tool call");
+                sender
+                    .send(QueuedToolCall {
+                        request_id: object.get("id").cloned().expect("validated tool call"),
+                        params: object.get("params").cloned(),
+                    })
+                    .context("queue MCP tool call")?;
+                continue;
             }
+            if let Some(response) = self.handle(request)? {
+                let mut output = output.lock().expect("MCP stdout");
+                write_message(&mut *output, response)?;
+            }
+        };
+        drop(sender);
+        for worker in workers {
+            worker
+                .join()
+                .map_err(|_| anyhow::anyhow!("MCP tool worker panicked"))??;
         }
+        read_result
     }
 
     fn handle(&mut self, request: Value) -> Result<Option<Value>> {
@@ -285,7 +346,7 @@ impl Session {
                 json!({"tools": tool_definitions()}),
             ))),
             "tools/call" if self.initialized => {
-                Ok(Some(self.call_tool(request_id, object.get("params"))))
+                Ok(Some(self.tools.call_tool(request_id, object.get("params"))))
             }
             _ if !self.initialized => Ok(Some(error_response(
                 request_id,
@@ -320,11 +381,13 @@ impl Session {
                 "protocolVersion": protocol,
                 "capabilities": {"tools": {"listChanged": false}},
                 "serverInfo": {"name": "casefile", "version": env!("CARGO_PKG_VERSION")},
-                "instructions": "Casefile tools operate only on the explicit planning root bound to this process. Apply tools require a provider-produced preview and external human approval."
+                "instructions": "Casefile tools operate only on the explicit planning root bound to this process. Follow each tool's input schema exactly. Apply tools require external human approval and the matching preview tool's entire structuredContent passed unchanged as the preview value; never pass only preview_id."
             }),
         )
     }
+}
 
+impl ToolService {
     fn call_tool(&self, request_id: Value, params: Option<&Value>) -> Value {
         let name = params
             .and_then(|value| value.get("name"))
@@ -336,7 +399,14 @@ impl Session {
             .and_then(|value| value.get("arguments"))
             .cloned()
             .unwrap_or_else(|| json!({}));
-        match self.dispatch(name, arguments) {
+        let result = if is_apply_tool(name) {
+            let _exclusive = self.access.write().expect("MCP tool access");
+            self.dispatch(name, arguments)
+        } else {
+            let _shared = self.access.read().expect("MCP tool access");
+            self.dispatch(name, arguments)
+        };
+        match result {
             Ok(value) => success_response(request_id, tool_result(value, false)),
             Err(error) => success_response(
                 request_id,
@@ -455,70 +525,401 @@ impl Session {
     }
 }
 
+fn is_tool_call(request: &Value) -> bool {
+    request.as_object().is_some_and(|object| {
+        object.get("jsonrpc") == Some(&Value::String("2.0".into()))
+            && object.get("method") == Some(&Value::String("tools/call".into()))
+            && object.contains_key("id")
+    })
+}
+
+fn is_apply_tool(name: &str) -> bool {
+    matches!(
+        name,
+        "casefile_apply_record"
+            | "casefile_apply_progress"
+            | "casefile_apply_default_delivery_board"
+            | "casefile_apply_strategy_transition"
+            | "casefile_apply_writer_binding"
+    )
+}
+
 fn tool_definitions() -> Vec<Value> {
-    let open = || json!({"type": "object", "additionalProperties": true});
     vec![
         tool(
             "casefile_snapshot",
             "Read the canonical provider snapshot, capabilities, diagnostics, and projections.",
-            json!({"type":"object","additionalProperties":false}),
+            object_schema(json!({}), &[]),
         ),
         tool(
             "casefile_query",
-            "Run a typed canonical provider query.",
-            open(),
+            "Run a canonical provider query. Pass the query object directly, not under a request or arguments key.",
+            query_schema(),
         ),
         tool(
             "casefile_preview_record",
-            "Preview a canonical record draft change without writing.",
-            open(),
+            "Preview a canonical ticket, epic, or board change without writing. Put the change request under request.",
+            object_schema(json!({"request": change_request_schema()}), &["request"]),
         ),
         tool(
             "casefile_apply_record",
-            "Apply one exact provider-produced record preview after external approval.",
-            open(),
+            "Apply one exact provider-produced record preview after external approval. Pass the matching preview tool's entire structuredContent unchanged as preview.",
+            apply_schema(),
         ),
         tool(
             "casefile_preview_progress",
-            "Preview a progress bootstrap or append without writing.",
-            open(),
+            "Preview a progress bootstrap or append without writing. Put the typed progress operation under operation.",
+            object_schema(
+                json!({"operation": progress_operation_schema()}),
+                &["operation"],
+            ),
         ),
         tool(
             "casefile_apply_progress",
-            "Apply one exact provider-produced progress preview after external approval.",
-            open(),
+            "Apply one exact provider-produced progress preview after external approval. Pass the matching preview tool's entire structuredContent unchanged as preview.",
+            apply_schema(),
         ),
         tool(
             "casefile_preview_default_delivery_board",
-            "Preview the canonical default delivery board.",
-            open(),
+            "Preview the canonical default delivery board. investigation is the planning-root-relative investigation directory.",
+            object_schema(
+                json!({"investigation": non_empty_string()}),
+                &["investigation"],
+            ),
         ),
         tool(
             "casefile_apply_default_delivery_board",
-            "Apply one exact provider-produced default-board preview after external approval.",
-            open(),
+            "Apply one exact provider-produced default-board preview after external approval. Pass the matching preview tool's entire structuredContent unchanged as preview.",
+            apply_schema(),
         ),
         tool(
             "casefile_preview_strategy_transition",
-            "Preview a governed strategy transition without writing.",
-            open(),
+            "Preview a governed strategy transition without writing. Put the complete typed transition request under request.",
+            object_schema(
+                json!({"request": strategy_transition_request_schema()}),
+                &["request"],
+            ),
         ),
         tool(
             "casefile_apply_strategy_transition",
-            "Apply one exact governed strategy-transition preview after external approval.",
-            open(),
+            "Apply one exact governed strategy-transition preview after external approval. Pass the matching preview tool's entire structuredContent unchanged as preview.",
+            apply_schema(),
         ),
         tool(
             "casefile_preview_writer_binding",
-            "Preview a progress-gated writer binding without writing.",
-            open(),
+            "Preview a progress-gated writer binding without writing. Put investigation and binding_source under request.",
+            object_schema(
+                json!({
+                    "request": object_schema(
+                        json!({
+                            "investigation": non_empty_string(),
+                            "binding_source": non_empty_string(),
+                        }),
+                        &["investigation", "binding_source"],
+                    )
+                }),
+                &["request"],
+            ),
         ),
         tool(
             "casefile_apply_writer_binding",
-            "Apply one exact writer-binding preview after external approval.",
-            open(),
+            "Apply one exact writer-binding preview after external approval. Pass the matching preview tool's entire structuredContent unchanged as preview.",
+            apply_schema(),
         ),
     ]
+}
+
+fn object_schema(properties: Value, required: &[&str]) -> Value {
+    json!({
+        "type": "object",
+        "properties": properties,
+        "required": required,
+        "additionalProperties": false,
+    })
+}
+
+fn non_empty_string() -> Value {
+    json!({"type": "string", "minLength": 1})
+}
+
+fn string_array() -> Value {
+    json!({"type": "array", "items": {"type": "string"}})
+}
+
+fn nullable(schema: Value) -> Value {
+    json!({"anyOf": [schema, {"type": "null"}]})
+}
+
+fn query_schema() -> Value {
+    let scope = || {
+        nullable(object_schema(
+            json!({
+                "project": non_empty_string(),
+                "investigation": non_empty_string(),
+            }),
+            &["project"],
+        ))
+    };
+    let scoped = |query: &str| {
+        object_schema(
+            json!({
+                "query": {"const": query},
+                "scope": scope(),
+            }),
+            &["query"],
+        )
+    };
+    let searchable = |query: &str| {
+        object_schema(
+            json!({
+                "query": {"const": query},
+                "scope": scope(),
+                "search": nullable(json!({"type": "string"})),
+            }),
+            &["query"],
+        )
+    };
+    json!({
+        "oneOf": [
+            searchable("tickets"),
+            searchable("epics"),
+            scoped("boards"),
+            scoped("progress"),
+            scoped("strategy_transitions"),
+        ]
+    })
+}
+
+fn change_request_schema() -> Value {
+    let with_draft = |operation: &str| {
+        object_schema(
+            json!({
+                "operation": {"const": operation},
+                "path": non_empty_string(),
+                "draft": record_draft_schema(),
+            }),
+            &["operation", "path", "draft"],
+        )
+    };
+    json!({
+        "oneOf": [
+            with_draft("create"),
+            with_draft("replace"),
+            object_schema(
+                json!({
+                    "operation": {"const": "delete"},
+                    "path": non_empty_string(),
+                }),
+                &["operation", "path"],
+            ),
+        ]
+    })
+}
+
+fn record_draft_schema() -> Value {
+    let work_item = |kind: &str| {
+        object_schema(
+            json!({
+                "kind": {"const": kind},
+                "id": non_empty_string(),
+                "title": non_empty_string(),
+                "project": non_empty_string(),
+                "investigation": non_empty_string(),
+                "status": {"type": "string", "enum": ["provisional", "accepted", "rejected"]},
+                "reported_by_role": non_empty_string(),
+                "reported_by_agent": non_empty_string(),
+                "source_commit": non_empty_string(),
+                "created_at": {"type": "string", "format": "date-time"},
+                "updated_at": {"type": "string", "format": "date-time"},
+                "confidence": {"type": "string", "enum": ["low", "medium", "high"]},
+                "decision_refs": string_array(),
+                "related_tickets": string_array(),
+                "supersedes": string_array(),
+                "superseded_by": string_array(),
+                "rank": nullable(json!({"type": "integer", "minimum": 0})),
+                "requirement_and_evidence": {"type": "string"},
+                "impact": {"type": "string"},
+                "resolution_boundary": {"type": "string"},
+                "acceptance_criteria": {"type": "string"},
+                "verification": {"type": "string"},
+                "relationships_and_duplicate_analysis": {"type": "string"},
+                "review_and_disposition_history": {"type": "string"},
+            }),
+            &[
+                "kind",
+                "id",
+                "title",
+                "project",
+                "investigation",
+                "status",
+                "reported_by_role",
+                "reported_by_agent",
+                "source_commit",
+                "created_at",
+                "updated_at",
+                "confidence",
+                "decision_refs",
+                "related_tickets",
+                "supersedes",
+                "superseded_by",
+                "requirement_and_evidence",
+                "impact",
+                "resolution_boundary",
+                "acceptance_criteria",
+                "verification",
+                "relationships_and_duplicate_analysis",
+                "review_and_disposition_history",
+            ],
+        )
+    };
+    json!({
+        "oneOf": [
+            work_item("ticket"),
+            work_item("epic"),
+            object_schema(
+                json!({
+                    "kind": {"const": "board"},
+                    "id": non_empty_string(),
+                    "title": non_empty_string(),
+                    "status_source": {"type": "string", "enum": ["disposition", "progress"]},
+                    "filter_statuses": nullable(string_array()),
+                    "filter_kinds": nullable(string_array()),
+                    "columns": {
+                        "type": "array",
+                        "minItems": 1,
+                        "items": object_schema(
+                            json!({
+                                "name": non_empty_string(),
+                                "statuses": {
+                                    "type": "array",
+                                    "minItems": 1,
+                                    "items": {"type": "string"},
+                                },
+                            }),
+                            &["name", "statuses"],
+                        ),
+                    },
+                }),
+                &["kind", "id", "title", "columns"],
+            ),
+        ]
+    })
+}
+
+fn progress_operation_schema() -> Value {
+    let base_entry = |kind: &str, variant: Value, variant_required: &[&str]| {
+        let mut required = vec!["kind", "id", "recorded_at", "recorded_by", "ticket_id"];
+        required.extend_from_slice(variant_required);
+        let mut properties = json!({
+            "kind": {"const": kind},
+            "id": non_empty_string(),
+            "recorded_at": {"type": "string", "format": "date-time"},
+            "recorded_by": non_empty_string(),
+            "ticket_id": non_empty_string(),
+        });
+        properties
+            .as_object_mut()
+            .expect("fixed object")
+            .extend(variant.as_object().expect("fixed object").clone());
+        object_schema(properties, &required)
+    };
+    let entry = json!({
+        "oneOf": [
+            base_entry(
+                "transition",
+                json!({
+                    "from": {
+                        "type": "string",
+                        "enum": ["unknown", "in_progress", "in_review", "verifying", "blocked", "complete"],
+                    },
+                    "to": {
+                        "type": "string",
+                        "enum": ["unknown", "in_progress", "in_review", "verifying", "blocked", "complete"],
+                    },
+                }),
+                &["from", "to"],
+            ),
+            base_entry(
+                "note",
+                json!({
+                    "category": {"type": "string", "enum": ["deviation", "quirk"]},
+                    "message": non_empty_string(),
+                }),
+                &["category", "message"],
+            ),
+        ]
+    });
+    json!({
+        "oneOf": [
+            object_schema(
+                json!({
+                    "operation": {"const": "bootstrap"},
+                    "investigation": non_empty_string(),
+                }),
+                &["operation", "investigation"],
+            ),
+            object_schema(
+                json!({
+                    "operation": {"const": "append"},
+                    "investigation": non_empty_string(),
+                    "entries": {"type": "array", "minItems": 1, "items": entry},
+                }),
+                &["operation", "investigation", "entries"],
+            ),
+        ]
+    })
+}
+
+fn strategy_transition_request_schema() -> Value {
+    object_schema(
+        json!({
+            "investigation": non_empty_string(),
+            "operation_id": non_empty_string(),
+            "recorded_at": {"type": "string", "format": "date-time"},
+            "selected_matrix_origin": non_empty_string(),
+            "selected_matrix_source": non_empty_string(),
+            "available_capabilities": string_array(),
+            "preserved_work_paths": string_array(),
+            "active_ownership": {
+                "type": "array",
+                "items": object_schema(
+                    json!({
+                        "owner": non_empty_string(),
+                        "paths": {
+                            "type": "array",
+                            "minItems": 1,
+                            "items": {"type": "string", "minLength": 1},
+                        },
+                    }),
+                    &["owner", "paths"],
+                ),
+            },
+            "rationale": non_empty_string(),
+        }),
+        &[
+            "investigation",
+            "operation_id",
+            "recorded_at",
+            "selected_matrix_origin",
+            "selected_matrix_source",
+            "available_capabilities",
+            "preserved_work_paths",
+            "rationale",
+        ],
+    )
+}
+
+fn apply_schema() -> Value {
+    object_schema(
+        json!({
+            "preview": {
+                "type": "object",
+                "description": "The complete structuredContent object returned by the matching preview tool. Pass it unchanged; do not construct it and do not pass preview_id alone.",
+                "additionalProperties": true,
+            }
+        }),
+        &["preview"],
+    )
 }
 
 fn tool(name: &str, description: &str, input_schema: Value) -> Value {
