@@ -142,7 +142,7 @@ class AppServer:
                 "clientInfo": {
                     "name": "casefile",
                     "title": "Casefile",
-                    "version": "0.4.0",
+                    "version": "0.4.1",
                 },
                 "capabilities": {},
             },

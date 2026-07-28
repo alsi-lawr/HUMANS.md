@@ -142,6 +142,13 @@ fn fixed_root_session_negotiates_and_exposes_canonical_snapshot_and_query() {
         5
     );
     assert_eq!(
+        schema("casefile_preview_record")["oneOf"]
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+    assert_eq!(
         schema("casefile_preview_progress")["required"],
         json!(["operation"])
     );

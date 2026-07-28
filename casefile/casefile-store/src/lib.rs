@@ -28,11 +28,12 @@ pub use index::{DerivedIndex, Indexed, RevisionSource};
 pub use progress::{ProgressApplyResult, ProgressChangeRequest, ProgressPreview};
 pub use provider::{
     CacheState, DefaultBoardApplyResult, DefaultBoardPreview, NoCache, PROVIDER_PROTOCOL_VERSION,
-    ProgressOperation, ProgressProjection, Provider, ProviderApplyOutcome, ProviderCache,
-    ProviderCapabilities, ProviderError, ProviderMutationState, ProviderOperation, ProviderPreview,
-    ProviderProgressPreview, ProviderProjections, ProviderQuery, ProviderQueryResult,
-    ProviderRecordApplyResult, ProviderSnapshot, ProviderStrategyTransitionPreview,
-    ProviderWriterBindingPreview, StrategyTransitionProjection,
+    ProgressOperation, ProgressProjection, Provider, ProviderApplyOutcome, ProviderBatchPreview,
+    ProviderCache, ProviderCapabilities, ProviderError, ProviderMutationState, ProviderOperation,
+    ProviderPreview, ProviderProgressPreview, ProviderProjections, ProviderQuery,
+    ProviderQueryResult, ProviderRecordApplyResult, ProviderRecordBatchApplyResult,
+    ProviderSnapshot, ProviderStrategyTransitionPreview, ProviderWriterBindingPreview,
+    StrategyTransitionProjection,
 };
 pub use scanning::ScanResult;
 pub use store::{Store, StoreError};

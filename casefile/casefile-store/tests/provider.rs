@@ -344,6 +344,83 @@ fn record_apply_requires_the_complete_provider_preview_and_preserves_store_on_al
 }
 
 #[test]
+fn record_batch_promotes_mutually_related_tickets_as_one_valid_change() {
+    let root = fixture();
+    let provider = Provider::without_cache(Store::open(root.path()).expect("store"));
+    let provisional = format!("{INVESTIGATION}/tickets/provisional");
+    fs::create_dir_all(root.path().join(&provisional)).expect("provisional directory");
+    let draft = |id: &str, status: &str, related: &str| {
+        let (_, mut draft) = new_ticket(root.path());
+        if let RecordDraft::Ticket(item) = &mut draft {
+            item.id = id.into();
+            item.title = format!("Mutually related {id}");
+            item.status = status.into();
+            item.related_tickets = vec![related.into()];
+        }
+        draft
+    };
+    for (id, related) in [("HMD-012", "HMD-013"), ("HMD-013", "HMD-012")] {
+        let path = format!("{provisional}/{id}.md");
+        fs::write(
+            root.path().join(&path),
+            casefile_core::render_draft(&path, &draft(id, "provisional", related))
+                .expect("render provisional ticket"),
+        )
+        .expect("write provisional ticket");
+    }
+    assert!(
+        provider
+            .snapshot()
+            .expect("valid provisional Store")
+            .diagnostics
+            .is_empty()
+    );
+
+    let requests = ["HMD-012", "HMD-013"]
+        .into_iter()
+        .flat_map(|id| {
+            let related = if id == "HMD-012" {
+                "HMD-013"
+            } else {
+                "HMD-012"
+            };
+            [
+                ChangeRequest::Delete {
+                    path: format!("{provisional}/{id}.md"),
+                },
+                ChangeRequest::Create {
+                    path: format!("{INVESTIGATION}/tickets/accepted/{id}.md"),
+                    draft: draft(id, "accepted", related),
+                },
+            ]
+        })
+        .collect::<Vec<_>>();
+    let preview = provider
+        .preview_record_batch(requests)
+        .expect("batch preview");
+    assert!(preview.canonical.diagnostics.is_empty());
+    provider
+        .apply_record_batch(preview)
+        .expect("atomic batch promotion");
+
+    for id in ["HMD-012", "HMD-013"] {
+        assert!(!root.path().join(format!("{provisional}/{id}.md")).exists());
+        assert!(
+            root.path()
+                .join(format!("{INVESTIGATION}/tickets/accepted/{id}.md"))
+                .is_file()
+        );
+    }
+    assert!(
+        provider
+            .snapshot()
+            .expect("valid promoted Store")
+            .diagnostics
+            .is_empty()
+    );
+}
+
+#[test]
 fn progress_preview_integrity_covers_bootstrap_transition_replay_no_op_and_conflict() {
     let root = fixture();
     let provider = Provider::without_cache(Store::open(root.path()).expect("store"));

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Assemble and verify the fixed Casefile 0.4.0 executable matrix."""
+"""Assemble and verify the fixed Casefile executable matrix."""
 from __future__ import annotations
 
 import argparse

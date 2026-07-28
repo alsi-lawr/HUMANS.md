@@ -17,7 +17,7 @@ mod strategy_transition;
 mod work_item;
 
 pub use board::{BoardColumn, BoardDraft, BoardStatusSource};
-pub use change::{ApplyResult, ChangeRequest, Preview};
+pub use change::{ApplyResult, ChangeBatchApplyResult, ChangeBatchPreview, ChangeRequest, Preview};
 #[doc(hidden)]
 pub use decision::parse as parse_decision;
 pub use diagnostic::{Diagnostic, SCHEMA_VERSION, stable};
