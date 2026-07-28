@@ -12,9 +12,8 @@ ownership. Present compatible presets and require explicit selection. Refuse una
 capabilities, root replacement, lost work, or overlapping active writers.
 
 For governed work, build the typed transition request, call `casefile_preview_strategy_transition`,
-display and save the complete immutable preview, and request explicit human approval. Only after
-approval pass that exact preview unchanged to `casefile_apply_strategy_transition`; provider write
-authority is not approval.
+review its envelope, then apply its `preview_id`. The explicit strategy selection authorizes this
+persistence; a materially different transition requires a new selection.
 
 For ad-hoc work, require no ticket and use only the local CLI `scratch-strategy` operation. Require
 an explicit absolute scratch target and a matrix outside the configured planning Store. The CLI must

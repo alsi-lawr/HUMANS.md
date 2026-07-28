@@ -2,12 +2,13 @@ use anyhow::{Context, Result, bail};
 use casefile_core::ChangeRequest;
 use casefile_store::{
     ActivationState, DefaultBoardPreview, PROVIDER_PROTOCOL_VERSION, ProgressOperation, Provider,
-    ProviderBatchPreview, ProviderCapabilities, ProviderMutationState, ProviderOperation,
-    ProviderPreview, ProviderProgressPreview, ProviderStrategyTransitionPreview,
+    ProviderApprovalPolicy, ProviderBatchPreview, ProviderCapabilities, ProviderMutationState,
+    ProviderOperation, ProviderPreview, ProviderProgressPreview, ProviderStrategyTransitionPreview,
     ProviderWriterBindingPreview, Store, StrategyTransitionRequest, WriterBindingRequest,
 };
 use serde::{Serialize, de::DeserializeOwned};
 use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
 use std::{
     collections::{BTreeMap, BTreeSet, VecDeque},
     fs,
@@ -172,6 +173,9 @@ fn validate_baseline(
     if !capabilities.writes_require_external_approval {
         bail!("provider external-approval capability is missing");
     }
+    if capabilities.approval_policy != ProviderApprovalPolicy::RecordDeletesOnly {
+        bail!("provider approval policy is incompatible");
+    }
     let advertised = capabilities
         .operations
         .iter()
@@ -240,16 +244,10 @@ enum StoredPreview {
     WriterBinding(ProviderWriterBindingPreview),
 }
 
-#[derive(Clone)]
-struct PreviewEntry {
-    public: Value,
-    internal: StoredPreview,
-}
-
 #[derive(Default)]
 struct PreviewVault {
     order: VecDeque<String>,
-    values: BTreeMap<String, PreviewEntry>,
+    values: BTreeMap<String, StoredPreview>,
 }
 
 impl Session {
@@ -406,7 +404,7 @@ impl Session {
                 "protocolVersion": protocol,
                 "capabilities": {"tools": {"listChanged": false}},
                 "serverInfo": {"name": "casefile", "version": env!("CARGO_PKG_VERSION")},
-                "instructions": "Casefile tools operate only on the explicit planning root bound to this process. Follow each tool's input schema exactly. Apply tools require external human approval and the matching preview tool's entire structuredContent passed unchanged as the preview value; never pass only preview_id."
+                "instructions": "Casefile tools operate only on the explicit planning root bound to this process. Follow each tool's input schema exactly. Every preview states approval_required. Request external human approval only when it is true; otherwise do not interrupt for a separate apply confirmation. Apply an exact live-session preview by passing its preview_id."
             }),
         )
     }
@@ -462,21 +460,13 @@ impl ToolService {
                     _ => bail!("pass exactly one of request or requests"),
                 }
             }
-            "casefile_apply_record" => {
-                #[derive(serde::Deserialize)]
-                struct Arguments {
-                    preview: Value,
+            "casefile_apply_record" => match self.preview_by_id(arguments)? {
+                StoredPreview::Record(preview) => serialize(self.provider.apply_record(preview)?),
+                StoredPreview::RecordBatch(preview) => {
+                    serialize(self.provider.apply_record_batch(preview)?)
                 }
-                match self.approved_preview(parse::<Arguments>(arguments)?.preview)? {
-                    StoredPreview::Record(preview) => {
-                        serialize(self.provider.apply_record(preview)?)
-                    }
-                    StoredPreview::RecordBatch(preview) => {
-                        serialize(self.provider.apply_record_batch(preview)?)
-                    }
-                    _ => bail!("preview was produced by a different Casefile tool"),
-                }
-            }
+                _ => bail!("preview was produced by a different Casefile tool"),
+            },
             "casefile_preview_progress" => {
                 #[derive(serde::Deserialize)]
                 struct Arguments {
@@ -488,11 +478,7 @@ impl ToolService {
                 ))
             }
             "casefile_apply_progress" => {
-                #[derive(serde::Deserialize)]
-                struct Arguments {
-                    preview: Value,
-                }
-                let preview = match self.approved_preview(parse::<Arguments>(arguments)?.preview)? {
+                let preview = match self.preview_by_id(arguments)? {
                     StoredPreview::Progress(preview) => preview,
                     _ => bail!("preview was produced by a different Casefile tool"),
                 };
@@ -510,11 +496,7 @@ impl ToolService {
                 ))
             }
             "casefile_apply_default_delivery_board" => {
-                #[derive(serde::Deserialize)]
-                struct Arguments {
-                    preview: Value,
-                }
-                let preview = match self.approved_preview(parse::<Arguments>(arguments)?.preview)? {
+                let preview = match self.preview_by_id(arguments)? {
                     StoredPreview::Board(preview) => preview,
                     _ => bail!("preview was produced by a different Casefile tool"),
                 };
@@ -531,11 +513,7 @@ impl ToolService {
                 ))
             }
             "casefile_apply_strategy_transition" => {
-                #[derive(serde::Deserialize)]
-                struct Arguments {
-                    preview: Value,
-                }
-                let preview = match self.approved_preview(parse::<Arguments>(arguments)?.preview)? {
+                let preview = match self.preview_by_id(arguments)? {
                     StoredPreview::StrategyTransition(preview) => preview,
                     _ => bail!("preview was produced by a different Casefile tool"),
                 };
@@ -552,11 +530,7 @@ impl ToolService {
                 ))
             }
             "casefile_apply_writer_binding" => {
-                #[derive(serde::Deserialize)]
-                struct Arguments {
-                    preview: Value,
-                }
-                let preview = match self.approved_preview(parse::<Arguments>(arguments)?.preview)? {
+                let preview = match self.preview_by_id(arguments)? {
                     StoredPreview::WriterBinding(preview) => preview,
                     _ => bail!("preview was produced by a different Casefile tool"),
                 };
@@ -567,15 +541,7 @@ impl ToolService {
     }
 
     fn publish_preview(&self, internal: StoredPreview) -> Result<Value> {
-        let mut public = match &internal {
-            StoredPreview::Record(preview) => serialize(preview)?,
-            StoredPreview::RecordBatch(preview) => serialize(preview)?,
-            StoredPreview::Progress(preview) => serialize(preview)?,
-            StoredPreview::Board(preview) => serialize(preview)?,
-            StoredPreview::StrategyTransition(preview) => serialize(preview)?,
-            StoredPreview::WriterBinding(preview) => serialize(preview)?,
-        };
-        remove_internal_bytes(&mut public);
+        let public = review_envelope(&internal)?;
         let preview_id = public
             .get("preview_id")
             .and_then(Value::as_str)
@@ -583,13 +549,7 @@ impl ToolService {
             .to_owned();
         let mut vault = self.previews.lock().expect("MCP preview vault");
         vault.order.push_back(preview_id.clone());
-        vault.values.insert(
-            preview_id,
-            PreviewEntry {
-                public: public.clone(),
-                internal,
-            },
-        );
+        vault.values.insert(preview_id, internal);
         while vault.order.len() > PREVIEW_LIMIT {
             if let Some(expired) = vault.order.pop_front() {
                 vault.values.remove(&expired);
@@ -598,37 +558,169 @@ impl ToolService {
         Ok(public)
     }
 
-    fn approved_preview(&self, public: Value) -> Result<StoredPreview> {
-        let preview_id = public
-            .get("preview_id")
-            .and_then(Value::as_str)
-            .context("preview must contain preview_id")?;
+    fn preview_by_id(&self, arguments: Value) -> Result<StoredPreview> {
+        #[derive(serde::Deserialize)]
+        #[serde(deny_unknown_fields)]
+        struct Arguments {
+            preview_id: String,
+        }
+        let preview_id = parse::<Arguments>(arguments)?.preview_id;
         let vault = self.previews.lock().expect("MCP preview vault");
-        let entry = vault
+        vault
             .values
-            .get(preview_id)
-            .filter(|entry| entry.public == public)
-            .context("provider preview is unknown, expired, or was altered")?;
-        Ok(entry.internal.clone())
+            .get(&preview_id)
+            .cloned()
+            .context("provider preview is unknown or expired")
     }
 }
 
-fn remove_internal_bytes(value: &mut Value) {
-    match value {
-        Value::Array(items) => {
-            for item in items {
-                remove_internal_bytes(item);
-            }
-        }
-        Value::Object(object) => {
-            object.remove("rendered_bytes");
-            object.remove("proposed_bytes");
-            for item in object.values_mut() {
-                remove_internal_bytes(item);
-            }
-        }
-        _ => {}
+#[derive(Serialize)]
+struct ReviewOperation {
+    operation: &'static str,
+    path: String,
+}
+
+fn review_envelope(preview: &StoredPreview) -> Result<Value> {
+    let (preview_id, approval_required, no_op, operations, diagnostics, diffs) = match preview {
+        StoredPreview::Record(preview) => (
+            preview.preview_id.as_str(),
+            preview.approval_required,
+            preview.no_op,
+            vec![record_review_operation(&preview.canonical.request)],
+            serialize(&preview.canonical.diagnostics)?,
+            vec![preview.canonical.diff.as_str()],
+        ),
+        StoredPreview::RecordBatch(preview) => (
+            preview.preview_id.as_str(),
+            preview.approval_required,
+            preview.no_op,
+            preview
+                .canonical
+                .requests
+                .iter()
+                .map(record_review_operation)
+                .collect(),
+            serialize(&preview.canonical.diagnostics)?,
+            vec![preview.canonical.diff.as_str()],
+        ),
+        StoredPreview::Progress(preview) => (
+            preview.preview_id.as_str(),
+            preview.approval_required,
+            preview.canonical.no_op,
+            vec![ReviewOperation {
+                operation: match preview.operation {
+                    ProgressOperation::Bootstrap { .. } => "bootstrap",
+                    ProgressOperation::Append { .. } => "append",
+                },
+                path: preview.canonical.path.clone(),
+            }],
+            serialize(&preview.canonical.diagnostics)?,
+            vec![preview.canonical.diff.as_str()],
+        ),
+        StoredPreview::Board(preview) => (
+            preview.preview_id.as_str(),
+            preview.approval_required,
+            preview.no_op,
+            vec![record_review_operation(&preview.canonical.request)],
+            serialize(&preview.canonical.diagnostics)?,
+            vec![preview.canonical.diff.as_str()],
+        ),
+        StoredPreview::StrategyTransition(preview) => (
+            preview.preview_id.as_str(),
+            preview.approval_required,
+            preview.canonical.no_op,
+            preview
+                .canonical
+                .changes
+                .iter()
+                .map(|change| ReviewOperation {
+                    operation: governed_review_operation(
+                        change.expected_target_revision.is_some(),
+                        change.proposed_target_revision.is_some(),
+                    ),
+                    path: change.path.clone(),
+                })
+                .collect(),
+            serialize(&preview.canonical.diagnostics)?,
+            preview
+                .canonical
+                .changes
+                .iter()
+                .map(|change| change.diff.as_str())
+                .collect(),
+        ),
+        StoredPreview::WriterBinding(preview) => (
+            preview.preview_id.as_str(),
+            preview.approval_required,
+            preview.canonical.no_op,
+            preview
+                .canonical
+                .changes
+                .iter()
+                .map(|change| ReviewOperation {
+                    operation: governed_review_operation(
+                        change.expected_target_revision.is_some(),
+                        change.proposed_target_revision.is_some(),
+                    ),
+                    path: change.path.clone(),
+                })
+                .collect(),
+            serialize(&preview.canonical.diagnostics)?,
+            preview
+                .canonical
+                .changes
+                .iter()
+                .map(|change| change.diff.as_str())
+                .collect(),
+        ),
+    };
+    let mut operation_counts = BTreeMap::new();
+    for operation in &operations {
+        *operation_counts
+            .entry(operation.operation)
+            .or_insert(0_usize) += 1;
     }
+    Ok(json!({
+        "preview_id": preview_id,
+        "approval_required": approval_required,
+        "no_op": no_op,
+        "operation_counts": operation_counts,
+        "operations": operations,
+        "diagnostics": diagnostics,
+        "diff": diff_summary(&diffs),
+    }))
+}
+
+fn record_review_operation(request: &ChangeRequest) -> ReviewOperation {
+    ReviewOperation {
+        operation: match request {
+            ChangeRequest::Create { .. } => "create",
+            ChangeRequest::Replace { .. } => "replace",
+            ChangeRequest::Delete { .. } => "delete",
+        },
+        path: request.path().to_owned(),
+    }
+}
+
+fn governed_review_operation(expected: bool, proposed: bool) -> &'static str {
+    match (expected, proposed) {
+        (false, true) => "create",
+        (true, false) => "delete",
+        _ => "replace",
+    }
+}
+
+fn diff_summary(diffs: &[&str]) -> Value {
+    let mut hasher = Sha256::new();
+    let mut bytes = 0_usize;
+    for diff in diffs {
+        bytes += diff.len();
+        hasher.update(diff.as_bytes());
+    }
+    json!({
+        "bytes": bytes,
+        "sha256": format!("sha256:{:x}", hasher.finalize()),
+    })
 }
 
 fn is_tool_call(request: &Value) -> bool {
@@ -664,7 +756,7 @@ fn tool_definitions() -> Vec<Value> {
         ),
         tool(
             "casefile_preview_record",
-            "Preview canonical ticket, epic, or board changes without writing. Put one change under request, or an atomic set that must validate together under requests.",
+            "Preview canonical ticket, epic, or board changes without writing. Put one change under request, or an atomic set that must validate together under requests. Returns a compact review envelope retained under preview_id; approval_required is true only when the request contains a delete.",
             json!({
                 "oneOf": [
                     object_schema(json!({"request": change_request_schema()}), &["request"]),
@@ -683,7 +775,7 @@ fn tool_definitions() -> Vec<Value> {
         ),
         tool(
             "casefile_apply_record",
-            "Apply one exact provider-produced record or record-batch preview after external approval. Pass the matching preview tool's entire structuredContent unchanged as preview.",
+            "Apply one exact live-session record or record-batch preview by preview_id. Obtain external approval first only when its review envelope's approval_required is true.",
             apply_schema(),
         ),
         tool(
@@ -696,7 +788,7 @@ fn tool_definitions() -> Vec<Value> {
         ),
         tool(
             "casefile_apply_progress",
-            "Apply one exact provider-produced progress preview after external approval. Pass the matching preview tool's entire structuredContent unchanged as preview.",
+            "Apply one exact live-session progress preview by preview_id without a separate approval interruption.",
             apply_schema(),
         ),
         tool(
@@ -709,7 +801,7 @@ fn tool_definitions() -> Vec<Value> {
         ),
         tool(
             "casefile_apply_default_delivery_board",
-            "Apply one exact provider-produced default-board preview after external approval. Pass the matching preview tool's entire structuredContent unchanged as preview.",
+            "Apply one exact live-session default-board preview by preview_id without a separate approval interruption.",
             apply_schema(),
         ),
         tool(
@@ -722,7 +814,7 @@ fn tool_definitions() -> Vec<Value> {
         ),
         tool(
             "casefile_apply_strategy_transition",
-            "Apply one exact governed strategy-transition preview after external approval. Pass the matching preview tool's entire structuredContent unchanged as preview.",
+            "Apply one exact live-session strategy-transition preview by preview_id after the human has selected the strategy, without a second apply confirmation.",
             apply_schema(),
         ),
         tool(
@@ -743,7 +835,7 @@ fn tool_definitions() -> Vec<Value> {
         ),
         tool(
             "casefile_apply_writer_binding",
-            "Apply one exact writer-binding preview after external approval. Pass the matching preview tool's entire structuredContent unchanged as preview.",
+            "Apply one exact live-session writer-binding preview by preview_id after the human has selected the binding, without a second apply confirmation.",
             apply_schema(),
         ),
     ]
@@ -1032,13 +1124,13 @@ fn strategy_transition_request_schema() -> Value {
 fn apply_schema() -> Value {
     object_schema(
         json!({
-            "preview": {
-                "type": "object",
-                "description": "The complete structuredContent object returned by the matching preview tool. Pass it unchanged; do not construct it and do not pass preview_id alone.",
-                "additionalProperties": true,
-            }
+            "preview_id": {
+                "type": "string",
+                "minLength": 1,
+                "description": "The preview_id returned by the matching preview tool in this live MCP session.",
+            },
         }),
-        &["preview"],
+        &["preview_id"],
     )
 }
 

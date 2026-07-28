@@ -16,12 +16,11 @@ class DeliveryBoardProviderCutoverTests(unittest.TestCase):
         self.assertIn('"casefile_preview_default_delivery_board"', mcp)
         self.assertIn('"casefile_apply_default_delivery_board"', mcp)
 
-    def test_skills_require_complete_preview_and_external_approval(self):
+    def test_skills_apply_board_preview_id(self):
         for relative in ("casefile/skills/casefile/SKILL.md", "casefile/skills/casefile-consolidate/SKILL.md"):
             text = (ROOT / relative).read_text(encoding="utf-8")
-            self.assertIn("complete", text)
-            self.assertIn("explicit human approval", text)
-            self.assertIn("casefile_apply_default_delivery_board", text)
+            self.assertIn("preview_id", text)
+            self.assertIn("casefile_preview_default_delivery_board", text)
 
     def test_exact_retired_sources_are_absent(self):
         tracked = {

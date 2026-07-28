@@ -3,8 +3,8 @@ use casefile_core::{
 };
 use casefile_store::{
     ActivationState, CacheState, NoCache, ProgressOperation, ProgressProjection, Provider,
-    ProviderCache, ProviderError, ProviderMutationState, ProviderOperation, ProviderQuery,
-    ProviderQueryResult, Store,
+    ProviderApprovalPolicy, ProviderCache, ProviderError, ProviderMutationState, ProviderOperation,
+    ProviderQuery, ProviderQueryResult, Store,
 };
 use std::{fs, path::Path, process::Command};
 use tempfile::TempDir;
@@ -103,6 +103,10 @@ fn snapshot_negotiates_one_single_scan_v1_baseline_and_queries_store_projections
         ProviderMutationState::ReadWrite
     );
     assert!(snapshot.capabilities.writes_require_external_approval);
+    assert_eq!(
+        snapshot.capabilities.approval_policy,
+        ProviderApprovalPolicy::RecordDeletesOnly
+    );
     assert!(
         snapshot
             .capabilities
@@ -279,6 +283,7 @@ fn record_apply_requires_the_complete_provider_preview_and_preserves_store_on_al
             draft,
         })
         .expect("preview");
+    assert!(!preview.approval_required);
     let mut altered = Vec::new();
     let mut value = preview.clone();
     value.canonical.request = ChangeRequest::Delete { path: path.clone() };
@@ -399,6 +404,7 @@ fn record_batch_promotes_mutually_related_tickets_as_one_valid_change() {
         .preview_record_batch(requests)
         .expect("batch preview");
     assert!(preview.canonical.diagnostics.is_empty());
+    assert!(preview.approval_required);
     provider
         .apply_record_batch(preview)
         .expect("atomic batch promotion");

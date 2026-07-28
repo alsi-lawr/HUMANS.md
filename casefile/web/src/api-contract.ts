@@ -435,6 +435,7 @@ export const decodePreview = (value: unknown): Preview => {
   const input = object(value, "preview");
   return {
     preview_id: nonEmptyString(input.preview_id, "provider preview identity"),
+    approval_required: boolean(input.approval_required, "preview approval requirement"),
     rendered_bytes: nullable(input.rendered_bytes, (item) =>
       array(item, "rendered bytes", (byte) => unsignedInteger(byte, "rendered byte")),
     ),

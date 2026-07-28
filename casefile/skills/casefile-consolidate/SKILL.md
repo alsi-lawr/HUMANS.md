@@ -13,22 +13,19 @@ Resolve and show the planning root and the exact investigation before doing anyt
 selected target with the canonical CLI and report root-wide diagnostics outside that scope as
 inherited context; they neither authorize a bypass nor block a valid target.
 
-Use the fixed-root provider for progress bootstrap and append operations. Put the complete immutable
-preview in the current task's `.agent-workspace/<session-id>/` directory, outside the planning root.
-Display it, obtain explicit human approval, and apply that exact preview unchanged in the same MCP
-session. Do not parse or write `progress/log.toml`, ticket Markdown, or another progress file.
+Use the fixed-root provider for progress bootstrap and append operations. Review its compact preview
+envelope and apply the returned `preview_id` in the same MCP session. Do not parse or write
+`progress/log.toml`, ticket Markdown, or another progress file.
 
 ## Migrate an absent progress log
 
-First call `casefile_preview_progress` with the typed `bootstrap` operation. Present its exact
-target, eligible accepted ticket IDs that will derive as `unknown`, proposed empty log, diff, and
-scoped diagnostics. It creates only an absent `progress/log.toml` containing `schema_version = 1`;
-it records no invented ticket history.
+First call `casefile_preview_progress` with the typed `bootstrap` operation and present its review
+envelope. It creates only an absent `progress/log.toml` containing `schema_version = 1`; it records
+no invented ticket history.
 
-Ask for an explicit apply decision after the preview. On approval, call `casefile_apply_progress`
-with the saved preview unchanged and report the resulting path and revision. An existing valid log
-is a no-op. A malformed or noncanonical log, legacy layout, unactivated target, rejected/provisional
-ticket, ambiguous scope, or divergent preview is refused or reported without repair-by-migration.
+Call `casefile_apply_progress` with the returned `preview_id` and report the resulting path and
+revision. An existing valid log is a no-op. Invalid or ambiguous state is refused without
+repair-by-migration.
 
 ## Repair one malformed log
 
@@ -39,10 +36,11 @@ path and retention through closeout. Then invoke the CLI human/recovery adapter'
 `progress-repair-preview` command and show its complete diff, target, scoped diagnostics, and backup
 plan. Whole-log replacement remains outside provider capability discovery.
 
-Wait for an explicit apply decision. Apply only the saved preview with `progress-repair-apply`. The
-canonical writer performs the one-file atomic replacement and post-write validation; report failure
-without editing the original yourself. A matching retry is a no-op. If the target revision changed,
-stop and make a fresh preview; do not reuse, merge, or alter the caller's replacement.
+Apply only the saved preview with `progress-repair-apply` without requesting a second confirmation.
+The caller's explicit replacement content is the authority for this operation. The canonical writer
+performs the one-file atomic replacement and post-write validation; report failure without editing
+the original yourself. A matching retry is a no-op. If the target revision changed, stop and make a
+fresh preview; do not reuse, merge, or alter the caller's replacement.
 
 For command examples and developer validation/package guidance, see `CONTRIBUTING.md`; user-facing
 migration and repair reference lives in the project wiki.
@@ -50,20 +48,9 @@ migration and repair reference lives in the project wiki.
 ## Provision the delivery board
 
 After the progress-log outcome is successfully applied or confirmed as an existing valid no-op, call
-`casefile_preview_default_delivery_board` for the same selected investigation. Save its fresh
-immutable preview in the current task's `.agent-workspace/<session-id>/` directory, outside the
-planning root. Show the exact target, diff, and diagnostics, then wait for an explicit apply
-decision. Apply only that saved preview unchanged with `casefile_apply_default_delivery_board`. An
-exact existing `boards/delivery.toml` is a content no-op; a differing file, symlink, non-file
-collision, stale target revision, invalid activation, missing mapping, or ambiguous mapping is
-preserved and visibly refused.
-
-The canonical identity combines the configured project prefix and mapped investigation directory
-name. Before preview and apply, preflight every activated mapping and refuse if that identity does
-not map to exactly one investigation. The generic preview may preserve unchanged diagnostics from
-its exact pre-write Store baseline, which remain visible in canonical scan, check, and query output;
-it still refuses every diagnostic introduced or changed by this board request. Apply guards the
-saved board target revision and does not reject unrelated Store changes.
+`casefile_preview_default_delivery_board` for the same selected investigation. Review its envelope
+and apply the returned `preview_id`. An exact existing board is a no-op; a conflicting or invalid
+target is preserved and refused.
 
 This step creates or confirms only the explicit delivery board. It does not read or mutate the
 progress log or tickets. Keep progress and board previews/applies sequential and independent; do not

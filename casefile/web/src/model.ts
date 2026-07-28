@@ -166,6 +166,7 @@ export type Relationship = Readonly<{
 export type ChangeRequest = Readonly<{ operation: "replace"; path: string; draft: RecordDraft }>;
 export type Preview = Readonly<{
   preview_id: string;
+  approval_required: boolean;
   rendered_bytes: ReadonlyArray<number> | null;
   no_op: boolean;
   request: ChangeRequest;

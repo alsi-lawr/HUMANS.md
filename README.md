@@ -16,11 +16,11 @@ coding guidance.
 
 ## Install
 
-Add the `humans-md` marketplace at `v0.4.1`, then install the identities you need. Start with core;
+Add the `humans-md` marketplace at `v0.4.2`, then install the identities you need. Start with core;
 Casefile and coding remain optional siblings.
 
 ```sh
-codex plugin marketplace add alsi-lawr/humans-md-marketplace --ref v0.4.1
+codex plugin marketplace add alsi-lawr/humans-md-marketplace --ref v0.4.2
 codex plugin add humans-md@humans-md
 # optional siblings
 codex plugin add casefile@humans-md
@@ -28,7 +28,7 @@ codex plugin add coding@humans-md
 ```
 
 ```sh
-claude plugin marketplace add alsi-lawr/humans-md-marketplace@v0.4.1
+claude plugin marketplace add alsi-lawr/humans-md-marketplace@v0.4.2
 claude plugin install humans-md@humans-md --scope user
 # optional siblings
 claude plugin install casefile@humans-md --scope user
@@ -45,8 +45,8 @@ matrix. After installing it, invoke its host-specific Casefile setup skill with 
 activated current-v1 planning Store. Setup verifies and installs the matching executable, probes its
 identity and 12-tool Provider contract, and receipt-binds the host directly to
 `casefile mcp-package`. MCP startup then needs no Cargo, Python, Node, network, or `PATH` lookup.
-Every governed write still requires the complete Provider preview to be shown and explicitly
-approved before that exact preview is applied.
+MCP retains exact previews in the live session and returns compact review envelopes that apply by
+`preview_id`. Routine writes proceed without a second confirmation; record deletions require one.
 
 Implementation offers three explicit governed shapes: a strictly serial ticket batch, a serial
 ticket batch with one read-only look-ahead, and a bounded pipeline that may overlap one independent,
