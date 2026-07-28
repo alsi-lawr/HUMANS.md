@@ -98,9 +98,11 @@ path. These are dated compatibility facts, not permanent host limitations.
 
 MCP is a thin transport over the canonical typed Provider: capability and snapshot share one Store
 baseline, queries are Store-derived, and every governed mutation is exact-preview preview/apply with
-target-level conflict detection. The complete immutable Provider preview must be displayed and
-explicitly approved by a human before the exact unchanged preview is applied in the same live
-Provider session. Technical capability is not consent.
+target-level conflict detection. MCP retains the complete immutable preview and returns a compact
+review envelope containing its `preview_id`, approval boundary, operation counts and paths,
+diagnostics, and diff size/hash. Apply accepts only that `preview_id` in the same live session. The
+current `record_deletes_only` policy requires a separate human confirmation only when a record
+request or batch contains a delete.
 
 Activated current-v1 Stores operate in place without conversion. Unactivated, invalid, unsupported,
 and early legacy activation layouts remain read-only or unsupported with actionable diagnostics; do
@@ -123,29 +125,27 @@ governed progress path. Do not edit a progress log, ticket frontmatter, or a sec
 migrate, repair, or update ticket delivery state.
 
 For a selected active investigation, first validate only that scope. Call the fixed-root MCP
-provider's `casefile_preview_progress`, save and display the complete preview outside the planning
-root, obtain explicit human approval, then pass that exact preview unchanged to
-`casefile_apply_progress` in the same provider session:
+provider's `casefile_preview_progress`, review its compact envelope, then apply its `preview_id` in
+the same provider session:
 
 ```sh
 casefile --root "$CASEFILE_ROOT" check --require-activation --investigation "$INVESTIGATION"
 # MCP: casefile_preview_progress {"operation":{"operation":"bootstrap","investigation":"..."}}
-# Show/save the complete result; after explicit approval, MCP: casefile_apply_progress {"preview":...}
+# MCP: casefile_apply_progress {"preview_id":"provider-preview-..."}
 ```
 
 For local recovery when MCP is unavailable, `progress-session --request <operation.json>` keeps the
-provider alive, prints the complete preview, and applies only after the operator types its exact
-preview ID. The analogous `default-delivery-board-session`, `strategy-transition-session`, and
-`writer-binding-session` commands preserve the same one-session opaque-preview gate. Their prompt,
-not provider write capability, is the approval boundary.
+provider alive, prints the complete preview, and applies it unchanged. The analogous
+`default-delivery-board-session`, `strategy-transition-session`, and `writer-binding-session`
+commands preserve the same one-session opaque-preview gate without a second prompt. `record-session`
+prompts for the exact preview ID only when its preview contains a delete.
 
 The same provider operation owns ordinary transitions and typed notes. Supply the ticket's currently
-derived state in `--from`, use a stable operation ID, and preserve the generated preview for the
-apply or exact retry. Notes use category `deviation` or `quirk` and never change state. Do not
-backfill stages that were not captured when they occurred; record a note instead. The CLI
-recovery-only `progress-repair-preview` and `progress-repair-apply` commands accept an exact
-caller-supplied complete log only for malformed-log repair. No preview may live inside the planning
-root.
+derived state in `--from`, use a stable operation ID, and retain the MCP `preview_id` through apply.
+Notes use category `deviation` or `quirk` and never change state. Do not backfill stages that were
+not captured when they occurred; record a note instead. The CLI recovery-only
+`progress-repair-preview` and `progress-repair-apply` commands accept an exact caller-supplied
+complete log only for malformed-log repair. No preview may live inside the planning root.
 
 Bootstrap creates an absent empty `progress/log.toml`; accepted tickets without entries derive as
 `unknown`. It never writes invented initialization history and an existing valid log is a no-op. For
@@ -167,8 +167,7 @@ operation:
 
 ```sh
 # MCP: casefile_preview_default_delivery_board {"investigation":"..."}
-# Display/save the complete preview. After explicit approval:
-# MCP: casefile_apply_default_delivery_board {"preview":...}
+# MCP: casefile_apply_default_delivery_board {"preview_id":"provider-preview-..."}
 ```
 
 The provider selects the exact activated project's prefix and mapped investigation directory name
@@ -228,12 +227,11 @@ while implementation is inactive.
 
 Binding replacement remains a root-authorized decision. Use the resolver's `select` command only to
 materialize the confirmed typed request, pass that request to the Provider's writer-binding preview,
-display the complete immutable preview, obtain explicit human approval, and apply that exact
-unchanged preview through the Provider. The Provider derives inactivity from one valid canonical
-progress log: accepted tickets may be `unknown` or `complete`, active non-complete stages refuse the
-replacement, and missing, malformed, or conflicting progress fails closed. Provider capability is
-not approval. Git history is the only history boundary: do not add an archive, journal, second state
-file, or client-side write path.
+review the compact envelope, and apply its `preview_id`. The explicit selection is the authority for
+persistence. The Provider derives inactivity from one valid canonical progress log: accepted tickets
+may be `unknown` or `complete`, active non-complete stages refuse the replacement, and missing,
+malformed, or conflicting progress fails closed. Git history is the only history boundary: do not
+add an archive, journal, second state file, or client-side write path.
 
 ### Workbench development
 

@@ -323,6 +323,10 @@ fn serve_exposes_only_the_fixed_read_contract() {
         snapshot["capabilities"]["writes_require_external_approval"],
         true
     );
+    assert_eq!(
+        snapshot["capabilities"]["approval_policy"],
+        "record_deletes_only"
+    );
     assert!(server.index.is_file());
     assert_eq!(
         json_request(

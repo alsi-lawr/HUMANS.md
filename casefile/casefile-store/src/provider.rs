@@ -49,12 +49,19 @@ pub enum ProviderMutationState {
     ReadOnly { reason: String },
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ProviderApprovalPolicy {
+    RecordDeletesOnly,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct ProviderCapabilities {
     pub protocol_version: u32,
     pub planning_format_versions: Vec<u32>,
     pub mutation: ProviderMutationState,
     pub operations: Vec<ProviderOperation>,
+    pub approval_policy: ProviderApprovalPolicy,
     pub writes_require_external_approval: bool,
 }
 
@@ -201,6 +208,7 @@ pub struct ProviderPreview {
     #[serde(flatten)]
     pub canonical: Preview,
     pub no_op: bool,
+    pub approval_required: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -210,6 +218,7 @@ pub struct ProviderBatchPreview {
     #[serde(flatten)]
     pub canonical: ChangeBatchPreview,
     pub no_op: bool,
+    pub approval_required: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -229,6 +238,7 @@ pub struct ProviderProgressPreview {
     pub preview_id: String,
     pub operation: ProgressOperation,
     pub canonical: ProgressPreview,
+    pub approval_required: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -236,6 +246,7 @@ pub struct ProviderProgressPreview {
 pub struct ProviderStrategyTransitionPreview {
     pub preview_id: String,
     pub canonical: StrategyTransitionPreview,
+    pub approval_required: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -243,6 +254,7 @@ pub struct ProviderStrategyTransitionPreview {
 pub struct ProviderWriterBindingPreview {
     pub preview_id: String,
     pub canonical: WriterBindingPreview,
+    pub approval_required: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -252,6 +264,7 @@ pub struct DefaultBoardPreview {
     pub canonical: Preview,
     pub rendered_bytes: Vec<u8>,
     pub no_op: bool,
+    pub approval_required: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -297,12 +310,12 @@ pub enum ProviderError {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 enum StoredPreview {
-    Record(Preview, Option<Vec<u8>>, bool),
-    RecordBatch(ChangeBatchPreview, Vec<Option<Vec<u8>>>, bool),
-    Progress(ProgressOperation, ProgressPreview),
-    Board(String, Preview, Vec<u8>, bool),
-    StrategyTransition(StrategyTransitionPreview),
-    WriterBinding(WriterBindingPreview),
+    Record(Preview, Option<Vec<u8>>, bool, bool),
+    RecordBatch(ChangeBatchPreview, Vec<Option<Vec<u8>>>, bool, bool),
+    Progress(ProgressOperation, ProgressPreview, bool),
+    Board(String, Preview, Vec<u8>, bool, bool),
+    StrategyTransition(StrategyTransitionPreview, bool),
+    WriterBinding(WriterBindingPreview, bool),
 }
 
 #[derive(Default)]
@@ -434,16 +447,19 @@ impl<C: ProviderCache> Provider<C> {
             .transpose()
             .map_err(|diagnostic| StoreError::Invalid(diagnostic.message))?;
         let no_op = canonical.diff.is_empty() && canonical.diagnostics.is_empty();
+        let approval_required = record_approval_required(&canonical.request);
         let preview_id = self.remember(StoredPreview::Record(
             canonical.clone(),
             rendered_bytes.clone(),
             no_op,
+            approval_required,
         ));
         Ok(ProviderPreview {
             preview_id,
             rendered_bytes,
             canonical,
             no_op,
+            approval_required,
         })
     }
 
@@ -458,6 +474,7 @@ impl<C: ProviderCache> Provider<C> {
                 preview.canonical.clone(),
                 preview.rendered_bytes,
                 preview.no_op,
+                preview.approval_required,
             ),
         )?;
         let result = if preview.no_op {
@@ -494,16 +511,19 @@ impl<C: ProviderCache> Provider<C> {
             .collect::<Result<Vec<_>, _>>()
             .map_err(|diagnostic| StoreError::Invalid(diagnostic.message))?;
         let no_op = canonical.diff.is_empty() && canonical.diagnostics.is_empty();
+        let approval_required = canonical.requests.iter().any(record_approval_required);
         let preview_id = self.remember(StoredPreview::RecordBatch(
             canonical.clone(),
             rendered_bytes.clone(),
             no_op,
+            approval_required,
         ));
         Ok(ProviderBatchPreview {
             preview_id,
             rendered_bytes,
             canonical,
             no_op,
+            approval_required,
         })
     }
 
@@ -518,6 +538,7 @@ impl<C: ProviderCache> Provider<C> {
                 preview.canonical.clone(),
                 preview.rendered_bytes,
                 preview.no_op,
+                preview.approval_required,
             ),
         )?;
         let result = if preview.no_op {
@@ -579,11 +600,13 @@ impl<C: ProviderCache> Provider<C> {
         let preview_id = self.remember(StoredPreview::Progress(
             operation.clone(),
             canonical.clone(),
+            false,
         ));
         Ok(ProviderProgressPreview {
             preview_id,
             operation,
             canonical,
+            approval_required: false,
         })
     }
 
@@ -594,7 +617,11 @@ impl<C: ProviderCache> Provider<C> {
         self.require_mutation()?;
         self.verify(
             &preview.preview_id,
-            &StoredPreview::Progress(preview.operation, preview.canonical.clone()),
+            &StoredPreview::Progress(
+                preview.operation,
+                preview.canonical.clone(),
+                preview.approval_required,
+            ),
         )?;
         let result = self.store.apply_progress(preview.canonical)?;
         self.outcome(result)
@@ -662,6 +689,7 @@ impl<C: ProviderCache> Provider<C> {
             canonical.clone(),
             rendered_bytes.clone(),
             no_op,
+            false,
         ));
         Ok(DefaultBoardPreview {
             preview_id,
@@ -669,6 +697,7 @@ impl<C: ProviderCache> Provider<C> {
             canonical,
             rendered_bytes,
             no_op,
+            approval_required: false,
         })
     }
 
@@ -684,6 +713,7 @@ impl<C: ProviderCache> Provider<C> {
                 preview.canonical.clone(),
                 preview.rendered_bytes,
                 preview.no_op,
+                preview.approval_required,
             ),
         )?;
         if !preview.canonical.diagnostics.is_empty() {
@@ -718,10 +748,11 @@ impl<C: ProviderCache> Provider<C> {
     ) -> Result<ProviderStrategyTransitionPreview, ProviderError> {
         self.require_mutation()?;
         let canonical = self.store.preview_strategy_transition(request)?;
-        let preview_id = self.remember(StoredPreview::StrategyTransition(canonical.clone()));
+        let preview_id = self.remember(StoredPreview::StrategyTransition(canonical.clone(), false));
         Ok(ProviderStrategyTransitionPreview {
             preview_id,
             canonical,
+            approval_required: false,
         })
     }
 
@@ -732,7 +763,10 @@ impl<C: ProviderCache> Provider<C> {
         self.require_mutation()?;
         self.verify(
             &preview.preview_id,
-            &StoredPreview::StrategyTransition(preview.canonical.clone()),
+            &StoredPreview::StrategyTransition(
+                preview.canonical.clone(),
+                preview.approval_required,
+            ),
         )?;
         let result = self.store.apply_strategy_transition(preview.canonical)?;
         self.outcome(result)
@@ -744,10 +778,11 @@ impl<C: ProviderCache> Provider<C> {
     ) -> Result<ProviderWriterBindingPreview, ProviderError> {
         self.require_mutation()?;
         let canonical = self.store.preview_writer_binding(request)?;
-        let preview_id = self.remember(StoredPreview::WriterBinding(canonical.clone()));
+        let preview_id = self.remember(StoredPreview::WriterBinding(canonical.clone(), false));
         Ok(ProviderWriterBindingPreview {
             preview_id,
             canonical,
+            approval_required: false,
         })
     }
 
@@ -758,7 +793,7 @@ impl<C: ProviderCache> Provider<C> {
         self.require_mutation()?;
         self.verify(
             &preview.preview_id,
-            &StoredPreview::WriterBinding(preview.canonical.clone()),
+            &StoredPreview::WriterBinding(preview.canonical.clone(), preview.approval_required),
         )?;
         let result = self.store.apply_writer_binding(preview.canonical)?;
         self.outcome(result)
@@ -870,8 +905,13 @@ fn capabilities(activation: ActivationState) -> ProviderCapabilities {
         planning_format_versions: vec![1],
         mutation,
         operations,
+        approval_policy: ProviderApprovalPolicy::RecordDeletesOnly,
         writes_require_external_approval: true,
     }
+}
+
+fn record_approval_required(request: &ChangeRequest) -> bool {
+    matches!(request, ChangeRequest::Delete { .. })
 }
 
 fn projections(derived: &DerivedSnapshot, scan: &ScanResult) -> ProviderProjections {

@@ -141,7 +141,7 @@ pub(super) fn execute(root: PathBuf, command: Command) -> Result<ExitCode> {
             let request: ChangeRequest = read_json(&request)?;
             let provider = Provider::without_cache(store);
             let preview = provider.preview_record(request)?;
-            confirm_preview(&preview.preview_id, &preview)?;
+            review_preview(&preview.preview_id, preview.approval_required, &preview)?;
             print_json(&provider.apply_record(preview)?)?;
             Ok(ExitCode::SUCCESS)
         }
@@ -154,7 +154,7 @@ pub(super) fn execute(root: PathBuf, command: Command) -> Result<ExitCode> {
             let operation: ProgressOperation = read_json(&request)?;
             let provider = Provider::without_cache(store);
             let preview = provider.preview_progress(operation)?;
-            confirm_preview(&preview.preview_id, &preview)?;
+            review_preview(&preview.preview_id, preview.approval_required, &preview)?;
             print_json(&provider.apply_progress(preview)?)?;
             Ok(ExitCode::SUCCESS)
         }
@@ -193,7 +193,7 @@ pub(super) fn execute(root: PathBuf, command: Command) -> Result<ExitCode> {
             let request: StrategyTransitionRequest = read_json(&request)?;
             let provider = Provider::without_cache(store);
             let preview = provider.preview_strategy_transition(request)?;
-            confirm_preview(&preview.preview_id, &preview)?;
+            review_preview(&preview.preview_id, preview.approval_required, &preview)?;
             print_json(&provider.apply_strategy_transition(preview)?)?;
             Ok(ExitCode::SUCCESS)
         }
@@ -206,7 +206,7 @@ pub(super) fn execute(root: PathBuf, command: Command) -> Result<ExitCode> {
             let request: WriterBindingRequest = read_json(&request)?;
             let provider = Provider::without_cache(store);
             let preview = provider.preview_writer_binding(request)?;
-            confirm_preview(&preview.preview_id, &preview)?;
+            review_preview(&preview.preview_id, preview.approval_required, &preview)?;
             print_json(&provider.apply_writer_binding(preview)?)?;
             Ok(ExitCode::SUCCESS)
         }
@@ -219,7 +219,7 @@ pub(super) fn execute(root: PathBuf, command: Command) -> Result<ExitCode> {
         Command::DefaultDeliveryBoardSession { investigation } => {
             let provider = Provider::without_cache(store);
             let preview = provider.preview_default_delivery_board(investigation)?;
-            confirm_preview(&preview.preview_id, &preview)?;
+            review_preview(&preview.preview_id, preview.approval_required, &preview)?;
             print_json(&provider.apply_default_delivery_board(preview)?)?;
             Ok(ExitCode::SUCCESS)
         }
@@ -400,8 +400,11 @@ fn require_external_payload(root: &Path, payload: &Path) -> Result<()> {
     Ok(())
 }
 
-fn confirm_preview(id: &str, preview: &impl Serialize) -> Result<()> {
+fn review_preview(id: &str, approval_required: bool, preview: &impl Serialize) -> Result<()> {
     print_json(preview)?;
+    if !approval_required {
+        return Ok(());
+    }
     eprintln!("Type the exact provider preview ID to approve this immutable preview:");
     io::stderr().flush()?;
     let mut approval = String::new();

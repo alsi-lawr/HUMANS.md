@@ -154,7 +154,7 @@ fn fixed_root_session_negotiates_and_exposes_canonical_snapshot_and_query() {
     );
     assert_eq!(
         schema("casefile_apply_progress")["required"],
-        json!(["preview"])
+        json!(["preview_id"])
     );
     let response = |id: i64| {
         responses
@@ -383,7 +383,22 @@ fn provider_preview_and_apply_remain_one_session_exact_operations() {
         "{preview_response}"
     );
     let preview = preview_response["result"]["structuredContent"].clone();
-    assert!(preview["canonical"].get("proposed_bytes").is_none());
+    let preview_id = preview["preview_id"].as_str().expect("preview ID");
+    assert_eq!(preview["approval_required"], false);
+    assert_eq!(preview["operation_counts"], json!({"bootstrap": 1}));
+    assert_eq!(
+        preview["operations"],
+        json!([{
+            "operation": "bootstrap",
+            "path": "projects/demo/investigations/sample/progress/log.toml"
+        }])
+    );
+    assert!(preview.get("canonical").is_none());
+    assert!(
+        preview["diff"]["sha256"]
+            .as_str()
+            .is_some_and(|digest| digest.starts_with("sha256:"))
+    );
     assert!(
         !preview_response["result"]["content"][0]["text"]
             .as_str()
@@ -392,7 +407,7 @@ fn provider_preview_and_apply_remain_one_session_exact_operations() {
     );
     let apply_request = json!({
         "jsonrpc":"2.0","id":3,"method":"tools/call","params":{
-            "name":"casefile_apply_progress","arguments":{"preview":preview}
+            "name":"casefile_apply_progress","arguments":{"preview_id":preview_id}
         }
     });
     serde_json::to_writer(&mut input, &apply_request).expect("apply request");

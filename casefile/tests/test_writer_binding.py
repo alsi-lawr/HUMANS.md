@@ -257,7 +257,7 @@ class WriterBindingTests(unittest.TestCase):
         self.assertEqual("low", document["reasoning_effort"])
         self.assertEqual("runtime_override", document["resolution"]["mode"])
 
-    def test_selection_returns_typed_provider_request_and_requires_separate_approval(self):
+    def test_selection_returns_typed_provider_request_without_a_second_approval(self):
         pair = {
             "model": "gpt-5.6-sol",
             "reasoning_effort": "high",
@@ -265,7 +265,7 @@ class WriterBindingTests(unittest.TestCase):
         }
         result = binding.selection_request("projects/demo/investigations/sample", pair)
         self.assertFalse(result["persisted"])
-        self.assertTrue(result["approval_required"])
+        self.assertFalse(result["approval_required"])
         self.assertEqual("casefile_preview_writer_binding", result["provider_preview_tool"])
         self.assertEqual("casefile_apply_writer_binding", result["provider_apply_tool"])
         self.assertEqual(

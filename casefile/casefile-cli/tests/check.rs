@@ -1,75 +1,56 @@
 use serde_json::{Value, json};
 use std::{
     fs,
-    io::Write,
     path::{Path, PathBuf},
-    process::{Command, Stdio},
+    process::Command,
     sync::atomic::{AtomicUsize, Ordering},
 };
 
 #[test]
-fn progress_session_requires_post_preview_exact_id_approval() {
+fn progress_session_applies_exact_preview_without_a_second_approval() {
     let request = json!({
         "operation": "bootstrap",
         "investigation": "projects/demo/investigations/sample"
     });
-    for (approval, expected_success) in [("wrong\n", false), ("provider-preview-1\n", true)] {
-        let root = fixture();
-        for arguments in [
-            &["init", "-q"][..],
-            &["config", "user.email", "casefile@example.test"],
-            &["config", "user.name", "Casefile Test"],
-            &["add", "."],
-            &["commit", "-qm", "fixture"],
-        ] {
-            assert!(
-                Command::new("git")
-                    .current_dir(root.path())
-                    .args(arguments)
-                    .status()
-                    .expect("git")
-                    .success()
-            );
-        }
-        let request_path = root.0.with_extension("progress-operation.json");
-        fs::write(
-            &request_path,
-            serde_json::to_vec(&request).expect("request JSON"),
-        )
-        .expect("request");
-        let mut child = Command::new(env!("CARGO_BIN_EXE_casefile"))
-            .args(["--root"])
-            .arg(root.path())
-            .args(["progress-session", "--request"])
-            .arg(&request_path)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .expect("progress session");
-        child
-            .stdin
-            .take()
-            .expect("session stdin")
-            .write_all(approval.as_bytes())
-            .expect("approval");
-        let output = child.wait_with_output().expect("session result");
-        fs::remove_file(&request_path).expect("remove request");
-        assert_eq!(output.status.success(), expected_success);
+    let root = fixture();
+    for arguments in [
+        &["init", "-q"][..],
+        &["config", "user.email", "casefile@example.test"],
+        &["config", "user.name", "Casefile Test"],
+        &["add", "."],
+        &["commit", "-qm", "fixture"],
+    ] {
         assert!(
-            String::from_utf8_lossy(&output.stdout).contains("provider-preview-1"),
-            "stdout={} stderr={}",
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr)
-        );
-        assert!(String::from_utf8_lossy(&output.stderr).contains("exact provider preview ID"));
-        assert_eq!(
-            root.path()
-                .join("projects/demo/investigations/sample/progress/log.toml")
-                .exists(),
-            expected_success
+            Command::new("git")
+                .current_dir(root.path())
+                .args(arguments)
+                .status()
+                .expect("git")
+                .success()
         );
     }
+    let request_path = root.0.with_extension("progress-operation.json");
+    fs::write(
+        &request_path,
+        serde_json::to_vec(&request).expect("request JSON"),
+    )
+    .expect("request");
+    let output = Command::new(env!("CARGO_BIN_EXE_casefile"))
+        .args(["--root"])
+        .arg(root.path())
+        .args(["progress-session", "--request"])
+        .arg(&request_path)
+        .output()
+        .expect("progress session");
+    fs::remove_file(&request_path).expect("remove request");
+    assert!(output.status.success());
+    assert!(String::from_utf8_lossy(&output.stdout).contains("\"approval_required\": false"));
+    assert!(!String::from_utf8_lossy(&output.stderr).contains("exact provider preview ID"));
+    assert!(
+        root.path()
+            .join("projects/demo/investigations/sample/progress/log.toml")
+            .is_file()
+    );
 }
 
 struct TemporaryRoot(PathBuf);
@@ -261,23 +242,13 @@ fn binding_command(root: &Path, operation: &str, document: &Path) -> std::proces
 }
 
 fn binding_session(root: &Path, request: &Path) -> std::process::Output {
-    let mut child = Command::new(env!("CARGO_BIN_EXE_casefile"))
+    Command::new(env!("CARGO_BIN_EXE_casefile"))
         .args(["--root"])
         .arg(root)
         .args(["writer-binding-session", "--request"])
         .arg(request)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .expect("binding session");
-    child
-        .stdin
-        .take()
-        .expect("binding stdin")
-        .write_all(b"provider-preview-1\n")
-        .expect("binding approval");
-    child.wait_with_output().expect("binding session result")
+        .output()
+        .expect("binding session")
 }
 
 fn project_binding(root: &Path, strategy_id: &str) -> std::process::Output {

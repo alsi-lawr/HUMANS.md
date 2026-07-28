@@ -339,7 +339,7 @@ def selection_request(
         "persisted": False,
         "provider_preview_tool": "casefile_preview_writer_binding",
         "provider_apply_tool": "casefile_apply_writer_binding",
-        "approval_required": True,
+        "approval_required": False,
     }
 
 
