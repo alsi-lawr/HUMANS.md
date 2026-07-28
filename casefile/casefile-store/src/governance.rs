@@ -71,8 +71,6 @@ pub struct GovernedChange {
 pub struct StrategyTransitionPreview {
     pub operation: GovernedOperationKind,
     pub request: StrategyTransitionRequest,
-    pub expected_store_revision: Revision,
-    pub proposed_store_revision: Revision,
     pub changes: Vec<GovernedChange>,
     pub transition_record: StrategyTransitionRecord,
     pub diagnostics: Vec<Diagnostic>,
@@ -84,8 +82,6 @@ pub struct StrategyTransitionPreview {
 pub struct WriterBindingPreview {
     pub operation: GovernedOperationKind,
     pub request: WriterBindingRequest,
-    pub expected_store_revision: Revision,
-    pub proposed_store_revision: Revision,
     pub changes: Vec<GovernedChange>,
     pub diagnostics: Vec<Diagnostic>,
     pub no_op: bool,
@@ -267,8 +263,6 @@ pub(super) fn preview_strategy_transition(
     Ok(StrategyTransitionPreview {
         operation: GovernedOperationKind::StrategyTransition,
         request,
-        expected_store_revision: before.snapshot.revision,
-        proposed_store_revision: proposed.snapshot.revision,
         changes: vec![matrix_change, record_change],
         transition_record,
         diagnostics,
@@ -290,10 +284,24 @@ pub(super) fn apply_strategy_transition(
         ));
     }
     let current = scan(root, &BTreeMap::new())?;
-    if current.snapshot.revision != preview.expected_store_revision {
-        return Err(StoreError::StaleStoreRevision);
-    }
-    let canonical = preview_strategy_transition(root, preview.request.clone())?;
+    let mut canonical = preview_strategy_transition(root, preview.request.clone())?;
+    canonical.transition_record.expected_store_revision =
+        preview.transition_record.expected_store_revision.clone();
+    let record_bytes = render_strategy_transition(&canonical.transition_record).into_bytes();
+    let record_path = canonical
+        .changes
+        .get(1)
+        .ok_or_else(|| {
+            StoreError::Invalid("strategy transition preview has no record target".into())
+        })?
+        .path
+        .clone();
+    let existing_record = current
+        .snapshot
+        .entries
+        .iter()
+        .find(|entry| entry.path == record_path);
+    canonical.changes[1] = change(root, record_path, existing_record, record_bytes)?;
     if canonical != preview {
         return Err(StoreError::Invalid(
             "strategy transition preview was altered".into(),
@@ -325,16 +333,14 @@ pub(super) fn apply_strategy_transition(
             return Err(error);
         }
     };
-    if resulting.snapshot.revision != preview.proposed_store_revision
-        || preview.changes.iter().any(|change| {
-            resulting
-                .snapshot
-                .entries
-                .iter()
-                .find(|entry| entry.path == change.path)
-                .is_none_or(|entry| entry.original_bytes != change.rendered_bytes)
-        })
-    {
+    if preview.changes.iter().any(|change| {
+        resulting
+            .snapshot
+            .entries
+            .iter()
+            .find(|entry| entry.path == change.path)
+            .is_none_or(|entry| entry.original_bytes != change.rendered_bytes)
+    }) {
         restore_all(root, &prior)?;
         return Err(StoreError::Invalid(
             "strategy transition post-write verification failed".into(),
@@ -421,8 +427,6 @@ pub(super) fn preview_writer_binding(
     Ok(WriterBindingPreview {
         operation: GovernedOperationKind::WriterBinding,
         request,
-        expected_store_revision: before.snapshot.revision,
-        proposed_store_revision: proposed.snapshot.revision,
         changes: vec![change],
         diagnostics,
         no_op,
@@ -443,9 +447,6 @@ pub(super) fn apply_writer_binding(
         ));
     }
     let current = scan(root, &BTreeMap::new())?;
-    if current.snapshot.revision != preview.expected_store_revision {
-        return Err(StoreError::StaleStoreRevision);
-    }
     let canonical = preview_writer_binding(root, preview.request.clone())?;
     if canonical != preview {
         return Err(StoreError::Invalid(
@@ -482,13 +483,12 @@ pub(super) fn apply_writer_binding(
         }
     };
     let derived = derive_snapshot(&resulting);
-    let verified = resulting.snapshot.revision == preview.proposed_store_revision
-        && resulting
-            .snapshot
-            .entries
-            .iter()
-            .find(|entry| entry.path == change.path)
-            .is_some_and(|entry| entry.original_bytes == change.rendered_bytes)
+    let verified = resulting
+        .snapshot
+        .entries
+        .iter()
+        .find(|entry| entry.path == change.path)
+        .is_some_and(|entry| entry.original_bytes == change.rendered_bytes)
         && derived.records.iter().any(|record| {
             record.path == change.path
                 && record.strategy_binding.as_ref().is_some_and(|binding| {
@@ -584,11 +584,6 @@ fn ensure_binding_inactive(scan: &ScanResult, investigation: &str) -> Result<(),
         })
         .filter_map(|entry| entry.identity.clone())
         .collect::<BTreeSet<_>>();
-    if accepted.is_empty() {
-        return Err(StoreError::Invalid(
-            "binding replacement requires canonical accepted-ticket progress".into(),
-        ));
-    }
     let mut statuses = accepted
         .iter()
         .map(|ticket| (ticket.clone(), ProgressStatus::Unknown))

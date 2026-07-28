@@ -299,6 +299,6 @@ fn stale_apply_preserves_concurrent_content_and_retains_draft() {
     );
     assert!(Path::new(&fs::read_to_string(log).expect("editor log")).is_file());
     let transcript = String::from_utf8_lossy(&transcript);
-    assert!(transcript.contains("stale store revision"));
+    assert!(transcript.contains("stale target revision"));
     assert!(transcript.contains("canonical files unchanged; draft retained at"));
 }

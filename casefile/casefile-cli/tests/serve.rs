@@ -510,6 +510,6 @@ fn serve_preserves_preview_and_gates_apply_with_capability() {
     assert_eq!(stale.status, 409);
     assert_eq!(
         serde_json::from_str::<Value>(&stale.body).expect("stale JSON"),
-        json!({"error":"stale store revision", "code":"stale_revision"})
+        json!({"error":"stale target revision", "code":"stale_revision"})
     );
 }

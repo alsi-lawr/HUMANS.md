@@ -97,10 +97,10 @@ deliberately rejected for this release to keep one symmetric artifact, provenanc
 path. These are dated compatibility facts, not permanent host limitations.
 
 MCP is a thin transport over the canonical typed Provider: capability and snapshot share one Store
-baseline, queries are Store-derived, and every governed mutation is revision-pinned preview/apply.
-The complete immutable Provider preview must be displayed and explicitly approved by a human before
-the exact unchanged preview is applied in the same live Provider session. Technical capability is
-not consent.
+baseline, queries are Store-derived, and every governed mutation is exact-preview preview/apply with
+target-level conflict detection. The complete immutable Provider preview must be displayed and
+explicitly approved by a human before the exact unchanged preview is applied in the same live
+Provider session. Technical capability is not consent.
 
 Activated current-v1 Stores operate in place without conversion. Unactivated, invalid, unsupported,
 and early legacy activation layouts remain read-only or unsupported with actionable diagnostics; do
@@ -176,13 +176,14 @@ only to construct `<PREFIX>-<INVESTIGATION-DIRECTORY>-delivery`. This keeps boar
 when one project has multiple investigations with distinct final directory names. Before preview and
 apply, the provider preflights every activated mapping and refuses if the derived identity maps to
 anything other than exactly one investigation. The Rust `preview` and `apply` operations remain
-authoritative for board rendering, path checks, validation, Store revisions, and the one-file atomic
-write. Provider preview compares the proposed diagnostics with its exact pre-write baseline:
+authoritative for board rendering, path checks, validation, target revisions, and the one-file
+atomic write. Provider preview compares the proposed diagnostics with its exact pre-write baseline:
 unchanged baseline diagnostics remain visible to scan, check, and query but do not block the write;
-an introduced or changed diagnostic does. The whole-Store revision still pins that baseline through
-apply. The operation creates an absent `boards/delivery.toml`, reports exact canonical content as a
-no-op, and refuses a different target without replacement. It never reads or mutates progress or
-tickets, and consolidation keeps the progress and board writes sequential rather than transactional.
+an introduced or changed diagnostic does. Apply refuses a changed board target but does not reject
+unrelated Store changes. The operation creates an absent `boards/delivery.toml`, reports exact
+canonical content as a no-op, and refuses a different target without replacement. It never reads or
+mutates progress or tickets, and consolidation keeps the progress and board writes sequential rather
+than transactional.
 
 ### Strategies and writer bindings
 

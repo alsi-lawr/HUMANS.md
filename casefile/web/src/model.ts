@@ -170,8 +170,6 @@ export type Preview = Readonly<{
   no_op: boolean;
   request: ChangeRequest;
   expected_target_revision: string | null;
-  expected_store_revision: string;
-  proposed_store_revision: string;
   diagnostics: ReadonlyArray<Diagnostic>;
   diff: string;
 }>;

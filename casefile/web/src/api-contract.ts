@@ -443,8 +443,6 @@ export const decodePreview = (value: unknown): Preview => {
     expected_target_revision: nullable(input.expected_target_revision, (item) =>
       string(item, "target revision"),
     ),
-    expected_store_revision: string(input.expected_store_revision, "store revision"),
-    proposed_store_revision: string(input.proposed_store_revision, "proposed revision"),
     diagnostics: decodeDiagnostics(input.diagnostics),
     diff: string(input.diff, "preview diff"),
   };

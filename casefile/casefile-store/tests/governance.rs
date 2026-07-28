@@ -3,8 +3,7 @@ use std::{fs, path::Path, process::Command};
 use casefile_core::{Diagnostic, Kind, ProgressEntry, ProgressLog, ProgressStatus, Revision};
 use casefile_store::{
     GovernedOperationKind, ProgressChangeRequest, Provider, ProviderError, ProviderOperation,
-    ProviderQuery, ProviderQueryResult, Store, StoreError, StrategyTransitionRequest,
-    WriterBindingRequest,
+    ProviderQuery, ProviderQueryResult, Store, StrategyTransitionRequest, WriterBindingRequest,
 };
 use tempfile::TempDir;
 
@@ -131,11 +130,13 @@ fn strategy_transition_is_strict_store_visible_idempotent_and_creates_no_backup(
         preview.transition_record.previous_strategy_id,
         "casefile-implement-ticket-batch"
     );
-    let expected_revision = preview.proposed_store_revision.clone();
     let result = store
         .apply_strategy_transition(preview)
         .expect("transition apply");
-    assert_eq!(result.resulting_store_revision, expected_revision);
+    assert_eq!(
+        result.resulting_store_revision,
+        store.scan().expect("result scan").snapshot.revision
+    );
     assert_eq!(result.paths.len(), 2);
     let scan = store.scan().expect("scan");
     let transition = scan
@@ -148,7 +149,7 @@ fn strategy_transition_is_strict_store_visible_idempotent_and_creates_no_backup(
         transition.classification,
         casefile_core::Classification::Governed
     );
-    assert!(scan.snapshot.revision == expected_revision);
+    assert_eq!(scan.snapshot.revision, result.resulting_store_revision);
     let provider = Provider::without_cache(store.clone());
     let snapshot = provider.snapshot().expect("provider snapshot");
     assert_eq!(snapshot.projections.strategy_transitions.len(), 1);
@@ -269,12 +270,6 @@ fn provider_refuses_every_authoritative_transition_preview_change_without_mutati
     value.canonical.changes[0].proposed_target_revision = Some(Revision("altered".into()));
     altered.push(value);
     let mut value = preview.clone();
-    value.canonical.expected_store_revision = Revision("altered".into());
-    altered.push(value);
-    let mut value = preview.clone();
-    value.canonical.proposed_store_revision = Revision("altered".into());
-    altered.push(value);
-    let mut value = preview.clone();
     value
         .canonical
         .diagnostics
@@ -299,17 +294,16 @@ fn provider_refuses_every_authoritative_transition_preview_change_without_mutati
 }
 
 #[test]
-fn transition_collision_staleness_validation_and_rollback_preserve_prior_bytes() {
+fn transition_accepts_unrelated_changes_and_preserves_collision_validation_and_rollback() {
     let root = fixture();
     let store = Store::open(root.path()).expect("store");
     let preview = store
         .preview_strategy_transition(transition_request())
         .expect("preview");
-    fs::write(root.path().join("unrelated"), "changed").expect("stale change");
-    assert!(matches!(
-        store.apply_strategy_transition(preview),
-        Err(StoreError::StaleStoreRevision)
-    ));
+    fs::write(root.path().join("unrelated"), "changed").expect("unrelated change");
+    store
+        .apply_strategy_transition(preview)
+        .expect("unrelated change does not invalidate transition");
 
     let collision_root = fixture();
     let collision_store = Store::open(collision_root.path()).expect("store");
@@ -404,6 +398,23 @@ fn binding_activity_is_derived_exactly_from_canonical_progress_and_spawn_require
             "spawn status {status:?}"
         );
     }
+    let no_tickets = fixture();
+    fs::remove_file(
+        no_tickets
+            .path()
+            .join(INVESTIGATION)
+            .join("tickets/accepted/HMD-011.md"),
+    )
+    .expect("remove accepted ticket");
+    write_progress(no_tickets.path(), None);
+    Store::open(no_tickets.path())
+        .expect("store")
+        .preview_writer_binding(WriterBindingRequest {
+            investigation: INVESTIGATION.into(),
+            binding_source: BINDING.into(),
+        })
+        .expect("initial binding before tickets");
+
     let missing = fixture();
     let store = Store::open(missing.path()).expect("store");
     assert!(
@@ -487,12 +498,6 @@ fn binding_provider_preview_is_complete_strict_atomic_and_has_no_archive_or_scra
     value.canonical.changes[0].proposed_target_revision = Some(Revision("altered".into()));
     altered.push(value);
     let mut value = preview.clone();
-    value.canonical.expected_store_revision = Revision("altered".into());
-    altered.push(value);
-    let mut value = preview.clone();
-    value.canonical.proposed_store_revision = Revision("altered".into());
-    altered.push(value);
-    let mut value = preview.clone();
     value
         .canonical
         .diagnostics
@@ -542,7 +547,7 @@ fn binding_provider_preview_is_complete_strict_atomic_and_has_no_archive_or_scra
 }
 
 #[test]
-fn binding_refuses_stale_scope_schema_and_symlink_without_target_mutation() {
+fn binding_accepts_unrelated_changes_and_refuses_invalid_schema_and_symlink_targets() {
     let root = fixture();
     write_progress(root.path(), None);
     let store = Store::open(root.path()).expect("store");
@@ -566,14 +571,12 @@ fn binding_refuses_stale_scope_schema_and_symlink_without_target_mutation() {
             binding_source: BINDING.into(),
         })
         .expect("preview");
-    fs::write(root.path().join("unrelated"), "stale").expect("stale");
-    assert!(matches!(
-        store.apply_writer_binding(preview),
-        Err(StoreError::StaleStoreRevision)
-    ));
+    fs::write(root.path().join("unrelated"), "changed").expect("unrelated");
+    store
+        .apply_writer_binding(preview)
+        .expect("unrelated change does not invalidate binding");
     assert!(
-        !root
-            .path()
+        root.path()
             .join(INVESTIGATION)
             .join("strategy/bindings.toml")
             .exists()

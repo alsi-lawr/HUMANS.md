@@ -59,9 +59,9 @@ test("accepts the canonical progress record kind and rejects future kinds", () =
 });
 
 test("preserves the host stale-revision failure code", () => {
-  expect(decodeHostFailure({ error: "stale store revision", code: "stale_revision" }, 409)).toEqual(
-    { message: "stale store revision", code: "stale_revision" },
-  );
+  expect(
+    decodeHostFailure({ error: "stale target revision", code: "stale_revision" }, 409),
+  ).toEqual({ message: "stale target revision", code: "stale_revision" });
 });
 
 test("decodes both canonical board status sources and rejects malformed selectors", () => {

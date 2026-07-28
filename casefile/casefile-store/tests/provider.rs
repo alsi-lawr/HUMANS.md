@@ -295,12 +295,6 @@ fn record_apply_requires_the_complete_provider_preview_and_preserves_store_on_al
     value.canonical.expected_target_revision = Some(Revision("altered".into()));
     altered.push(value);
     let mut value = preview.clone();
-    value.canonical.expected_store_revision = Revision("altered".into());
-    altered.push(value);
-    let mut value = preview.clone();
-    value.canonical.proposed_store_revision = Revision("altered".into());
-    altered.push(value);
-    let mut value = preview.clone();
     value
         .canonical
         .diagnostics
@@ -372,12 +366,6 @@ fn progress_preview_integrity_covers_bootstrap_transition_replay_no_op_and_confl
     altered.push(value);
     let mut value = preview.clone();
     value.canonical.expected_target_revision = Some(Revision("altered".into()));
-    altered.push(value);
-    let mut value = preview.clone();
-    value.canonical.expected_store_revision = Revision("altered".into());
-    altered.push(value);
-    let mut value = preview.clone();
-    value.canonical.proposed_store_revision = Revision("altered".into());
     altered.push(value);
     let mut value = preview.clone();
     value
@@ -498,19 +486,7 @@ fn default_board_is_named_exact_preview_with_preflight_collision_and_byte_preser
         Err(ProviderError::PreviewIntegrity)
     ));
     let mut altered = preview.clone();
-    altered.canonical.expected_store_revision = Revision("altered".into());
-    assert!(matches!(
-        provider.apply_default_delivery_board(altered),
-        Err(ProviderError::PreviewIntegrity)
-    ));
-    let mut altered = preview.clone();
     altered.canonical.expected_target_revision = Some(Revision("altered".into()));
-    assert!(matches!(
-        provider.apply_default_delivery_board(altered),
-        Err(ProviderError::PreviewIntegrity)
-    ));
-    let mut altered = preview.clone();
-    altered.canonical.proposed_store_revision = Revision("altered".into());
     assert!(matches!(
         provider.apply_default_delivery_board(altered),
         Err(ProviderError::PreviewIntegrity)
@@ -731,7 +707,7 @@ fn cache_refresh_failure_after_a_confirmed_write_is_degraded_not_authoritative()
 }
 
 #[test]
-fn every_provider_apply_family_refuses_a_stale_store_without_target_mutation() {
+fn every_provider_apply_family_accepts_unrelated_store_changes() {
     let root = fixture();
     let provider = Provider::without_cache(Store::open(root.path()).expect("store"));
     let (ticket_path, draft) = new_ticket(root.path());
@@ -742,13 +718,10 @@ fn every_provider_apply_family_refuses_a_stale_store_without_target_mutation() {
         })
         .expect("record preview");
     fs::write(root.path().join("unrelated-record.txt"), "changed").expect("external change");
-    assert!(matches!(
-        provider.apply_record(record),
-        Err(ProviderError::Store(
-            casefile_store::StoreError::StaleStoreRevision
-        ))
-    ));
-    assert!(!root.path().join(ticket_path).exists());
+    provider
+        .apply_record(record)
+        .expect("unrelated record does not invalidate preview");
+    assert!(root.path().join(ticket_path).exists());
 
     let root = fixture();
     let provider = Provider::without_cache(Store::open(root.path()).expect("store"));
@@ -756,15 +729,11 @@ fn every_provider_apply_family_refuses_a_stale_store_without_target_mutation() {
         .bootstrap_progress(INVESTIGATION)
         .expect("progress preview");
     fs::write(root.path().join("unrelated-progress.txt"), "changed").expect("external change");
-    assert!(matches!(
-        provider.apply_progress(progress),
-        Err(ProviderError::Store(
-            casefile_store::StoreError::StaleStoreRevision
-        ))
-    ));
+    provider
+        .apply_progress(progress)
+        .expect("unrelated progress does not invalidate preview");
     assert!(
-        !root
-            .path()
+        root.path()
             .join(INVESTIGATION)
             .join("progress/log.toml")
             .exists()
@@ -776,15 +745,11 @@ fn every_provider_apply_family_refuses_a_stale_store_without_target_mutation() {
         .preview_default_delivery_board(INVESTIGATION)
         .expect("board preview");
     fs::write(root.path().join("unrelated-board.txt"), "changed").expect("external change");
-    assert!(matches!(
-        provider.apply_default_delivery_board(board),
-        Err(ProviderError::Store(
-            casefile_store::StoreError::StaleStoreRevision
-        ))
-    ));
+    provider
+        .apply_default_delivery_board(board)
+        .expect("unrelated board does not invalidate preview");
     assert!(
-        !root
-            .path()
+        root.path()
             .join(INVESTIGATION)
             .join("boards/delivery.toml")
             .exists()

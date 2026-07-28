@@ -97,11 +97,7 @@ impl ApiError {
         }
     }
     fn store(error: casefile_store::StoreError) -> Self {
-        let stale = matches!(
-            error,
-            casefile_store::StoreError::StaleStoreRevision
-                | casefile_store::StoreError::StaleTargetRevision
-        );
+        let stale = matches!(error, casefile_store::StoreError::StaleTargetRevision);
         Self {
             status: if stale { 409 } else { 400 },
             message: error.to_string(),

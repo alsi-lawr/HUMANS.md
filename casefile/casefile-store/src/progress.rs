@@ -36,8 +36,6 @@ pub struct ProgressPreview {
     pub request: ProgressChangeRequest,
     pub path: String,
     pub expected_target_revision: Option<Revision>,
-    pub expected_store_revision: Revision,
-    pub proposed_store_revision: Revision,
     pub diagnostics: Vec<Diagnostic>,
     pub diff: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -94,7 +92,6 @@ pub(super) fn preview(
             return Ok(rejected(
                 request,
                 path,
-                before.snapshot.revision,
                 Diagnostic::new(
                     "progress/log.toml",
                     "invalid_progress_request",
@@ -105,7 +102,7 @@ pub(super) fn preview(
         if let Some(existing) = existing {
             // Bootstrap marks a previously absent scope as adopted.  It never normalises or
             // replaces an existing log: parsing still proves that the record is valid, but the
-            // original bytes and both revisions remain the preview/apply result.
+            // original bytes and target revision remain the preview/apply result.
             let _ = parse_progress_log(
                 &path,
                 std::str::from_utf8(&existing.original_bytes)
@@ -117,8 +114,6 @@ pub(super) fn preview(
                 request,
                 path,
                 expected_target_revision: Some(existing.content_revision.clone()),
-                expected_store_revision: before.snapshot.revision.clone(),
-                proposed_store_revision: before.snapshot.revision,
                 no_op: diagnostics.is_empty(),
                 diagnostics,
                 diff: String::new(),
@@ -134,7 +129,6 @@ pub(super) fn preview(
             return Ok(rejected(
                 request,
                 path,
-                before.snapshot.revision,
                 Diagnostic::new(
                     "progress/log.toml",
                     "invalid_progress_request",
@@ -159,7 +153,6 @@ pub(super) fn preview(
                 return Ok(rejected(
                     request,
                     path,
-                    before.snapshot.revision,
                     Diagnostic::new(
                         "progress/log.toml",
                         "invalid_progress_operation_id",
@@ -172,7 +165,6 @@ pub(super) fn preview(
                     return Ok(rejected(
                         request,
                         path,
-                        before.snapshot.revision,
                         Diagnostic::new(
                             "progress/log.toml",
                             "conflicting_progress_operation_id",
@@ -187,12 +179,7 @@ pub(super) fn preview(
         ProgressLog { entries }
     };
     if let Err(diagnostic) = validate_progress_log(&path, &proposed_log) {
-        return Ok(rejected(
-            request,
-            path,
-            before.snapshot.revision,
-            diagnostic,
-        ));
+        return Ok(rejected(request, path, diagnostic));
     }
     let bytes = render_progress_log(&proposed_log).into_bytes();
     let same = existing.is_some_and(|entry| entry.original_bytes == bytes);
@@ -210,8 +197,6 @@ pub(super) fn preview(
             request,
             path,
             expected_target_revision: existing.map(|entry| entry.content_revision.clone()),
-            expected_store_revision: before.snapshot.revision.clone(),
-            proposed_store_revision: proposed.snapshot.revision,
             diagnostics,
             diff: String::new(),
             proposed_bytes: Some(bytes),
@@ -233,8 +218,6 @@ pub(super) fn preview(
         request,
         path,
         expected_target_revision: existing.map(|entry| entry.content_revision.clone()),
-        expected_store_revision: before.snapshot.revision,
-        proposed_store_revision: proposed.snapshot.revision,
         diagnostics,
         diff,
         proposed_bytes: Some(bytes),
@@ -265,10 +248,9 @@ pub(super) fn apply(
         .entries
         .iter()
         .find(|entry| entry.path == path);
-    let stale_store = current.snapshot.revision != preview.expected_store_revision;
     let stale_target = current_entry.map(|entry| &entry.content_revision)
         != preview.expected_target_revision.as_ref();
-    if stale_store || stale_target {
+    if stale_target {
         if completed_no_op(&preview.request, current_entry)? {
             return Ok(ProgressApplyResult {
                 path,
@@ -279,11 +261,7 @@ pub(super) fn apply(
                 no_op: true,
             });
         }
-        return Err(if stale_store {
-            StoreError::StaleStoreRevision
-        } else {
-            StoreError::StaleTargetRevision
-        });
+        return Err(StoreError::StaleTargetRevision);
     }
     if preview.no_op {
         return Ok(ProgressApplyResult {
@@ -467,15 +445,12 @@ fn scoped_diagnostics(diagnostics: &[Diagnostic], prefix: &str) -> Vec<Diagnosti
 fn rejected(
     request: ProgressChangeRequest,
     path: String,
-    revision: Revision,
     diagnostic: Diagnostic,
 ) -> ProgressPreview {
     ProgressPreview {
         request,
         path,
         expected_target_revision: None,
-        expected_store_revision: revision.clone(),
-        proposed_store_revision: revision,
         diagnostics: vec![diagnostic],
         diff: String::new(),
         proposed_bytes: None,

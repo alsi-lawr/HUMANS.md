@@ -56,15 +56,15 @@ immutable preview in the current task's `.agent-workspace/<session-id>/` directo
 planning root. Show the exact target, diff, and diagnostics, then wait for an explicit apply
 decision. Apply only that saved preview unchanged with `casefile_apply_default_delivery_board`. An
 exact existing `boards/delivery.toml` is a content no-op; a differing file, symlink, non-file
-collision, stale revision, invalid activation, missing mapping, or ambiguous mapping is preserved
-and visibly refused.
+collision, stale target revision, invalid activation, missing mapping, or ambiguous mapping is
+preserved and visibly refused.
 
 The canonical identity combines the configured project prefix and mapped investigation directory
 name. Before preview and apply, preflight every activated mapping and refuse if that identity does
 not map to exactly one investigation. The generic preview may preserve unchanged diagnostics from
 its exact pre-write Store baseline, which remain visible in canonical scan, check, and query output;
-it still refuses every diagnostic introduced or changed by this board request. Apply remains pinned
-to the complete saved Store revision.
+it still refuses every diagnostic introduced or changed by this board request. Apply guards the
+saved board target revision and does not reject unrelated Store changes.
 
 This step creates or confirms only the explicit delivery board. It does not read or mutate the
 progress log or tickets. Keep progress and board previews/applies sequential and independent; do not

@@ -31,7 +31,7 @@ preview/apply operation. Existing investigations receive it only through an expl
 same project with distinct final directory names do not repeat a board identity. Provisioning
 preflights every activated mapping before preview and apply and refuses when that identity does not
 map to exactly one investigation. The canonical preview blocks only diagnostics introduced or
-changed by this proposed record; unchanged pre-write diagnostics remain visible and the whole-Store
-revision pins that exact baseline through apply. The progress log remains independently created or
-repaired through the provider progress operation or the distinct CLI recovery adapter; neither
-record implies or mutates the other.
+changed by this proposed record; unchanged pre-write diagnostics remain visible. Apply guards only
+the board target revision, so unrelated Store changes do not invalidate the preview. The progress
+log remains independently created or repaired through the provider progress operation or the
+distinct CLI recovery adapter; neither record implies or mutates the other.

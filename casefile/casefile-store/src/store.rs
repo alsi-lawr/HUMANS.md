@@ -19,8 +19,6 @@ pub enum StoreError {
     Io(#[from] std::io::Error),
     #[error("operation is invalid: {0}")]
     Invalid(String),
-    #[error("stale store revision")]
-    StaleStoreRevision,
     #[error("stale target revision")]
     StaleTargetRevision,
 }

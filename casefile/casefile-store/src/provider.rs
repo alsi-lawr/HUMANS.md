@@ -272,8 +272,6 @@ pub enum ProviderError {
     ReadOnly(String),
     #[error("provider preview is unknown, expired, or was altered")]
     PreviewIntegrity,
-    #[error("provider baseline changed while preview was being produced")]
-    ConcurrentBaseline,
     #[error("default delivery-board mapping is invalid: {0}")]
     DefaultBoardMapping(String),
     #[error("unsupported provider protocol version {requested}; supported version is {supported}")]
@@ -410,11 +408,8 @@ impl<C: ProviderCache> Provider<C> {
     }
 
     pub fn preview_record(&self, request: ChangeRequest) -> Result<ProviderPreview, ProviderError> {
-        let baseline = self.require_mutation()?;
+        self.require_mutation()?;
         let canonical = self.store.preview(request)?;
-        if canonical.expected_store_revision != baseline.snapshot.revision {
-            return Err(ProviderError::ConcurrentBaseline);
-        }
         let rendered_bytes = canonical
             .request
             .rendered()
@@ -450,12 +445,12 @@ impl<C: ProviderCache> Provider<C> {
         let result = if preview.no_op {
             let current = self.store.preview(preview.canonical.request.clone())?;
             if current != preview.canonical {
-                return Err(StoreError::StaleStoreRevision.into());
+                return Err(StoreError::StaleTargetRevision.into());
             }
             ApplyResult {
                 path: current.request.path().into(),
                 resulting_target_revision: current.expected_target_revision,
-                resulting_store_revision: current.expected_store_revision,
+                resulting_store_revision: self.store.scan()?.snapshot.revision,
                 diff: String::new(),
             }
         } else {
@@ -480,7 +475,7 @@ impl<C: ProviderCache> Provider<C> {
         &self,
         operation: ProgressOperation,
     ) -> Result<ProviderProgressPreview, ProviderError> {
-        let baseline = self.require_mutation()?;
+        self.require_mutation()?;
         let request = match &operation {
             ProgressOperation::Bootstrap { investigation } => {
                 self.store.bootstrap_progress(investigation)?
@@ -497,9 +492,6 @@ impl<C: ProviderCache> Provider<C> {
             },
         };
         let canonical = self.store.preview_progress(request)?;
-        if canonical.expected_store_revision != baseline.snapshot.revision {
-            return Err(ProviderError::ConcurrentBaseline);
-        }
         let preview_id = self.remember(StoredPreview::Progress(
             operation.clone(),
             canonical.clone(),
@@ -562,15 +554,10 @@ impl<C: ProviderCache> Provider<C> {
             Preview {
                 request,
                 expected_target_revision: existing.map(|entry| entry.content_revision.clone()),
-                expected_store_revision: scan.snapshot.revision.clone(),
-                proposed_store_revision: scan.snapshot.revision.clone(),
                 diagnostics: scoped_diagnostics,
                 diff: String::new(),
             }
         };
-        if canonical.expected_store_revision != scan.snapshot.revision {
-            return Err(ProviderError::ConcurrentBaseline);
-        }
         if existing.is_some() && !canonical.diff.is_empty() && canonical.diagnostics.is_empty() {
             canonical.diagnostics.push(Diagnostic::new(
                 &path,
@@ -624,12 +611,12 @@ impl<C: ProviderCache> Provider<C> {
         let result = if preview.no_op {
             let current = self.store.preview(preview.canonical.request.clone())?;
             if current != preview.canonical {
-                return Err(StoreError::StaleStoreRevision.into());
+                return Err(StoreError::StaleTargetRevision.into());
             }
             ApplyResult {
                 path: current.request.path().into(),
                 resulting_target_revision: current.expected_target_revision,
-                resulting_store_revision: current.expected_store_revision,
+                resulting_store_revision: self.store.scan()?.snapshot.revision,
                 diff: String::new(),
             }
         } else {
@@ -645,11 +632,8 @@ impl<C: ProviderCache> Provider<C> {
         &self,
         request: StrategyTransitionRequest,
     ) -> Result<ProviderStrategyTransitionPreview, ProviderError> {
-        let baseline = self.require_mutation()?;
+        self.require_mutation()?;
         let canonical = self.store.preview_strategy_transition(request)?;
-        if canonical.expected_store_revision != baseline.snapshot.revision {
-            return Err(ProviderError::ConcurrentBaseline);
-        }
         let preview_id = self.remember(StoredPreview::StrategyTransition(canonical.clone()));
         Ok(ProviderStrategyTransitionPreview {
             preview_id,
@@ -674,11 +658,8 @@ impl<C: ProviderCache> Provider<C> {
         &self,
         request: WriterBindingRequest,
     ) -> Result<ProviderWriterBindingPreview, ProviderError> {
-        let baseline = self.require_mutation()?;
+        self.require_mutation()?;
         let canonical = self.store.preview_writer_binding(request)?;
-        if canonical.expected_store_revision != baseline.snapshot.revision {
-            return Err(ProviderError::ConcurrentBaseline);
-        }
         let preview_id = self.remember(StoredPreview::WriterBinding(canonical.clone()));
         Ok(ProviderWriterBindingPreview {
             preview_id,

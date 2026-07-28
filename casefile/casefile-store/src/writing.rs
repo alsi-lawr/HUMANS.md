@@ -4,7 +4,7 @@ use crate::{
     scanning::scan,
     store::StoreError,
 };
-use casefile_core::{ApplyResult, ChangeRequest, Diagnostic, Kind, Preview, Revision, stable};
+use casefile_core::{ApplyResult, ChangeRequest, Diagnostic, Kind, Preview, stable};
 use std::{collections::BTreeMap, ffi::OsStr, fs, io::Write, path::Path, process::Command};
 use tempfile::NamedTempFile;
 
@@ -20,7 +20,7 @@ pub(super) fn preview(root: &Path, request: ChangeRequest) -> Result<Preview, St
     let proposed_bytes = match request.rendered() {
         Some(Ok(bytes)) => bytes,
         Some(Err(diagnostic)) => {
-            return Ok(rejected(request, before.snapshot.revision, diagnostic));
+            return Ok(rejected(request, diagnostic));
         }
         None => Vec::new(),
     };
@@ -34,7 +34,6 @@ pub(super) fn preview(root: &Path, request: ChangeRequest) -> Result<Preview, St
     if !writable.is_some_and(Kind::is_writable) || path_kind != writable {
         return Ok(rejected(
             request,
-            before.snapshot.revision,
             Diagnostic::new(
                 &path,
                 "read_only_or_wrong_path",
@@ -46,14 +45,12 @@ pub(super) fn preview(root: &Path, request: ChangeRequest) -> Result<Preview, St
         ChangeRequest::Create { .. } if existing.is_some() => {
             return Ok(rejected(
                 request,
-                before.snapshot.revision,
                 Diagnostic::new(&path, "target_exists", "create requires an absent target"),
             ));
         }
         ChangeRequest::Replace { .. } if existing.is_none() => {
             return Ok(rejected(
                 request,
-                before.snapshot.revision,
                 Diagnostic::new(
                     &path,
                     "target_missing",
@@ -64,7 +61,6 @@ pub(super) fn preview(root: &Path, request: ChangeRequest) -> Result<Preview, St
         ChangeRequest::Delete { .. } if existing.is_none() => {
             return Ok(rejected(
                 request,
-                before.snapshot.revision,
                 Diagnostic::new(
                     &path,
                     "target_missing",
@@ -98,8 +94,6 @@ pub(super) fn preview(root: &Path, request: ChangeRequest) -> Result<Preview, St
     Ok(Preview {
         request,
         expected_target_revision: existing.map(|entry| entry.content_revision.clone()),
-        expected_store_revision: before.snapshot.revision,
-        proposed_store_revision: proposed.snapshot.revision,
         diagnostics: stable(diagnostics),
         diff,
     })
@@ -152,9 +146,6 @@ pub(super) fn apply(root: &Path, preview: Preview) -> Result<ApplyResult, StoreE
         ));
     }
     let current = scan(root, &BTreeMap::new())?;
-    if current.snapshot.revision != preview.expected_store_revision {
-        return Err(StoreError::StaleStoreRevision);
-    }
     let path = checked_path(preview.request.path())?;
     let current_entry = current
         .snapshot
@@ -207,12 +198,10 @@ pub(super) fn apply(root: &Path, preview: Preview) -> Result<ApplyResult, StoreE
         diff: preview.diff,
     })
 }
-fn rejected(request: ChangeRequest, revision: Revision, diagnostic: Diagnostic) -> Preview {
+fn rejected(request: ChangeRequest, diagnostic: Diagnostic) -> Preview {
     Preview {
         request,
         expected_target_revision: None,
-        expected_store_revision: revision.clone(),
-        proposed_store_revision: revision,
         diagnostics: vec![diagnostic],
         diff: String::new(),
     }

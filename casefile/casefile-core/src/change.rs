@@ -31,8 +31,6 @@ impl ChangeRequest {
 pub struct Preview {
     pub request: ChangeRequest,
     pub expected_target_revision: Option<Revision>,
-    pub expected_store_revision: Revision,
-    pub proposed_store_revision: Revision,
     pub diagnostics: Vec<Diagnostic>,
     pub diff: String,
 }

@@ -345,7 +345,6 @@ fn bootstrap_creates_only_an_absent_empty_log_and_existing_valid_log_is_byte_pre
     assert!(existing.no_op);
     assert!(existing.diff.is_empty());
     assert!(existing.bootstrap_ticket_ids.is_empty());
-    assert_eq!(existing.expected_store_revision, before);
     let applied = store
         .apply_progress(existing)
         .expect("existing bootstrap apply");
@@ -465,10 +464,8 @@ fn progress_apply_refuses_unsafe_paths_without_replacing_existing_bytes() {
     fs::write(&outside, "outside bytes\n").expect("outside bytes");
     symlink(&outside, progress.join("log.toml")).expect("unsafe link");
 
-    // This models a caller that refreshes its revision after detecting an out-of-band path change:
-    // the Store must still reject the unsafe target at the single atomic writer boundary.
+    // The Store must reject the unsafe target at the single atomic writer boundary.
     let current = store.scan().expect("updated scan").snapshot;
-    preview.expected_store_revision = current.revision;
     preview.expected_target_revision = current
         .entries
         .iter()
