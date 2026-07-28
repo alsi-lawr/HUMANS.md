@@ -9,7 +9,7 @@ use casefile_store::{
 use serde::{Serialize, de::DeserializeOwned};
 use serde_json::{Value, json};
 use std::{
-    collections::BTreeSet,
+    collections::{BTreeMap, BTreeSet, VecDeque},
     fs,
     io::{self, BufRead, Write},
     path::{Path, PathBuf},
@@ -20,6 +20,7 @@ use std::{
 const MCP_PROTOCOL_VERSIONS: &[&str] = &["2024-11-05", "2025-03-26", "2025-06-18", "2025-11-25"];
 const MAX_MESSAGE_BYTES: usize = 8 * 1024 * 1024;
 const TOOL_WORKERS: usize = 16;
+const PREVIEW_LIMIT: usize = 256;
 const REQUIRED_PROVIDER_OPERATIONS: &[&str] = &[
     "snapshot",
     "query_tickets",
@@ -221,11 +222,33 @@ struct Session {
 struct ToolService {
     provider: Arc<Provider>,
     access: Arc<RwLock<()>>,
+    previews: Arc<Mutex<PreviewVault>>,
 }
 
 struct QueuedToolCall {
     request_id: Value,
     params: Option<Value>,
+}
+
+#[derive(Clone)]
+enum StoredPreview {
+    Record(ProviderPreview),
+    Progress(ProviderProgressPreview),
+    Board(DefaultBoardPreview),
+    StrategyTransition(ProviderStrategyTransitionPreview),
+    WriterBinding(ProviderWriterBindingPreview),
+}
+
+#[derive(Clone)]
+struct PreviewEntry {
+    public: Value,
+    internal: StoredPreview,
+}
+
+#[derive(Default)]
+struct PreviewVault {
+    order: VecDeque<String>,
+    values: BTreeMap<String, PreviewEntry>,
 }
 
 impl Session {
@@ -234,6 +257,7 @@ impl Session {
             tools: ToolService {
                 provider: Arc::new(provider),
                 access: Arc::new(RwLock::new(())),
+                previews: Arc::new(Mutex::new(PreviewVault::default())),
             },
             initialized: false,
         }
@@ -424,104 +448,172 @@ impl ToolService {
                 struct Arguments {
                     request: ChangeRequest,
                 }
-                serialize(
+                self.publish_preview(StoredPreview::Record(
                     self.provider
                         .preview_record(parse::<Arguments>(arguments)?.request)?,
-                )
+                ))
             }
             "casefile_apply_record" => {
                 #[derive(serde::Deserialize)]
                 struct Arguments {
-                    preview: ProviderPreview,
+                    preview: Value,
                 }
-                serialize(
-                    self.provider
-                        .apply_record(parse::<Arguments>(arguments)?.preview)?,
-                )
+                let preview = match self.approved_preview(parse::<Arguments>(arguments)?.preview)? {
+                    StoredPreview::Record(preview) => preview,
+                    _ => bail!("preview was produced by a different Casefile tool"),
+                };
+                serialize(self.provider.apply_record(preview)?)
             }
             "casefile_preview_progress" => {
                 #[derive(serde::Deserialize)]
                 struct Arguments {
                     operation: ProgressOperation,
                 }
-                serialize(
+                self.publish_preview(StoredPreview::Progress(
                     self.provider
                         .preview_progress(parse::<Arguments>(arguments)?.operation)?,
-                )
+                ))
             }
             "casefile_apply_progress" => {
                 #[derive(serde::Deserialize)]
                 struct Arguments {
-                    preview: ProviderProgressPreview,
+                    preview: Value,
                 }
-                serialize(
-                    self.provider
-                        .apply_progress(parse::<Arguments>(arguments)?.preview)?,
-                )
+                let preview = match self.approved_preview(parse::<Arguments>(arguments)?.preview)? {
+                    StoredPreview::Progress(preview) => preview,
+                    _ => bail!("preview was produced by a different Casefile tool"),
+                };
+                serialize(self.provider.apply_progress(preview)?)
             }
             "casefile_preview_default_delivery_board" => {
                 #[derive(serde::Deserialize)]
                 struct Arguments {
                     investigation: String,
                 }
-                serialize(
+                self.publish_preview(StoredPreview::Board(
                     self.provider.preview_default_delivery_board(
                         parse::<Arguments>(arguments)?.investigation,
                     )?,
-                )
+                ))
             }
             "casefile_apply_default_delivery_board" => {
                 #[derive(serde::Deserialize)]
                 struct Arguments {
-                    preview: DefaultBoardPreview,
+                    preview: Value,
                 }
-                serialize(
-                    self.provider
-                        .apply_default_delivery_board(parse::<Arguments>(arguments)?.preview)?,
-                )
+                let preview = match self.approved_preview(parse::<Arguments>(arguments)?.preview)? {
+                    StoredPreview::Board(preview) => preview,
+                    _ => bail!("preview was produced by a different Casefile tool"),
+                };
+                serialize(self.provider.apply_default_delivery_board(preview)?)
             }
             "casefile_preview_strategy_transition" => {
                 #[derive(serde::Deserialize)]
                 struct Arguments {
                     request: StrategyTransitionRequest,
                 }
-                serialize(
+                self.publish_preview(StoredPreview::StrategyTransition(
                     self.provider
                         .preview_strategy_transition(parse::<Arguments>(arguments)?.request)?,
-                )
+                ))
             }
             "casefile_apply_strategy_transition" => {
                 #[derive(serde::Deserialize)]
                 struct Arguments {
-                    preview: ProviderStrategyTransitionPreview,
+                    preview: Value,
                 }
-                serialize(
-                    self.provider
-                        .apply_strategy_transition(parse::<Arguments>(arguments)?.preview)?,
-                )
+                let preview = match self.approved_preview(parse::<Arguments>(arguments)?.preview)? {
+                    StoredPreview::StrategyTransition(preview) => preview,
+                    _ => bail!("preview was produced by a different Casefile tool"),
+                };
+                serialize(self.provider.apply_strategy_transition(preview)?)
             }
             "casefile_preview_writer_binding" => {
                 #[derive(serde::Deserialize)]
                 struct Arguments {
                     request: WriterBindingRequest,
                 }
-                serialize(
+                self.publish_preview(StoredPreview::WriterBinding(
                     self.provider
                         .preview_writer_binding(parse::<Arguments>(arguments)?.request)?,
-                )
+                ))
             }
             "casefile_apply_writer_binding" => {
                 #[derive(serde::Deserialize)]
                 struct Arguments {
-                    preview: ProviderWriterBindingPreview,
+                    preview: Value,
                 }
-                serialize(
-                    self.provider
-                        .apply_writer_binding(parse::<Arguments>(arguments)?.preview)?,
-                )
+                let preview = match self.approved_preview(parse::<Arguments>(arguments)?.preview)? {
+                    StoredPreview::WriterBinding(preview) => preview,
+                    _ => bail!("preview was produced by a different Casefile tool"),
+                };
+                serialize(self.provider.apply_writer_binding(preview)?)
             }
             _ => bail!("unknown Casefile tool {name}"),
         }
+    }
+
+    fn publish_preview(&self, internal: StoredPreview) -> Result<Value> {
+        let mut public = match &internal {
+            StoredPreview::Record(preview) => serialize(preview)?,
+            StoredPreview::Progress(preview) => serialize(preview)?,
+            StoredPreview::Board(preview) => serialize(preview)?,
+            StoredPreview::StrategyTransition(preview) => serialize(preview)?,
+            StoredPreview::WriterBinding(preview) => serialize(preview)?,
+        };
+        remove_internal_bytes(&mut public);
+        let preview_id = public
+            .get("preview_id")
+            .and_then(Value::as_str)
+            .context("provider preview is missing preview_id")?
+            .to_owned();
+        let mut vault = self.previews.lock().expect("MCP preview vault");
+        vault.order.push_back(preview_id.clone());
+        vault.values.insert(
+            preview_id,
+            PreviewEntry {
+                public: public.clone(),
+                internal,
+            },
+        );
+        while vault.order.len() > PREVIEW_LIMIT {
+            if let Some(expired) = vault.order.pop_front() {
+                vault.values.remove(&expired);
+            }
+        }
+        Ok(public)
+    }
+
+    fn approved_preview(&self, public: Value) -> Result<StoredPreview> {
+        let preview_id = public
+            .get("preview_id")
+            .and_then(Value::as_str)
+            .context("preview must contain preview_id")?;
+        let vault = self.previews.lock().expect("MCP preview vault");
+        let entry = vault
+            .values
+            .get(preview_id)
+            .filter(|entry| entry.public == public)
+            .context("provider preview is unknown, expired, or was altered")?;
+        Ok(entry.internal.clone())
+    }
+}
+
+fn remove_internal_bytes(value: &mut Value) {
+    match value {
+        Value::Array(items) => {
+            for item in items {
+                remove_internal_bytes(item);
+            }
+        }
+        Value::Object(object) => {
+            object.remove("rendered_bytes");
+            object.remove("proposed_bytes");
+            for item in object.values_mut() {
+                remove_internal_bytes(item);
+            }
+        }
+        _ => {}
     }
 }
 

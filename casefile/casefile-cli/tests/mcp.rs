@@ -376,6 +376,13 @@ fn provider_preview_and_apply_remain_one_session_exact_operations() {
         "{preview_response}"
     );
     let preview = preview_response["result"]["structuredContent"].clone();
+    assert!(preview["canonical"].get("proposed_bytes").is_none());
+    assert!(
+        !preview_response["result"]["content"][0]["text"]
+            .as_str()
+            .expect("preview text")
+            .contains("proposed_bytes")
+    );
     let apply_request = json!({
         "jsonrpc":"2.0","id":3,"method":"tools/call","params":{
             "name":"casefile_apply_progress","arguments":{"preview":preview}
