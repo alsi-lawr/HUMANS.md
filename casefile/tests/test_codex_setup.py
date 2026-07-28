@@ -209,9 +209,26 @@ class CodexSetupTests(unittest.TestCase):
 
                 config = home / "config.toml"
                 config.write_bytes(config.read_bytes().replace(b"pragmatic", b"friendly"))
+                marketplace = (
+                    b"\n[marketplaces.humans-md]\n"
+                    b'source = "https://github.com/alsi-lawr/humans-md-marketplace.git"\n'
+                    b'ref = "v0.4.0"\n'
+                )
+                config.write_bytes(
+                    config.read_bytes().replace(setup.TABLE_END, marketplace + setup.TABLE_END)
+                )
                 receipt_path, receipt = setup.receipt(home, None)
                 setup.uninstall(home, "codex", receipt_path, receipt)
-                self.assertEqual(original.replace(b"pragmatic", b"friendly"), config.read_bytes())
+                self.assertEqual(
+                    original.replace(b"pragmatic", b"friendly") + marketplace.lstrip(b"\n"),
+                    config.read_bytes(),
+                )
+                self.assertEqual(
+                    "v0.4.0",
+                    tomllib.loads(config.read_text(encoding="ascii"))["marketplaces"]["humans-md"][
+                        "ref"
+                    ],
+                )
                 self.assertTrue(legacy.is_dir())
                 self.assertFalse(setup.pointer(home).exists())
                 self.assertFalse(fake.installed)

@@ -373,7 +373,6 @@ def unowned_config(data: bytes) -> bytes:
     ranges = []
     for name, begin, end, required in (
         ("scalars", SCALAR_BEGIN, SCALAR_END, True),
-        ("tables", TABLE_BEGIN, TABLE_END, True),
         ("feature keys", FEATURE_BEGIN, FEATURE_END, False),
         ("agent keys", AGENT_BEGIN, AGENT_END, False),
     ):
@@ -391,9 +390,36 @@ def unowned_config(data: bytes) -> bytes:
     result = data
     for start, stop in reversed(ranges):
         result = result[:start] + result[stop:]
+    if result.count(TABLE_BEGIN) != 1 or result.count(TABLE_END) != 1:
+        raise SetupError("managed config block is missing or duplicated: tables")
+    result = remove_owned_tables(result)
     if result:
         tomllib.loads(result.decode("utf-8"))
     return result
+
+
+def remove_owned_tables(data: bytes) -> bytes:
+    output = []
+    owned = False
+    for line in data.splitlines(keepends=True):
+        stripped = line.strip()
+        if stripped == TABLE_BEGIN.strip():
+            if output and not output[-1].strip():
+                output.pop()
+            continue
+        if stripped == TABLE_END.strip():
+            continue
+        match = re.fullmatch(rb"\s*\[\[?([^\]\r\n]+)\]\]?\s*(?:#.*)?\r?\n?", line)
+        if match:
+            name = match.group(1).decode("utf-8")
+            owned = (
+                name == "mcp_servers.casefile"
+                or name.startswith("mcp_servers.casefile.")
+                or name.startswith("agents.casefile-")
+            )
+        if not owned:
+            output.append(line)
+    return b"".join(output)
 
 
 def verify_config(
