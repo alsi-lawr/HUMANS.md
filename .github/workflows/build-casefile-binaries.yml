@@ -107,7 +107,7 @@ jobs:
         run: |
           mkdir -p 'matrix/${{ matrix.target }}'
           cp 'casefile/target/${{ matrix.target }}/release/${{ matrix.binary }}' 'matrix/${{ matrix.target }}/${{ matrix.binary }}'
-          python scripts/smoke-casefile-mcp.py --executable 'matrix/${{ matrix.target }}/${{ matrix.binary }}' --version 0.4.1 | tee 'matrix/${{ matrix.target }}/smoke.json'
+          python scripts/smoke-casefile-mcp.py --executable 'matrix/${{ matrix.target }}/${{ matrix.binary }}' --version 0.4.2 | tee 'matrix/${{ matrix.target }}/smoke.json'
       - uses: actions/upload-artifact@v7
         with:
           name: casefile-${{ needs.source.outputs.source_commit }}-${{ matrix.target }}
@@ -149,8 +149,8 @@ jobs:
             mkdir -p native-smoke
             cp "matrix-input/casefile-$SOURCE_COMMIT-$target/smoke.json" "native-smoke/$target.json"
           done
-          python scripts/casefile_artifacts.py assemble --input-root inputs --artifact-root casefile-runtime --version 0.4.1 --source-commit "$SOURCE_COMMIT"
-          python scripts/casefile_artifacts.py verify --artifact-root casefile-runtime --version 0.4.1 --source-commit "$SOURCE_COMMIT"
+          python scripts/casefile_artifacts.py assemble --input-root inputs --artifact-root casefile-runtime --version 0.4.2 --source-commit "$SOURCE_COMMIT"
+          python scripts/casefile_artifacts.py verify --artifact-root casefile-runtime --version 0.4.2 --source-commit "$SOURCE_COMMIT"
           sha256sum casefile-runtime/artifacts.json | tee casefile-runtime-manifest.sha256
           python - <<'PY'
           import json, os, pathlib
