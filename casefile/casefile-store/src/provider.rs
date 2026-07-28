@@ -5,8 +5,9 @@ use crate::{
     StrategyTransitionRequest, WriterBindingPreview, WriterBindingRequest,
 };
 use casefile_core::{
-    ApplyResult, BoardColumn, BoardDraft, BoardStatusSource, ChangeRequest, Diagnostic, Kind,
-    Preview, ProgressEntry, RecordDraft, RecordSummary, Revision, StrategyTransitionRecord,
+    ApplyResult, BoardColumn, BoardDraft, BoardStatusSource, ChangeBatchApplyResult,
+    ChangeBatchPreview, ChangeRequest, Diagnostic, Kind, Preview, ProgressEntry, RecordDraft,
+    RecordSummary, Revision, StrategyTransitionRecord,
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -203,6 +204,15 @@ pub struct ProviderPreview {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct ProviderBatchPreview {
+    pub preview_id: String,
+    pub rendered_bytes: Vec<Option<Vec<u8>>>,
+    #[serde(flatten)]
+    pub canonical: ChangeBatchPreview,
+    pub no_op: bool,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "operation", rename_all = "snake_case")]
 pub enum ProgressOperation {
     Bootstrap {
@@ -259,6 +269,13 @@ pub struct ProviderRecordApplyResult {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct ProviderRecordBatchApplyResult {
+    #[serde(flatten)]
+    pub result: ChangeBatchApplyResult,
+    pub no_op: bool,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct ProviderApplyOutcome<T> {
     pub result: T,
     pub cache: CacheState,
@@ -281,6 +298,7 @@ pub enum ProviderError {
 #[derive(Clone, Debug, Eq, PartialEq)]
 enum StoredPreview {
     Record(Preview, Option<Vec<u8>>, bool),
+    RecordBatch(ChangeBatchPreview, Vec<Option<Vec<u8>>>, bool),
     Progress(ProgressOperation, ProgressPreview),
     Board(String, Preview, Vec<u8>, bool),
     StrategyTransition(StrategyTransitionPreview),
@@ -457,6 +475,72 @@ impl<C: ProviderCache> Provider<C> {
             self.store.apply(preview.canonical)?
         };
         self.outcome(ProviderRecordApplyResult {
+            result,
+            no_op: preview.no_op,
+        })
+    }
+
+    pub fn preview_record_batch(
+        &self,
+        requests: Vec<ChangeRequest>,
+    ) -> Result<ProviderBatchPreview, ProviderError> {
+        self.require_mutation()?;
+        let canonical = self.store.preview_batch(requests)?;
+        let rendered_bytes = canonical
+            .requests
+            .iter()
+            .map(ChangeRequest::rendered)
+            .map(Option::transpose)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|diagnostic| StoreError::Invalid(diagnostic.message))?;
+        let no_op = canonical.diff.is_empty() && canonical.diagnostics.is_empty();
+        let preview_id = self.remember(StoredPreview::RecordBatch(
+            canonical.clone(),
+            rendered_bytes.clone(),
+            no_op,
+        ));
+        Ok(ProviderBatchPreview {
+            preview_id,
+            rendered_bytes,
+            canonical,
+            no_op,
+        })
+    }
+
+    pub fn apply_record_batch(
+        &self,
+        preview: ProviderBatchPreview,
+    ) -> Result<ProviderApplyOutcome<ProviderRecordBatchApplyResult>, ProviderError> {
+        self.require_mutation()?;
+        self.verify(
+            &preview.preview_id,
+            &StoredPreview::RecordBatch(
+                preview.canonical.clone(),
+                preview.rendered_bytes,
+                preview.no_op,
+            ),
+        )?;
+        let result = if preview.no_op {
+            let current = self
+                .store
+                .preview_batch(preview.canonical.requests.clone())?;
+            if current != preview.canonical {
+                return Err(StoreError::StaleTargetRevision.into());
+            }
+            ChangeBatchApplyResult {
+                paths: current
+                    .requests
+                    .iter()
+                    .map(|request| request.path().to_owned())
+                    .collect(),
+                resulting_target_revisions: current.expected_target_revisions,
+                resulting_store_revision: self.store.scan()?.snapshot.revision,
+                diff: String::new(),
+            }
+        } else {
+            self.store.apply_batch(preview.canonical)?
+        };
+        self.outcome(ProviderRecordBatchApplyResult {
             result,
             no_op: preview.no_op,
         })

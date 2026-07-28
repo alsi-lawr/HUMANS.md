@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 use crate::{diagnostic::Diagnostic, record::RecordDraft, snapshot::Revision};
 
@@ -39,6 +40,22 @@ pub struct Preview {
 pub struct ApplyResult {
     pub path: String,
     pub resulting_target_revision: Option<Revision>,
+    pub resulting_store_revision: Revision,
+    pub diff: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct ChangeBatchPreview {
+    pub requests: Vec<ChangeRequest>,
+    pub expected_target_revisions: BTreeMap<String, Option<Revision>>,
+    pub diagnostics: Vec<Diagnostic>,
+    pub diff: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct ChangeBatchApplyResult {
+    pub paths: Vec<String>,
+    pub resulting_target_revisions: BTreeMap<String, Option<Revision>>,
     pub resulting_store_revision: Revision,
     pub diff: String,
 }

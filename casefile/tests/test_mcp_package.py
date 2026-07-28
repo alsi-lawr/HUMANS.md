@@ -6,6 +6,7 @@ import subprocess
 import struct
 import sys
 import tempfile
+import tomllib
 import unittest
 from pathlib import Path
 
@@ -16,6 +17,9 @@ TARGETS = (
     "x86_64-apple-darwin", "x86_64-pc-windows-msvc", "x86_64-unknown-linux-musl",
 )
 SOURCE = "1" * 40
+VERSION = tomllib.loads(
+    (ROOT / "casefile/packaging/plugin.toml").read_text(encoding="ascii")
+)["version"]
 
 
 def executable(target: str) -> bytes:
@@ -39,7 +43,7 @@ class McpPackageTests(unittest.TestCase):
             data = executable(target)
             path.write_bytes(data)
             rows.append({"path": path.relative_to(artifact).as_posix(), "sha256": hashlib.sha256(data).hexdigest(), "size": len(data), "target": target})
-        manifest = {"schema_version": 1, "version": "0.4.0", "source_commit": SOURCE, "artifacts": rows}
+        manifest = {"schema_version": 1, "version": VERSION, "source_commit": SOURCE, "artifacts": rows}
         (artifact / "artifacts.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="ascii")
         return artifact
 

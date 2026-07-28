@@ -9,7 +9,9 @@ use crate::{
     scanning::{ScanResult, scan},
     writing,
 };
-use casefile_core::{ApplyResult, ChangeRequest, Preview, Revision};
+use casefile_core::{
+    ApplyResult, ChangeBatchApplyResult, ChangeBatchPreview, ChangeRequest, Preview, Revision,
+};
 use std::{collections::BTreeMap, fs, path::PathBuf};
 use thiserror::Error;
 
@@ -58,6 +60,20 @@ impl Store {
 
     pub fn apply(&self, preview: Preview) -> Result<ApplyResult, StoreError> {
         writing::apply(&self.root, preview)
+    }
+
+    pub fn preview_batch(
+        &self,
+        requests: Vec<ChangeRequest>,
+    ) -> Result<ChangeBatchPreview, StoreError> {
+        writing::preview_batch(&self.root, requests)
+    }
+
+    pub fn apply_batch(
+        &self,
+        preview: ChangeBatchPreview,
+    ) -> Result<ChangeBatchApplyResult, StoreError> {
+        writing::apply_batch(&self.root, preview)
     }
 
     pub fn preview_progress(

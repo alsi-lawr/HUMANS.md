@@ -6,10 +6,14 @@ import subprocess
 import struct
 import sys
 import tempfile
+import tomllib
 import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
+VERSION = tomllib.loads(
+    (ROOT / "casefile/packaging/plugin.toml").read_text(encoding="ascii")
+)["version"]
 TARGETS = (
     "aarch64-apple-darwin", "aarch64-pc-windows-msvc", "aarch64-unknown-linux-musl",
     "x86_64-apple-darwin", "x86_64-pc-windows-msvc", "x86_64-unknown-linux-musl",
@@ -39,7 +43,7 @@ class PackageRootTests(unittest.TestCase):
                 path.parent.mkdir(parents=True, exist_ok=True)
                 data = executable(target); path.write_bytes(data)
                 rows.append({"path":path.relative_to(artifact).as_posix(),"sha256":hashlib.sha256(data).hexdigest(),"size":len(data),"target":target})
-            (artifact/"artifacts.json").write_text(json.dumps({"schema_version":1,"version":"0.4.0","source_commit":"1"*40,"artifacts":rows},indent=2,sort_keys=True)+"\n",encoding="ascii")
+            (artifact/"artifacts.json").write_text(json.dumps({"schema_version":1,"version":VERSION,"source_commit":"1"*40,"artifacts":rows},indent=2,sort_keys=True)+"\n",encoding="ascii")
             extra = ("--casefile-artifact-root", str(artifact), "--casefile-source-commit", "1" * 40)
             self.assertEqual(0, run("scripts/package-plugin.py", "build", "--all", *extra).returncode)
             self.assertEqual(0, run("scripts/package-plugin.py", "check", "--all", *extra).returncode)

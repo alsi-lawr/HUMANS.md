@@ -2,9 +2,9 @@ use anyhow::{Context, Result, bail};
 use casefile_core::ChangeRequest;
 use casefile_store::{
     ActivationState, DefaultBoardPreview, PROVIDER_PROTOCOL_VERSION, ProgressOperation, Provider,
-    ProviderCapabilities, ProviderMutationState, ProviderOperation, ProviderPreview,
-    ProviderProgressPreview, ProviderStrategyTransitionPreview, ProviderWriterBindingPreview,
-    Store, StrategyTransitionRequest, WriterBindingRequest,
+    ProviderBatchPreview, ProviderCapabilities, ProviderMutationState, ProviderOperation,
+    ProviderPreview, ProviderProgressPreview, ProviderStrategyTransitionPreview,
+    ProviderWriterBindingPreview, Store, StrategyTransitionRequest, WriterBindingRequest,
 };
 use serde::{Serialize, de::DeserializeOwned};
 use serde_json::{Value, json};
@@ -233,6 +233,7 @@ struct QueuedToolCall {
 #[derive(Clone)]
 enum StoredPreview {
     Record(ProviderPreview),
+    RecordBatch(ProviderBatchPreview),
     Progress(ProviderProgressPreview),
     Board(DefaultBoardPreview),
     StrategyTransition(ProviderStrategyTransitionPreview),
@@ -445,24 +446,36 @@ impl ToolService {
             "casefile_query" => serialize(self.provider.query(parse(arguments)?)?),
             "casefile_preview_record" => {
                 #[derive(serde::Deserialize)]
+                #[serde(deny_unknown_fields)]
                 struct Arguments {
-                    request: ChangeRequest,
+                    request: Option<ChangeRequest>,
+                    requests: Option<Vec<ChangeRequest>>,
                 }
-                self.publish_preview(StoredPreview::Record(
-                    self.provider
-                        .preview_record(parse::<Arguments>(arguments)?.request)?,
-                ))
+                let arguments = parse::<Arguments>(arguments)?;
+                match (arguments.request, arguments.requests) {
+                    (Some(request), None) => self.publish_preview(StoredPreview::Record(
+                        self.provider.preview_record(request)?,
+                    )),
+                    (None, Some(requests)) => self.publish_preview(StoredPreview::RecordBatch(
+                        self.provider.preview_record_batch(requests)?,
+                    )),
+                    _ => bail!("pass exactly one of request or requests"),
+                }
             }
             "casefile_apply_record" => {
                 #[derive(serde::Deserialize)]
                 struct Arguments {
                     preview: Value,
                 }
-                let preview = match self.approved_preview(parse::<Arguments>(arguments)?.preview)? {
-                    StoredPreview::Record(preview) => preview,
+                match self.approved_preview(parse::<Arguments>(arguments)?.preview)? {
+                    StoredPreview::Record(preview) => {
+                        serialize(self.provider.apply_record(preview)?)
+                    }
+                    StoredPreview::RecordBatch(preview) => {
+                        serialize(self.provider.apply_record_batch(preview)?)
+                    }
                     _ => bail!("preview was produced by a different Casefile tool"),
-                };
-                serialize(self.provider.apply_record(preview)?)
+                }
             }
             "casefile_preview_progress" => {
                 #[derive(serde::Deserialize)]
@@ -556,6 +569,7 @@ impl ToolService {
     fn publish_preview(&self, internal: StoredPreview) -> Result<Value> {
         let mut public = match &internal {
             StoredPreview::Record(preview) => serialize(preview)?,
+            StoredPreview::RecordBatch(preview) => serialize(preview)?,
             StoredPreview::Progress(preview) => serialize(preview)?,
             StoredPreview::Board(preview) => serialize(preview)?,
             StoredPreview::StrategyTransition(preview) => serialize(preview)?,
@@ -650,12 +664,26 @@ fn tool_definitions() -> Vec<Value> {
         ),
         tool(
             "casefile_preview_record",
-            "Preview a canonical ticket, epic, or board change without writing. Put the change request under request.",
-            object_schema(json!({"request": change_request_schema()}), &["request"]),
+            "Preview canonical ticket, epic, or board changes without writing. Put one change under request, or an atomic set that must validate together under requests.",
+            json!({
+                "oneOf": [
+                    object_schema(json!({"request": change_request_schema()}), &["request"]),
+                    object_schema(
+                        json!({
+                            "requests": {
+                                "type": "array",
+                                "minItems": 1,
+                                "items": change_request_schema(),
+                            }
+                        }),
+                        &["requests"],
+                    ),
+                ]
+            }),
         ),
         tool(
             "casefile_apply_record",
-            "Apply one exact provider-produced record preview after external approval. Pass the matching preview tool's entire structuredContent unchanged as preview.",
+            "Apply one exact provider-produced record or record-batch preview after external approval. Pass the matching preview tool's entire structuredContent unchanged as preview.",
             apply_schema(),
         ),
         tool(
