@@ -29,6 +29,7 @@ except ModuleNotFoundError:
 
 NAME = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 SEMVER = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$")
+INCLUDE = re.compile(r"\{\{include:([^}]+)\}\}")
 TEXT_SUFFIXES = {".json", ".md", ".py", ".toml", ".txt", ".yaml", ".yml", ".in"}
 TRANSIENT_DIRECTORY_NAMES = {"__pycache__"}
 TRANSIENT_FILE_SUFFIXES = {".pyc", ".pyo"}
@@ -142,6 +143,27 @@ def walk_source(root: Path, source: Path) -> list[Path]:
     return sorted(files, key=lambda item: item.relative_to(absolute).as_posix())
 
 
+def expand_includes(root: Path, candidate: Path, data: bytes) -> bytes:
+    """Replace `{{include:<repo-relative-path>}}` with that file's content."""
+    text = data.decode("ascii")
+    if INCLUDE.search(text) is None:
+        return data
+
+    def resolve(match: re.Match[str]) -> str:
+        source = safe_relative(match.group(1), "include")
+        target = root / source
+        if target.is_symlink() or not target.is_file():
+            raise PackageError(
+                f"{candidate.relative_to(root)}: include target is missing or unsafe: {source.as_posix()}"
+            )
+        included = target.read_text(encoding="ascii")
+        if INCLUDE.search(included) is not None:
+            raise PackageError(f"nested include in {source.as_posix()}")
+        return included.rstrip("\n")
+
+    return INCLUDE.sub(resolve, text).encode("ascii")
+
+
 def add_file(files: dict[Path, FileSpec], target: Path, spec: FileSpec) -> None:
     if target in files:
         raise PackageError(f"duplicate destination: {target.as_posix()}")
@@ -166,6 +188,7 @@ def copy_resources(root: Path, files: dict[Path, FileSpec], entries: list, field
                     data.decode("ascii")
                 except UnicodeDecodeError as error:
                     raise PackageError(f"non-ASCII source: {candidate.relative_to(root)}") from error
+                data = expand_includes(root, candidate, data)
             executable = bool(candidate.stat().st_mode & 0o111)
             add_file(files, target, FileSpec(data, 0o755 if executable else 0o644))
 

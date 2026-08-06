@@ -51,6 +51,13 @@ class ClaudeSetupTests(unittest.TestCase):
         plugin = root / "plugin"
         (plugin / ".claude-plugin").mkdir(parents=True)
         (plugin / ".claude-plugin/plugin.json").write_text(json.dumps({"name":"casefile","version":"0.4.0"})+"\n", encoding="ascii")
+        (plugin / "matrices").mkdir(parents=True)
+        (plugin / "matrices/casefile-review-dialogue.toml").write_text(
+            'schema_version = 1\nstrategy_id = "casefile-review-dialogue"\n'
+            '[limits]\nmax_depth = 2\n', encoding="ascii")
+        (plugin / "matrices/casefile-investigate-solo.toml").write_text(
+            'schema_version = 1\nstrategy_id = "casefile-investigate-solo"\n'
+            '[limits]\nmax_depth = 0\n', encoding="ascii")
         rows=[]
         for target in TARGETS:
             name="casefile.exe" if target.endswith("windows-msvc") else "casefile"
@@ -84,6 +91,8 @@ else: raise SystemExit(2)
         with tempfile.TemporaryDirectory() as temporary:
             plugin, planning, home, claude = self.fixture(Path(temporary))
             unrelated=home/"unrelated.json"; unrelated.write_text("keep\n",encoding="ascii")
+            (home/"settings.json").write_text(
+                json.dumps({"theme":"dark","env":{"OTHER":"keep"}})+"\n", encoding="ascii")
             plan=setup.prepare(plugin,home,str(claude),planning)
             self.assertFalse(setup.pointer(home).exists())
             result=setup.install(plan)
@@ -93,11 +102,46 @@ else: raise SystemExit(2)
             binding=json.loads((home/".claude.json").read_text())
             self.assertEqual(str(binary),binding["command"])
             self.assertEqual(["mcp-package","--planning-root",str(planning)],binding["args"])
+            # Depth ceiling comes from the deepest matrix the plugin ships, not a constant.
+            self.assertEqual(2,receipt["subagent_spawn_depth"])
+            self.assertIsNone(receipt["subagent_spawn_depth_before"])
+            settings=json.loads((home/"settings.json").read_text())
+            self.assertEqual("2",settings["env"]["CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH"])
+            self.assertEqual("keep",settings["env"]["OTHER"])
+            self.assertEqual("dark",settings["theme"])
             self.assertEqual("preview",setup.uninstall(home,str(claude),False)["status"])
             self.assertEqual("uninstalled",setup.uninstall(home,str(claude),True)["status"])
             self.assertFalse(binary.exists()); self.assertEqual("keep\n",unrelated.read_text())
+            # Uninstall removes the key it added and leaves unrelated settings untouched.
+            settings=json.loads((home/"settings.json").read_text())
+            self.assertNotIn("CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH",settings.get("env",{}))
+            self.assertEqual("keep",settings["env"]["OTHER"])
+            self.assertEqual("dark",settings["theme"])
 
-    def test_unowned_binding_and_tampered_matrix_refuse_before_mutation(self):
+    def test_overwrite_reinstalls_and_keeps_the_pre_casefile_depth(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root=Path(temporary); plugin,planning,home,claude=self.fixture(root)
+            (home/"settings.json").write_text(
+                json.dumps({"env":{"CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH":"7"}})+"\n",
+                encoding="ascii")
+            first=setup.install(setup.prepare(plugin,home,str(claude),planning))
+            self.assertEqual("7",json.loads(Path(first["receipt"]).read_text())["subagent_spawn_depth_before"])
+
+            # A plain reinstall is refused; the occupied binary path is the first gate.
+            with self.assertRaisesRegex(setup.SetupError,"already occupied"):
+                setup.prepare(plugin,home,str(claude),planning)
+
+            setup.pointer(home).unlink()
+            setup.pointer(home).parent.mkdir(parents=True,exist_ok=True)
+            atomic=json.dumps({"receipt":first["receipt"]},indent=2,sort_keys=True)+"\n"
+            setup.pointer(home).write_text(atomic,encoding="ascii")
+            second=setup.install(setup.prepare(plugin,home,str(claude),planning,True))
+            value=json.loads(Path(second["receipt"]).read_text())
+            # The second receipt carries the host's original depth, not Casefile's own.
+            self.assertEqual("7",value["subagent_spawn_depth_before"])
+            self.assertEqual(2,value["subagent_spawn_depth"])
+
+    def test_unowned_binding_refuses_before_mutation(self):
         with tempfile.TemporaryDirectory() as temporary:
             plugin, planning, home, claude = self.fixture(Path(temporary))
             (home/".claude.json").write_text('{}',encoding="ascii")

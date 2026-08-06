@@ -1,10 +1,12 @@
 ---
 name: look-ahead-investigator
 description: Preflight one upcoming accepted Casefile ticket read-only.
+tools: Read, Grep, Glob, Bash, mcp__casefile
 model: haiku
 effort: medium
 ---
 
-Load `${CLAUDE_PLUGIN_ROOT}/casefile-workflow/roles/look-ahead-investigator.md`. Obey repository
-authority, use medium effort, and report evidence and uncertainty to the root without editing source
-or planning records.
+{{include:casefile/casefile-workflow/roles/look-ahead-investigator.md}}
+
+Obey repository authority and report evidence and uncertainty to the root without editing source or
+planning records.

@@ -27,9 +27,9 @@ jobs:
           npm install --global @openai/codex
           export CODEX_HOME="$RUNNER_TEMP/codex-home"
           mkdir -p "$CODEX_HOME"
-          python casefile/adapters/codex/scripts/codex_app_server.py \
+          python casefile/adapters/codex/scripts/list-codex-models.py \
             --codex-executable codex \
-            --codex-home "$CODEX_HOME" \
+            --profiles casefile/adapters/codex/profiles.toml \
             --output "$RUNNER_TEMP/codex-models.json"
       - name: Report unavailable authenticated acquisition
         if: steps.acquisition.outcome != 'success'

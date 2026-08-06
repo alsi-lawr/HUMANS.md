@@ -1,9 +1,9 @@
 ---
-name: implementation-writer
-description: Implement one accepted Casefile ticket batch under exclusive ownership.
+name: implementation-writer-opus-low
+description: Implement one accepted Casefile ticket batch under exclusive ownership, pinned to opus at low effort.
 tools: Read, Grep, Glob, Bash, Write, Edit, NotebookEdit, mcp__casefile
-model: sonnet
-effort: high
+model: opus
+effort: low
 ---
 
 {{include:casefile/casefile-workflow/roles/implementation-writer.md}}

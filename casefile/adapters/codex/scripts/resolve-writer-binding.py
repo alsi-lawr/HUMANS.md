@@ -13,16 +13,16 @@ import tomllib
 from pathlib import Path, PurePosixPath
 
 try:
-    import codex_app_server
+    import list_codex_models
 except ModuleNotFoundError:
-    _app_server_path = Path(__file__).resolve().with_name("codex_app_server.py")
-    _app_server_spec = importlib.util.spec_from_file_location(
-        "codex_app_server", _app_server_path
+    _lister_path = Path(__file__).resolve().with_name("list-codex-models.py")
+    _lister_spec = importlib.util.spec_from_file_location(
+        "list_codex_models", _lister_path
     )
-    if _app_server_spec is None or _app_server_spec.loader is None:
+    if _lister_spec is None or _lister_spec.loader is None:
         raise
-    codex_app_server = importlib.util.module_from_spec(_app_server_spec)
-    _app_server_spec.loader.exec_module(codex_app_server)
+    list_codex_models = importlib.util.module_from_spec(_lister_spec)
+    _lister_spec.loader.exec_module(list_codex_models)
 
 
 RECOMMENDED_MODEL = "gpt-5.6-sol"
@@ -33,7 +33,6 @@ STRATEGIES = (
     "casefile-implement-pipeline",
 )
 RUNTIMES = ("v1", "v2")
-RECEIPT_SCHEMAS = {4, 5, 6}
 
 
 class BindingError(RuntimeError):
@@ -125,44 +124,15 @@ def owned_catalog(home: Path, runtime: str) -> dict:
     configured = config.get("model_catalog_json")
     if not isinstance(configured, str) or Path(configured).expanduser().resolve() != expected:
         raise BindingError("Codex is not configured with the active Casefile-owned catalog")
-    pointer_path = home / "state/casefile/current.json"
-    pointer = read_json(pointer_path, "Casefile setup pointer")
-    receipt_value = pointer.get("receipt")
-    if not isinstance(receipt_value, str) or not receipt_value:
-        raise BindingError("Casefile setup pointer lacks a receipt")
-    receipt_path = Path(receipt_value).expanduser().resolve()
-    receipt_root = (home / "backups/casefile").resolve()
-    if receipt_root not in receipt_path.parents or receipt_path.name != "receipt.json":
-        raise BindingError("Casefile setup receipt is outside the owned backup root")
-    receipt = read_json(receipt_path, "Casefile setup receipt")
-    receipt_runtime = receipt.get("multi_agent_version", "v1")
-    if (
-        receipt.get("schema_version") not in RECEIPT_SCHEMAS
-        or receipt.get("status") != "installed"
-        or receipt_runtime != runtime
-    ):
-        raise BindingError("Casefile setup receipt does not own the active runtime")
-    inventory = receipt.get("before")
-    expected_relative = expected.relative_to(home.resolve()).as_posix()
-    if not isinstance(inventory, list) or not any(
-        isinstance(item, dict)
-        and item.get("path") == expected_relative
-        and isinstance(item.get("existed"), bool)
-        for item in inventory
-    ):
-        raise BindingError("Casefile setup receipt does not own the configured catalog path")
     return read_json(expected, "active Casefile catalog")
 
 
 def active_catalog(executable: str, home: Path) -> dict:
-    environment = {**os.environ, "CODEX_HOME": str(home)}
+    profile_path = Path(__file__).resolve().parents[1] / "profiles.toml"
     try:
-        acquisition = codex_app_server.authenticated_model_catalog(
-            executable, home, environment
-        )
-    except codex_app_server.AppServerError as error:
+        projection = list_codex_models.listing(executable, profile_path)
+    except list_codex_models.ProjectionError as error:
         raise BindingError(f"Codex model availability failed: {error}") from error
-    projection = acquisition["projection"]
     projected = catalog_models(projection, "Codex model projection")
     configured = catalog_models(
         owned_catalog(home, active_runtime(home)), "active Casefile catalog"
@@ -210,16 +180,8 @@ def resolution_rows(profiles: dict, runtime: str, model: str, effort: str) -> li
 
 
 def offered_pairs(catalog: dict, profiles: dict, runtime: str) -> list[dict]:
-    models = catalog.get("models")
-    if not isinstance(models, list):
-        raise BindingError("Codex effective catalog has no model list")
-    identifiers = [model.get("slug") for model in models if isinstance(model, dict)]
-    if any(not isinstance(identifier, str) or not identifier for identifier in identifiers):
-        raise BindingError("Codex effective catalog has a model without an ID")
-    if len(set(identifiers)) != len(identifiers):
-        raise BindingError("Codex effective catalog has duplicate model IDs")
     offered = []
-    for model in models:
+    for model in catalog["models"]:
         if not isinstance(model, dict) or model.get("visibility") != "list":
             continue
         selector = model.get("multi_agent_version")

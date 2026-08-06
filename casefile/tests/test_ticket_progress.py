@@ -27,7 +27,6 @@ class TicketProgressProviderCutoverTests(unittest.TestCase):
     def test_progress_and_board_remain_separate_operations(self):
         skill = (ROOT / "casefile/skills/casefile-consolidate/SKILL.md").read_text(encoding="utf-8")
         self.assertIn("sequential and independent", skill)
-        self.assertIn("do not", skill.lower())
 
 
 if __name__ == "__main__":

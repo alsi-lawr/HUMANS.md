@@ -131,6 +131,13 @@ fn fixed_root_session_negotiates_and_exposes_canonical_snapshot_and_query() {
             .all(|tool| tool["inputSchema"]["additionalProperties"] != true),
         "tool argument roots must not be unconstrained objects"
     );
+    assert!(
+        tools
+            .iter()
+            .all(|tool| tool["inputSchema"]["type"] == "object"),
+        "every tool argument root must declare type object; strict MCP clients \
+         reject the whole tools/list response when one schema omits it"
+    );
     let schema = |name: &str| {
         &tools
             .iter()

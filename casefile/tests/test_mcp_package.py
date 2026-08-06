@@ -70,7 +70,7 @@ class McpPackageTests(unittest.TestCase):
             self.assertEqual(self.inventory(codex / "runtime"), self.inventory(claude / "runtime"))
             metadata = json.loads((codex / ".codex-plugin/plugin.json").read_text(encoding="ascii"))
             self.assertNotIn("mcpServers", metadata)
-            self.assertTrue((codex / "scripts/codex_app_server.py").is_file())
+            self.assertTrue((codex / "scripts/list-codex-models.py").is_file())
             for root in (ROOT / "casefile/adapters/codex", codex):
                 scripts = "\n".join(
                     path.read_text(encoding="ascii") for path in root.rglob("*.py")

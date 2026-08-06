@@ -229,8 +229,23 @@ display_name = "GPT-5.4-Mini"
 visibility = "list"
 
 [[catalog.targets]]
+id = "gpt-5.2"
+required = false
+required_reasoning = ["low", "medium", "high", "xhigh"]
+base_instructions_file = "catalog/gpt-5.2/base-instructions.md"
+model_messages_file = "catalog/gpt-5.2/model-messages.json"
+null_selectors = []
+
+[catalog.targets.expected]
+display_name = "GPT-5.2"
+visibility = "list"
+
+[[catalog.targets]]
 id = "gpt-5.3-codex-spark"
 required = true
+# Upstream stopped listing this model while it is still in use. Setup synthesises the entry from
+# this target and the drift report does not treat its absence as a finding.
+pinned = true
 required_reasoning = ["low", "medium", "high", "xhigh"]
 base_instructions_file = "catalog/gpt-5.3-codex-spark/base-instructions.md"
 model_messages_file = "catalog/gpt-5.3-codex-spark/model-messages.json"

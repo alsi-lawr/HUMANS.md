@@ -6,48 +6,187 @@ medium-high = "high"
 
 [[workers]]
 role = "inspector"
+profile = "inspector"
+agent_file = "agents/inspector.md"
 model = "opus"
 policy_tier = "high"
 frontmatter_effort = "high"
 
 [[workers]]
 role = "detective"
+profile = "detective"
+agent_file = "agents/detective.md"
 model = "sonnet"
 policy_tier = "medium-high"
 frontmatter_effort = "high"
 
 [[workers]]
 role = "dialogue-review-chair"
+profile = "dialogue-review-chair"
+agent_file = "agents/dialogue-review-chair.md"
 model = "opus"
 policy_tier = "high"
 frontmatter_effort = "high"
 
 [[workers]]
 role = "dialogue-review-challenger"
+profile = "dialogue-review-challenger"
+agent_file = "agents/dialogue-review-challenger.md"
 model = "sonnet"
 policy_tier = "medium-high"
 frontmatter_effort = "high"
 
 [[workers]]
 role = "atomic-ticket-reviewer"
+profile = "atomic-ticket-reviewer"
+agent_file = "agents/atomic-ticket-reviewer.md"
 model = "sonnet"
 policy_tier = "medium-high"
 frontmatter_effort = "high"
 
 [[workers]]
 role = "verification-reviewer"
+profile = "verification-reviewer"
+agent_file = "agents/verification-reviewer.md"
 model = "haiku"
 policy_tier = "medium"
 frontmatter_effort = "medium"
 
 [[workers]]
 role = "implementation-writer"
+profile = "implementation-writer"
+agent_file = "agents/implementation-writer.md"
 model = "sonnet"
 policy_tier = "medium-high"
 frontmatter_effort = "high"
 
 [[workers]]
 role = "look-ahead-investigator"
+profile = "look-ahead-investigator"
+agent_file = "agents/look-ahead-investigator.md"
 model = "haiku"
 policy_tier = "medium"
 frontmatter_effort = "medium"
+
+# Writer bindings resolve (model, reasoning_effort) to one implementation-writer agent.
+# strategy-binding.md scopes a binding to the selected implementation matrix.
+
+[[writer_profiles]]
+role = "implementation-writer"
+model = "opus"
+reasoning = "low"
+profile = "implementation-writer-opus-low"
+agent_file = "agents/implementation-writer-opus-low.md"
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline"]
+
+[[writer_profiles]]
+role = "implementation-writer"
+model = "opus"
+reasoning = "medium"
+profile = "implementation-writer-opus-medium"
+agent_file = "agents/implementation-writer-opus-medium.md"
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline"]
+
+[[writer_profiles]]
+role = "implementation-writer"
+model = "opus"
+reasoning = "high"
+profile = "implementation-writer-opus-high"
+agent_file = "agents/implementation-writer-opus-high.md"
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline"]
+
+[[writer_profiles]]
+role = "implementation-writer"
+model = "opus"
+reasoning = "xhigh"
+profile = "implementation-writer-opus-xhigh"
+agent_file = "agents/implementation-writer-opus-xhigh.md"
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline"]
+
+[[writer_profiles]]
+role = "implementation-writer"
+model = "opus"
+reasoning = "max"
+profile = "implementation-writer-opus-max"
+agent_file = "agents/implementation-writer-opus-max.md"
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline"]
+
+[[writer_profiles]]
+role = "implementation-writer"
+model = "sonnet"
+reasoning = "low"
+profile = "implementation-writer-sonnet-low"
+agent_file = "agents/implementation-writer-sonnet-low.md"
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline"]
+
+[[writer_profiles]]
+role = "implementation-writer"
+model = "sonnet"
+reasoning = "medium"
+profile = "implementation-writer-sonnet-medium"
+agent_file = "agents/implementation-writer-sonnet-medium.md"
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline"]
+
+[[writer_profiles]]
+role = "implementation-writer"
+model = "sonnet"
+reasoning = "high"
+profile = "implementation-writer-sonnet-high"
+agent_file = "agents/implementation-writer-sonnet-high.md"
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline"]
+
+[[writer_profiles]]
+role = "implementation-writer"
+model = "sonnet"
+reasoning = "xhigh"
+profile = "implementation-writer-sonnet-xhigh"
+agent_file = "agents/implementation-writer-sonnet-xhigh.md"
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline"]
+
+[[writer_profiles]]
+role = "implementation-writer"
+model = "sonnet"
+reasoning = "max"
+profile = "implementation-writer-sonnet-max"
+agent_file = "agents/implementation-writer-sonnet-max.md"
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline"]
+
+[[writer_profiles]]
+role = "implementation-writer"
+model = "haiku"
+reasoning = "low"
+profile = "implementation-writer-haiku-low"
+agent_file = "agents/implementation-writer-haiku-low.md"
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline"]
+
+[[writer_profiles]]
+role = "implementation-writer"
+model = "haiku"
+reasoning = "medium"
+profile = "implementation-writer-haiku-medium"
+agent_file = "agents/implementation-writer-haiku-medium.md"
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline"]
+
+[[writer_profiles]]
+role = "implementation-writer"
+model = "haiku"
+reasoning = "high"
+profile = "implementation-writer-haiku-high"
+agent_file = "agents/implementation-writer-haiku-high.md"
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline"]
+
+[[writer_profiles]]
+role = "implementation-writer"
+model = "haiku"
+reasoning = "xhigh"
+profile = "implementation-writer-haiku-xhigh"
+agent_file = "agents/implementation-writer-haiku-xhigh.md"
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline"]
+
+[[writer_profiles]]
+role = "implementation-writer"
+model = "haiku"
+reasoning = "max"
+profile = "implementation-writer-haiku-max"
+agent_file = "agents/implementation-writer-haiku-max.md"
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline"]

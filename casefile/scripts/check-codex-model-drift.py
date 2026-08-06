@@ -23,11 +23,18 @@ def compare(catalog: dict, profiles: dict) -> list[str]:
             findings.append(f"Duplicate profile-relevant model `{model_id}`.")
         else:
             by_id[model_id] = model
-    for target in profiles.get("catalog", {}).get("targets", []):
+    targets = profiles.get("catalog", {}).get("targets", [])
+    # A model Codex offers that the packaged catalog does not carry must be added and the agent
+    # matrices re-evaluated before it can be selected.
+    carried = {target.get("id") for target in targets}
+    for model_id in sorted(by_id.keys() - carried):
+        findings.append(f"Codex offers `{model_id}`, which the packaged catalog does not carry.")
+    for target in targets:
         model_id = target.get("id")
         model = by_id.get(model_id)
         if model is None:
-            if target.get("required") is True:
+            # A pinned model is carried by this repository, not by Codex's projection.
+            if target.get("required") is True and target.get("pinned") is not True:
                 findings.append(f"Required model `{model_id}` is missing.")
             continue
         efforts = {

@@ -39,3 +39,6 @@ destination = "skills"
 [[vendors.claude.copy]]
 source = "humans-md/adapters/claude/scripts"
 destination = "scripts"
+[[vendors.claude.copy]]
+source = "humans-md/settings.json"
+destination = "templates/settings.json"

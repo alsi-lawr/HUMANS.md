@@ -81,7 +81,7 @@ class CodexModelDriftTests(unittest.TestCase):
         workflow = (ROOT / ".github/workflows/codex-model-drift.yml").read_text(
             encoding="ascii"
         )
-        self.assertIn("codex_app_server.py", workflow)
+        self.assertIn("list-codex-models.py", workflow)
         self.assertIn("model projection", workflow)
         self.assertNotIn("codex debug", workflow)
         self.assertIn("continue-on-error: true", workflow)
@@ -98,6 +98,13 @@ class CodexModelDriftTests(unittest.TestCase):
         self.assertEqual(0, code)
         self.assertIn("No profile-relevant drift detected.", output)
 
+    def test_absent_pinned_model_is_not_drift(self):
+        pinned = setup.pinned_models(PROFILES)
+        self.assertEqual({"gpt-5.3-codex-spark"}, pinned)
+        code, output = self.run_check(catalog(self.profiles, pinned))
+        self.assertEqual(0, code)
+        self.assertNotIn("gpt-5.3-codex-spark", output)
+
     def test_missing_required_models_and_visibility_are_drift(self):
         current = catalog(
             self.profiles,
@@ -110,7 +117,7 @@ class CodexModelDriftTests(unittest.TestCase):
         code, output = self.run_check(current)
         self.assertEqual(1, code)
         self.assertIn("Required model `gpt-5.6-sol` is missing.", output)
-        self.assertIn("Required model `gpt-5.3-codex-spark` is missing.", output)
+        self.assertNotIn("gpt-5.3-codex-spark", output)
         self.assertIn(
             "Model `gpt-5.6-terra` field `visibility` changed from `list` to `hide`.",
             output,

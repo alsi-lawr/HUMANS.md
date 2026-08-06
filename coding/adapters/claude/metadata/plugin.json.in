@@ -1,8 +1,11 @@
 {
   "author": {
-    "name": ${publisher_json}
+    "name": ${publisher_json},
+    "url": ${repository_url_json}
   },
   "description": ${description_json},
+  "displayName": ${name_json},
+  "homepage": ${repository_url_json},
   "license": ${license_json},
   "name": ${name_json},
   "repository": ${repository_url_json},

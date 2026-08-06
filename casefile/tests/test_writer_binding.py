@@ -130,22 +130,6 @@ class WriterBindingTests(unittest.TestCase):
                 "[features]\nmulti_agent = false\nmulti_agent_v2 = true\n",
                 encoding="ascii",
             )
-            receipt_path = home / "backups/casefile/install/receipt.json"
-            receipt_path.parent.mkdir(parents=True)
-            receipt_path.write_text(
-                json.dumps(
-                    {
-                        "schema_version": 6,
-                        "status": "installed",
-                        "multi_agent_version": "v2",
-                        "before": [{"path": "models-casefile-v2.json", "existed": False}],
-                    }
-                ),
-                encoding="ascii",
-            )
-            pointer = home / "state/casefile/current.json"
-            pointer.parent.mkdir(parents=True)
-            pointer.write_text(json.dumps({"receipt": str(receipt_path)}), encoding="ascii")
             projection = {
                 "models": [
                     {
@@ -156,11 +140,8 @@ class WriterBindingTests(unittest.TestCase):
                     }
                 ]
             }
-            acquisition = {"projection": projection, "raw": {"models": []}}
             with mock.patch.object(
-                binding.codex_app_server,
-                "authenticated_model_catalog",
-                return_value=acquisition,
+                binding.list_codex_models, "listing", return_value=projection
             ) as model_list:
                 active = binding.active_catalog("codex", home)
             model_list.assert_called_once()
@@ -180,9 +161,7 @@ class WriterBindingTests(unittest.TestCase):
                 }
             )
             with mock.patch.object(
-                binding.codex_app_server,
-                "authenticated_model_catalog",
-                return_value=acquisition,
+                binding.list_codex_models, "listing", return_value=projection
             ), self.assertRaisesRegex(binding.BindingError, "IDs differ"):
                 binding.active_catalog("codex", home)
 

@@ -18,5 +18,5 @@ persistence; a materially different transition requires a new selection.
 For ad-hoc work, require no ticket and use only the local CLI `scratch-strategy` operation. Require
 an explicit absolute scratch target and a matrix outside the configured planning Store. The CLI must
 refuse any input or target overlapping that Store and writes only the selected scratch file. It
-creates no governed transition, is not planning state, and is deliberately absent from provider and
-MCP capability discovery.
+creates no governed transition and is not planning state; no provider or MCP operation exists for
+it.

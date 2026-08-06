@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[2]
 class CasefileBoundaryTests(unittest.TestCase):
     def test_casefile_setup_is_separate_from_core_contract(self):
         scripts = [
-            ROOT / "casefile/adapters/codex/scripts/codex_app_server.py",
+            ROOT / "casefile/adapters/codex/scripts/list-codex-models.py",
             ROOT / "casefile/adapters/codex/scripts/setup-codex.py",
             ROOT / "casefile/adapters/codex/scripts/resolve-writer-binding.py",
         ]

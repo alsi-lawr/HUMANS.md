@@ -757,21 +757,19 @@ fn tool_definitions() -> Vec<Value> {
         tool(
             "casefile_preview_record",
             "Preview canonical ticket, epic, or board changes without writing. Put one change under request, or an atomic set that must validate together under requests. Returns a compact review envelope retained under preview_id; approval_required is true only when the request contains a delete.",
-            json!({
-                "oneOf": [
-                    object_schema(json!({"request": change_request_schema()}), &["request"]),
-                    object_schema(
-                        json!({
-                            "requests": {
-                                "type": "array",
-                                "minItems": 1,
-                                "items": change_request_schema(),
-                            }
-                        }),
-                        &["requests"],
-                    ),
-                ]
-            }),
+            one_of_object(vec![
+                object_schema(json!({"request": change_request_schema()}), &["request"]),
+                object_schema(
+                    json!({
+                        "requests": {
+                            "type": "array",
+                            "minItems": 1,
+                            "items": change_request_schema(),
+                        }
+                    }),
+                    &["requests"],
+                ),
+            ]),
         ),
         tool(
             "casefile_apply_record",
@@ -862,6 +860,14 @@ fn nullable(schema: Value) -> Value {
     json!({"anyOf": [schema, {"type": "null"}]})
 }
 
+/// A discriminated union of object variants.
+///
+/// The explicit `type` is required: MCP clients reject a tool whose `inputSchema`
+/// omits it, and a rejected schema drops the whole `tools/list` response.
+fn one_of_object(variants: Vec<Value>) -> Value {
+    json!({"type": "object", "oneOf": variants})
+}
+
 fn query_schema() -> Value {
     let scope = || {
         nullable(object_schema(
@@ -891,15 +897,13 @@ fn query_schema() -> Value {
             &["query"],
         )
     };
-    json!({
-        "oneOf": [
-            searchable("tickets"),
-            searchable("epics"),
-            scoped("boards"),
-            scoped("progress"),
-            scoped("strategy_transitions"),
-        ]
-    })
+    one_of_object(vec![
+        searchable("tickets"),
+        searchable("epics"),
+        scoped("boards"),
+        scoped("progress"),
+        scoped("strategy_transitions"),
+    ])
 }
 
 fn change_request_schema() -> Value {
@@ -913,19 +917,17 @@ fn change_request_schema() -> Value {
             &["operation", "path", "draft"],
         )
     };
-    json!({
-        "oneOf": [
-            with_draft("create"),
-            with_draft("replace"),
-            object_schema(
-                json!({
-                    "operation": {"const": "delete"},
-                    "path": non_empty_string(),
-                }),
-                &["operation", "path"],
-            ),
-        ]
-    })
+    one_of_object(vec![
+        with_draft("create"),
+        with_draft("replace"),
+        object_schema(
+            json!({
+                "operation": {"const": "delete"},
+                "path": non_empty_string(),
+            }),
+            &["operation", "path"],
+        ),
+    ])
 }
 
 fn record_draft_schema() -> Value {
@@ -984,38 +986,36 @@ fn record_draft_schema() -> Value {
             ],
         )
     };
-    json!({
-        "oneOf": [
-            work_item("ticket"),
-            work_item("epic"),
-            object_schema(
-                json!({
-                    "kind": {"const": "board"},
-                    "id": non_empty_string(),
-                    "title": non_empty_string(),
-                    "status_source": {"type": "string", "enum": ["disposition", "progress"]},
-                    "filter_statuses": nullable(string_array()),
-                    "filter_kinds": nullable(string_array()),
-                    "columns": {
-                        "type": "array",
-                        "minItems": 1,
-                        "items": object_schema(
-                            json!({
-                                "name": non_empty_string(),
-                                "statuses": {
-                                    "type": "array",
-                                    "minItems": 1,
-                                    "items": {"type": "string"},
-                                },
-                            }),
-                            &["name", "statuses"],
-                        ),
-                    },
-                }),
-                &["kind", "id", "title", "columns"],
-            ),
-        ]
-    })
+    one_of_object(vec![
+        work_item("ticket"),
+        work_item("epic"),
+        object_schema(
+            json!({
+                "kind": {"const": "board"},
+                "id": non_empty_string(),
+                "title": non_empty_string(),
+                "status_source": {"type": "string", "enum": ["disposition", "progress"]},
+                "filter_statuses": nullable(string_array()),
+                "filter_kinds": nullable(string_array()),
+                "columns": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": object_schema(
+                        json!({
+                            "name": non_empty_string(),
+                            "statuses": {
+                                "type": "array",
+                                "minItems": 1,
+                                "items": {"type": "string"},
+                            },
+                        }),
+                        &["name", "statuses"],
+                    ),
+                },
+            }),
+            &["kind", "id", "title", "columns"],
+        ),
+    ])
 }
 
 fn progress_operation_schema() -> Value {
@@ -1035,51 +1035,47 @@ fn progress_operation_schema() -> Value {
             .extend(variant.as_object().expect("fixed object").clone());
         object_schema(properties, &required)
     };
-    let entry = json!({
-        "oneOf": [
-            base_entry(
-                "transition",
-                json!({
-                    "from": {
-                        "type": "string",
-                        "enum": ["unknown", "in_progress", "in_review", "verifying", "blocked", "complete"],
-                    },
-                    "to": {
-                        "type": "string",
-                        "enum": ["unknown", "in_progress", "in_review", "verifying", "blocked", "complete"],
-                    },
-                }),
-                &["from", "to"],
-            ),
-            base_entry(
-                "note",
-                json!({
-                    "category": {"type": "string", "enum": ["deviation", "quirk"]},
-                    "message": non_empty_string(),
-                }),
-                &["category", "message"],
-            ),
-        ]
-    });
-    json!({
-        "oneOf": [
-            object_schema(
-                json!({
-                    "operation": {"const": "bootstrap"},
-                    "investigation": non_empty_string(),
-                }),
-                &["operation", "investigation"],
-            ),
-            object_schema(
-                json!({
-                    "operation": {"const": "append"},
-                    "investigation": non_empty_string(),
-                    "entries": {"type": "array", "minItems": 1, "items": entry},
-                }),
-                &["operation", "investigation", "entries"],
-            ),
-        ]
-    })
+    let entry = one_of_object(vec![
+        base_entry(
+            "transition",
+            json!({
+                "from": {
+                    "type": "string",
+                    "enum": ["unknown", "in_progress", "in_review", "verifying", "blocked", "complete"],
+                },
+                "to": {
+                    "type": "string",
+                    "enum": ["unknown", "in_progress", "in_review", "verifying", "blocked", "complete"],
+                },
+            }),
+            &["from", "to"],
+        ),
+        base_entry(
+            "note",
+            json!({
+                "category": {"type": "string", "enum": ["deviation", "quirk"]},
+                "message": non_empty_string(),
+            }),
+            &["category", "message"],
+        ),
+    ]);
+    one_of_object(vec![
+        object_schema(
+            json!({
+            "operation": {"const": "bootstrap"},
+                "investigation": non_empty_string(),
+            }),
+            &["operation", "investigation"],
+        ),
+        object_schema(
+            json!({
+                "operation": {"const": "append"},
+                "investigation": non_empty_string(),
+                "entries": {"type": "array", "minItems": 1, "items": entry},
+            }),
+            &["operation", "investigation", "entries"],
+        ),
+    ])
 }
 
 fn strategy_transition_request_schema() -> Value {

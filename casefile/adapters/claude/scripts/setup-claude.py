@@ -10,6 +10,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+import tomllib
 from pathlib import Path, PurePosixPath
 
 try:
@@ -24,6 +25,7 @@ except ModuleNotFoundError:
 
 
 RECEIPT_SCHEMA = 1
+DEPTH_KEY = "CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH"
 SERVER = "casefile"
 
 
@@ -63,6 +65,60 @@ def pointer(home: Path) -> Path:
 
 def user_config(home: Path) -> Path:
     return home / ".claude.json"
+
+
+def settings_file(home: Path) -> Path:
+    return home / "settings.json"
+
+
+def spawn_depth(root: Path) -> int:
+    """Deepest nesting any shipped matrix declares."""
+    depths = []
+    for path in sorted((root / "matrices").glob("*.toml")):
+        matrix = tomllib.loads(path.read_text(encoding="ascii"))
+        depth = matrix.get("limits", {}).get("max_depth")
+        if not isinstance(depth, int) or depth < 0:
+            raise SetupError(f"matrix {path.name} declares no usable max_depth")
+        depths.append(depth)
+    if not depths:
+        raise SetupError("plugin ships no strategy matrices")
+    return max(depths)
+
+
+def read_settings(home: Path) -> dict:
+    path = settings_file(home)
+    if path.is_symlink() or (path.exists() and not path.is_file()):
+        raise SetupError("Claude settings.json is unsafe")
+    if not path.exists():
+        return {}
+    try:
+        document = json.loads(path.read_text(encoding="utf-8"))
+    except (ValueError, UnicodeDecodeError) as error:
+        raise SetupError(f"Claude settings.json is not valid JSON: {error}") from error
+    if not isinstance(document, dict):
+        raise SetupError("Claude settings.json must be a JSON object")
+    return document
+
+
+def write_spawn_depth(home: Path, depth: int | None) -> object:
+    """Set or clear the depth ceiling. Returns the prior value, or None when absent."""
+    document = read_settings(home)
+    environment = document.get("env")
+    if not isinstance(environment, dict):
+        environment = {}
+        document["env"] = environment
+    prior = environment.get(DEPTH_KEY)
+    if depth is None:
+        environment.pop(DEPTH_KEY, None)
+        if not environment:
+            document.pop("env", None)
+    else:
+        environment[DEPTH_KEY] = str(depth)
+    atomic_write(
+        settings_file(home),
+        (json.dumps(document, indent=2, ensure_ascii=True) + "\n").encode("ascii"),
+    )
+    return prior
 
 
 def plugin(root: Path) -> tuple[Path, dict]:
@@ -110,12 +166,14 @@ def read_receipt(home: Path) -> tuple[Path, dict] | None:
     return path, value
 
 
-def prepare(root: Path, home: Path, executable: str, planning: Path) -> dict:
+def prepare(
+    root: Path, home: Path, executable: str, planning: Path, overwrite: bool = False
+) -> dict:
     root, manifest = plugin(root)
     planning = casefile_runtime.planning_root(planning)
     selected = casefile_runtime.select(root, manifest["version"])
     destination = casefile_runtime.destination(home, manifest["version"], selected["target"])
-    if destination.exists() or destination.is_symlink():
+    if destination.is_symlink() or (destination.exists() and not overwrite):
         raise SetupError("the versioned Casefile executable path is already occupied")
     casefile_runtime.probe(selected["source"], manifest["version"], planning)
     environment = {**os.environ, "CLAUDE_CONFIG_DIR": str(home)}
@@ -125,14 +183,15 @@ def prepare(root: Path, home: Path, executable: str, planning: Path) -> dict:
         raise SetupError("an unowned Claude MCP server named casefile already exists")
     if active is not None:
         _, previous = active
-        if previous.get("plugin_version") == manifest["version"]:
+        if previous.get("plugin_version") == manifest["version"] and not overwrite:
             raise SetupError("this Casefile version is already installed")
         if binding is None or previous.get("binary") not in binding or previous.get("planning_root") not in binding:
             raise SetupError("the existing Casefile binding differs from its receipt")
     return {
         "root": root, "home": home, "executable": executable, "environment": environment,
         "version": manifest["version"], "planning_root": planning, "selected": selected,
-        "binary": destination, "previous": active,
+        "binary": destination, "previous": active, "overwrite": overwrite,
+        "spawn_depth": spawn_depth(root),
     }
 
 
@@ -142,6 +201,8 @@ def preview(plan: dict) -> dict:
         "casefile_target": plan["selected"]["target"], "casefile_executable": str(plan["binary"]),
         "planning_root": str(plan["planning_root"]), "mcp_server": SERVER,
         "scope": "user", "runtime_prerequisites": [], "apply_required": True,
+        "subagent_spawn_depth": plan["spawn_depth"],
+        "settings_target": str(settings_file(plan["home"])),
     }
 
 
@@ -163,6 +224,8 @@ def install(plan: dict) -> dict:
     binaries = list(previous_value.get("owned_binaries", [])) if previous_value else []
     copied = False
     registration_started = False
+    depth_applied = False
+    depth_before = None
     config = user_config(plan["home"])
     if config.is_symlink() or (config.exists() and not config.is_file()):
         raise SetupError("Claude user configuration is unsafe")
@@ -176,6 +239,10 @@ def install(plan: dict) -> dict:
         casefile_runtime.probe(plan["binary"], plan["version"], plan["planning_root"])
         registration_started = True
         register(plan)
+        depth_before = write_spawn_depth(plan["home"], plan["spawn_depth"])
+        depth_applied = True
+        if previous_value is not None:
+            depth_before = previous_value.get("subagent_spawn_depth_before")
         relative = plan["binary"].relative_to(plan["home"]).as_posix()
         if relative not in binaries:
             binaries.append(relative)
@@ -184,6 +251,8 @@ def install(plan: dict) -> dict:
             "plugin_version": plan["version"], "binary": str(plan["binary"]),
             "planning_root": str(plan["planning_root"]), "artifact_sha256": plan["selected"]["sha256"],
             "owned_binaries": binaries,
+            "subagent_spawn_depth": plan["spawn_depth"],
+            "subagent_spawn_depth_before": depth_before,
         }
         receipt_path = receipt_dir / "receipt.json"
         atomic_write(receipt_path, canonical(receipt))
@@ -192,6 +261,8 @@ def install(plan: dict) -> dict:
     except BaseException as error:
         rollback_error = None
         try:
+            if depth_applied:
+                write_spawn_depth(plan["home"], depth_before)
             if registration_started:
                 if config_before is None:
                     config.unlink(missing_ok=True)
@@ -263,6 +334,8 @@ def uninstall(home: Path, executable: str, apply: bool) -> dict:
             shutil.copyfile(binary, backup / str(index))
         try:
             checked([executable, "mcp", "remove", "--scope", "user", SERVER], environment)
+            recorded = value.get("subagent_spawn_depth_before")
+            write_spawn_depth(home, int(recorded) if isinstance(recorded, str) else None)
             for binary in owned_paths:
                 binary.unlink()
             pointer(home).unlink()
@@ -289,6 +362,11 @@ def main() -> int:
     install_parser.add_argument("--claude-config-dir", type=Path, default=Path(os.environ.get("CLAUDE_CONFIG_DIR", "~/.claude")))
     install_parser.add_argument("--claude-executable", default=shutil.which("claude"))
     install_parser.add_argument("--apply", action="store_true")
+    install_parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="reinstall over an existing receipt, preserving its pre-Casefile backup",
+    )
     uninstall_parser = commands.add_parser("uninstall")
     uninstall_parser.add_argument("--claude-config-dir", type=Path, default=Path(os.environ.get("CLAUDE_CONFIG_DIR", "~/.claude")))
     uninstall_parser.add_argument("--claude-executable", default=shutil.which("claude"))
@@ -299,7 +377,13 @@ def main() -> int:
         if not args.claude_executable:
             raise SetupError("Claude executable was not found")
         if args.operation == "install":
-            plan = prepare(args.plugin_root, home, args.claude_executable, args.planning_root)
+            plan = prepare(
+                args.plugin_root,
+                home,
+                args.claude_executable,
+                args.planning_root,
+                args.overwrite,
+            )
             print(json.dumps(preview(plan), indent=2, sort_keys=True))
             if args.apply:
                 print(json.dumps(install(plan), indent=2, sort_keys=True))

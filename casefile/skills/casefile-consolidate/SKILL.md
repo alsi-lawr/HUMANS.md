@@ -34,7 +34,7 @@ state, reconstruct history, or convert legacy layouts. Before previewing, copy t
 target's exact bytes to task scratch under a SHA-256 content-hash filename and report that backup
 path and retention through closeout. Then invoke the CLI human/recovery adapter's
 `progress-repair-preview` command and show its complete diff, target, scoped diagnostics, and backup
-plan. Whole-log replacement remains outside provider capability discovery.
+plan. No provider or MCP operation performs whole-log replacement.
 
 Apply only the saved preview with `progress-repair-apply` without requesting a second confirmation.
 The caller's explicit replacement content is the authority for this operation. The canonical writer

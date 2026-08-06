@@ -56,7 +56,7 @@ def main() -> int:
         setup = "scripts/setup-codex.py" if codex.exists() else "scripts/setup-claude.py"
         if not (root / setup).is_file() or not (root / "scripts/casefile_runtime.py").is_file():
             errors.append("generated Casefile package lacks receipt-backed runtime setup")
-        if codex.exists() and not (root / "scripts/codex_app_server.py").is_file():
+        if codex.exists() and not (root / "scripts/list-codex-models.py").is_file():
             errors.append("generated Codex Casefile package lacks stable model discovery")
         try:
             raw = (root / "runtime/artifacts.json").read_bytes()

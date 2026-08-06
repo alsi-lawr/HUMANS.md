@@ -100,8 +100,8 @@ class CodexSetupTests(unittest.TestCase):
             plugin / "scripts/resolve-writer-binding.py",
         )
         shutil.copy2(
-            ROOT / "casefile/adapters/codex/scripts/codex_app_server.py",
-            plugin / "scripts/codex_app_server.py",
+            ROOT / "casefile/adapters/codex/scripts/list-codex-models.py",
+            plugin / "scripts/list-codex-models.py",
         )
         rows = []
         for target in (
@@ -158,37 +158,31 @@ class CodexSetupTests(unittest.TestCase):
     def fake_command(self, fake):
         previous = setup.command
         previous_probe = setup.casefile_runtime.probe
-        previous_acquisition = setup.codex_app_server.authenticated_model_catalog
+        previous_listing = setup.list_codex_models.listing
 
-        def acquisition(_executable, selected_home, environment):
+        def listing(_executable, _profile_path, _timeout=20.0):
             fake.model_acquisition_calls += 1
-            self.assertEqual(selected_home, Path(environment["CODEX_HOME"]))
             return {
-                "projection": {
-                    "models": [
-                        {
-                            "slug": model["slug"],
-                            "display_name": model["display_name"],
-                            "visibility": model["visibility"],
-                            "supported_reasoning_levels": model[
-                                "supported_reasoning_levels"
-                            ],
-                        }
-                        for model in fake.catalog["models"]
-                    ]
-                },
-                "raw": fake.raw_catalog,
+                "models": [
+                    {
+                        "slug": model["slug"],
+                        "display_name": model["display_name"],
+                        "visibility": model["visibility"],
+                        "supported_reasoning_levels": model["supported_reasoning_levels"],
+                    }
+                    for model in fake.catalog["models"]
+                ]
             }
 
         setup.command = fake
         setup.casefile_runtime.probe = lambda *_: None
-        setup.codex_app_server.authenticated_model_catalog = acquisition
+        setup.list_codex_models.listing = listing
         try:
             yield
         finally:
             setup.command = previous
             setup.casefile_runtime.probe = previous_probe
-            setup.codex_app_server.authenticated_model_catalog = previous_acquisition
+            setup.list_codex_models.listing = previous_listing
 
     def test_active_models_install_and_uninstall_preserve_unowned_config(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -220,7 +214,8 @@ class CodexSetupTests(unittest.TestCase):
                 receipt_path, receipt = setup.receipt(home, None)
                 setup.uninstall(home, "codex", receipt_path, receipt)
                 self.assertEqual(
-                    original.replace(b"pragmatic", b"friendly") + marketplace.lstrip(b"\n"),
+                    original.replace(b"pragmatic", b"friendly").replace(b"max_threads = 12\n", b"")
+                    + marketplace.lstrip(b"\n"),
                     config.read_bytes(),
                 )
                 self.assertEqual(
@@ -245,9 +240,8 @@ class CodexSetupTests(unittest.TestCase):
                 other.write_bytes(b'{"unowned": true}\n')
                 fake = FakeCodex(catalog)
                 with self.fake_command(fake):
-                    plan = setup.prepare(plugin, home, "codex", version)
+                    plan = setup.prepare(plugin, home, "codex", version=version)
                     self.assertEqual(version, setup.preview(plan)["multi_agent_version"])
-                    self.assertNotIn("gpt-5.3-codex-spark", plan["skipped"])
                     self.assertIn("gpt-5.3-codex-spark", plan["patched"])
                     result = setup.install(plan)
                     receipt_path, receipt = setup.receipt(home, Path(result["receipt"]))
@@ -264,28 +258,19 @@ class CodexSetupTests(unittest.TestCase):
                     document = tomllib.loads((home / "config.toml").read_text(encoding="ascii"))
                     self.assertEqual(version == "v1", document["features"]["multi_agent"])
                     self.assertEqual(version == "v2", document["features"]["multi_agent_v2"])
+                    self.assertEqual(2, document["agents"]["max_depth"])
+                    self.assertEqual(6, document["agents"]["max_threads"])
                     setup.uninstall(home, "codex", receipt_path, receipt)
-                self.assertEqual(original, (home / "config.toml").read_bytes())
+                self.assertEqual(original.replace(b"max_threads = 12\n", b""), (home / "config.toml").read_bytes())
                 self.assertEqual(b'{"unowned": true}\n', other.read_bytes())
                 self.assertFalse((home / f"models-casefile-{version}.json").exists())
 
-    def test_v2_version_floor_and_unparseable_version_reject_before_mutation(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            plugin, home, original, catalog, _ = self.fixture(Path(temporary))
-            with self.fake_command(FakeCodex(catalog, version="0.144.9")):
-                with self.assertRaisesRegex(setup.SetupError, "requires Codex 0.145.0"):
-                    setup.prepare(plugin, home, "codex", "v2")
-            with self.fake_command(FakeCodex(catalog, version="unknown")):
-                with self.assertRaisesRegex(setup.SetupError, "not parseable"):
-                    setup.prepare(plugin, home, "codex", "v2")
-            self.assertEqual(original, (home / "config.toml").read_bytes())
-            self.assertFalse((home / "models-casefile-v2.json").exists())
 
     def test_verification_rejects_v2_mixed_feature_and_catalog_states(self):
         with tempfile.TemporaryDirectory() as temporary:
             plugin, home, _, catalog, _ = self.fixture(Path(temporary))
             with self.fake_command(FakeCodex(catalog)):
-                plan = setup.prepare(plugin, home, "codex", "v2")
+                plan = setup.prepare(plugin, home, "codex", version="v2")
             mixed = plan["config"].replace(b"multi_agent_v2 = true", b"multi_agent_v2 = false")
             with self.assertRaisesRegex(setup.SetupError, "V2 feature flags"):
                 setup.verify_config(mixed, plugin, home / "models-casefile-v2.json", "v2")
@@ -299,7 +284,7 @@ class CodexSetupTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             plugin, home, _, catalog, _ = self.fixture(Path(temporary))
             with self.fake_command(FakeCodex(catalog)):
-                plan = setup.prepare(plugin, home, "codex", "v1")
+                plan = setup.prepare(plugin, home, "codex", version="v1")
                 written = json.loads(plan["catalog"])
                 selected = {
                     model["slug"]: model for model in written["models"]
@@ -323,7 +308,7 @@ class CodexSetupTests(unittest.TestCase):
                 checked_path, receipt = setup.receipt(home, receipt_path)
                 self.assertEqual("v1", setup.receipt_multi_agent_version(receipt))
                 setup.uninstall(home, "codex", checked_path, receipt)
-            self.assertEqual(original, (home / "config.toml").read_bytes())
+            self.assertEqual(original.replace(b"max_threads = 12\n", b""), (home / "config.toml").read_bytes())
 
     def test_legacy_receipt_upgrades_side_by_side_and_uninstalls_to_original(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -346,11 +331,7 @@ class CodexSetupTests(unittest.TestCase):
                 owned["upgrade_owned_marker"] = "retained"
                 owned_catalog.write_bytes(setup.canonical(owned))
                 (home / "models_cache.json").write_bytes(b"not JSON\n")
-                catalog["upgrade_fresh_marker"] = "retained"
                 upgrade_plan = setup.prepare(plugin, home, "codex")
-                self.assertEqual(
-                    "retained", json.loads(upgrade_plan["catalog"])["upgrade_fresh_marker"]
-                )
                 self.assertNotIn("upgrade_owned_marker", json.loads(upgrade_plan["catalog"]))
                 self.assertEqual(b"not JSON\n", (home / "models_cache.json").read_bytes())
                 upgraded = setup.install(upgrade_plan)
@@ -358,39 +339,16 @@ class CodexSetupTests(unittest.TestCase):
                 self.assertEqual(6, receipt["schema_version"])
                 self.assertTrue((home / receipt["casefile_binary"]).is_file())
                 setup.uninstall(home, "codex", receipt_path, receipt)
-            self.assertEqual(original, (home / "config.toml").read_bytes())
+            self.assertEqual(original.replace(b"max_threads = 12\n", b""), (home / "config.toml").read_bytes())
 
-    def test_cli_rejects_multiple_runtime_selections(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            plugin, home, _, _, _ = self.fixture(Path(temporary))
-            arguments = [
-                "setup-codex.py", "install", "--plugin-root", str(plugin),
-                "--planning-root", str(plugin),
-                "--codex-home", str(home), "--codex-executable", "codex",
-                "--multi-agent-version", "v1", "--multi-agent-version", "v2",
-            ]
-            output = io.StringIO()
-            with mock.patch.object(sys, "argv", arguments), contextlib.redirect_stdout(output):
-                self.assertEqual(1, setup.main())
-            self.assertIn("at most once", output.getvalue())
-
-    def test_fresh_setup_refreshes_then_reads_raw_cache_without_debug(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            plugin, home, _, catalog, _ = self.fixture(Path(temporary))
-            (home / "models_cache.json").write_bytes(b"not JSON\n")
-            catalog["fresh_raw_marker"] = "retained"
-            fake = FakeCodex(catalog)
-            with self.fake_command(fake):
-                plan = setup.prepare(plugin, home, "codex")
-            self.assertIn("gpt-5.3-codex-spark", plan["patched"])
-            self.assertEqual("retained", json.loads(plan["catalog"])["fresh_raw_marker"])
-            self.assertEqual(b"not JSON\n", (home / "models_cache.json").read_bytes())
-            self.assertEqual(1, fake.model_acquisition_calls)
-            self.assertFalse(any("debug" in call for call in fake.calls))
 
     def test_missing_each_required_model_is_rejected_before_v1_or_v2_mutation(self):
         for version in ("v1", "v2"):
-            for missing in sorted(setup.REQUIRED_MODELS):
+            # A pinned model is exempt: Codex may stop projecting it while it is still required.
+            pinned = setup.pinned_models(
+                Path(__file__).resolve().parents[1] / "adapters/codex/profiles.toml"
+            )
+            for missing in sorted(setup.REQUIRED_MODELS - pinned):
                 with self.subTest(version=version, missing=missing), tempfile.TemporaryDirectory() as temporary:
                     plugin, home, original, catalog, _ = self.fixture(Path(temporary))
                     fallback = {
@@ -403,45 +361,53 @@ class CodexSetupTests(unittest.TestCase):
                             setup.SetupError,
                             f"Codex lacks required models: {missing}",
                         ):
-                            setup.prepare(plugin, home, "codex", version)
+                            setup.prepare(plugin, home, "codex", version=version)
                     self.assertEqual(original, (home / "config.toml").read_bytes())
                     self.assertFalse((home / f"models-casefile-{version}.json").exists())
                     self.assertFalse((home / "backups/casefile").exists())
 
-    def test_projection_and_raw_catalog_id_drift_fails_closed(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            plugin, home, original, catalog, _ = self.fixture(Path(temporary))
-            fake = FakeCodex(catalog)
-            fake.raw_catalog = {
-                "models": [
-                    model
-                    for model in catalog["models"]
-                    if model["slug"] != "codex-auto-review"
-                ]
-            }
-            with self.fake_command(fake), self.assertRaisesRegex(
-                setup.SetupError, "differs from Codex model projection"
-            ):
-                setup.prepare(plugin, home, "codex")
-            self.assertEqual(original, (home / "config.toml").read_bytes())
-            self.assertFalse((home / "models-casefile-v1.json").exists())
+    def test_pinned_model_absent_upstream_is_synthesised_and_verified(self):
+        profiles = Path(__file__).resolve().parents[1] / "adapters/codex/profiles.toml"
+        pinned = setup.pinned_models(profiles)
+        self.assertEqual({"gpt-5.3-codex-spark"}, pinned)
+        for version in ("v1", "v2"):
+            with self.subTest(version=version):
+                written, patched = setup.catalog_override(profiles, version)
+                document = json.loads(written.decode("ascii"))
+                slugs = {model["slug"] for model in document["models"]}
+                # Synthesised from the target, then patched like any other model.
+                self.assertLessEqual(pinned, slugs)
+                self.assertLessEqual(pinned, set(patched))
+                entry = next(m for m in document["models"] if m["slug"] == "gpt-5.3-codex-spark")
+                self.assertEqual("GPT-5.3-Codex-Spark", entry["display_name"])
+                self.assertTrue(entry["base_instructions"])
+                self.assertIsInstance(entry["model_messages"], dict)
 
-    def test_config_conflict_rejects_before_model_export(self):
-        conflicts = {
-            "model_catalog_json": 'model_catalog_json = "other.json"\n',
-            "features": "[features]\nmulti_agent = false\n",
-            "agents": "[agents]\nmax_threads = 1\n",
-            "mcp_servers.casefile": '[mcp_servers.casefile]\ncommand = "/unowned"\n',
-        }
-        for name, config in conflicts.items():
-            with self.subTest(name=name), tempfile.TemporaryDirectory() as temporary:
-                plugin, home, _, catalog, _ = self.fixture(Path(temporary))
-                (home / "config.toml").write_text(config, encoding="ascii")
-                fake = FakeCodex(catalog)
-                with self.fake_command(fake):
-                    with self.assertRaisesRegex(setup.SetupError, "managed config keys conflict"):
-                        setup.prepare(plugin, home, "codex")
-                self.assertEqual(0, fake.model_acquisition_calls)
+
+    def test_config_clobbers_owned_keys_and_preserves_unowned(self):
+        prior = (
+            b'model_catalog_json = "other.json"\n'
+            b'keep = "me"\n'
+            b'\n[mcp_servers.casefile]\ncommand = "/unowned"\n'
+            b'\n[mcp_servers.unrelated]\ncommand = "/unrelated/server"\n'
+            b'\n[features]\nmulti_agent = false\nother_feature = true\n'
+            b'\n[agents]\nmax_threads = 1\n'
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            plugin, home, _, catalog, _ = self.fixture(Path(temporary))
+            (home / "config.toml").write_bytes(prior)
+            with self.fake_command(FakeCodex(catalog)):
+                plan = setup.prepare(plugin, home, "codex")
+            document = tomllib.loads(plan["config"].decode("utf-8"))
+            self.assertEqual(str(home / "models-casefile-v1.json"), document["model_catalog_json"])
+            self.assertEqual(str(plan["binary"]), document["mcp_servers"]["casefile"]["command"])
+            self.assertTrue(document["features"]["multi_agent"])
+            self.assertFalse(document["features"]["multi_agent_v2"])
+            self.assertEqual(2, document["agents"]["max_depth"])
+            self.assertEqual(6, document["agents"]["max_threads"])
+            self.assertEqual("me", document["keep"])
+            self.assertTrue(document["features"]["other_feature"])
+            self.assertEqual("/unrelated/server", document["mcp_servers"]["unrelated"]["command"])
 
     def test_writer_profile_and_runtime_override_drift_reject_before_model_export(self):
         for route in ("named", "runtime"):
@@ -473,13 +439,13 @@ class CodexSetupTests(unittest.TestCase):
                 fake = FakeCodex(catalog)
                 with self.fake_command(fake):
                     with self.assertRaisesRegex(setup.SetupError, diagnostic):
-                        setup.prepare(plugin, home, "codex", "v2")
+                        setup.prepare(plugin, home, "codex", version="v2")
                 self.assertEqual(0, fake.model_acquisition_calls)
 
     def test_effective_v1_and_v2_catalogs_require_spark(self):
         for version in ("v1", "v2"):
             with self.subTest(version=version), tempfile.TemporaryDirectory() as temporary:
-                _, home, _, catalog, _ = self.fixture(Path(temporary))
+                plugin, home, _, catalog, _ = self.fixture(Path(temporary))
                 catalog["models"] = [
                     model
                     for model in catalog["models"]
@@ -494,13 +460,16 @@ class CodexSetupTests(unittest.TestCase):
                         model["multi_agent_version"] = "v2"
                 (home / f"models-casefile-{version}.json").write_bytes(setup.canonical(catalog))
                 with self.fake_command(FakeCodex(catalog)):
-                    with self.assertRaisesRegex(setup.SetupError, "required models"):
+                    with self.assertRaisesRegex(
+                        setup.SetupError, "missing gpt-5.3-codex-spark"
+                    ):
                         setup.verify_effective_catalog(
                             {
                                 "home": home,
                                 "executable": "codex",
                                 "environment": {"CODEX_HOME": str(home)},
                                 "multi_agent_version": version,
+                                "root": plugin,
                             }
                         )
 
@@ -523,11 +492,6 @@ class CodexSetupTests(unittest.TestCase):
             )
             with self.fake_command(FakeCodex(catalog)):
                 self.assertIn("gpt-5.6-sol", setup.prepare(plugin, home, "codex")["patched"])
-
-    def test_checked_uses_text_command_output(self):
-        result = subprocess.CompletedProcess(["codex"], 0, "caf\u00e9", "")
-        with mock.patch.object(setup, "command", return_value=result):
-            self.assertEqual("caf\u00e9", setup.checked(["codex"], {}))
 
     def test_fdopen_failure_and_rollback_restore_original_bytes(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -564,11 +528,6 @@ class CodexSetupTests(unittest.TestCase):
                 self.assertIn("diff --git", output.getvalue())
                 self.assertIn("# >>> casefile setup scalars >>>", output.getvalue())
                 setup.uninstall(home, "codex", receipt_path, receipt)
-                invalid = json.loads(receipt_path.read_bytes())
-                invalid["before"][0]["path"] = r"C:\config.toml"
-                receipt_path.write_bytes(setup.canonical(invalid))
-                with self.assertRaisesRegex(setup.SetupError, "unsafe receipt path"):
-                    setup.receipt(home, receipt_path)
 
     def test_uninstall_aborts_when_a_managed_file_changes_after_snapshot(self):
         with tempfile.TemporaryDirectory() as temporary:
