@@ -36,14 +36,13 @@ The receipt written by this operation carries forward the pre-Casefile backup re
 install. Casefile's own installed state is not backed up: restoring it is never the goal, and
 capturing it would overwrite the only record of the host's original configuration.
 
-An install with no active receipt is a first install and captures the pre-Casefile state as
-normal.
+An install with no active receipt is a first install and captures the pre-Casefile state as normal.
 
 ## Refusals
 
-Do not use `--overwrite` to take ownership of a Claude installation this plugin does not own.
-Claude setup still refuses an unowned MCP server or a binding that differs from its receipt, and
-those refusals are correct: resolve them by hand. Codex setup owns its config keys and tables
-outright and overwrites them on every install.
+Do not use `--overwrite` to take ownership of a Claude installation this plugin does not own. Claude
+setup still refuses an unowned MCP server or a binding that differs from its receipt, and those
+refusals are correct: resolve them by hand. Codex setup owns its config keys and tables outright and
+overwrites them on every install.
 
 Restart the host after a successful receipt-backed update.

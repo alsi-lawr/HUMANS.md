@@ -1,6 +1,8 @@
 ---
 name: implementation-writer-haiku-max
-description: Implement one accepted Casefile ticket batch under exclusive ownership, pinned to haiku at max effort.
+description:
+  Implement one accepted Casefile ticket batch under exclusive ownership, pinned to haiku at max
+  effort.
 tools: Read, Grep, Glob, Bash, Write, Edit, NotebookEdit, mcp__casefile
 model: haiku
 effort: max

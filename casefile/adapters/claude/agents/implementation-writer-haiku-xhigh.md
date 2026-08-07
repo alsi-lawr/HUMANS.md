@@ -1,6 +1,8 @@
 ---
 name: implementation-writer-haiku-xhigh
-description: Implement one accepted Casefile ticket batch under exclusive ownership, pinned to haiku at xhigh effort.
+description:
+  Implement one accepted Casefile ticket batch under exclusive ownership, pinned to haiku at xhigh
+  effort.
 tools: Read, Grep, Glob, Bash, Write, Edit, NotebookEdit, mcp__casefile
 model: haiku
 effort: xhigh

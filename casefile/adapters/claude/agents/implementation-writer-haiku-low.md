@@ -1,6 +1,8 @@
 ---
 name: implementation-writer-haiku-low
-description: Implement one accepted Casefile ticket batch under exclusive ownership, pinned to haiku at low effort.
+description:
+  Implement one accepted Casefile ticket batch under exclusive ownership, pinned to haiku at low
+  effort.
 tools: Read, Grep, Glob, Bash, Write, Edit, NotebookEdit, mcp__casefile
 model: haiku
 effort: low

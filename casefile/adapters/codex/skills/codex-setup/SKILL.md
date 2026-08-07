@@ -10,7 +10,7 @@ description:
 Require one explicit absolute activated planning Store root. Run
 `${CODEX_PLUGIN_ROOT}/scripts/setup-codex.py install --plugin-root ${CODEX_PLUGIN_ROOT} --planning-root <absolute-root>`
 without `--apply`, review the plan, then ask once before applying. Omit `--multi-agent-version` for
-the V1 default, or pass `--multi-agent-version v2`. This lifecycle owns only Casefile
-model-catalog, selected multi-agent feature, profile, and role configuration; it never installs or
-replaces `AGENTS.md`. Setup refuses to install while Codex offers a model the packaged catalog does
-not carry; report that refusal rather than working around it.
+the V1 default, or pass `--multi-agent-version v2`. This lifecycle owns only Casefile model-catalog,
+selected multi-agent feature, profile, and role configuration; it never installs or replaces
+`AGENTS.md`. Setup refuses to install while Codex offers a model the packaged catalog does not
+carry; report that refusal rather than working around it.

@@ -1,6 +1,8 @@
 ---
 name: implementation-writer-opus-medium
-description: Implement one accepted Casefile ticket batch under exclusive ownership, pinned to opus at medium effort.
+description:
+  Implement one accepted Casefile ticket batch under exclusive ownership, pinned to opus at medium
+  effort.
 tools: Read, Grep, Glob, Bash, Write, Edit, NotebookEdit, mcp__casefile
 model: opus
 effort: medium

@@ -1,6 +1,8 @@
 ---
 name: implementation-writer-sonnet-high
-description: Implement one accepted Casefile ticket batch under exclusive ownership, pinned to sonnet at high effort.
+description:
+  Implement one accepted Casefile ticket batch under exclusive ownership, pinned to sonnet at high
+  effort.
 tools: Read, Grep, Glob, Bash, Write, Edit, NotebookEdit, mcp__casefile
 model: sonnet
 effort: high
