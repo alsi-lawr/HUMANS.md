@@ -73,6 +73,46 @@ frontmatter_effort = "medium"
 
 [[writer_profiles]]
 role = "implementation-writer"
+model = "fable"
+reasoning = "low"
+profile = "implementation-writer-fable-low"
+agent_file = "agents/implementation-writer-fable-low.md"
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline"]
+
+[[writer_profiles]]
+role = "implementation-writer"
+model = "fable"
+reasoning = "medium"
+profile = "implementation-writer-fable-medium"
+agent_file = "agents/implementation-writer-fable-medium.md"
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline"]
+
+[[writer_profiles]]
+role = "implementation-writer"
+model = "fable"
+reasoning = "high"
+profile = "implementation-writer-fable-high"
+agent_file = "agents/implementation-writer-fable-high.md"
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline"]
+
+[[writer_profiles]]
+role = "implementation-writer"
+model = "fable"
+reasoning = "xhigh"
+profile = "implementation-writer-fable-xhigh"
+agent_file = "agents/implementation-writer-fable-xhigh.md"
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline"]
+
+[[writer_profiles]]
+role = "implementation-writer"
+model = "fable"
+reasoning = "max"
+profile = "implementation-writer-fable-max"
+agent_file = "agents/implementation-writer-fable-max.md"
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline"]
+
+[[writer_profiles]]
+role = "implementation-writer"
 model = "opus"
 reasoning = "low"
 profile = "implementation-writer-opus-low"
@@ -190,3 +230,4 @@ reasoning = "max"
 profile = "implementation-writer-haiku-max"
 agent_file = "agents/implementation-writer-haiku-max.md"
 strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline"]
+
