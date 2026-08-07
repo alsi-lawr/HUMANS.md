@@ -33,6 +33,15 @@ translate disposable derived state into product authority.
 When a requested safeguard crosses that boundary, state what owns the failure and omit it unless the
 requester explicitly expands the supported contract.
 
+## Code Comments
+
+Do not add comments that restate what the code does. Prefer self-explanatory names and structure.
+Only add comments for non-obvious intent, constraints, workarounds, invariants, or surprising
+implementation details. Do not add section-header comments. Do not editorialize or narrate in
+comments. A comment must only be used to disambiguate genuinely ambiguous intent.
+
+If in doubt, do not comment. Treat comments as a code smell unless you can genuinely justify it.
+
 ## Test Supported Behaviour
 
 Trace each test to a supported operation, an owned invariant, or a concrete regression in this
