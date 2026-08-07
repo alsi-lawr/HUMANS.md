@@ -10,4 +10,6 @@ description:
 Run `${CODEX_PLUGIN_ROOT}/scripts/setup-codex.py install --plugin-root ${CODEX_PLUGIN_ROOT}` first.
 Show its preview and ask once before rerunning with `--apply`. It installs only the packaged
 `AGENTS.md` contract and records the prior state beneath `~/.codex/backups/humans-md/`. It does not
-configure models, V1 flags, profiles, roles, or Casefile. Restart Codex after a successful setup.
+configure models, V1 flags, profiles, roles, or Casefile. Reinstalling over an active receipt
+requires adding `--overwrite`; the new receipt carries the pre-install recovery state forward.
+Restart Codex after a successful setup.

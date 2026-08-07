@@ -74,6 +74,8 @@ import json,os,pathlib,sys
 state=pathlib.Path(os.environ['CLAUDE_CONFIG_DIR'])/'.claude.json'
 args=sys.argv[1:]
 if args[:3]==['mcp','add','--scope']:
+ if state.exists():
+  print('MCP server casefile already exists in user config',file=sys.stderr); raise SystemExit(1)
  i=args.index('--'); value={'command':args[i+1],'args':args[i+2:]}
  if (state.parent/'corrupt-add').exists(): value={'command':'/wrong','args':[]}
  state.write_text(json.dumps(value)); print('added')

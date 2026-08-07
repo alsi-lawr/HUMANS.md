@@ -164,29 +164,41 @@ def preview(plan: dict) -> dict:
     return {"operation": "install", "plugin_version": plan["version"], "contract": str(plan["home"] / "AGENTS.md"), "receipt_root": str(backup_root(plan["home"])), "contract_only": True, "restart_required": True}
 
 
-def install(plan: dict) -> dict:
+def install(plan: dict, overwrite: bool = False) -> dict:
     plan = prepare(plan["root"], plan["home"], plan["executable"])
     home = plan["home"]
-    if pointer(home).exists():
+    previous = receipt(home) if pointer(home).exists() else None
+    if previous is not None and not overwrite:
         raise SetupError("an active humans-md receipt already exists; uninstall it before reinstalling")
     backup_root(home).mkdir(parents=True, exist_ok=True)
     receipt_dir = Path(tempfile.mkdtemp(prefix=datetime.datetime.now(datetime.UTC).strftime("%Y%m%dT%H%M%SZ-"), dir=backup_root(home)))
     os.chmod(receipt_dir, 0o700)
     paths = [home / item for item in MANAGED]
-    before = snapshot(home, paths, receipt_dir / "before")
+    # Rollback restores the pre-run state; the before snapshot records the pre-humans-md state.
+    rollback = snapshot(home, paths, receipt_dir / "rollback")
+    if previous is None:
+        before = snapshot(home, paths, receipt_dir / "before")
+    else:
+        previous_path, previous_value = previous
+        before = [dict(entry) for entry in previous_value["before"]]
+        if (previous_path.parent / "before").exists():
+            copy_path(previous_path.parent / "before", receipt_dir / "before")
     try:
         atomic_write(paths[0], plan["contract"])
         if paths[0].read_bytes() != plan["contract"]:
             raise SetupError("written contract differs from preview")
-        receipt = {"schema_version": RECEIPT_SCHEMA, "status": "installed", "plugin_version": plan["version"], "before": before, "remove_plugin": True, "remove_marketplace": False}
+        receipt_value = {"schema_version": RECEIPT_SCHEMA, "status": "installed", "plugin_version": plan["version"], "before": before, "remove_plugin": True, "remove_marketplace": False}
         receipt_path = receipt_dir / "receipt.json"
-        atomic_write(receipt_path, canonical(receipt))
+        atomic_write(receipt_path, canonical(receipt_value))
         pointer(home).parent.mkdir(parents=True, exist_ok=True)
         atomic_write(pointer(home), canonical({"receipt": str(receipt_path)}))
         return {"status": "installed", "receipt": str(receipt_path), "restart_required": True}
     except BaseException as error:
-        restore(home, receipt_dir / "before", before)
-        pointer(home).unlink(missing_ok=True)
+        restore(home, receipt_dir / "rollback", rollback)
+        if previous is None:
+            pointer(home).unlink(missing_ok=True)
+        else:
+            atomic_write(pointer(home), canonical({"receipt": str(previous[0])}))
         atomic_write(receipt_dir / "failure.json", canonical({"status": "failed", "error": str(error), "rollback_verified": True}))
         raise SetupError(f"setup failed; rollback verified: {error}") from error
 
@@ -250,6 +262,7 @@ def main() -> int:
         command.add_argument("--apply", action="store_true")
         if name == "install":
             command.add_argument("--plugin-root", type=Path, required=True)
+            command.add_argument("--overwrite", action="store_true")
     arguments = parser.parse_args()
     try:
         home = arguments.codex_home.expanduser().resolve(strict=True)
@@ -259,7 +272,7 @@ def main() -> int:
             plan = prepare(arguments.plugin_root, home, arguments.codex_executable)
             print(json.dumps(preview(plan), indent=2, sort_keys=True))
             if arguments.apply:
-                print(json.dumps(install(plan), indent=2, sort_keys=True))
+                print(json.dumps(install(plan, arguments.overwrite), indent=2, sort_keys=True))
         else:
             path, value = receipt(home)
             print(json.dumps({"operation": "uninstall", "receipt": str(path), "remove_plugin": True, "remove_marketplace": False, "review": "git diffs for managed files follow"}, indent=2, sort_keys=True))

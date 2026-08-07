@@ -10,7 +10,8 @@ description:
 Run `${CLAUDE_PLUGIN_ROOT}/scripts/setup-claude.py --plugin-root ${CLAUDE_PLUGIN_ROOT}`. Review its
 focused preview and record `approval_fingerprint`; after one approval rerun with
 `--apply --approval <fingerprint>`. The script rechecks both managed targets immediately before
-replacement and refuses stale approval.
+replacement and refuses stale approval. Reinstalling over an active receipt requires adding
+`--overwrite`; the new receipt carries the pre-install recovery state forward.
 
 This setup owns two targets: the standing contract at `<config>/CLAUDE.md`, and the contract keys
 it manages inside `<config>/settings.json`. Surface `settings_plan` from the preview before

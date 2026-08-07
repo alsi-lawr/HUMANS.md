@@ -207,10 +207,20 @@ def preview(plan: dict) -> dict:
 
 
 def register(plan: dict) -> None:
-    checked([
-        plan["executable"], "mcp", "add", "--scope", "user", SERVER, "--",
-        str(plan["binary"]), "mcp-package", "--planning-root", str(plan["planning_root"]),
-    ], plan["environment"])
+    binding = current_binding(plan["executable"], plan["environment"])
+    exact = (
+        binding is not None
+        and str(plan["binary"]) in binding
+        and str(plan["planning_root"]) in binding
+    )
+    if binding is not None and not exact:
+        # Claude refuses to add over an existing server name; replace the previous binding.
+        checked([plan["executable"], "mcp", "remove", "--scope", "user", SERVER], plan["environment"])
+    if not exact:
+        checked([
+            plan["executable"], "mcp", "add", "--scope", "user", SERVER, "--",
+            str(plan["binary"]), "mcp-package", "--planning-root", str(plan["planning_root"]),
+        ], plan["environment"])
     binding = current_binding(plan["executable"], plan["environment"])
     if binding is None or str(plan["binary"]) not in binding or str(plan["planning_root"]) not in binding:
         raise SetupError("Claude did not retain the exact Casefile MCP binding")

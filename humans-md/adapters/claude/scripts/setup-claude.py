@@ -146,49 +146,77 @@ def preview(config: Path, plugin_root: Path) -> dict:
     return {"operation": "claude-core-setup", "receipt_kind": RECEIPT_KIND, "target": str(target(config)), "settings_target": str(settings_target(config)), "approval_fingerprint": combined_fingerprint(config), "source_sha256": hashlib.sha256(source).hexdigest(), "settings_plan": settings_plan(config, plugin_root)}
 
 
-def install(config: Path, plugin_root: Path, approval: str | None = None) -> dict:
+def active_receipt(config: Path) -> tuple[Path, dict] | None:
+    if not pointer(config).exists(): return None
+    try: value = json.loads(pointer(config).read_bytes())
+    except (OSError, ValueError) as error: raise SetupError(f"invalid Claude core pointer: {error}") from error
+    path = Path(value.get("receipt", "")).expanduser()
+    root = config_root(config).resolve()
+    path = path.resolve(strict=True)
+    if root not in path.parents or path.name != "receipt.json": raise SetupError("Claude core receipt is outside the durable backup root")
+    try: receipt = json.loads(path.read_bytes())
+    except (OSError, ValueError) as error: raise SetupError(f"invalid Claude core receipt: {error}") from error
+    return path, receipt
+
+
+def install(config: Path, plugin_root: Path, approval: str | None = None, overwrite: bool = False) -> dict:
     plan = preview(config, plugin_root)
     if approval is not None and approval != plan["approval_fingerprint"]: raise SetupError("stale approval: managed target changed")
-    if pointer(config).exists(): raise SetupError("an active v0.2.0 Claude core receipt already exists")
+    active = active_receipt(config)
+    if active is not None and not overwrite: raise SetupError("an active v0.2.0 Claude core receipt already exists")
     source = plugin_source(plugin_root); current = target(config); root = config_root(config)
     settings_current = settings_target(config)
     merged, settings_before = merged_settings(config, plugin_root)
     root.mkdir(parents=True, exist_ok=True); os.chmod(root, 0o700)
     receipt_dir = Path(tempfile.mkdtemp(prefix=datetime.datetime.now(datetime.UTC).strftime("%Y%m%dT%H%M%SZ-"), dir=root))
-    before = receipt_dir / "CLAUDE.md.before"; was_missing = not current.exists()
-    settings_backup = receipt_dir / "settings.json.before"; settings_was_missing = not settings_current.exists()
+    # Rollback restores the pre-run state; the lineage files record the pre-humans-md state.
+    rollback_contract = current.read_bytes() if current.exists() else None
+    rollback_settings = settings_current.read_bytes() if settings_current.exists() else None
     try:
-        if current.exists(): atomic_write(before, current.read_bytes())
-        else: (receipt_dir / "CLAUDE.md.was-missing").write_text("\n", encoding="ascii")
-        if settings_current.exists(): atomic_write(settings_backup, settings_current.read_bytes())
-        else: (receipt_dir / "settings.json.was-missing").write_text("\n", encoding="ascii")
+        if active is None:
+            before_name = "missing" if not current.exists() else "CLAUDE.md.before"
+            settings_file_before = "missing" if not settings_current.exists() else "settings.json.before"
+            if current.exists(): atomic_write(receipt_dir / "CLAUDE.md.before", rollback_contract)
+            else: (receipt_dir / "CLAUDE.md.was-missing").write_text("\n", encoding="ascii")
+            if settings_current.exists(): atomic_write(receipt_dir / "settings.json.before", rollback_settings)
+            else: (receipt_dir / "settings.json.was-missing").write_text("\n", encoding="ascii")
+        else:
+            previous_dir, previous = active[0].parent, active[1]
+            before_name = previous.get("before", "missing")
+            settings_file_before = previous.get("settings_file_before", "missing")
+            for name in ("CLAUDE.md.before", "CLAUDE.md.was-missing", "settings.json.before", "settings.json.was-missing"):
+                if (previous_dir / name).is_file(): shutil.copyfile(previous_dir / name, receipt_dir / name)
+            carried = previous.get("settings_before", {})
+            settings_before = {dotted: carried.get(dotted, prior) for dotted, prior in settings_before.items()}
         # Last re-read before mutation rejects a review invalidated during setup preparation.
         if approval is not None and approval != combined_fingerprint(config): raise SetupError("stale approval: managed target changed")
         atomic_write(current, source)
         # Preserve the operator's key order; only contract leaves are rewritten.
         atomic_write(settings_current, (json.dumps(merged, indent=2, ensure_ascii=True) + "\n").encode("ascii"))
         receipt_path = receipt_dir / "receipt.json"
-        atomic_write(receipt_path, canonical({"schema_version": RECEIPT_SCHEMA, "kind": RECEIPT_KIND, "status": "installed", "plugin_version": "0.2.0", "before": "missing" if was_missing else "CLAUDE.md.before", "settings_before": settings_before, "settings_file_before": "missing" if settings_was_missing else "settings.json.before"}))
+        atomic_write(receipt_path, canonical({"schema_version": RECEIPT_SCHEMA, "kind": RECEIPT_KIND, "status": "installed", "plugin_version": "0.2.0", "before": before_name, "settings_before": settings_before, "settings_file_before": settings_file_before}))
         pointer(config).parent.mkdir(parents=True, exist_ok=True)
         atomic_write(pointer(config), canonical({"receipt": str(receipt_path), "kind": RECEIPT_KIND}))
         return {"status": "installed", "receipt": str(receipt_path)}
     except BaseException as error:
         current.unlink(missing_ok=True)
-        if before.exists(): atomic_write(current, before.read_bytes())
+        if rollback_contract is not None: atomic_write(current, rollback_contract)
         settings_current.unlink(missing_ok=True)
-        if settings_backup.exists(): atomic_write(settings_current, settings_backup.read_bytes())
-        shutil.rmtree(receipt_dir, ignore_errors=True); pointer(config).unlink(missing_ok=True)
+        if rollback_settings is not None: atomic_write(settings_current, rollback_settings)
+        shutil.rmtree(receipt_dir, ignore_errors=True)
+        if active is None: pointer(config).unlink(missing_ok=True)
+        else: atomic_write(pointer(config), canonical({"receipt": str(active[0]), "kind": RECEIPT_KIND}))
         raise SetupError(f"Claude setup failed; rollback verified: {error}") from error
 
 
 def main() -> int:
-    parser=argparse.ArgumentParser(description=__doc__); parser.add_argument("--plugin-root",type=Path,required=True); parser.add_argument("--config-dir",type=Path,default=Path(os.environ.get("CLAUDE_CONFIG_DIR","~/.claude"))); parser.add_argument("--apply",action="store_true"); parser.add_argument("--approval")
+    parser=argparse.ArgumentParser(description=__doc__); parser.add_argument("--plugin-root",type=Path,required=True); parser.add_argument("--config-dir",type=Path,default=Path(os.environ.get("CLAUDE_CONFIG_DIR","~/.claude"))); parser.add_argument("--apply",action="store_true"); parser.add_argument("--approval"); parser.add_argument("--overwrite",action="store_true")
     args=parser.parse_args()
     try:
         config=args.config_dir.expanduser().resolve(strict=True); plan=preview(config,args.plugin_root); print(json.dumps(plan,indent=2,sort_keys=True))
         if args.apply:
             if not args.approval: raise SetupError("--approval must equal the preview approval_fingerprint")
-            print(json.dumps(install(config,args.plugin_root,args.approval),indent=2,sort_keys=True))
+            print(json.dumps(install(config,args.plugin_root,args.approval,args.overwrite),indent=2,sort_keys=True))
         else: print("preview only; no files changed")
         return 0
     except (OSError, SetupError) as error:
