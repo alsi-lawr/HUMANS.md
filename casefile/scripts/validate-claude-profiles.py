@@ -30,11 +30,12 @@ def check(adapter: Path) -> list[str]:
     profiles = tomllib.loads((adapter / "profiles.toml").read_text(encoding="ascii"))
     workers = {row["role"]: row for row in profiles.get("workers", [])}
     writers = profiles.get("writer_profiles", [])
+    variants = profiles.get("worker_profiles", [])
     agents = {path.stem: path for path in (adapter / "agents").glob("*.md")}
     bound = set()
     failures = []
 
-    for row in list(workers.values()) + writers:
+    for row in list(workers.values()) + writers + variants:
         target = adapter / row["agent_file"]
         if not target.is_file():
             failures.append(f"{row['profile']}: agent_file does not exist: {row['agent_file']}")
@@ -52,16 +53,25 @@ def check(adapter: Path) -> list[str]:
         failures.append(f"{name}: agent file has no profiles.toml row")
 
     # Every worker a matrix declares must have a role binding.
+    declared: dict[str, set[str]] = {}
     for path in sorted((adapter / "matrices").glob("*.toml")):
         matrix = tomllib.loads(path.read_text(encoding="ascii"))
         for worker in matrix.get("workers", []):
             if worker["role"] not in workers:
                 failures.append(f"{path.name}: role {worker['role']!r} has no workers row")
+            declared.setdefault(worker["role"], set()).add(matrix["strategy_id"])
 
     # A writer binding must reach every implementation strategy.
     for row in writers:
         if set(row.get("strategy_ids", [])) != WRITER_STRATEGIES:
             failures.append(f"{row['profile']}: strategy_ids do not cover the writer strategies")
+
+    # A worker variant must cover exactly the strategies whose matrices declare its role.
+    for row in variants:
+        if row["role"] not in workers:
+            failures.append(f"{row['profile']}: variant role {row['role']!r} has no workers row")
+        if set(row.get("strategy_ids", [])) != declared.get(row["role"], set()):
+            failures.append(f"{row['profile']}: strategy_ids do not cover the role's strategies")
 
     return failures
 

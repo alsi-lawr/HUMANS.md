@@ -231,3 +231,485 @@ profile = "implementation-writer-haiku-max"
 agent_file = "agents/implementation-writer-haiku-max.md"
 strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline"]
 
+# Worker variant profiles resolve (role, model, reasoning_effort) to one pinned agent.
+# A governed strategy matrix selects a variant by naming its profile as platform_profile.
+
+[[worker_profiles]]
+role = "atomic-ticket-reviewer"
+model = "fable"
+reasoning = "low"
+profile = "atomic-ticket-reviewer-fable-low"
+agent_file = "agents/atomic-ticket-reviewer-fable-low.md"
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline", "casefile-review-atomic", "casefile-review-two-stage"]
+
+[[worker_profiles]]
+role = "atomic-ticket-reviewer"
+model = "fable"
+reasoning = "medium"
+profile = "atomic-ticket-reviewer-fable-medium"
+agent_file = "agents/atomic-ticket-reviewer-fable-medium.md"
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline", "casefile-review-atomic", "casefile-review-two-stage"]
+
+[[worker_profiles]]
+role = "atomic-ticket-reviewer"
+model = "fable"
+reasoning = "high"
+profile = "atomic-ticket-reviewer-fable-high"
+agent_file = "agents/atomic-ticket-reviewer-fable-high.md"
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline", "casefile-review-atomic", "casefile-review-two-stage"]
+
+[[worker_profiles]]
+role = "atomic-ticket-reviewer"
+model = "fable"
+reasoning = "xhigh"
+profile = "atomic-ticket-reviewer-fable-xhigh"
+agent_file = "agents/atomic-ticket-reviewer-fable-xhigh.md"
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline", "casefile-review-atomic", "casefile-review-two-stage"]
+
+[[worker_profiles]]
+role = "atomic-ticket-reviewer"
+model = "fable"
+reasoning = "max"
+profile = "atomic-ticket-reviewer-fable-max"
+agent_file = "agents/atomic-ticket-reviewer-fable-max.md"
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline", "casefile-review-atomic", "casefile-review-two-stage"]
+
+[[worker_profiles]]
+role = "atomic-ticket-reviewer"
+model = "opus"
+reasoning = "low"
+profile = "atomic-ticket-reviewer-opus-low"
+agent_file = "agents/atomic-ticket-reviewer-opus-low.md"
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline", "casefile-review-atomic", "casefile-review-two-stage"]
+
+[[worker_profiles]]
+role = "atomic-ticket-reviewer"
+model = "opus"
+reasoning = "medium"
+profile = "atomic-ticket-reviewer-opus-medium"
+agent_file = "agents/atomic-ticket-reviewer-opus-medium.md"
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline", "casefile-review-atomic", "casefile-review-two-stage"]
+
+[[worker_profiles]]
+role = "atomic-ticket-reviewer"
+model = "opus"
+reasoning = "high"
+profile = "atomic-ticket-reviewer-opus-high"
+agent_file = "agents/atomic-ticket-reviewer-opus-high.md"
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline", "casefile-review-atomic", "casefile-review-two-stage"]
+
+[[worker_profiles]]
+role = "atomic-ticket-reviewer"
+model = "opus"
+reasoning = "xhigh"
+profile = "atomic-ticket-reviewer-opus-xhigh"
+agent_file = "agents/atomic-ticket-reviewer-opus-xhigh.md"
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline", "casefile-review-atomic", "casefile-review-two-stage"]
+
+[[worker_profiles]]
+role = "atomic-ticket-reviewer"
+model = "opus"
+reasoning = "max"
+profile = "atomic-ticket-reviewer-opus-max"
+agent_file = "agents/atomic-ticket-reviewer-opus-max.md"
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline", "casefile-review-atomic", "casefile-review-two-stage"]
+
+[[worker_profiles]]
+role = "atomic-ticket-reviewer"
+model = "sonnet"
+reasoning = "low"
+profile = "atomic-ticket-reviewer-sonnet-low"
+agent_file = "agents/atomic-ticket-reviewer-sonnet-low.md"
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline", "casefile-review-atomic", "casefile-review-two-stage"]
+
+[[worker_profiles]]
+role = "atomic-ticket-reviewer"
+model = "sonnet"
+reasoning = "medium"
+profile = "atomic-ticket-reviewer-sonnet-medium"
+agent_file = "agents/atomic-ticket-reviewer-sonnet-medium.md"
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline", "casefile-review-atomic", "casefile-review-two-stage"]
+
+[[worker_profiles]]
+role = "atomic-ticket-reviewer"
+model = "sonnet"
+reasoning = "high"
+profile = "atomic-ticket-reviewer-sonnet-high"
+agent_file = "agents/atomic-ticket-reviewer-sonnet-high.md"
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline", "casefile-review-atomic", "casefile-review-two-stage"]
+
+[[worker_profiles]]
+role = "atomic-ticket-reviewer"
+model = "sonnet"
+reasoning = "xhigh"
+profile = "atomic-ticket-reviewer-sonnet-xhigh"
+agent_file = "agents/atomic-ticket-reviewer-sonnet-xhigh.md"
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline", "casefile-review-atomic", "casefile-review-two-stage"]
+
+[[worker_profiles]]
+role = "atomic-ticket-reviewer"
+model = "sonnet"
+reasoning = "max"
+profile = "atomic-ticket-reviewer-sonnet-max"
+agent_file = "agents/atomic-ticket-reviewer-sonnet-max.md"
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline", "casefile-review-atomic", "casefile-review-two-stage"]
+
+[[worker_profiles]]
+role = "atomic-ticket-reviewer"
+model = "haiku"
+reasoning = "low"
+profile = "atomic-ticket-reviewer-haiku-low"
+agent_file = "agents/atomic-ticket-reviewer-haiku-low.md"
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline", "casefile-review-atomic", "casefile-review-two-stage"]
+
+[[worker_profiles]]
+role = "atomic-ticket-reviewer"
+model = "haiku"
+reasoning = "medium"
+profile = "atomic-ticket-reviewer-haiku-medium"
+agent_file = "agents/atomic-ticket-reviewer-haiku-medium.md"
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline", "casefile-review-atomic", "casefile-review-two-stage"]
+
+[[worker_profiles]]
+role = "atomic-ticket-reviewer"
+model = "haiku"
+reasoning = "high"
+profile = "atomic-ticket-reviewer-haiku-high"
+agent_file = "agents/atomic-ticket-reviewer-haiku-high.md"
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline", "casefile-review-atomic", "casefile-review-two-stage"]
+
+[[worker_profiles]]
+role = "atomic-ticket-reviewer"
+model = "haiku"
+reasoning = "xhigh"
+profile = "atomic-ticket-reviewer-haiku-xhigh"
+agent_file = "agents/atomic-ticket-reviewer-haiku-xhigh.md"
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline", "casefile-review-atomic", "casefile-review-two-stage"]
+
+[[worker_profiles]]
+role = "atomic-ticket-reviewer"
+model = "haiku"
+reasoning = "max"
+profile = "atomic-ticket-reviewer-haiku-max"
+agent_file = "agents/atomic-ticket-reviewer-haiku-max.md"
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline", "casefile-review-atomic", "casefile-review-two-stage"]
+
+[[worker_profiles]]
+role = "verification-reviewer"
+model = "fable"
+reasoning = "low"
+profile = "verification-reviewer-fable-low"
+agent_file = "agents/verification-reviewer-fable-low.md"
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline", "casefile-review-two-stage"]
+
+[[worker_profiles]]
+role = "verification-reviewer"
+model = "fable"
+reasoning = "medium"
+profile = "verification-reviewer-fable-medium"
+agent_file = "agents/verification-reviewer-fable-medium.md"
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline", "casefile-review-two-stage"]
+
+[[worker_profiles]]
+role = "verification-reviewer"
+model = "fable"
+reasoning = "high"
+profile = "verification-reviewer-fable-high"
+agent_file = "agents/verification-reviewer-fable-high.md"
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline", "casefile-review-two-stage"]
+
+[[worker_profiles]]
+role = "verification-reviewer"
+model = "fable"
+reasoning = "xhigh"
+profile = "verification-reviewer-fable-xhigh"
+agent_file = "agents/verification-reviewer-fable-xhigh.md"
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline", "casefile-review-two-stage"]
+
+[[worker_profiles]]
+role = "verification-reviewer"
+model = "fable"
+reasoning = "max"
+profile = "verification-reviewer-fable-max"
+agent_file = "agents/verification-reviewer-fable-max.md"
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline", "casefile-review-two-stage"]
+
+[[worker_profiles]]
+role = "verification-reviewer"
+model = "opus"
+reasoning = "low"
+profile = "verification-reviewer-opus-low"
+agent_file = "agents/verification-reviewer-opus-low.md"
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline", "casefile-review-two-stage"]
+
+[[worker_profiles]]
+role = "verification-reviewer"
+model = "opus"
+reasoning = "medium"
+profile = "verification-reviewer-opus-medium"
+agent_file = "agents/verification-reviewer-opus-medium.md"
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline", "casefile-review-two-stage"]
+
+[[worker_profiles]]
+role = "verification-reviewer"
+model = "opus"
+reasoning = "high"
+profile = "verification-reviewer-opus-high"
+agent_file = "agents/verification-reviewer-opus-high.md"
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline", "casefile-review-two-stage"]
+
+[[worker_profiles]]
+role = "verification-reviewer"
+model = "opus"
+reasoning = "xhigh"
+profile = "verification-reviewer-opus-xhigh"
+agent_file = "agents/verification-reviewer-opus-xhigh.md"
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline", "casefile-review-two-stage"]
+
+[[worker_profiles]]
+role = "verification-reviewer"
+model = "opus"
+reasoning = "max"
+profile = "verification-reviewer-opus-max"
+agent_file = "agents/verification-reviewer-opus-max.md"
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline", "casefile-review-two-stage"]
+
+[[worker_profiles]]
+role = "verification-reviewer"
+model = "sonnet"
+reasoning = "low"
+profile = "verification-reviewer-sonnet-low"
+agent_file = "agents/verification-reviewer-sonnet-low.md"
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline", "casefile-review-two-stage"]
+
+[[worker_profiles]]
+role = "verification-reviewer"
+model = "sonnet"
+reasoning = "medium"
+profile = "verification-reviewer-sonnet-medium"
+agent_file = "agents/verification-reviewer-sonnet-medium.md"
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline", "casefile-review-two-stage"]
+
+[[worker_profiles]]
+role = "verification-reviewer"
+model = "sonnet"
+reasoning = "high"
+profile = "verification-reviewer-sonnet-high"
+agent_file = "agents/verification-reviewer-sonnet-high.md"
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline", "casefile-review-two-stage"]
+
+[[worker_profiles]]
+role = "verification-reviewer"
+model = "sonnet"
+reasoning = "xhigh"
+profile = "verification-reviewer-sonnet-xhigh"
+agent_file = "agents/verification-reviewer-sonnet-xhigh.md"
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline", "casefile-review-two-stage"]
+
+[[worker_profiles]]
+role = "verification-reviewer"
+model = "sonnet"
+reasoning = "max"
+profile = "verification-reviewer-sonnet-max"
+agent_file = "agents/verification-reviewer-sonnet-max.md"
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline", "casefile-review-two-stage"]
+
+[[worker_profiles]]
+role = "verification-reviewer"
+model = "haiku"
+reasoning = "low"
+profile = "verification-reviewer-haiku-low"
+agent_file = "agents/verification-reviewer-haiku-low.md"
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline", "casefile-review-two-stage"]
+
+[[worker_profiles]]
+role = "verification-reviewer"
+model = "haiku"
+reasoning = "medium"
+profile = "verification-reviewer-haiku-medium"
+agent_file = "agents/verification-reviewer-haiku-medium.md"
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline", "casefile-review-two-stage"]
+
+[[worker_profiles]]
+role = "verification-reviewer"
+model = "haiku"
+reasoning = "high"
+profile = "verification-reviewer-haiku-high"
+agent_file = "agents/verification-reviewer-haiku-high.md"
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline", "casefile-review-two-stage"]
+
+[[worker_profiles]]
+role = "verification-reviewer"
+model = "haiku"
+reasoning = "xhigh"
+profile = "verification-reviewer-haiku-xhigh"
+agent_file = "agents/verification-reviewer-haiku-xhigh.md"
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline", "casefile-review-two-stage"]
+
+[[worker_profiles]]
+role = "verification-reviewer"
+model = "haiku"
+reasoning = "max"
+profile = "verification-reviewer-haiku-max"
+agent_file = "agents/verification-reviewer-haiku-max.md"
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline", "casefile-review-two-stage"]
+
+[[worker_profiles]]
+role = "look-ahead-investigator"
+model = "fable"
+reasoning = "low"
+profile = "look-ahead-investigator-fable-low"
+agent_file = "agents/look-ahead-investigator-fable-low.md"
+strategy_ids = ["casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline"]
+
+[[worker_profiles]]
+role = "look-ahead-investigator"
+model = "fable"
+reasoning = "medium"
+profile = "look-ahead-investigator-fable-medium"
+agent_file = "agents/look-ahead-investigator-fable-medium.md"
+strategy_ids = ["casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline"]
+
+[[worker_profiles]]
+role = "look-ahead-investigator"
+model = "fable"
+reasoning = "high"
+profile = "look-ahead-investigator-fable-high"
+agent_file = "agents/look-ahead-investigator-fable-high.md"
+strategy_ids = ["casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline"]
+
+[[worker_profiles]]
+role = "look-ahead-investigator"
+model = "fable"
+reasoning = "xhigh"
+profile = "look-ahead-investigator-fable-xhigh"
+agent_file = "agents/look-ahead-investigator-fable-xhigh.md"
+strategy_ids = ["casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline"]
+
+[[worker_profiles]]
+role = "look-ahead-investigator"
+model = "fable"
+reasoning = "max"
+profile = "look-ahead-investigator-fable-max"
+agent_file = "agents/look-ahead-investigator-fable-max.md"
+strategy_ids = ["casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline"]
+
+[[worker_profiles]]
+role = "look-ahead-investigator"
+model = "opus"
+reasoning = "low"
+profile = "look-ahead-investigator-opus-low"
+agent_file = "agents/look-ahead-investigator-opus-low.md"
+strategy_ids = ["casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline"]
+
+[[worker_profiles]]
+role = "look-ahead-investigator"
+model = "opus"
+reasoning = "medium"
+profile = "look-ahead-investigator-opus-medium"
+agent_file = "agents/look-ahead-investigator-opus-medium.md"
+strategy_ids = ["casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline"]
+
+[[worker_profiles]]
+role = "look-ahead-investigator"
+model = "opus"
+reasoning = "high"
+profile = "look-ahead-investigator-opus-high"
+agent_file = "agents/look-ahead-investigator-opus-high.md"
+strategy_ids = ["casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline"]
+
+[[worker_profiles]]
+role = "look-ahead-investigator"
+model = "opus"
+reasoning = "xhigh"
+profile = "look-ahead-investigator-opus-xhigh"
+agent_file = "agents/look-ahead-investigator-opus-xhigh.md"
+strategy_ids = ["casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline"]
+
+[[worker_profiles]]
+role = "look-ahead-investigator"
+model = "opus"
+reasoning = "max"
+profile = "look-ahead-investigator-opus-max"
+agent_file = "agents/look-ahead-investigator-opus-max.md"
+strategy_ids = ["casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline"]
+
+[[worker_profiles]]
+role = "look-ahead-investigator"
+model = "sonnet"
+reasoning = "low"
+profile = "look-ahead-investigator-sonnet-low"
+agent_file = "agents/look-ahead-investigator-sonnet-low.md"
+strategy_ids = ["casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline"]
+
+[[worker_profiles]]
+role = "look-ahead-investigator"
+model = "sonnet"
+reasoning = "medium"
+profile = "look-ahead-investigator-sonnet-medium"
+agent_file = "agents/look-ahead-investigator-sonnet-medium.md"
+strategy_ids = ["casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline"]
+
+[[worker_profiles]]
+role = "look-ahead-investigator"
+model = "sonnet"
+reasoning = "high"
+profile = "look-ahead-investigator-sonnet-high"
+agent_file = "agents/look-ahead-investigator-sonnet-high.md"
+strategy_ids = ["casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline"]
+
+[[worker_profiles]]
+role = "look-ahead-investigator"
+model = "sonnet"
+reasoning = "xhigh"
+profile = "look-ahead-investigator-sonnet-xhigh"
+agent_file = "agents/look-ahead-investigator-sonnet-xhigh.md"
+strategy_ids = ["casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline"]
+
+[[worker_profiles]]
+role = "look-ahead-investigator"
+model = "sonnet"
+reasoning = "max"
+profile = "look-ahead-investigator-sonnet-max"
+agent_file = "agents/look-ahead-investigator-sonnet-max.md"
+strategy_ids = ["casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline"]
+
+[[worker_profiles]]
+role = "look-ahead-investigator"
+model = "haiku"
+reasoning = "low"
+profile = "look-ahead-investigator-haiku-low"
+agent_file = "agents/look-ahead-investigator-haiku-low.md"
+strategy_ids = ["casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline"]
+
+[[worker_profiles]]
+role = "look-ahead-investigator"
+model = "haiku"
+reasoning = "medium"
+profile = "look-ahead-investigator-haiku-medium"
+agent_file = "agents/look-ahead-investigator-haiku-medium.md"
+strategy_ids = ["casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline"]
+
+[[worker_profiles]]
+role = "look-ahead-investigator"
+model = "haiku"
+reasoning = "high"
+profile = "look-ahead-investigator-haiku-high"
+agent_file = "agents/look-ahead-investigator-haiku-high.md"
+strategy_ids = ["casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline"]
+
+[[worker_profiles]]
+role = "look-ahead-investigator"
+model = "haiku"
+reasoning = "xhigh"
+profile = "look-ahead-investigator-haiku-xhigh"
+agent_file = "agents/look-ahead-investigator-haiku-xhigh.md"
+strategy_ids = ["casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline"]
+
+[[worker_profiles]]
+role = "look-ahead-investigator"
+model = "haiku"
+reasoning = "max"
+profile = "look-ahead-investigator-haiku-max"
+agent_file = "agents/look-ahead-investigator-haiku-max.md"
+strategy_ids = ["casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline"]
