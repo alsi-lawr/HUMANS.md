@@ -39,7 +39,6 @@ def native_stub(target: str) -> bytes:
 class FakeCodex:
     def __init__(self, catalog: dict, doctor_ok: bool = True, version: str = "0.145.0"):
         self.catalog = catalog
-        self.raw_catalog = catalog
         self.doctor_ok = doctor_ok
         self.version = version
         self.installed = True
@@ -190,7 +189,7 @@ class CodexSetupTests(unittest.TestCase):
             fake = FakeCodex(catalog)
             with self.fake_command(fake):
                 plan = setup.prepare(plugin, home, "codex")
-                self.assertIn("gpt-5.3-codex-spark", plan["patched"])
+                self.assertIn("gpt-5.3-codex-spark", plan["catalog_models"])
                 result = setup.install(plan)
 
                 selected = {
@@ -242,7 +241,7 @@ class CodexSetupTests(unittest.TestCase):
                 with self.fake_command(fake):
                     plan = setup.prepare(plugin, home, "codex", version=version)
                     self.assertEqual(version, setup.preview(plan)["multi_agent_version"])
-                    self.assertIn("gpt-5.3-codex-spark", plan["patched"])
+                    self.assertIn("gpt-5.3-codex-spark", plan["catalog_models"])
                     result = setup.install(plan)
                     receipt_path, receipt = setup.receipt(home, Path(result["receipt"]))
                     self.assertEqual(version, receipt["multi_agent_version"])
@@ -366,22 +365,53 @@ class CodexSetupTests(unittest.TestCase):
                     self.assertFalse((home / f"models-casefile-{version}.json").exists())
                     self.assertFalse((home / "backups/casefile").exists())
 
-    def test_pinned_model_absent_upstream_is_synthesised_and_verified(self):
+    def test_complete_maintained_catalog_carries_pinned_model(self):
         profiles = Path(__file__).resolve().parents[1] / "adapters/codex/profiles.toml"
         pinned = setup.pinned_models(profiles)
         self.assertEqual({"gpt-5.3-codex-spark"}, pinned)
         for version in ("v1", "v2"):
             with self.subTest(version=version):
-                written, patched = setup.catalog_override(profiles, version)
+                written, catalog_models = setup.catalog_replacement(profiles, version)
                 document = json.loads(written.decode("ascii"))
                 slugs = {model["slug"] for model in document["models"]}
-                # Synthesised from the target, then patched like any other model.
-                self.assertLessEqual(pinned, slugs)
-                self.assertLessEqual(pinned, set(patched))
+                self.assertEqual(setup.carried_models(profiles), slugs)
+                self.assertEqual(slugs, set(catalog_models))
                 entry = next(m for m in document["models"] if m["slug"] == "gpt-5.3-codex-spark")
                 self.assertEqual("GPT-5.3-Codex-Spark", entry["display_name"])
                 self.assertTrue(entry["base_instructions"])
                 self.assertIsInstance(entry["model_messages"], dict)
+                for model in document["models"]:
+                    self.assertLessEqual(setup.REQUIRED_CATALOG_FIELDS, set(model))
+                    self.assertTrue(
+                        all(
+                            level["description"]
+                            for level in model["supported_reasoning_levels"]
+                        )
+                    )
+
+    def test_unknown_projected_alias_does_not_change_replacement_catalog(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            plugin, home, _, projection, _ = self.fixture(Path(temporary))
+            projection["models"].append(
+                {
+                    "slug": "gpt-5.6-sol-wm",
+                    "display_name": "GPT-5.6-Sol-WM",
+                    "visibility": "hide",
+                    "supported_reasoning_levels": [
+                        {
+                            "effort": "high",
+                            "description": "Greater reasoning depth for complex problems",
+                        }
+                    ],
+                }
+            )
+            with self.fake_command(FakeCodex(projection)):
+                plan = setup.prepare(plugin, home, "codex", version="v2")
+            slugs = {
+                model["slug"] for model in json.loads(plan["catalog"])["models"]
+            }
+            self.assertNotIn("gpt-5.6-sol-wm", slugs)
+            self.assertEqual(setup.carried_models(plugin / "config/profiles.toml"), slugs)
 
 
     def test_config_clobbers_owned_keys_and_preserves_unowned(self):
@@ -485,13 +515,13 @@ class CodexSetupTests(unittest.TestCase):
             profile = plugin / "config/profiles.toml"
             profile.write_text(
                 profile.read_text(encoding="ascii").replace(
-                    "catalog/gpt-5.6-sol/base-instructions.md",
-                    r"catalog\\gpt-5.6-sol\\base-instructions.md",
+                    "catalog/models.json",
+                    r"catalog\\models.json",
                 ),
                 encoding="ascii",
             )
             with self.fake_command(FakeCodex(catalog)):
-                self.assertIn("gpt-5.6-sol", setup.prepare(plugin, home, "codex")["patched"])
+                self.assertIn("gpt-5.6-sol", setup.prepare(plugin, home, "codex")["catalog_models"])
 
     def test_fdopen_failure_and_rollback_restore_original_bytes(self):
         with tempfile.TemporaryDirectory() as temporary:

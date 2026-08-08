@@ -49,6 +49,40 @@ REQUIRED_MODELS = {
 }
 V1_SELECTOR_MODELS = {"gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"}
 MULTI_AGENT_VERSIONS = {"v1", "v2"}
+REQUIRED_CATALOG_FIELDS = {
+    "additional_speed_tiers",
+    "apply_patch_tool_type",
+    "availability_nux",
+    "base_instructions",
+    "comp_hash",
+    "context_window",
+    "default_reasoning_level",
+    "default_reasoning_summary",
+    "default_verbosity",
+    "description",
+    "display_name",
+    "experimental_supported_tools",
+    "include_skills_usage_instructions",
+    "input_modalities",
+    "max_context_window",
+    "model_messages",
+    "multi_agent_version",
+    "priority",
+    "service_tiers",
+    "shell_type",
+    "slug",
+    "support_verbosity",
+    "supported_in_api",
+    "supported_reasoning_levels",
+    "supports_image_detail_original",
+    "supports_parallel_tool_calls",
+    "supports_search_tool",
+    "truncation_policy",
+    "upgrade",
+    "use_responses_lite",
+    "visibility",
+    "web_search_tool_type",
+}
 SCALAR_BEGIN = b"# >>> casefile setup scalars >>>\n"
 SCALAR_END = b"# <<< casefile setup scalars <<<\n"
 TABLE_BEGIN = b"\n# >>> casefile setup tables >>>\n"
@@ -143,6 +177,7 @@ def plugin_root(path: Path) -> tuple[Path, dict]:
         raise SetupError("installed plugin identity is not casefile")
     for relative in (
         "config/config-fragment.toml.in",
+        "config/catalog/models.json",
         "config/profiles.toml",
         "runtime/artifacts.json",
         "scripts/casefile_runtime.py",
@@ -174,10 +209,9 @@ def discover(executable: str, environment: dict[str, str], version: str) -> dict
     return plugin
 
 
-def resource(profile: Path, target: dict, path_key: str) -> bytes:
-    value = target.get(path_key)
+def profile_resource(profile: Path, value: object) -> bytes:
     if not isinstance(value, str) or not value:
-        raise SetupError(f"catalog target lacks {path_key}")
+        raise SetupError("catalog file is not configured")
     relative = PurePosixPath(value.replace("\\", "/"))
     if relative.is_absolute() or ".." in relative.parts:
         raise SetupError(f"unsafe catalog resource: {value}")
@@ -224,35 +258,16 @@ def pinned_models(profile_path: Path) -> set[str]:
     }
 
 
-def synthesised_model(target: dict, profile_path: Path) -> dict:
-    """Build a catalog entry for a pinned model from its declared target."""
-    expected = target.get("expected", {})
-    display_name = expected.get("display_name")
-    visibility = expected.get("visibility")
-    efforts = target.get("required_reasoning", [])
-    if not isinstance(display_name, str) or not isinstance(visibility, str):
-        raise SetupError(f"pinned target lacks expected fields: {target.get('id')}")
-    if not isinstance(efforts, list) or not efforts:
-        raise SetupError(f"pinned target lacks required reasoning: {target.get('id')}")
-    return {
-        "slug": target["id"],
-        "display_name": display_name,
-        "visibility": visibility,
-        "supported_reasoning_levels": [{"effort": effort} for effort in efforts],
-        # Present so the selector pass can clear or assign it; value set per runtime below.
-        "multi_agent_version": None,
-    }
-
-
-def catalog_override(profile_path: Path, version: str) -> tuple[bytes, list[str]]:
+def catalog_replacement(profile_path: Path, version: str) -> tuple[bytes, list[str]]:
     version = multi_agent_version(version)
     profile = tomllib.loads(profile_path.read_text(encoding="ascii"))
     policy = profile.get("catalog", {})
     if profile.get("schema_version") != 1:
         raise SetupError("unsupported catalog or profile schema")
-    if policy.get("id_field") != "slug" or policy.get("selector_fields") != [
-        "multi_agent_version"
-    ]:
+    if (
+        policy.get("id_field") != "slug"
+        or policy.get("selector_fields") != ["multi_agent_version"]
+    ):
         raise SetupError("unsupported catalog policy")
     targets = policy.get("targets", [])
     identifiers = [target.get("id") for target in targets]
@@ -262,31 +277,60 @@ def catalog_override(profile_path: Path, version: str) -> tuple[bytes, list[str]
     if missing:
         raise SetupError(f"catalog lacks required models: {', '.join(missing)}")
 
-    result = {"models": [synthesised_model(target, profile_path) for target in targets]}
+    try:
+        result = json.loads(profile_resource(profile_path, policy.get("file")))
+    except (UnicodeError, json.JSONDecodeError) as error:
+        raise SetupError(f"maintained catalog is invalid: {error}") from error
+    if not isinstance(result, dict):
+        raise SetupError("maintained catalog is not an object")
+    catalog_ids(result, "maintained catalog")
     output = {model["slug"]: model for model in result["models"]}
-    patched: list[str] = []
+    missing = sorted(set(identifiers) - set(output))
+    extra = sorted(set(output) - set(identifiers))
+    if missing or extra:
+        details = []
+        if missing:
+            details.append("missing " + ", ".join(missing))
+        if extra:
+            details.append("unexpected " + ", ".join(extra))
+        raise SetupError("maintained catalog differs from targets: " + "; ".join(details))
+
     for target in targets:
         model_id = target.get("id")
         model = output[model_id]
-        model["base_instructions"] = resource(profile_path, target, "base_instructions_file").decode(
-            "ascii"
-        )
-        messages = json.loads(
-            resource(profile_path, target, "model_messages_file").decode("ascii")
-        )
-        if not isinstance(messages, dict):
-            raise SetupError(f"invalid model messages: {model_id}")
-        model["model_messages"] = messages
-        selectors = target.get("null_selectors", [])
-        if not isinstance(selectors, list) or set(selectors) - {"multi_agent_version"}:
-            raise SetupError(f"unsupported selector for {model_id}")
-        for selector in selectors:
-            set_selector(model, selector)
-        patched.append(model_id)
-    if version == "v2":
-        for model in result["models"]:
-            model["multi_agent_version"] = "v2"
-    return canonical(result), sorted(patched)
+        absent = sorted(REQUIRED_CATALOG_FIELDS - set(model))
+        if absent:
+            raise SetupError(
+                f"maintained catalog model {model_id} lacks fields: {', '.join(absent)}"
+            )
+        if not isinstance(model["base_instructions"], str) or not model["base_instructions"]:
+            raise SetupError(f"maintained catalog has invalid instructions: {model_id}")
+        if not isinstance(model["model_messages"], dict):
+            raise SetupError(f"maintained catalog has invalid model messages: {model_id}")
+        levels = model["supported_reasoning_levels"]
+        if not isinstance(levels, list) or any(
+            not isinstance(level, dict)
+            or not isinstance(level.get("effort"), str)
+            or not isinstance(level.get("description"), str)
+            or not level["description"]
+            for level in levels
+        ):
+            raise SetupError(f"maintained catalog has invalid reasoning levels: {model_id}")
+        efforts = {level["effort"] for level in levels}
+        absent_efforts = sorted(set(target.get("required_reasoning", [])) - efforts)
+        if absent_efforts:
+            raise SetupError(
+                f"maintained catalog model {model_id} lacks reasoning: "
+                + ", ".join(absent_efforts)
+            )
+        for field, expected in target.get("expected", {}).items():
+            if model.get(field) != expected:
+                raise SetupError(
+                    f"maintained catalog model {model_id} field {field} "
+                    f"differs from {expected!r}"
+                )
+        set_selector(model, "multi_agent_version", "v2" if version == "v2" else None)
+    return canonical(result), sorted(output)
 
 
 def marked(begin: bytes, payload: bytes, end: bytes) -> bytes:
@@ -598,24 +642,16 @@ def catalog_ids(document: dict, label: str) -> set[str]:
 
 
 def require_available_models(
-    projection: dict, pinned: set[str] | None = None, carried: set[str] | None = None
+    projection: dict, pinned: set[str] | None = None
 ) -> set[str]:
     identifiers = catalog_ids(projection, "Codex model projection")
     missing = sorted(REQUIRED_MODELS - identifiers - (pinned or set()))
     if missing:
         raise SetupError(f"Codex lacks required models: {', '.join(missing)}")
-    # Refuse rather than silently install against a model set this catalog does not cover.
-    if carried is not None:
-        unsupported = sorted(identifiers - carried)
-        if unsupported:
-            raise SetupError(
-                "Codex offers models the packaged catalog does not carry: "
-                + ", ".join(unsupported)
-            )
     return identifiers
 
 
-def raw_catalog(path: Path) -> dict:
+def read_catalog(path: Path) -> dict:
     if path.is_symlink() or not path.is_file():
         raise SetupError(f"Codex catalog source is missing or unsafe: {path}")
     try:
@@ -628,10 +664,10 @@ def raw_catalog(path: Path) -> dict:
     return value
 
 
-def cross_check_catalog(expected_ids: set[str], raw: dict, label: str) -> None:
-    raw_ids = catalog_ids(raw, label)
-    missing = sorted(expected_ids - raw_ids)
-    extra = sorted(raw_ids - expected_ids)
+def cross_check_catalog(expected_ids: set[str], catalog: dict, label: str) -> None:
+    actual_ids = catalog_ids(catalog, label)
+    missing = sorted(expected_ids - actual_ids)
+    extra = sorted(actual_ids - expected_ids)
     if missing or extra:
         details = []
         if missing:
@@ -685,10 +721,8 @@ def prepare(
     config = config_candidate(current, root, catalog_path, version, binary, planning)
     profiles_path = root / "config/profiles.toml"
     projection = acquire_models(executable, profiles_path)
-    require_available_models(
-        projection, pinned_models(profiles_path), carried_models(profiles_path)
-    )
-    catalog, patched = catalog_override(profiles_path, version)
+    require_available_models(projection, pinned_models(profiles_path))
+    catalog, catalog_models = catalog_replacement(profiles_path, version)
     return {
         "root": root,
         "home": home,
@@ -698,7 +732,7 @@ def prepare(
         "multi_agent_version": version,
         "config": config,
         "catalog": catalog,
-        "patched": patched,
+        "catalog_models": catalog_models,
         "planning_root": planning,
         "runtime": runtime,
         "binary": binary,
@@ -715,7 +749,7 @@ def preview(plan: dict) -> dict:
         "catalog": str(home / f"models-casefile-{plan['multi_agent_version']}.json"),
         "multi_agent_version": plan["multi_agent_version"],
         "receipt_root": str(home / "backups/casefile"),
-        "patched_models": plan["patched"],
+        "catalog_models": plan["catalog_models"],
         "config_ownership": "marked key and table blocks",
         "restart_required": True,
         "planning_root": str(plan["planning_root"]),
@@ -744,11 +778,9 @@ def verify_effective_catalog(plan: dict) -> None:
     version = multi_agent_version(plan.get("multi_agent_version", "v1"))
     profiles_path = plan["root"] / "config/profiles.toml"
     projection = acquire_models(plan["executable"], profiles_path)
-    require_available_models(
-        projection, pinned_models(profiles_path), carried_models(profiles_path)
-    )
+    require_available_models(projection, pinned_models(profiles_path))
     catalog_path = plan["home"] / f"models-casefile-{version}.json"
-    document = raw_catalog(catalog_path)
+    document = read_catalog(catalog_path)
     cross_check_catalog(carried_models(profiles_path), document, "written Casefile catalog")
     verify_catalog_selectors(document, version, "effective catalog")
 

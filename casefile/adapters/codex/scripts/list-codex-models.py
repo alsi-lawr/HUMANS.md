@@ -133,12 +133,6 @@ def listing(executable: str, profile_path: Path, timeout: float = 20.0) -> dict:
     return {"models": sorted(models, key=lambda model: model["slug"])}
 
 
-def unsupported(models: dict, profile_path: Path) -> list[str]:
-    """Models Codex offers that the packaged catalog does not carry."""
-    carried = {target.get("id") for target in targets(profile_path)}
-    return sorted({model["slug"] for model in models["models"]} - carried)
-
-
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--codex-executable", default="codex")
