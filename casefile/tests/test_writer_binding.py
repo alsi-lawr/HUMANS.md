@@ -109,6 +109,12 @@ class WriterBindingTests(unittest.TestCase):
     def test_active_catalog_uses_app_server_availability_and_owned_selectors(self):
         with tempfile.TemporaryDirectory() as temporary:
             home = Path(temporary)
+            packaged_script = home / "plugin/scripts/resolve-writer-binding.py"
+            packaged_script.parent.mkdir(parents=True)
+            packaged_script.touch()
+            packaged_profiles = home / "plugin/config/profiles.toml"
+            packaged_profiles.parent.mkdir()
+            packaged_profiles.write_bytes(PROFILES_PATH.read_bytes())
             catalog_path = home / "models-casefile-v2.json"
             catalog_path.write_text(
                 json.dumps(
@@ -140,11 +146,11 @@ class WriterBindingTests(unittest.TestCase):
                     }
                 ]
             }
-            with mock.patch.object(
+            with mock.patch.object(binding, "__file__", str(packaged_script)), mock.patch.object(
                 binding.list_codex_models, "listing", return_value=projection
             ) as model_list:
                 active = binding.active_catalog("codex", home)
-            model_list.assert_called_once()
+            model_list.assert_called_once_with("codex", packaged_profiles)
             self.assertEqual("list", active["models"][0]["visibility"])
             self.assertEqual(
                 [{"effort": "high"}],

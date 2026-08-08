@@ -33,10 +33,27 @@ translate disposable derived state into product authority.
 When a requested safeguard crosses that boundary, state what owns the failure and omit it unless the
 requester explicitly expands the supported contract.
 
+## Code Comments
+
+Do not add comments that restate what the code does. Prefer self-explanatory names and structure.
+Only add comments for non-obvious intent, constraints, workarounds, invariants, or surprising
+implementation details. Do not add section-header comments. Do not editorialize or narrate in
+comments. A comment must only be used to disambiguate genuinely ambiguous intent.
+
+If in doubt, do not comment. Treat comments as a code smell unless you can genuinely justify it.
+
 ## Test Supported Behaviour
 
-Trace each test to a supported operation, an owned invariant, or a concrete regression in this
-codebase.
+A test suite is a maintenance burden: every test must guard something genuinely valuable. Do not
+practice TDD and do not chase coverage. Write a test only where correct behaviour is not obvious
+from reading the code: emergent, cross-cutting, transactional, concurrent, or boundary-window
+behaviour. Where a straightforward read already proves the behaviour, add no test: presence and
+registration assertions, copy and string assertions, and signature-echo tests are the burden, not
+the guard. Generated code never warrants a test; authored code is judged by the same bar, including
+authored fragments inside otherwise generated files.
+
+Trace each test that clears that bar to a supported operation, an owned invariant, or a concrete
+regression in this codebase.
 
 Test stale revisions, validation failures, rollback behavior, and data preservation when they are
 reachable through supported calls. Do not manufacture coverage by directly corrupting derived
