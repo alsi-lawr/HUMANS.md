@@ -12,5 +12,5 @@ Require one explicit absolute activated planning Store root. Run
 without `--apply`, review the plan, then ask once before applying. Omit `--multi-agent-version` for
 the V1 default, or pass `--multi-agent-version v2`. This lifecycle owns only Casefile model-catalog,
 selected multi-agent feature, profile, and role configuration; it never installs or replaces
-`AGENTS.md`. Setup refuses to install while Codex offers a model the packaged catalog does not
-carry; report that refusal rather than working around it.
+`AGENTS.md`. Codex discovery only confirms required-model availability. It never supplies or alters
+the Casefile-owned replacement catalog, and projected IDs outside that catalog do not block setup.
