@@ -128,7 +128,7 @@ def owned_catalog(home: Path, runtime: str) -> dict:
 
 
 def active_catalog(executable: str, home: Path) -> dict:
-    profile_path = Path(__file__).resolve().parents[1] / "profiles.toml"
+    profile_path = default_profiles_path()
     try:
         projection = list_codex_models.listing(executable, profile_path)
     except list_codex_models.ProjectionError as error:
