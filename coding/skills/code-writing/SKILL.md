@@ -46,7 +46,7 @@ If in doubt, do not comment. Treat comments as a code smell unless you can genui
 
 A test suite is a maintenance burden: every test must guard something genuinely valuable. Do not
 practice TDD and do not chase coverage. Write a test only where correct behaviour is not obvious
-from reading the code — emergent, cross-cutting, transactional, concurrent, or boundary-window
+from reading the code: emergent, cross-cutting, transactional, concurrent, or boundary-window
 behaviour. Where a straightforward read already proves the behaviour, add no test: presence and
 registration assertions, copy and string assertions, and signature-echo tests are the burden, not
 the guard. Generated code never warrants a test; authored code is judged by the same bar, including
