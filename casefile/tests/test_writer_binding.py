@@ -106,7 +106,7 @@ class WriterBindingTests(unittest.TestCase):
             with self.assertRaisesRegex(binding.BindingError, "exactly one"):
                 binding.active_runtime(home)
 
-    def test_active_catalog_uses_app_server_availability_and_owned_selectors(self):
+    def test_active_catalog_uses_app_server_only_for_availability(self):
         with tempfile.TemporaryDirectory() as temporary:
             home = Path(temporary)
             packaged_script = home / "plugin/scripts/resolve-writer-binding.py"
@@ -125,6 +125,12 @@ class WriterBindingTests(unittest.TestCase):
                                 "multi_agent_version": "v2",
                                 "visibility": "hide",
                                 "supported_reasoning_levels": [{"effort": "low"}],
+                            },
+                            {
+                                "slug": "gpt-5.2",
+                                "multi_agent_version": "v2",
+                                "visibility": "list",
+                                "supported_reasoning_levels": [{"effort": "xhigh"}],
                             }
                         ]
                     }
@@ -151,25 +157,27 @@ class WriterBindingTests(unittest.TestCase):
             ) as model_list:
                 active = binding.active_catalog("codex", home)
             model_list.assert_called_once_with("codex", packaged_profiles)
-            self.assertEqual("list", active["models"][0]["visibility"])
+            self.assertEqual(["gpt-5.6-sol"], [model["slug"] for model in active["models"]])
+            self.assertEqual("hide", active["models"][0]["visibility"])
             self.assertEqual(
-                [{"effort": "high"}],
+                [{"effort": "low"}],
                 active["models"][0]["supported_reasoning_levels"],
             )
             self.assertEqual("v2", active["models"][0]["multi_agent_version"])
 
             projection["models"].append(
                 {
-                    "slug": "gpt-5.3-codex-spark",
-                    "display_name": "Spark",
-                    "visibility": "list",
-                    "supported_reasoning_levels": [{"effort": "low"}],
+                    "slug": "gpt-5.6-sol-wm",
+                    "display_name": "Sol WM",
+                    "visibility": "hide",
+                    "supported_reasoning_levels": [{"effort": "high"}],
                 }
             )
             with mock.patch.object(
                 binding.list_codex_models, "listing", return_value=projection
-            ), self.assertRaisesRegex(binding.BindingError, "IDs differ"):
-                binding.active_catalog("codex", home)
+            ):
+                active = binding.active_catalog("codex", home)
+            self.assertEqual(["gpt-5.6-sol"], [model["slug"] for model in active["models"]])
 
     def test_v2_offers_visible_optional_models_and_required_spark_but_not_hidden_models(self):
         catalog = {

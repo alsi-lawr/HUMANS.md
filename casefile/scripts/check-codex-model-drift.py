@@ -66,7 +66,7 @@ def main() -> int:
     body = [
         "# Codex model profile drift",
         "",
-        "This report compares required model IDs, visibility, display names, and required reasoning levels from Codex's stable app-server projection. Raw runtime selectors are intentionally verified by setup lifecycle tests instead. It contains no catalog payload and makes no instruction edits.",
+        "This report compares required model IDs, visibility, display names, and required reasoning levels from Codex's stable app-server projection. Runtime selectors are intentionally verified by setup lifecycle tests instead. It contains no catalog payload and makes no instruction edits.",
         "",
     ]
     if findings:

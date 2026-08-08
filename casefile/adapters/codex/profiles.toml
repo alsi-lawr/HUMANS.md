@@ -154,18 +154,14 @@ reasoning = "medium"
 agent_file = "agents/casefile-review-two-stage-verification-reviewer.toml"
 
 [catalog]
+file = "catalog/models.json"
 id_field = "slug"
-instruction_field = "base_instructions"
-model_messages_field = "model_messages"
 selector_fields = ["multi_agent_version"]
 
 [[catalog.targets]]
 id = "gpt-5.6-sol"
 required = true
 required_reasoning = ["low", "medium", "high", "xhigh", "max", "ultra"]
-base_instructions_file = "catalog/gpt-5.6-sol/base-instructions.md"
-model_messages_file = "catalog/gpt-5.6-sol/model-messages.json"
-null_selectors = ["multi_agent_version"]
 
 [catalog.targets.expected]
 display_name = "GPT-5.6-Sol"
@@ -175,9 +171,6 @@ visibility = "list"
 id = "gpt-5.6-terra"
 required = true
 required_reasoning = ["low", "medium", "high", "xhigh", "max", "ultra"]
-base_instructions_file = "catalog/gpt-5.6-terra/base-instructions.md"
-model_messages_file = "catalog/gpt-5.6-terra/model-messages.json"
-null_selectors = ["multi_agent_version"]
 
 [catalog.targets.expected]
 display_name = "GPT-5.6-Terra"
@@ -187,9 +180,6 @@ visibility = "list"
 id = "gpt-5.6-luna"
 required = true
 required_reasoning = ["low", "medium", "high", "xhigh", "max"]
-base_instructions_file = "catalog/gpt-5.6-luna/base-instructions.md"
-model_messages_file = "catalog/gpt-5.6-luna/model-messages.json"
-null_selectors = ["multi_agent_version"]
 
 [catalog.targets.expected]
 display_name = "GPT-5.6-Luna"
@@ -198,9 +188,6 @@ visibility = "list"
 [[catalog.targets]]
 id = "gpt-5.5"
 required_reasoning = ["low", "medium", "high", "xhigh"]
-base_instructions_file = "catalog/gpt-5.5/base-instructions.md"
-model_messages_file = "catalog/gpt-5.5/model-messages.json"
-null_selectors = []
 
 [catalog.targets.expected]
 display_name = "GPT-5.5"
@@ -209,9 +196,6 @@ visibility = "list"
 [[catalog.targets]]
 id = "gpt-5.4"
 required_reasoning = ["low", "medium", "high", "xhigh"]
-base_instructions_file = "catalog/gpt-5.4/base-instructions.md"
-model_messages_file = "catalog/gpt-5.4/model-messages.json"
-null_selectors = []
 
 [catalog.targets.expected]
 display_name = "GPT-5.4"
@@ -220,9 +204,6 @@ visibility = "list"
 [[catalog.targets]]
 id = "gpt-5.4-mini"
 required_reasoning = ["low", "medium", "high", "xhigh"]
-base_instructions_file = "catalog/gpt-5.4-mini/base-instructions.md"
-model_messages_file = "catalog/gpt-5.4-mini/model-messages.json"
-null_selectors = []
 
 [catalog.targets.expected]
 display_name = "GPT-5.4-Mini"
@@ -232,9 +213,6 @@ visibility = "list"
 id = "gpt-5.2"
 required = false
 required_reasoning = ["low", "medium", "high", "xhigh"]
-base_instructions_file = "catalog/gpt-5.2/base-instructions.md"
-model_messages_file = "catalog/gpt-5.2/model-messages.json"
-null_selectors = []
 
 [catalog.targets.expected]
 display_name = "GPT-5.2"
@@ -243,13 +221,10 @@ visibility = "list"
 [[catalog.targets]]
 id = "gpt-5.3-codex-spark"
 required = true
-# Upstream stopped listing this model while it is still in use. Setup synthesises the entry from
-# this target and the drift report does not treat its absence as a finding.
+# Upstream stopped listing this model while it is still in use. The maintained replacement
+# catalog carries it and the drift report does not treat its absence as a finding.
 pinned = true
 required_reasoning = ["low", "medium", "high", "xhigh"]
-base_instructions_file = "catalog/gpt-5.3-codex-spark/base-instructions.md"
-model_messages_file = "catalog/gpt-5.3-codex-spark/model-messages.json"
-null_selectors = []
 
 [catalog.targets.expected]
 display_name = "GPT-5.3-Codex-Spark"
@@ -258,9 +233,6 @@ visibility = "list"
 [[catalog.targets]]
 id = "codex-auto-review"
 required_reasoning = ["low", "medium", "high", "xhigh"]
-base_instructions_file = "catalog/codex-auto-review/base-instructions.md"
-model_messages_file = "catalog/codex-auto-review/model-messages.json"
-null_selectors = []
 
 [catalog.targets.expected]
 display_name = "Codex Auto Review"

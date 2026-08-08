@@ -137,14 +137,11 @@ def active_catalog(executable: str, home: Path) -> dict:
     configured = catalog_models(
         owned_catalog(home, active_runtime(home)), "active Casefile catalog"
     )
-    if set(projected) != set(configured):
-        raise BindingError("active Casefile catalog IDs differ from Codex model projection")
-    result = {"models": []}
-    for identifier, model in projected.items():
-        combined = dict(model)
-        combined["multi_agent_version"] = configured[identifier].get("multi_agent_version")
-        result["models"].append(combined)
-    return result
+    return {
+        "models": [
+            model for identifier, model in configured.items() if identifier in projected
+        ]
+    }
 
 
 def resolution_rows(profiles: dict, runtime: str, model: str, effort: str) -> list[dict]:
