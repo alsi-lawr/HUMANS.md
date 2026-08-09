@@ -96,7 +96,7 @@ test("decodes both canonical board status sources and rejects malformed selector
       status_source: "progress",
       filter_statuses: null,
       filter_kinds: ["ticket"],
-      columns: [{ name: "Unknown", statuses: ["unknown"], cards: [] }],
+      columns: [{ name: "TODO", statuses: ["unknown"], cards: [] }],
     },
   ]);
 

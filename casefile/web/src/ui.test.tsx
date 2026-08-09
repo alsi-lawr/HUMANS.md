@@ -191,7 +191,7 @@ test("renders stale and unresolved board cards without inventing a ticket detail
             filter_kinds: null,
             columns: [
               {
-                name: "Unknown",
+                name: "TODO",
                 statuses: ["unknown"],
                 cards: [
                   {
@@ -278,7 +278,7 @@ test("distinguishes browser board loading, no-board, empty-column, invalid, fail
             status_source: "progress",
             filter_statuses: null,
             filter_kinds: null,
-            columns: [{ name: "Unknown", statuses: ["unknown"], cards: [] }],
+            columns: [{ name: "TODO", statuses: ["unknown"], cards: [] }],
           },
         ],
       }}
@@ -318,7 +318,7 @@ test("keeps missing and ambiguous browser cards non-activatable", () => {
     status_source: "progress" as const,
     filter_statuses: null,
     filter_kinds: null,
-    columns: [{ name: "Unknown", statuses: ["unknown"], cards: [card] }],
+    columns: [{ name: "TODO", statuses: ["unknown"], cards: [card] }],
   };
   const missing = renderToStaticMarkup(
     <BoardsPanel state={{ tag: "ready", boards: [board] }} records={[]} onSelect={noAction} />,

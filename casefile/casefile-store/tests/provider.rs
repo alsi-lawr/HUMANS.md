@@ -558,6 +558,8 @@ fn default_board_is_named_exact_preview_with_preflight_collision_and_byte_preser
         } => {
             assert_eq!(path, &format!("{INVESTIGATION}/boards/delivery.toml"));
             assert_eq!(board.id, "HMD-sample-delivery");
+            assert_eq!(board.columns[0].name, "TODO");
+            assert_eq!(board.columns[0].statuses, ["unknown"]);
         }
         other => panic!("unexpected default-board request: {other:?}"),
     }

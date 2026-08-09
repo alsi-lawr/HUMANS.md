@@ -71,7 +71,7 @@ test("navigates and reconciles governed work against the shared host fixture", a
     expect(container.textContent).toContain("Minimum epic");
     await click(container, "Boards");
     await waitFor(() => container.textContent?.includes("Delivery boards") === true);
-    expect(container.textContent).toContain("Unknown");
+    expect(container.textContent).toContain("TODO");
     expect(container.textContent).toContain("Minimum ticket");
     await change(labelledInput(container, "Search records"), "no-ticket-list-match");
     await waitFor(() => container.textContent?.includes("Minimum ticket") === true);
@@ -515,7 +515,7 @@ const startHost = async (
     join(root, "projects/demo/investigations/sample/boards/progress.toml"),
     options.progress === true
       ? 'schema_version = 1\nid = "HMD-progress"\ntitle = "Progress"\nstatus_source = "progress"\nfilter_kinds = ["ticket"]\n\n[[columns]]\nname = "In progress"\nstatuses = ["in_progress"]\n\n[[columns]]\nname = "Blocked"\nstatuses = ["blocked"]\n'
-      : 'schema_version = 1\nid = "HMD-progress"\ntitle = "Delivery"\nstatus_source = "progress"\nfilter_kinds = ["ticket"]\n\n[[columns]]\nname = "Unknown"\nstatuses = ["unknown"]\n',
+      : 'schema_version = 1\nid = "HMD-progress"\ntitle = "Delivery"\nstatus_source = "progress"\nfilter_kinds = ["ticket"]\n\n[[columns]]\nname = "TODO"\nstatuses = ["unknown"]\n',
   );
   if (options.progress === true) {
     const ticket = await readFile(join(root, ticketPath), "utf8");

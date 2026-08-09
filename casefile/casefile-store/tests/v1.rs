@@ -421,7 +421,7 @@ fn semantic_invalid_progress_suppresses_unknown_and_progress_board_cards() {
     .expect("cross-scope log");
     fs::write(
         root.path().join("projects/demo/investigations/sample/boards/main.toml"),
-        "schema_version = 1\nid = \"HMD-board\"\ntitle = \"Progress\"\nstatus_source = \"progress\"\nfilter_kinds = [\"ticket\"]\n\n[[columns]]\nname = \"Unknown\"\nstatuses = [\"unknown\"]\n",
+        "schema_version = 1\nid = \"HMD-board\"\ntitle = \"Progress\"\nstatus_source = \"progress\"\nfilter_kinds = [\"ticket\"]\n\n[[columns]]\nname = \"TODO\"\nstatuses = [\"unknown\"]\n",
     )
     .expect("progress board");
 
@@ -1142,7 +1142,7 @@ fn delivery_board(id: &str) -> RecordDraft {
         filter_statuses: None,
         filter_kinds: Some(vec!["ticket".into()]),
         columns: vec![BoardColumn {
-            name: "Unknown".into(),
+            name: "TODO".into(),
             statuses: vec!["unknown".into()],
         }],
     })

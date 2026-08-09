@@ -262,7 +262,7 @@ status_source = "progress"
 filter_kinds = ["ticket"]
 
 [[columns]]
-name = "Unknown"
+name = "TODO"
 statuses = ["unknown"]
 
 [[columns]]

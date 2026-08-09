@@ -291,7 +291,7 @@ fn boards_are_read_only_unfiltered_and_open_a_canonical_ticket_detail() {
         filter_statuses: None,
         filter_kinds: None,
         columns: vec![DerivedBoardColumn {
-            name: "Unknown".into(),
+            name: "TODO".into(),
             statuses: vec!["unknown".into()],
             cards: vec![DerivedCard {
                 identity: casefile_store::ScopedIdentity {
@@ -319,7 +319,7 @@ fn boards_are_read_only_unfiltered_and_open_a_canonical_ticket_detail() {
     let output = test_support::render(&app, 160, 28);
     assert!(output.contains("[6] BOARDS 1"));
     assert!(output.contains("Delivery"));
-    assert!(output.contains("Unknown (1)"));
+    assert!(output.contains("TODO (1)"));
     assert!(output.contains("HMD-013  unknown  Navigator"));
     assert!(output.contains("record filter does not alter cards"));
     assert!(test_support::render(&app, 70, 28).contains("Delivery"));
@@ -722,7 +722,7 @@ fn board_with_cards(title: &str, cards: Vec<DerivedCard>) -> DerivedBoard {
         filter_statuses: None,
         filter_kinds: None,
         columns: vec![DerivedBoardColumn {
-            name: "Unknown".into(),
+            name: "TODO".into(),
             statuses: vec!["unknown".into()],
             cards,
         }],
