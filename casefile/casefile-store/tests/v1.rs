@@ -780,6 +780,110 @@ fn project_decisions_resolve_within_the_project_only() {
 }
 
 #[test]
+fn work_item_references_may_cross_investigations_within_one_project_only() {
+    let root = fixture();
+    fs::write(
+        root.path().join("casefile.toml"),
+        "schema_version = 1\n[projects.demo]\nprefix = 'HMD'\ninvestigations = ['projects/demo/investigations/sample', 'projects/demo/investigations/other']\n",
+    )
+    .expect("same-project activation");
+    let source_path = path(root.path(), "tickets/accepted/HMD-011.md");
+    let original = fs::read_to_string(&source_path).expect("source ticket");
+    let other = root.path().join("projects/demo/investigations/other");
+    fs::create_dir_all(other.join("decision-log")).expect("other decision directory");
+    fs::create_dir_all(other.join("tickets/accepted")).expect("other ticket directory");
+    fs::write(
+        other.join("decision-log/HMD-D-002-other.md"),
+        "# HMD-D-002 - Other investigation\n\n## Status\n\naccepted\n\n## Decision\n\nSame project.\n",
+    )
+    .expect("other decision");
+    fs::write(
+        other.join("tickets/accepted/HMD-012.md"),
+        original
+            .replace("HMD-011", "HMD-012")
+            .replace("investigation: \"sample\"", "investigation: \"other\"")
+            .replace("HMD-D-001", "HMD-D-002"),
+    )
+    .expect("other ticket");
+    let cross_investigation = original
+        .replace("HMD-D-001", "HMD-D-002")
+        .replace("related_tickets: []", "related_tickets: [HMD-012]");
+    fs::write(&source_path, &cross_investigation).expect("cross-investigation references");
+
+    let store = Store::open(root.path()).expect("store");
+    let scan = store.scan().expect("scan");
+    assert!(scan.diagnostics.is_empty(), "{:#?}", scan.diagnostics);
+    let relationships = store
+        .derived_snapshot()
+        .expect("derived snapshot")
+        .relationships;
+    for (kind, target) in [
+        (RelationshipKind::Decision, "HMD-D-002"),
+        (RelationshipKind::Related, "HMD-012"),
+    ] {
+        assert!(relationships.iter().any(|relationship| {
+            relationship.kind == kind
+                && relationship.source.identity == "HMD-011"
+                && relationship.target.identity == target
+                && relationship.target.scope.project == "demo"
+                && relationship.target.scope.investigation.as_deref() == Some("other")
+        }));
+    }
+
+    fs::write(
+        &source_path,
+        cross_investigation.replace("related_tickets: [HMD-012]", "related_tickets: [HMD-D-002]"),
+    )
+    .expect("wrong-kind reference");
+    scan_has(root.path(), "unresolved_reference");
+
+    fs::write(
+        root.path().join("casefile.toml"),
+        "schema_version = 1\n[projects.demo]\nprefix = 'HMD'\ninvestigations = ['projects/demo/investigations/sample', 'projects/demo/investigations/other']\n[projects.external]\nprefix = 'EXT'\ninvestigations = ['projects/external/investigations/other']\n",
+    )
+    .expect("cross-project activation");
+    let external = root.path().join("projects/external/investigations/other");
+    fs::create_dir_all(external.join("decision-log")).expect("external decision directory");
+    fs::create_dir_all(external.join("tickets/accepted")).expect("external ticket directory");
+    fs::write(
+        external.join("decision-log/EXT-D-001-external.md"),
+        "# EXT-D-001 - External\n\n## Status\n\naccepted\n\n## Decision\n\nDifferent project.\n",
+    )
+    .expect("external decision");
+    fs::write(
+        external.join("tickets/accepted/EXT-012.md"),
+        original
+            .replace("HMD-011", "EXT-012")
+            .replace("project: \"demo\"", "project: \"external\"")
+            .replace("investigation: \"sample\"", "investigation: \"other\"")
+            .replace("HMD-D-001", "EXT-D-001"),
+    )
+    .expect("external ticket");
+    fs::write(
+        &source_path,
+        original
+            .replace("HMD-D-001", "EXT-D-001")
+            .replace("related_tickets: []", "related_tickets: [EXT-012]"),
+    )
+    .expect("cross-project references");
+    let diagnostics = Store::open(root.path())
+        .expect("store")
+        .scan()
+        .expect("scan")
+        .diagnostics;
+    assert_eq!(
+        diagnostics
+            .iter()
+            .filter(|diagnostic| {
+                diagnostic.path.ends_with("tickets/accepted/HMD-011.md")
+                    && diagnostic.code == "unresolved_reference"
+            })
+            .count(),
+        2
+    );
+}
+
+#[test]
 fn derived_relationships_are_unique_and_directed() {
     let root = fixture();
     let ticket_path = path(root.path(), "tickets/accepted/HMD-011.md");

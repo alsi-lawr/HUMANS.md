@@ -90,21 +90,17 @@ pub(super) fn cross_validate(entries: &[EntrySnapshot], active: &Activation) -> 
                 RecordDraft::Ticket(item) | RecordDraft::Epic(item) => item,
                 _ => unreachable!(),
             };
-            let scope = scope_for(&entry.path, active);
+            let project = project_for(&entry.path, active);
             for reference in &item.decision_refs {
                 let resolves = identities.get(reference.as_str()).is_some_and(|target| {
                     target.kind == Some(Kind::Decision)
-                        && project_for(&target.path, active) == project_for(&entry.path, active)
-                        && match scope_for(&target.path, active) {
-                            None => true,
-                            Some(target_scope) => Some(target_scope) == scope,
-                        }
+                        && project_for(&target.path, active) == project
                 });
                 if reference == id || !resolves {
                     diagnostics.push(Diagnostic::new(
                         &entry.path,
                         "unresolved_reference",
-                        "decision references must resolve in the same project or investigation",
+                        "decision references must resolve within the governed project",
                     ));
                 }
             }
@@ -115,14 +111,15 @@ pub(super) fn cross_validate(entries: &[EntrySnapshot], active: &Activation) -> 
                 .chain(item.superseded_by.iter())
             {
                 if reference == id
-                    || identities
-                        .get(reference.as_str())
-                        .is_none_or(|target| scope_for(&target.path, active) != scope)
+                    || identities.get(reference.as_str()).is_none_or(|target| {
+                        !matches!(target.kind, Some(Kind::Ticket | Kind::Epic))
+                            || project_for(&target.path, active) != project
+                    })
                 {
                     diagnostics.push(Diagnostic::new(
                         &entry.path,
                         "unresolved_reference",
-                        "references must resolve within the governed project/investigation scope",
+                        "references must resolve to work items within the governed project",
                     ));
                 }
             }
