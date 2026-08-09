@@ -200,7 +200,8 @@ never changes reviewer, verifier, look-ahead, or root bindings. The Rust parser 
 authority and projects these client-visible states:
 
 - `absent`: no overlay exists and the single matrix writer pair is effective;
-- `pending`: a valid overlay exists before an implementation strategy is selected;
+- `pending`: a pre-existing valid overlay was encountered before an implementation strategy was
+  selected; clients do not create bindings in that state;
 - `resolved`: the overlay adapter matches a selected implementation matrix with exactly one writer;
 - `unresolved`: the overlay or matrix cannot identify one applicable effective writer; and
 - `invalid`: the binding source failed canonical validation.
@@ -218,12 +219,15 @@ multi-agent runtime and have a verified packaged resolution for both implementat
 requires an exact generated named profile for the pair. V2 requires each strategy's runtime wrapper,
 a positive fork context, and explicit model and effort overrides at spawn.
 
-Sol/high is a recommendation, not a default. The offer reports whether it is available and always
-requires an explicit exact selection. If it is unavailable, present the remaining offered pairs
-without recommending a substitute. Before ticket-batch, pipeline, resumed, or correction work,
-resolve the canonical projection and revalidate the pair against a fresh offer. Stop before
-delegation for pending, unresolved, invalid, or newly unavailable state; obtain explicit reselection
-while implementation is inactive.
+Sol/high is a recommendation, not a default. For a newly selected implementation strategy, offer
+writer bindings only after the dependency-safe plan is accepted and the exact implementation matrix
+is persisted and valid. Never pre-create a matrix or binding during startup, investigation, or
+review. The offer reports whether Sol/high is available and always requires an explicit exact
+selection. If it is unavailable, present the remaining offered pairs without recommending a
+substitute. Before ticket-batch, pipeline, resumed, or correction work, resolve the canonical
+projection and revalidate the pair against a fresh offer. Stop before delegation for pending,
+unresolved, invalid, or newly unavailable state; obtain explicit reselection while implementation is
+inactive.
 
 Binding replacement remains a root-authorized decision. Use the resolver's `select` command only to
 materialize the confirmed typed request, pass that request to the Provider's writer-binding preview,

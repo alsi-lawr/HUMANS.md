@@ -12,6 +12,45 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class CasefileBoundaryTests(unittest.TestCase):
+    def test_codex_writer_binding_waits_for_selected_implementation_matrix(self):
+        core_skill = (ROOT / "casefile/skills/casefile/SKILL.md").read_text(
+            encoding="ascii"
+        )
+        for startup_action in (
+            "resolve-writer-binding.py offer",
+            "casefile_preview_writer_binding",
+        ):
+            self.assertNotIn(startup_action, core_skill)
+        self.assertIn(
+            "never pre-create a matrix to satisfy the binding Provider", core_skill
+        )
+
+        implement_skill = (
+            ROOT / "casefile/skills/casefile-implement/SKILL.md"
+        ).read_text(encoding="ascii")
+        ordered_gates = (
+            "Require the accepted dependency-safe plan",
+            "Persist and validate the exact selected matrix",
+            "resolve-writer-binding.py offer",
+            "casefile_preview_writer_binding",
+            "immediately before every implementation-writer spawn",
+        )
+        positions = [implement_skill.index(gate) for gate in ordered_gates]
+        self.assertEqual(sorted(positions), positions)
+        self.assertIn(
+            "selected implementation matrix already exists without a binding retains",
+            " ".join(implement_skill.split()),
+        )
+
+        binding_schema = (
+            ROOT / "casefile/casefile-workflow/schemas/strategy-binding.md"
+        ).read_text(encoding="ascii")
+        self.assertIn(
+            "must not create a binding before an exact implementation matrix has been "
+            "selected and persisted",
+            " ".join(binding_schema.split()),
+        )
+
     def test_casefile_setup_is_separate_from_core_contract(self):
         scripts = [
             ROOT / "casefile/adapters/codex/scripts/list-codex-models.py",
