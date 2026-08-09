@@ -58,6 +58,22 @@ test("accepts the canonical progress record kind and rejects future kinds", () =
   );
 });
 
+test("accepts the canonical strategy transition record kind", () => {
+  const transition = {
+    ...projectDecision,
+    path: "projects/demo/investigations/sample/strategy/transitions/change.toml",
+    scope: { project: "demo", investigation: "sample" },
+    kind: "strategy_transition",
+    identity: {
+      scope: { project: "demo", investigation: "sample" },
+      identity: "strategy-transition:change",
+    },
+    title: "Strategy transition",
+  };
+
+  expect(decodeRecords([transition])[0]?.kind).toBe("strategy_transition");
+});
+
 test("preserves the host stale-revision failure code", () => {
   expect(
     decodeHostFailure({ error: "stale target revision", code: "stale_revision" }, 409),
