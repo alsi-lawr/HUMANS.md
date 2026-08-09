@@ -10,8 +10,9 @@ The Rust Casefile parser owns validation and projection. A binding applies only 
 `strategy/implementation.toml` when its adapter matches and that matrix has exactly one
 `implementation-writer`. A missing binding uses the matrix writer pair for compatible historical
 Casefiles. A present invalid or unmatched binding is not a fallback: clients receive its invalid or
-unresolved state and no effective writer pair. Before implementation is selected, a valid binding is
-pending.
+unresolved state and no effective writer pair. Clients must not create a binding before an exact
+implementation matrix has been selected and persisted. A binding encountered before implementation
+is selected projects as pending, but that projection does not authorize preselection.
 
 Replacing a binding is a typed preview/apply operation, never a client edit. The request contains no
 caller activity assertion. The Store derives activity from one valid canonical progress log:

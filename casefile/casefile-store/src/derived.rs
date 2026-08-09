@@ -568,13 +568,10 @@ fn derive_relationships(records: &[DerivedRecord]) -> Vec<DerivedRelationship> {
                                     RelationshipKind::Decision => {
                                         target.kind == Some(Kind::Decision)
                                             && identity.scope.project == source.scope.project
-                                            && (identity.scope.investigation.is_none()
-                                                || identity.scope.investigation
-                                                    == source.scope.investigation)
                                     }
                                     _ => {
                                         matches!(target.kind, Some(Kind::Ticket | Kind::Epic))
-                                            && identity.scope == source.scope
+                                            && identity.scope.project == source.scope.project
                                     }
                                 }
                         })

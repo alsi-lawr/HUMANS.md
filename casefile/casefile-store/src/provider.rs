@@ -1022,7 +1022,7 @@ fn default_board(id: String) -> BoardDraft {
         filter_statuses: None,
         filter_kinds: Some(vec!["ticket".into()]),
         columns: [
-            ("Unknown", "unknown"),
+            ("TODO", "unknown"),
             ("In progress", "in_progress"),
             ("In review", "in_review"),
             ("Verifying", "verifying"),

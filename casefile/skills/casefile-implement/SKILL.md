@@ -36,6 +36,19 @@ only after the human rejects the expansion or amends the governing decision or t
 ticket only after the recorded flow accepts it. See the brief
 [correction-escalation case study](references/correction-escalation-case-study.md).
 
+For Codex, when this implementation entry first persists its selected implementation matrix and no
+writer binding exists, run the installed `scripts/resolve-writer-binding.py offer` against the
+active Codex home. Present every returned model/effort pair, identify Sol/high as the
+recommendation, and require an explicit exact choice. If the offer marks Sol/high unavailable, say
+so and present every remaining valid pair without recommending an unselectable pair. Do not infer a
+recommendation as consent. Run the resolver's `select` command only to materialize the confirmed
+typed binding request. Pass that request to `casefile_preview_writer_binding`, review its envelope,
+and apply its `preview_id` in the same MCP session. The explicit model/effort choice authorizes
+persistence. If offering, preview, or persistence fails, stop before ticket progress, source
+mutation, or delegation and surface the diagnostic. This selection gate is Codex-only; do not change
+Claude implementation. A historical Casefile whose selected implementation matrix already exists
+without a binding retains that matrix's writer default and does not receive a backfill.
+
 For Codex, immediately before every implementation-writer spawn, first successfully transition the
 applicable ticket to canonical `in_progress`, then run the installed
 `scripts/resolve-writer-binding.py resolve` with the planning root, active investigation, exact
