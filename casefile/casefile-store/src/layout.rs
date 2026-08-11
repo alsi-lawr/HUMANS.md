@@ -28,11 +28,47 @@ pub fn normalize_planning_relative(path: &str) -> Result<String, &'static str> {
     if segments.is_empty()
         || segments
             .iter()
-            .any(|segment| matches!(*segment, "." | "..") || segment.contains('\0'))
+            .any(|segment| matches!(*segment, "." | "..") || !portable_segment(segment))
     {
         return Err("must contain only normal path segments");
     }
     Ok(segments.join("/"))
+}
+
+fn portable_segment(segment: &str) -> bool {
+    if segment.ends_with([' ', '.'])
+        || segment.bytes().any(|byte| {
+            byte <= 0x1f || matches!(byte, b'"' | b'*' | b':' | b'<' | b'>' | b'?' | b'|')
+        })
+    {
+        return false;
+    }
+
+    let basename = segment
+        .split_once('.')
+        .map_or(segment, |(basename, _)| basename)
+        .to_ascii_uppercase();
+    if matches!(basename.as_str(), "CON" | "PRN" | "AUX" | "NUL" | "CLOCK$") {
+        return false;
+    }
+    !["COM", "LPT"].iter().any(|prefix| {
+        basename.strip_prefix(prefix).is_some_and(|port| {
+            matches!(
+                port,
+                "1" | "2"
+                    | "3"
+                    | "4"
+                    | "5"
+                    | "6"
+                    | "7"
+                    | "8"
+                    | "9"
+                    | "\u{b9}"
+                    | "\u{b2}"
+                    | "\u{b3}"
+            )
+        })
+    })
 }
 
 pub(super) fn kind_for_path(path: &str, active: &Activation) -> Option<Kind> {
@@ -105,6 +141,10 @@ mod tests {
             (r"projects\demo", "projects/demo"),
             ("projects//demo///tickets/", "projects/demo/tickets"),
             (r"projects\\demo\\tickets\\", "projects/demo/tickets"),
+            (
+                "projects/.draft/COM10/LPT0/auxiliary",
+                "projects/.draft/COM10/LPT0/auxiliary",
+            ),
         ] {
             assert_eq!(normalize_planning_relative(input), Ok(expected.into()));
         }
@@ -122,6 +162,13 @@ mod tests {
             r"\\.\C:\projects\demo",
             "projects/./demo",
             "projects/../demo",
+            "projects/.. /demo",
+            "projects/item./demo",
+            "projects/item /demo",
+            "projects/C:stream/demo",
+            "projects/item:stream/demo",
+            "projects/item?/demo",
+            "projects/item\u{1f}/demo",
             "projects/demo\0ticket",
         ] {
             assert!(
@@ -129,6 +176,46 @@ mod tests {
                 "unexpectedly accepted {input:?}"
             );
         }
+        for device in [
+            "CON",
+            "PRN",
+            "AUX",
+            "NUL",
+            "CLOCK$",
+            "COM1",
+            "COM2",
+            "COM3",
+            "COM4",
+            "COM5",
+            "COM6",
+            "COM7",
+            "COM8",
+            "COM9",
+            "COM\u{b9}",
+            "COM\u{b2}",
+            "COM\u{b3}",
+            "LPT1",
+            "LPT2",
+            "LPT3",
+            "LPT4",
+            "LPT5",
+            "LPT6",
+            "LPT7",
+            "LPT8",
+            "LPT9",
+            "LPT\u{b9}",
+            "LPT\u{b2}",
+            "LPT\u{b3}",
+        ] {
+            for suffix in ["", ".tar.gz"] {
+                let input = format!("projects/{device}{suffix}/demo");
+                assert!(
+                    normalize_planning_relative(&input).is_err(),
+                    "unexpectedly accepted {input:?}"
+                );
+            }
+        }
+        assert!(normalize_planning_relative("projects/cOn.TxT/demo").is_err());
     }
 
     #[test]
@@ -139,6 +226,8 @@ mod tests {
             "projects//demo",
             "projects/demo/",
             "C:demo",
+            "projects/item.",
+            "projects/NUL.txt",
         ] {
             assert!(!safe_relative(input), "unexpectedly accepted {input:?}");
         }

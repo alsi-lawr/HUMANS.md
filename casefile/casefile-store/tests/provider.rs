@@ -382,6 +382,40 @@ fn record_apply_requires_the_complete_provider_preview_and_preserves_store_on_al
 }
 
 #[test]
+fn record_preview_rejects_win32_special_components_without_writing() {
+    let root = fixture();
+    let provider = Provider::without_cache(Store::open(root.path()).expect("store"));
+    let (_, draft) = new_ticket(root.path());
+    let tickets = root.path().join(INVESTIGATION).join("tickets");
+
+    for path in [
+        format!("{INVESTIGATION}/tickets/accepted/.. /HMD-099.md"),
+        format!("{INVESTIGATION}/tickets/accepted/item./HMD-099.md"),
+        format!("{INVESTIGATION}/tickets/accepted/HMD-099.md:stream"),
+        format!("{INVESTIGATION}/tickets/accepted/NUL.txt"),
+    ] {
+        assert!(matches!(
+            provider.preview_record(ChangeRequest::Create {
+                path,
+                draft: draft.clone(),
+            }),
+            Err(ProviderError::Store(casefile_store::StoreError::Invalid(_)))
+        ));
+    }
+
+    assert!(!tickets.join("HMD-099.md").exists());
+    assert!(!tickets.join("accepted/item/HMD-099.md").exists());
+    assert!(!tickets.join("accepted/HMD-099.md").exists());
+    let status = Command::new("git")
+        .current_dir(root.path())
+        .args(["status", "--porcelain"])
+        .output()
+        .expect("git status");
+    assert!(status.status.success());
+    assert!(status.stdout.is_empty(), "unexpected write: {status:?}");
+}
+
+#[test]
 fn record_batch_promotes_mutually_related_tickets_as_one_valid_change() {
     let root = fixture();
     let provider = Provider::without_cache(Store::open(root.path()).expect("store"));
