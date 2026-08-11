@@ -88,6 +88,13 @@ diagnostics and governed-write protections remain in force everywhere outside th
 trees. Presentation loaders and filesystem watchers must use the Store's exported
 `is_store_path_excluded` predicate rather than define another revision boundary.
 
+`Store::presentation_session` is a separate, bounded catalogue-first read model. Its generations,
+scope coverage, progress, entry batches, lazy content handles, and per-fact availability are
+presentation state only: they expose no canonical Store revision and never authorize Provider or
+writer operations. Presentation completion means the advertised catalogue and availability state
+finished loading. Only `Store::scan` and derivation from that complete scan provide canonical
+validation, revisions, original bytes, and write-admission inputs.
+
 ### Native MCP package boundary
 
 The generated Codex and Claude Casefile packages contain the complete supported executable matrix

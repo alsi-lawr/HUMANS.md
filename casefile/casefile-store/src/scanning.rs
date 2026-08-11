@@ -168,7 +168,7 @@ fn collect(
     Ok(())
 }
 
-fn classify(
+pub(super) fn classify(
     path: &str,
     bytes: &[u8],
     active: &Activation,
@@ -388,7 +388,7 @@ fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
-fn binding_diagnostics(entries: &[EntrySnapshot]) -> Vec<Diagnostic> {
+pub(super) fn binding_diagnostics(entries: &[EntrySnapshot]) -> Vec<Diagnostic> {
     let scope = |entry: &EntrySnapshot| {
         entry
             .path

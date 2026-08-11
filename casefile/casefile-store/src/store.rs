@@ -5,6 +5,7 @@ use crate::{
         WriterBindingPreview, WriterBindingRequest,
     },
     index::RevisionSource,
+    presentation::PresentationSession,
     progress::{self, ProgressApplyResult, ProgressChangeRequest, ProgressPreview},
     scanning::{ScanResult, scan},
     writing,
@@ -52,6 +53,11 @@ impl Store {
 
     pub fn derive_snapshot(&self, scan: &ScanResult) -> DerivedSnapshot {
         derive_snapshot(scan)
+    }
+
+    /// Creates an isolated catalogue-first presentation session for this Store root.
+    pub fn presentation_session(&self) -> PresentationSession {
+        PresentationSession::new(self.root.clone())
     }
 
     pub fn preview(&self, request: ChangeRequest) -> Result<Preview, StoreError> {

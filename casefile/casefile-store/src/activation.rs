@@ -19,7 +19,7 @@ pub enum ActivationState {
 #[derive(Clone, Debug, Default, Eq, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct Activation {
-    schema_version: Option<i64>,
+    pub(super) schema_version: Option<i64>,
     #[serde(default)]
     pub(super) projects: BTreeMap<String, Project>,
 }
