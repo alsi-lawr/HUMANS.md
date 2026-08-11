@@ -35,7 +35,7 @@ def read_json(path: Path, label: str) -> dict:
     try:
         if path.is_symlink() or not path.is_file() or path.stat().st_size <= 0:
             raise HandoffError(f"missing, empty, or unsafe {label}")
-        value = json.loads(path.read_text(encoding="ascii"))
+        value = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, json.JSONDecodeError) as error:
         raise HandoffError(f"invalid {label}: {error}") from error
     if not isinstance(value, dict):

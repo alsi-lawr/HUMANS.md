@@ -57,7 +57,7 @@ def main() -> int:
     codex = root / ".codex-plugin/plugin.json"
     claude = root / ".claude-plugin/plugin.json"
     if codex.exists() or claude.exists():
-        metadata = json.loads((codex if codex.exists() else claude).read_text(encoding="ascii"))
+        metadata = json.loads((codex if codex.exists() else claude).read_text(encoding="utf-8"))
         version = metadata.get("version")
         if metadata.get("name") != "casefile" or not isinstance(version, str) or not version:
             errors.append("generated Casefile metadata lacks its package identity")
@@ -79,8 +79,7 @@ def main() -> int:
                 or manifest_path.stat().st_size <= 0
             ):
                 raise OSError("artifact manifest is missing, empty, or unsafe")
-            raw = manifest_path.read_bytes()
-            manifest = json.loads(raw.decode("ascii"))
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         except (OSError, UnicodeError, json.JSONDecodeError):
             manifest = None
             errors.append("generated Casefile package lacks a valid artifact manifest")

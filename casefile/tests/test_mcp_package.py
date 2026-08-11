@@ -47,9 +47,17 @@ class McpPackageTests(unittest.TestCase):
                 "size": -1,
                 "target": target,
             })
-        manifest = {"schema_version": 1, "version": VERSION, "source_commit": SOURCE, "artifacts": rows}
+        manifest = {
+            "schema_version": 1,
+            "version": VERSION,
+            "source_commit": SOURCE,
+            "artifacts": rows,
+            "ignored_metadata": "caf\u00e9",
+        }
         (artifact / "artifacts.json").write_bytes(
-            (json.dumps(manifest, separators=(", ", ": ")) + "\r\n").encode("ascii")
+            (json.dumps(manifest, ensure_ascii=False, separators=(", ", ": ")) + "\r\n").encode(
+                "utf-8"
+            )
         )
         return artifact
 
@@ -73,9 +81,37 @@ class McpPackageTests(unittest.TestCase):
                 self.assertFalse((package / "scripts/casefile-mcp-launcher.py").exists())
                 self.assertTrue((package / "runtime/artifacts.json").is_file())
                 self.assertEqual(6, len(list((package / "runtime/bin").glob("*/*"))))
+                plugin = next(
+                    path
+                    for path in (
+                        package / ".codex-plugin/plugin.json",
+                        package / ".claude-plugin/plugin.json",
+                    )
+                    if path.is_file()
+                )
+                metadata = json.loads(plugin.read_text(encoding="utf-8"))
+                metadata["ignored_metadata"] = "na\u00efve"
+                plugin.write_bytes(
+                    (
+                        json.dumps(metadata, ensure_ascii=False, separators=(", ", ": "))
+                        + "\r\n"
+                    ).encode("utf-8")
+                )
+                validated = subprocess.run(
+                    [
+                        sys.executable,
+                        str(ROOT / "casefile/scripts/validate-casefile.py"),
+                        "--source",
+                        str(package),
+                    ],
+                    cwd=ROOT,
+                    capture_output=True,
+                    text=True,
+                )
+                self.assertEqual(0, validated.returncode, validated.stdout + validated.stderr)
             for package in (codex, claude):
                 self.assertTrue(all(path.stat().st_size > 0 for path in (package / "runtime").rglob("*") if path.is_file()))
-            metadata = json.loads((codex / ".codex-plugin/plugin.json").read_text(encoding="ascii"))
+            metadata = json.loads((codex / ".codex-plugin/plugin.json").read_text(encoding="utf-8"))
             self.assertNotIn("mcpServers", metadata)
             self.assertTrue((codex / "scripts/list-codex-models.py").is_file())
             for root in (ROOT / "casefile/adapters/codex", codex):
@@ -102,7 +138,7 @@ class McpPackageTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             artifact = self.artifacts(Path(temporary))
             manifest_path = artifact / "artifacts.json"
-            manifest = json.loads(manifest_path.read_text(encoding="ascii"))
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
             manifest["artifacts"][0]["path"] = r"C:bin\casefile"
             manifest_path.write_text(json.dumps(manifest), encoding="ascii")
             self.assertNotEqual(0, self.build(artifact).returncode)

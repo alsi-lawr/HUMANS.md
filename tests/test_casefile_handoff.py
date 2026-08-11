@@ -107,8 +107,11 @@ class CasefileHandoffTests(unittest.TestCase):
             row["path"] = row["path"].replace("/", "\\" if index % 2 else "//") + "///"
             row["sha256"] = "not checked"
             row["size"] = -1
+        manifest["ignored_metadata"] = "caf\u00e9"
         (runtime / "artifacts.json").write_bytes(
-            (json.dumps(manifest, separators=(", ", ": ")) + "\r\n").encode("ascii")
+            (
+                json.dumps(manifest, ensure_ascii=False, separators=(", ", ": ")) + "\r\n"
+            ).encode("utf-8")
         )
         (runtime / "unrelated").write_text("accepted\n", encoding="ascii")
         handoff_root = root / "handoff"
@@ -116,8 +119,17 @@ class CasefileHandoffTests(unittest.TestCase):
         smoke.mkdir()
         for target in artifacts.TARGETS:
             (smoke / f"{target}.json").write_text(
-                json.dumps({"identity": "casefile", "tools": 12, "version": "0.4.0"}) + "\n",
-                encoding="ascii",
+                json.dumps(
+                    {
+                        "identity": "casefile",
+                        "tools": 12,
+                        "version": "0.4.0",
+                        "ignored_metadata": "na\u00efve",
+                    },
+                    ensure_ascii=False,
+                )
+                + "\r\n",
+                encoding="utf-8",
             )
         provenance = {
             "event": event,
@@ -129,21 +141,26 @@ class CasefileHandoffTests(unittest.TestCase):
             "workflow_path": handoff.WORKFLOW_PATH,
         }
         (handoff_root / "casefile-build-provenance.json").write_text(
-            json.dumps(provenance, indent=2, sort_keys=True) + "\n", encoding="ascii"
+            json.dumps(provenance, separators=(", ", ": ")) + "\r\n", encoding="utf-8"
         )
         run = root / "run.json"
         run.write_text(
-            json.dumps({
-                "id": int(RUN_ID),
-                "name": handoff.WORKFLOW_NAME,
-                "path": handoff.WORKFLOW_PATH,
-                "event": event,
-                "head_branch": head_branch,
-                "status": "completed",
-                "conclusion": "success",
-                "head_sha": SOURCE,
-            }),
-            encoding="ascii",
+            json.dumps(
+                {
+                    "id": int(RUN_ID),
+                    "name": handoff.WORKFLOW_NAME,
+                    "path": handoff.WORKFLOW_PATH,
+                    "event": event,
+                    "head_branch": head_branch,
+                    "status": "completed",
+                    "conclusion": "success",
+                    "head_sha": SOURCE,
+                    "ignored_metadata": "jalape\u00f1o",
+                },
+                ensure_ascii=False,
+            )
+            + "\r\n",
+            encoding="utf-8",
         )
         return handoff_root, run
 
@@ -167,7 +184,7 @@ class CasefileHandoffTests(unittest.TestCase):
         ):
             with self.subTest(key=key), tempfile.TemporaryDirectory() as temporary:
                 root, run = self.fixture(Path(temporary))
-                metadata = json.loads(run.read_text(encoding="ascii"))
+                metadata = json.loads(run.read_text(encoding="utf-8"))
                 metadata[key] = value
                 run.write_text(json.dumps(metadata), encoding="ascii")
                 with self.assertRaisesRegex(handoff.HandoffError, "reviewed binary build"):
@@ -194,7 +211,7 @@ class CasefileHandoffTests(unittest.TestCase):
                 Path(temporary), "push", "casefile/build-reviewed"
             )
             provenance = root / "casefile-build-provenance.json"
-            value = json.loads(provenance.read_text(encoding="ascii"))
+            value = json.loads(provenance.read_text(encoding="utf-8"))
             value["source_commit"] = "2" * 40
             provenance.write_text(json.dumps(value), encoding="ascii")
             with self.assertRaisesRegex(handoff.HandoffError, "retained build provenance"):
