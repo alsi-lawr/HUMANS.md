@@ -4,7 +4,7 @@ use casefile_core::{
 use casefile_store::{
     ActivationState, CacheState, NoCache, ProgressOperation, ProgressProjection, Provider,
     ProviderApprovalPolicy, ProviderCache, ProviderError, ProviderMutationState, ProviderOperation,
-    ProviderQuery, ProviderQueryResult, Store,
+    ProviderQuery, ProviderQueryResult, RecordScope, Store,
 };
 use std::{fs, path::Path, process::Command};
 use tempfile::TempDir;
@@ -211,6 +211,29 @@ fn snapshot_negotiates_one_single_scan_v1_baseline_and_queries_store_projections
         ProviderQueryResult::Records { records, .. } => assert_eq!(records.len(), 1),
         other => panic!("unexpected query result: {other:?}"),
     }
+    match provider
+        .query(ProviderQuery::Tickets {
+            scope: Some(RecordScope {
+                project: "demo///".into(),
+                investigation: Some(r"sample\\".into()),
+            }),
+            search: None,
+        })
+        .expect("portable scoped query")
+    {
+        ProviderQueryResult::Records { records, .. } => assert_eq!(records.len(), 1),
+        other => panic!("unexpected scoped query result: {other:?}"),
+    }
+    assert!(matches!(
+        provider.query(ProviderQuery::Tickets {
+            scope: Some(RecordScope {
+                project: "C:demo".into(),
+                investigation: None,
+            }),
+            search: None,
+        }),
+        Err(ProviderError::Store(casefile_store::StoreError::Invalid(_)))
+    ));
 
     let scan = store.scan().expect("controlled baseline");
     fs::remove_file(root.path().join("casefile.toml")).expect("remove activation after scan");
@@ -277,14 +300,24 @@ fn record_apply_requires_the_complete_provider_preview_and_preserves_store_on_al
     let root = fixture();
     let provider = Provider::new(Store::open(root.path()).expect("store"), NoCache);
     let (path, draft) = new_ticket(root.path());
+    let portable_path = path.replace('/', r"\\") + "///";
     let preview = provider
         .preview_record(ChangeRequest::Create {
-            path: path.clone(),
+            path: portable_path.clone(),
             draft,
         })
         .expect("preview");
+    assert_eq!(preview.canonical.request.path(), path);
+    assert!(preview.canonical.diff.contains(&format!("b/{path}")));
+    #[cfg(unix)]
+    assert!(!root.path().join(&portable_path).exists());
     assert!(!preview.approval_required);
     let mut altered = Vec::new();
+    let mut value = preview.clone();
+    if let ChangeRequest::Create { path, .. } = &mut value.canonical.request {
+        *path = portable_path;
+    }
+    altered.push(value);
     let mut value = preview.clone();
     value.canonical.request = ChangeRequest::Delete { path: path.clone() };
     altered.push(value);
@@ -400,11 +433,31 @@ fn record_batch_promotes_mutually_related_tickets_as_one_valid_change() {
             ]
         })
         .collect::<Vec<_>>();
+    let portable_requests = requests
+        .into_iter()
+        .map(|request| match request {
+            ChangeRequest::Create { path, draft } => ChangeRequest::Create {
+                path: path.replace('/', r"\\") + "///",
+                draft,
+            },
+            ChangeRequest::Delete { path } => ChangeRequest::Delete {
+                path: path.replace('/', r"\\") + "///",
+            },
+            ChangeRequest::Replace { .. } => unreachable!(),
+        })
+        .collect();
     let preview = provider
-        .preview_record_batch(requests)
+        .preview_record_batch(portable_requests)
         .expect("batch preview");
     assert!(preview.canonical.diagnostics.is_empty());
     assert!(preview.approval_required);
+    assert!(
+        preview
+            .canonical
+            .requests
+            .iter()
+            .all(|request| !request.path().contains('\\') && !request.path().ends_with('/'))
+    );
     provider
         .apply_record_batch(preview)
         .expect("atomic batch promotion");
@@ -430,11 +483,22 @@ fn record_batch_promotes_mutually_related_tickets_as_one_valid_change() {
 fn progress_preview_integrity_covers_bootstrap_transition_replay_no_op_and_conflict() {
     let root = fixture();
     let provider = Provider::without_cache(Store::open(root.path()).expect("store"));
+    let portable_investigation = INVESTIGATION.replace('/', r"\\") + "///";
     let preview = provider
-        .bootstrap_progress(INVESTIGATION)
+        .bootstrap_progress(&portable_investigation)
         .expect("bootstrap preview");
+    assert!(matches!(
+        &preview.operation,
+        ProgressOperation::Bootstrap { investigation } if investigation == INVESTIGATION
+    ));
+    assert_eq!(preview.canonical.request.investigation, INVESTIGATION);
     let log = root.path().join(INVESTIGATION).join("progress/log.toml");
     let mut altered = Vec::new();
+    let mut value = preview.clone();
+    value.operation = ProgressOperation::Bootstrap {
+        investigation: portable_investigation,
+    };
+    altered.push(value);
     let mut value = preview.clone();
     value.operation = ProgressOperation::Append {
         investigation: INVESTIGATION.into(),
@@ -548,8 +612,9 @@ fn default_board_is_named_exact_preview_with_preflight_collision_and_byte_preser
     let root = fixture();
     let provider = Provider::without_cache(Store::open(root.path()).expect("store"));
     let preview = provider
-        .preview_default_delivery_board(INVESTIGATION)
+        .preview_default_delivery_board(INVESTIGATION.replace('/', r"\\") + "///")
         .expect("board preview");
+    assert_eq!(preview.investigation, INVESTIGATION);
     assert!(!preview.no_op);
     match &preview.canonical.request {
         ChangeRequest::Create {
@@ -564,6 +629,12 @@ fn default_board_is_named_exact_preview_with_preflight_collision_and_byte_preser
         other => panic!("unexpected default-board request: {other:?}"),
     }
     let board = root.path().join(INVESTIGATION).join("boards/delivery.toml");
+    let mut altered = preview.clone();
+    altered.investigation = INVESTIGATION.replace('/', r"\\");
+    assert!(matches!(
+        provider.apply_default_delivery_board(altered),
+        Err(ProviderError::PreviewIntegrity)
+    ));
     let mut altered = preview.clone();
     altered.investigation.push_str("-altered");
     assert!(matches!(

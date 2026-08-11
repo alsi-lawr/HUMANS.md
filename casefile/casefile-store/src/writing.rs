@@ -19,6 +19,7 @@ use std::{
 use tempfile::NamedTempFile;
 
 pub(super) fn preview(root: &Path, request: ChangeRequest) -> Result<Preview, StoreError> {
+    let request = canonical_request(request)?;
     ensure_worktree(root)?;
     let before = scan(root, &BTreeMap::new())?;
     let path = checked_path(request.path())?;
@@ -113,12 +114,16 @@ pub(super) fn preview_batch(
     root: &Path,
     requests: Vec<ChangeRequest>,
 ) -> Result<ChangeBatchPreview, StoreError> {
-    ensure_worktree(root)?;
     if requests.is_empty() {
         return Err(StoreError::Invalid(
             "record batch requires at least one request".into(),
         ));
     }
+    let requests = requests
+        .into_iter()
+        .map(canonical_request)
+        .collect::<Result<Vec<_>, _>>()?;
+    ensure_worktree(root)?;
     let before = scan(root, &BTreeMap::new())?;
     let active = activation(root)?.1;
     let mut paths = BTreeSet::new();
@@ -262,7 +267,8 @@ fn diagnostic_key(
     )
 }
 
-pub(super) fn apply(root: &Path, preview: Preview) -> Result<ApplyResult, StoreError> {
+pub(super) fn apply(root: &Path, mut preview: Preview) -> Result<ApplyResult, StoreError> {
+    preview.request = canonical_request(preview.request)?;
     ensure_worktree(root)?;
     if !preview.diagnostics.is_empty() {
         return Err(StoreError::Invalid(
@@ -332,14 +338,32 @@ struct BatchMutation {
 
 pub(super) fn apply_batch(
     root: &Path,
-    preview: ChangeBatchPreview,
+    mut preview: ChangeBatchPreview,
 ) -> Result<ChangeBatchApplyResult, StoreError> {
-    ensure_worktree(root)?;
     if preview.requests.is_empty() {
         return Err(StoreError::Invalid(
             "record batch requires at least one request".into(),
         ));
     }
+    preview.requests = preview
+        .requests
+        .into_iter()
+        .map(canonical_request)
+        .collect::<Result<Vec<_>, _>>()?;
+    let mut expected_target_revisions = BTreeMap::new();
+    for (path, revision) in preview.expected_target_revisions {
+        let canonical = checked_path(&path)?;
+        if expected_target_revisions
+            .insert(canonical, revision)
+            .is_some()
+        {
+            return Err(StoreError::Invalid(
+                "record batch target revisions contain duplicate canonical paths".into(),
+            ));
+        }
+    }
+    preview.expected_target_revisions = expected_target_revisions;
+    ensure_worktree(root)?;
     if !preview.diagnostics.is_empty() {
         return Err(StoreError::Invalid(
             "preview contains validation diagnostics".into(),
@@ -457,6 +481,22 @@ pub(super) fn apply_batch(
         resulting_target_revisions,
         resulting_store_revision: resulting.snapshot.revision,
         diff: preview.diff,
+    })
+}
+
+fn canonical_request(request: ChangeRequest) -> Result<ChangeRequest, StoreError> {
+    Ok(match request {
+        ChangeRequest::Create { path, draft } => ChangeRequest::Create {
+            path: checked_path(&path)?,
+            draft,
+        },
+        ChangeRequest::Replace { path, draft } => ChangeRequest::Replace {
+            path: checked_path(&path)?,
+            draft,
+        },
+        ChangeRequest::Delete { path } => ChangeRequest::Delete {
+            path: checked_path(&path)?,
+        },
     })
 }
 

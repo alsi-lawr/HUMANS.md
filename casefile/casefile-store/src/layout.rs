@@ -1,25 +1,38 @@
-use std::path::{Component, Path};
-
 use casefile_core::Kind;
 
 use crate::{activation::Activation, store::StoreError};
 
 pub(super) fn checked_path(path: &str) -> Result<String, StoreError> {
-    if !safe_relative(path) {
-        return Err(StoreError::Invalid(
-            "path must be a contained relative path".into(),
-        ));
-    }
-    Ok(path.into())
+    normalize_planning_relative(path)
+        .map_err(|_| StoreError::Invalid("path must be contained and relative".into()))
 }
 
 pub(super) fn safe_relative(path: &str) -> bool {
-    let value = Path::new(path);
-    !value.is_absolute()
-        && !path.is_empty()
-        && value
-            .components()
-            .all(|component| matches!(component, Component::Normal(_)))
+    normalize_planning_relative(path).is_ok_and(|canonical| canonical == path)
+}
+
+pub fn normalize_planning_relative(path: &str) -> Result<String, &'static str> {
+    if path.is_empty() {
+        return Err("must be a non-empty relative path");
+    }
+    if path.starts_with(['/', '\\'])
+        || path.as_bytes().get(1).is_some_and(|byte| *byte == b':')
+            && path.as_bytes()[0].is_ascii_alphabetic()
+    {
+        return Err("must be a contained relative path");
+    }
+    let segments = path
+        .split(['/', '\\'])
+        .filter(|segment| !segment.is_empty())
+        .collect::<Vec<_>>();
+    if segments.is_empty()
+        || segments
+            .iter()
+            .any(|segment| matches!(*segment, "." | "..") || segment.contains('\0'))
+    {
+        return Err("must contain only normal path segments");
+    }
+    Ok(segments.join("/"))
 }
 
 pub(super) fn kind_for_path(path: &str, active: &Activation) -> Option<Kind> {
@@ -78,5 +91,56 @@ pub(super) fn kind_for_path(path: &str, active: &Activation) -> Option<Kind> {
         ["boards", name] if name.ends_with(".toml") => Some(Kind::Board),
         ["progress", "log.toml"] => Some(Kind::Progress),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn portable_planning_relative_grammar_is_host_independent() {
+        for (input, expected) in [
+            ("projects/demo", "projects/demo"),
+            (r"projects\demo", "projects/demo"),
+            ("projects//demo///tickets/", "projects/demo/tickets"),
+            (r"projects\\demo\\tickets\\", "projects/demo/tickets"),
+        ] {
+            assert_eq!(normalize_planning_relative(input), Ok(expected.into()));
+        }
+        for input in [
+            "",
+            "///",
+            r"\\\\",
+            "/projects/demo",
+            r"\projects\demo",
+            "C:/projects/demo",
+            r"C:\projects\demo",
+            "C:projects/demo",
+            r"\\server\share\demo",
+            r"\\?\C:\projects\demo",
+            r"\\.\C:\projects\demo",
+            "projects/./demo",
+            "projects/../demo",
+            "projects/demo\0ticket",
+        ] {
+            assert!(
+                normalize_planning_relative(input).is_err(),
+                "unexpectedly accepted {input:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn persisted_paths_remain_strictly_slash_canonical() {
+        assert!(safe_relative("projects/demo"));
+        for input in [
+            r"projects\demo",
+            "projects//demo",
+            "projects/demo/",
+            "C:demo",
+        ] {
+            assert!(!safe_relative(input), "unexpectedly accepted {input:?}");
+        }
     }
 }

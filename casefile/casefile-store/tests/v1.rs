@@ -530,6 +530,28 @@ fn atomic_progress_write_failure_preserves_the_previous_log() {
 fn progress_target_paths_must_remain_contained() {
     let root = fixture();
     let store = Store::open(root.path()).expect("store");
+    let portable = r"projects\\demo//investigations\\sample///";
+    let preview = store
+        .preview_progress(ProgressChangeRequest {
+            investigation: portable.into(),
+            entries: Vec::new(),
+            replacement: None,
+            replacement_source: None,
+            bootstrap: true,
+        })
+        .expect("portable progress preview");
+    assert_eq!(
+        preview.request.investigation,
+        "projects/demo/investigations/sample"
+    );
+    assert_eq!(
+        preview.path,
+        "projects/demo/investigations/sample/progress/log.toml"
+    );
+    store.apply_progress(preview).expect("portable apply");
+    #[cfg(unix)]
+    assert!(!root.path().join(portable).exists());
+
     let request = ProgressChangeRequest {
         investigation: "../outside".into(),
         entries: Vec::new(),

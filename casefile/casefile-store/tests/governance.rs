@@ -75,7 +75,7 @@ fn strategy(root: &Path) -> std::path::PathBuf {
 
 fn transition_request() -> StrategyTransitionRequest {
     StrategyTransitionRequest {
-        investigation: INVESTIGATION.into(),
+        investigation: INVESTIGATION.replace('/', r"\\") + "///",
         operation_id: "select-pipeline".into(),
         recorded_at: "2026-07-27T12:00:00Z".into(),
         selected_matrix_origin: "adapters/codex/matrices/casefile-implement-pipeline.toml".into(),
@@ -86,8 +86,11 @@ fn transition_request() -> StrategyTransitionRequest {
             "shared_writable_planning".into(),
             "subagents".into(),
         ],
-        preserved_work_paths: vec!["tickets/accepted/HMD-011.md".into()],
-        active_ownership: Vec::new(),
+        preserved_work_paths: vec![r"tickets\\accepted//HMD-011.md///".into()],
+        active_ownership: vec![casefile_core::ActiveOwnership {
+            owner: "writer".into(),
+            paths: vec![r"casefile-store\\src///".into()],
+        }],
         rationale: "Human selected the pipeline strategy.".into(),
     }
 }
@@ -121,6 +124,19 @@ fn strategy_transition_is_strict_store_visible_idempotent_and_creates_no_backup(
     let preview = store
         .preview_strategy_transition(transition_request())
         .expect("transition preview");
+    assert_eq!(preview.request.investigation, INVESTIGATION);
+    assert_eq!(
+        preview.request.preserved_work_paths,
+        ["tickets/accepted/HMD-011.md"]
+    );
+    assert_eq!(
+        preview.request.active_ownership[0].paths,
+        ["casefile-store/src"]
+    );
+    assert_eq!(
+        preview.transition_record.preserved_work_paths,
+        preview.request.preserved_work_paths
+    );
     assert_eq!(preview.operation, GovernedOperationKind::StrategyTransition);
     assert_eq!(preview.changes.len(), 2);
     assert!(preview.diagnostics.is_empty());
@@ -198,6 +214,120 @@ fn strategy_transition_is_strict_store_visible_idempotent_and_creates_no_backup(
                 .to_string_lossy()
                 .contains("tmp"))
     );
+}
+
+#[test]
+fn strategy_replay_equates_only_line_endings_and_keeps_raw_preview_staleness() {
+    fn crlf(bytes: &[u8]) -> Vec<u8> {
+        String::from_utf8(bytes.to_vec())
+            .expect("UTF-8 fixture")
+            .replace("\r\n", "\n")
+            .replace('\n', "\r\n")
+            .into_bytes()
+    }
+
+    let root = fixture();
+    let store = Store::open(root.path()).expect("store");
+    let first = store
+        .preview_strategy_transition(transition_request())
+        .expect("first preview");
+    let matrix_path = first.changes[0].path.clone();
+    let record_path = first.changes[1].path.clone();
+    store.apply_strategy_transition(first).expect("first apply");
+    fs::write(
+        root.path().join(&matrix_path),
+        crlf(&fs::read(root.path().join(&matrix_path)).expect("matrix")),
+    )
+    .expect("CRLF matrix");
+    fs::write(
+        root.path().join(&record_path),
+        crlf(&fs::read(root.path().join(&record_path)).expect("record")),
+    )
+    .expect("CRLF record");
+
+    let normalized_identity_replay = store
+        .preview_strategy_transition(transition_request())
+        .expect("normalized-identity CRLF replay");
+    assert!(normalized_identity_replay.no_op);
+    let normalized_matrix = fs::read(root.path().join(&matrix_path)).expect("CRLF matrix bytes");
+    let normalized_record = fs::read(root.path().join(&record_path)).expect("CRLF record bytes");
+    store
+        .apply_strategy_transition(normalized_identity_replay)
+        .expect("normalized-identity replay apply");
+    assert_eq!(
+        fs::read(root.path().join(&matrix_path)).expect("preserved matrix"),
+        normalized_matrix
+    );
+    assert_eq!(
+        fs::read(root.path().join(&record_path)).expect("preserved record"),
+        normalized_record
+    );
+
+    let scan = store.scan().expect("CRLF scan");
+    let raw_matrix_revision = scan
+        .snapshot
+        .entries
+        .iter()
+        .find(|entry| entry.path == matrix_path)
+        .expect("matrix entry")
+        .content_revision
+        .clone();
+    let record_entry = scan
+        .snapshot
+        .entries
+        .iter()
+        .find(|entry| entry.path == record_path)
+        .expect("record entry");
+    let mut legacy = casefile_core::parse_strategy_transition(
+        &record_path,
+        std::str::from_utf8(&record_entry.original_bytes).expect("UTF-8 transition"),
+    )
+    .expect("transition record");
+    legacy.selected_matrix_sha256 = raw_matrix_revision
+        .0
+        .strip_prefix("sha256:")
+        .expect("SHA revision")
+        .into();
+    legacy.proposed_matrix_revision = raw_matrix_revision;
+    fs::write(
+        root.path().join(&record_path),
+        crlf(casefile_core::render_strategy_transition(&legacy).as_bytes()),
+    )
+    .expect("legacy raw identity record");
+    let legacy_record = fs::read(root.path().join(&record_path)).expect("legacy record bytes");
+    let legacy_replay = store
+        .preview_strategy_transition(transition_request())
+        .expect("legacy raw-identity replay");
+    assert!(legacy_replay.no_op);
+    store
+        .apply_strategy_transition(legacy_replay)
+        .expect("legacy replay apply");
+    assert_eq!(
+        fs::read(root.path().join(&record_path)).expect("preserved legacy record"),
+        legacy_record
+    );
+
+    let mut substantive = transition_request();
+    substantive
+        .selected_matrix_source
+        .push_str("# presentation changed\n");
+    assert!(store.preview_strategy_transition(substantive).is_err());
+
+    let stale_root = fixture();
+    let stale_store = Store::open(stale_root.path()).expect("stale store");
+    let stale_preview = stale_store
+        .preview_strategy_transition(transition_request())
+        .expect("stale preview");
+    let stale_matrix = stale_preview.changes[0].path.clone();
+    fs::write(
+        stale_root.path().join(&stale_matrix),
+        crlf(&fs::read(stale_root.path().join(&stale_matrix)).expect("matrix before conversion")),
+    )
+    .expect("post-preview EOL conversion");
+    assert!(matches!(
+        stale_store.apply_strategy_transition(stale_preview),
+        Err(casefile_store::StoreError::StaleTargetRevision)
+    ));
 }
 
 #[test]
@@ -294,6 +424,9 @@ fn provider_refuses_every_authoritative_transition_preview_change_without_mutati
     let before = fs::read(strategy(root.path())).expect("before matrix");
     let mut altered = Vec::new();
     let mut value = preview.clone();
+    value.canonical.request.investigation = INVESTIGATION.replace('/', r"\\");
+    altered.push(value);
+    let mut value = preview.clone();
     value.canonical.operation = GovernedOperationKind::WriterBinding;
     altered.push(value);
     let mut value = preview.clone();
@@ -383,7 +516,7 @@ fn transition_accepts_unrelated_changes_and_preserves_collision_validation_and_r
         },
         casefile_core::ActiveOwnership {
             owner: "two".into(),
-            paths: vec!["source/nested".into()],
+            paths: vec![r"source\\nested///".into()],
         },
     ];
     assert!(
@@ -438,13 +571,13 @@ fn binding_activity_is_derived_exactly_from_canonical_progress_and_spawn_require
         );
         let store = Store::open(root.path()).expect("store");
         let result = store.preview_writer_binding(WriterBindingRequest {
-            investigation: INVESTIGATION.into(),
+            investigation: INVESTIGATION.replace('/', r"\\") + "///",
             binding_source: BINDING.into(),
         });
         assert_eq!(result.is_ok(), permitted, "status {status:?}");
         assert_eq!(
             store
-                .require_writer_progress(INVESTIGATION, "HMD-011")
+                .require_writer_progress(&(INVESTIGATION.replace('/', r"\\") + "///"), "HMD-011",)
                 .is_ok(),
             status == ProgressStatus::InProgress,
             "spawn status {status:?}"
@@ -514,10 +647,11 @@ fn binding_provider_preview_is_complete_strict_atomic_and_has_no_archive_or_scra
     let provider = Provider::without_cache(Store::open(root.path()).expect("store"));
     let preview = provider
         .preview_writer_binding(WriterBindingRequest {
-            investigation: INVESTIGATION.into(),
+            investigation: INVESTIGATION.replace('/', r"\\") + "///",
             binding_source: BINDING.into(),
         })
         .expect("preview");
+    assert_eq!(preview.canonical.request.investigation, INVESTIGATION);
     assert_eq!(
         preview.canonical.operation,
         GovernedOperationKind::WriterBinding

@@ -10,7 +10,7 @@ use std::{
 fn progress_session_applies_exact_preview_without_a_second_approval() {
     let request = json!({
         "operation": "bootstrap",
-        "investigation": "projects/demo/investigations/sample"
+        "investigation": "projects\\\\demo//investigations\\\\sample///"
     });
     let root = fixture();
     for arguments in [
@@ -50,6 +50,58 @@ fn progress_session_applies_exact_preview_without_a_second_approval() {
         root.path()
             .join("projects/demo/investigations/sample/progress/log.toml")
             .is_file()
+    );
+    fs::write(
+        &request_path,
+        serde_json::to_vec(&json!({
+            "operation": "append",
+            "investigation": "projects\\\\demo//investigations\\\\sample///",
+            "entries": [{
+                "id": "portable-writer-start",
+                "recorded_at": "2026-08-11T19:00:00Z",
+                "recorded_by": "root",
+                "ticket_id": "HMD-011",
+                "kind": "transition",
+                "from": "unknown",
+                "to": "in_progress"
+            }]
+        }))
+        .expect("append JSON"),
+    )
+    .expect("append request");
+    let append = Command::new(env!("CARGO_BIN_EXE_casefile"))
+        .args(["--root"])
+        .arg(root.path())
+        .args(["progress-session", "--request"])
+        .arg(&request_path)
+        .output()
+        .expect("append session");
+    fs::remove_file(&request_path).expect("remove append request");
+    assert!(
+        append.status.success(),
+        "{}",
+        String::from_utf8_lossy(&append.stderr)
+    );
+    let require = Command::new(env!("CARGO_BIN_EXE_casefile"))
+        .args(["--root"])
+        .arg(root.path())
+        .args([
+            "require-writer-progress",
+            "--investigation",
+            r"projects\\demo//investigations\\sample///",
+            "--ticket-id",
+            "HMD-011",
+        ])
+        .output()
+        .expect("writer progress");
+    assert!(
+        require.status.success(),
+        "{}",
+        String::from_utf8_lossy(&require.stderr)
+    );
+    assert_eq!(
+        serde_json::from_slice::<Value>(&require.stdout).expect("writer progress JSON")["investigation"],
+        "projects/demo/investigations/sample"
     );
 }
 
@@ -123,16 +175,28 @@ fn scoped_check(root: &Path, investigation: &str) -> std::process::Output {
 #[test]
 fn scoped_check_requires_an_exact_activated_investigation() {
     let root = fixture();
-    let valid = scoped_check(root.path(), "projects/demo/investigations/sample");
+    let valid = scoped_check(root.path(), r"projects\\demo//investigations\\sample///");
     assert!(valid.status.success(), "{:?}", valid.stderr);
     assert_eq!(
         json!(true),
         serde_json::from_slice::<Value>(&valid.stdout).expect("JSON")["valid"]
     );
-    for invalid in ["projects/demo/investigations/missing", "../sample"] {
+    for invalid in [
+        "projects/demo/investigations/missing",
+        "../sample",
+        "/projects/demo/investigations/sample",
+        r"C:projects\demo",
+        r"\\server\share\sample",
+    ] {
         let result = scoped_check(root.path(), invalid);
         assert!(!result.status.success());
-        assert!(String::from_utf8_lossy(&result.stderr).contains("investigation"));
+        let error = String::from_utf8_lossy(&result.stderr);
+        assert!(
+            error.contains("investigation")
+                || error.contains("contained relative path")
+                || error.contains("normal path segments"),
+            "{error}"
+        );
     }
 }
 
@@ -258,7 +322,7 @@ fn project_binding(root: &Path, strategy_id: &str) -> std::process::Output {
         .args([
             "project-writer-binding",
             "--investigation",
-            "projects/demo/investigations/sample",
+            r"projects\\demo//investigations\\sample///",
             "--strategy-id",
             strategy_id,
         ])
@@ -302,7 +366,7 @@ fn binding_cli_uses_one_provider_session_and_retains_store_governance() {
     fs::write(
         &request,
         serde_json::to_vec(&serde_json::json!({
-            "investigation": "projects/demo/investigations/sample",
+            "investigation": "projects\\\\demo//investigations\\\\sample///",
             "binding_source": "not = [toml",
         }))
         .expect("request JSON"),
@@ -315,7 +379,7 @@ fn binding_cli_uses_one_provider_session_and_retains_store_governance() {
     fs::write(
         &request,
         serde_json::to_vec(&serde_json::json!({
-            "investigation": "projects/demo/investigations/sample",
+            "investigation": "projects\\\\demo//investigations\\\\sample///",
             "binding_source": BINDING,
         }))
         .expect("request JSON"),

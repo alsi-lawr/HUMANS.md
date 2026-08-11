@@ -14,6 +14,7 @@ use tempfile::NamedTempFile;
 
 use crate::{
     activation::{ActivationState, activation},
+    layout::checked_path,
     scanning::scan,
     store::StoreError,
 };
@@ -56,8 +57,9 @@ pub struct ProgressApplyResult {
 
 pub(super) fn preview(
     root: &Path,
-    request: ProgressChangeRequest,
+    mut request: ProgressChangeRequest,
 ) -> Result<ProgressPreview, StoreError> {
+    request.investigation = checked_path(&request.investigation)?;
     ensure_worktree(root)?;
     let (path, scope_prefix) = progress_path(root, &request.investigation)?;
     let before = scan(root, &BTreeMap::new())?;
@@ -228,8 +230,9 @@ pub(super) fn preview(
 
 pub(super) fn apply(
     root: &Path,
-    preview: ProgressPreview,
+    mut preview: ProgressPreview,
 ) -> Result<ProgressApplyResult, StoreError> {
+    preview.request.investigation = checked_path(&preview.request.investigation)?;
     ensure_worktree(root)?;
     if !preview.diagnostics.is_empty() {
         return Err(StoreError::Invalid(
@@ -302,9 +305,10 @@ pub(super) fn bootstrap(
     root: &Path,
     investigation: &str,
 ) -> Result<ProgressChangeRequest, StoreError> {
-    progress_path(root, investigation)?;
+    let investigation = checked_path(investigation)?;
+    progress_path(root, &investigation)?;
     Ok(ProgressChangeRequest {
-        investigation: investigation.into(),
+        investigation,
         entries: Vec::new(),
         replacement: None,
         replacement_source: None,
@@ -409,11 +413,7 @@ fn accepted_ticket_ids(scan: &crate::scanning::ScanResult, scope_prefix: &str) -
 }
 
 fn progress_path(root: &Path, investigation: &str) -> Result<(String, String), StoreError> {
-    if !crate::layout::safe_relative(investigation) {
-        return Err(StoreError::Invalid(
-            "investigation path must be contained".into(),
-        ));
-    }
+    let investigation = checked_path(investigation)?;
     let (state, active, _) = activation(root)?;
     if state != ActivationState::Active {
         return Err(StoreError::Invalid(
@@ -424,13 +424,13 @@ fn progress_path(root: &Path, investigation: &str) -> Result<(String, String), S
         project
             .investigations
             .iter()
-            .any(|value| value == investigation)
+            .any(|value| value == &investigation)
     }) {
         return Err(StoreError::Invalid("investigation is not activated".into()));
     }
     Ok((
-        format!("{}/progress/log.toml", investigation.trim_end_matches('/')),
-        format!("{}/", investigation.trim_end_matches('/')),
+        format!("{investigation}/progress/log.toml"),
+        format!("{investigation}/"),
     ))
 }
 

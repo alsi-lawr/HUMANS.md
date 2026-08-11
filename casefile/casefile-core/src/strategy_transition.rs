@@ -310,6 +310,7 @@ fn safe_path(value: &str) -> bool {
     !value.trim().is_empty()
         && !value.starts_with('/')
         && !value.contains('\\')
+        && !(value.as_bytes().get(1) == Some(&b':') && value.as_bytes()[0].is_ascii_alphabetic())
         && value
             .split('/')
             .all(|component| !component.is_empty() && !matches!(component, "." | ".."))
@@ -356,5 +357,8 @@ mod tests {
             parse_strategy_transition(path, &rendered).expect("parse")
         );
         assert!(parse_strategy_transition(path, &(rendered + "unknown = true\n")).is_err());
+        let mut drive_relative = record;
+        drive_relative.preserved_work_paths = vec!["C:ticket.md".into()];
+        assert!(validate_strategy_transition(path, &drive_relative).is_err());
     }
 }

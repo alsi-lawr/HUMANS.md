@@ -1,3 +1,4 @@
+use crate::layout::checked_path;
 use crate::{
     ActivationState, DerivedBoard, DerivedIndex, DerivedRecord, DerivedSnapshot,
     GovernedApplyResult, Indexed, ProgressApplyResult, ProgressChangeRequest, ProgressPreview,
@@ -379,6 +380,7 @@ impl<C: ProviderCache> Provider<C> {
     }
 
     pub fn query(&self, query: ProviderQuery) -> Result<ProviderQueryResult, ProviderError> {
+        let query = canonical_query(query)?;
         let baseline = self.snapshot()?;
         let revision = baseline.revision.clone();
         Ok(match query {
@@ -580,6 +582,7 @@ impl<C: ProviderCache> Provider<C> {
         &self,
         operation: ProgressOperation,
     ) -> Result<ProviderProgressPreview, ProviderError> {
+        let operation = canonical_progress_operation(operation)?;
         self.require_mutation()?;
         let request = match &operation {
             ProgressOperation::Bootstrap { investigation } => {
@@ -631,7 +634,7 @@ impl<C: ProviderCache> Provider<C> {
         &self,
         investigation: impl Into<String>,
     ) -> Result<DefaultBoardPreview, ProviderError> {
-        let investigation = investigation.into().trim_end_matches('/').to_owned();
+        let investigation = checked_path(&investigation.into())?;
         let scan = self.require_mutation()?;
         let identity = default_board_identity(&scan, &investigation)?;
         let path = format!("{investigation}/boards/delivery.toml");
@@ -860,6 +863,54 @@ impl<C: ProviderCache> Provider<C> {
             cache: self.refresh_cache(&derived),
         })
     }
+}
+
+fn canonical_query(query: ProviderQuery) -> Result<ProviderQuery, ProviderError> {
+    Ok(match query {
+        ProviderQuery::Tickets { scope, search } => ProviderQuery::Tickets {
+            scope: scope.map(canonical_scope).transpose()?,
+            search,
+        },
+        ProviderQuery::Epics { scope, search } => ProviderQuery::Epics {
+            scope: scope.map(canonical_scope).transpose()?,
+            search,
+        },
+        ProviderQuery::Boards { scope } => ProviderQuery::Boards {
+            scope: scope.map(canonical_scope).transpose()?,
+        },
+        ProviderQuery::Progress { scope } => ProviderQuery::Progress {
+            scope: scope.map(canonical_scope).transpose()?,
+        },
+        ProviderQuery::StrategyTransitions { scope } => ProviderQuery::StrategyTransitions {
+            scope: scope.map(canonical_scope).transpose()?,
+        },
+    })
+}
+
+fn canonical_scope(mut scope: RecordScope) -> Result<RecordScope, ProviderError> {
+    scope.project = checked_path(&scope.project)?;
+    scope.investigation = scope
+        .investigation
+        .map(|investigation| checked_path(&investigation))
+        .transpose()?;
+    Ok(scope)
+}
+
+fn canonical_progress_operation(
+    operation: ProgressOperation,
+) -> Result<ProgressOperation, ProviderError> {
+    Ok(match operation {
+        ProgressOperation::Bootstrap { investigation } => ProgressOperation::Bootstrap {
+            investigation: checked_path(&investigation)?,
+        },
+        ProgressOperation::Append {
+            investigation,
+            entries,
+        } => ProgressOperation::Append {
+            investigation: checked_path(&investigation)?,
+            entries,
+        },
+    })
 }
 
 fn capabilities(activation: ActivationState) -> ProviderCapabilities {

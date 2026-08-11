@@ -25,6 +25,7 @@ pub use governance::{
     StrategyTransitionRequest, WriterBindingPreview, WriterBindingRequest,
 };
 pub use index::{DerivedIndex, Indexed, RevisionSource};
+pub use layout::normalize_planning_relative;
 pub use progress::{ProgressApplyResult, ProgressChangeRequest, ProgressPreview};
 pub use provider::{
     CacheState, DefaultBoardApplyResult, DefaultBoardPreview, NoCache, PROVIDER_PROTOCOL_VERSION,
