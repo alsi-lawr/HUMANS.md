@@ -36,5 +36,5 @@ pub use provider::{
     ProviderRecordBatchApplyResult, ProviderSnapshot, ProviderStrategyTransitionPreview,
     ProviderWriterBindingPreview, StrategyTransitionProjection,
 };
-pub use scanning::ScanResult;
+pub use scanning::{ScanResult, is_store_path_excluded};
 pub use store::{Store, StoreError};

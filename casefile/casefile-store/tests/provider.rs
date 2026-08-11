@@ -137,6 +137,20 @@ fn snapshot_negotiates_one_single_scan_v1_baseline_and_queries_store_projections
         Err(ProviderError::UnsupportedProtocol { .. })
     ));
 
+    fs::write(root.path().join(".git/hmd-046-provider-probe"), "changed")
+        .expect("Git metadata probe");
+    fs::create_dir_all(root.path().join(".agent-workspace/provider"))
+        .expect("agent workspace probe");
+    fs::write(
+        root.path().join(".agent-workspace/provider/probe.txt"),
+        "changed",
+    )
+    .expect("agent workspace probe file");
+    assert_eq!(
+        provider.snapshot().expect("metadata-stable snapshot"),
+        snapshot
+    );
+
     let derived = store.derived_snapshot().expect("derived");
     let tickets = derived
         .records

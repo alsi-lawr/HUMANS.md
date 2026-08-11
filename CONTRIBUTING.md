@@ -80,6 +80,14 @@ loopback host only for all-record and relationship projections not covered by pr
 The host fixes one planning root at launch and embeds the tracked browser build; it transports
 provider previews and results, and the browser never parses or writes planning files directly.
 
+The canonical Store input includes every filesystem path below that root except paths whose first
+root-relative component is exactly `.git` or `.agent-workspace`. Those two direct-root trees are
+pruned before descent or file reads and do not contribute entries, diagnostics, raw discovery, or
+the Store revision. Same-named directories below any other component remain visible. Symlink
+diagnostics and governed-write protections remain in force everywhere outside the two excluded
+trees. Presentation loaders and filesystem watchers must use the Store's exported
+`is_store_path_excluded` predicate rather than define another revision boundary.
+
 ### Native MCP package boundary
 
 The generated Codex and Claude Casefile packages contain the complete supported executable matrix

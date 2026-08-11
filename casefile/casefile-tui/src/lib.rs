@@ -24,6 +24,29 @@ use std::{io, sync::mpsc, thread};
 
 const PAGE_SIZE: isize = 10;
 
+trait BootstrapSource {
+    fn scan(&self) -> Result<ScanResult, StoreError>;
+    fn derive_snapshot(&self, scan: &ScanResult) -> DerivedSnapshot;
+}
+
+impl BootstrapSource for Store {
+    fn scan(&self) -> Result<ScanResult, StoreError> {
+        Store::scan(self)
+    }
+
+    fn derive_snapshot(&self, scan: &ScanResult) -> DerivedSnapshot {
+        Store::derive_snapshot(self, scan)
+    }
+}
+
+fn bootstrap_snapshot(
+    source: &impl BootstrapSource,
+) -> Result<(ScanResult, DerivedSnapshot), StoreError> {
+    let scan = source.scan()?;
+    let derived = source.derive_snapshot(&scan);
+    Ok((scan, derived))
+}
+
 /// Starts the workbench for an already scanned snapshot.
 pub fn run(scan: ScanResult, derived: DerivedSnapshot) -> io::Result<Interaction> {
     let _guard = TerminalGuard::enter()?;
@@ -44,8 +67,7 @@ pub fn run_loading(store: Store) -> io::Result<Interaction> {
     thread::Builder::new()
         .name("casefile-tui-loader".into())
         .spawn(move || {
-            let result = (|| Ok::<_, StoreError>((store.scan()?, store.derived_snapshot()?)))()
-                .map_err(|error| error.to_string());
+            let result = bootstrap_snapshot(&store).map_err(|error| error.to_string());
             let _ = sender.send(result);
         })?;
 
@@ -89,5 +111,41 @@ impl Drop for TerminalGuard {
     fn drop(&mut self) {
         let _ = execute!(io::stdout(), LeaveAlternateScreen);
         let _ = disable_raw_mode();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::cell::Cell;
+
+    struct CountingSource {
+        scan_calls: Cell<usize>,
+        result: ScanResult,
+    }
+
+    impl BootstrapSource for CountingSource {
+        fn scan(&self) -> Result<ScanResult, StoreError> {
+            self.scan_calls.set(self.scan_calls.get() + 1);
+            Ok(self.result.clone())
+        }
+
+        fn derive_snapshot(&self, scan: &ScanResult) -> DerivedSnapshot {
+            test_support::derived(scan)
+        }
+    }
+
+    #[test]
+    fn bootstrap_scans_once_and_derives_from_that_exact_revision() {
+        let source = CountingSource {
+            scan_calls: Cell::new(0),
+            result: test_support::scan(),
+        };
+
+        let (scan, derived) = bootstrap_snapshot(&source).expect("bootstrap");
+
+        assert_eq!(source.scan_calls.get(), 1);
+        assert_eq!(derived.source_revision, scan.snapshot.revision);
+        assert_eq!(scan, source.result);
     }
 }
