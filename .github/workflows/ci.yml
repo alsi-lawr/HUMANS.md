@@ -19,7 +19,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - name: Run planning-path and governed-replay suites natively
-        run: cargo test --manifest-path casefile/Cargo.toml -p casefile-core -p casefile-store -p casefile-cli
+        run: cargo test --manifest-path casefile/Cargo.toml -p casefile-core -p casefile-store -p casefile-tui -p casefile-cli
 
   validate:
     runs-on: ubuntu-latest

@@ -13,7 +13,11 @@ use crate::{
 use casefile_core::{
     ApplyResult, ChangeBatchApplyResult, ChangeBatchPreview, ChangeRequest, Preview, Revision,
 };
-use std::{collections::BTreeMap, fs, path::PathBuf};
+use std::{
+    collections::BTreeMap,
+    fs,
+    path::{Path, PathBuf},
+};
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -58,6 +62,11 @@ impl Store {
     /// Creates an isolated catalogue-first presentation session for this Store root.
     pub fn presentation_session(&self) -> PresentationSession {
         PresentationSession::new(self.root.clone())
+    }
+
+    /// Returns the fixed, read-only root used by advisory observation adapters.
+    pub fn observation_root(&self) -> &Path {
+        &self.root
     }
 
     pub fn preview(&self, request: ChangeRequest) -> Result<Preview, StoreError> {

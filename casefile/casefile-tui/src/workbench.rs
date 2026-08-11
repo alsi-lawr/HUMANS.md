@@ -5,6 +5,7 @@ use crate::{
     progressive::{Coordinator, ProjectionChange, UiProjection},
     record_detail::{DetailState, RecordDetail},
     ui::{ACCENT, MUTED, WARN, safe_inline},
+    watching::{SelectedScope, WatchCoordinator},
 };
 use casefile_store::{DerivedBoard, DerivedSnapshot, PresentationTarget, ScanResult};
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
@@ -70,6 +71,7 @@ pub(crate) struct App {
     show_help: bool,
     feedback: Option<String>,
     status: Option<String>,
+    freshness: Option<String>,
     provisional: bool,
     unavailable: BTreeMap<String, String>,
     resume_anchor: Option<SelectionAnchor>,
@@ -89,6 +91,7 @@ impl App {
             show_help: false,
             feedback: None,
             status: None,
+            freshness: None,
             provisional: false,
             unavailable: BTreeMap::new(),
             resume_anchor: None,
@@ -195,6 +198,79 @@ impl App {
         }
         let interaction = self.interaction.take().unwrap_or(Interaction::Quit);
         Ok((interaction, self.resume()))
+    }
+
+    pub(crate) fn run_progressive_watched(
+        &mut self,
+        terminal: &mut Terminal<CrosstermBackend<Stdout>>,
+        coordinator: &mut Coordinator,
+        watcher: &mut WatchCoordinator,
+    ) -> io::Result<(Interaction, WorkbenchResume)> {
+        let mut dirty = true;
+        while self.interaction.is_none() {
+            dirty |= watcher.drain();
+            let update = coordinator.drain();
+            if update.projection != ProjectionChange::None {
+                self.apply_projection(coordinator.projection(), update.projection);
+                if update.projection == ProjectionChange::Complete
+                    && matches!(
+                        coordinator.take_completed_target(),
+                        Some(PresentationTarget::Store)
+                    )
+                    && let Some(catalogue) = coordinator.catalogue()
+                {
+                    watcher.rebuild(catalogue);
+                }
+            }
+            if update.dirty {
+                self.status = Some(coordinator.status().into());
+                dirty = true;
+            }
+            if coordinator.request_content(self.browser.selected_path()) {
+                self.status = Some(coordinator.status().into());
+                dirty = true;
+            }
+            self.freshness = watcher.warning(&self.selected_scope());
+            if dirty {
+                terminal.draw(|frame| self.render(frame.area(), frame.buffer_mut()))?;
+                dirty = false;
+            }
+            if event::poll(EVENT_POLL_INTERVAL)? {
+                match event::read()? {
+                    Event::Key(key) if key.kind == KeyEventKind::Press => {
+                        self.handle(key.code);
+                        if let Some(intent) = self.refresh_intent.take() {
+                            let target = self.refresh_target(coordinator, intent);
+                            match coordinator.refresh(target) {
+                                Ok(()) => self.status = Some(coordinator.status().into()),
+                                Err(message) => self.feedback = Some(message),
+                            }
+                        }
+                        dirty = true;
+                    }
+                    Event::Resize(_, _) => dirty = true,
+                    _ => {}
+                }
+            }
+        }
+        let interaction = self.interaction.take().unwrap_or(Interaction::Quit);
+        Ok((interaction, self.resume()))
+    }
+
+    fn selected_scope(&self) -> SelectedScope {
+        match (
+            self.browser.selected_project(),
+            self.browser.selected_investigation(),
+        ) {
+            (Some(project), Some(identity)) => SelectedScope::Investigation {
+                project: project.into(),
+                identity: identity.into(),
+            },
+            (Some(project), None) => SelectedScope::Project {
+                project: project.into(),
+            },
+            _ => SelectedScope::Store,
+        }
     }
 
     fn apply_projection(&mut self, projection: UiProjection, change: ProjectionChange) {
@@ -446,8 +522,20 @@ impl App {
             }
             status_text.push_str(&format!("Unavailable: {fields}"));
         }
+        if let Some(freshness) = &self.freshness {
+            if !status_text.is_empty() {
+                status_text.push_str("  |  ");
+            }
+            status_text.push_str(freshness);
+        }
         Paragraph::new(status_text)
-            .style(Style::default().fg(if self.provisional { WARN } else { MUTED }))
+            .style(
+                Style::default().fg(if self.provisional || self.freshness.is_some() {
+                    WARN
+                } else {
+                    MUTED
+                }),
+            )
             .render(status, buffer);
 
         match layout_mode(body) {

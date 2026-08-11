@@ -126,12 +126,28 @@ pub(crate) struct Coordinator {
     handoff: Option<ObservationHandoff>,
     status: String,
     content_status: Option<String>,
+    completed_target: Option<PresentationTarget>,
 }
 
 impl Coordinator {
     pub(crate) fn start(
         session: PresentationSession,
         handoff: Option<ObservationHandoff>,
+    ) -> Result<Self, StoreError> {
+        Self::start_at(
+            session,
+            handoff,
+            RefreshObservation {
+                generation: 0,
+                minimum_scope: RefreshMinimumScope::Contextual,
+            },
+        )
+    }
+
+    pub(crate) fn start_at(
+        session: PresentationSession,
+        handoff: Option<ObservationHandoff>,
+        observation: RefreshObservation,
     ) -> Result<Self, StoreError> {
         let mut coordinator = Self {
             session,
@@ -143,13 +159,11 @@ impl Coordinator {
             content: None,
             attempted_content: None,
             next_generation: 0,
-            observation: RefreshObservation {
-                generation: 0,
-                minimum_scope: RefreshMinimumScope::Contextual,
-            },
+            observation,
             handoff,
             status: String::new(),
             content_status: None,
+            completed_target: None,
         };
         coordinator.start_target(PresentationTarget::Store, true)?;
         Ok(coordinator)
@@ -210,7 +224,7 @@ impl Coordinator {
     }
 
     pub(crate) fn observe(&mut self, observation: RefreshObservation) -> bool {
-        if observation.generation <= self.observation.generation {
+        if observation.generation < self.observation.generation || observation == self.observation {
             return false;
         }
         self.observation = observation;
@@ -346,6 +360,14 @@ impl Coordinator {
         self.content_status.as_deref().unwrap_or(&self.status)
     }
 
+    pub(crate) fn catalogue(&self) -> Option<&PresentationCatalogue> {
+        self.visible_catalogue()
+    }
+
+    pub(crate) fn take_completed_target(&mut self) -> Option<PresentationTarget> {
+        self.completed_target.take()
+    }
+
     pub(crate) fn investigation_target(
         &self,
         project: &str,
@@ -426,6 +448,7 @@ impl Coordinator {
                 self.complete_entry_targets
                     .extend(active.entry_targets.clone());
                 self.has_complete = true;
+                self.completed_target = Some(active.target.clone());
                 let later_observation =
                     self.observation.generation > active.started_observation_generation;
                 self.status = if later_observation {

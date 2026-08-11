@@ -8,6 +8,7 @@ license.workspace = true
 casefile-core = { path = "../casefile-core" }
 casefile-store = { path = "../casefile-store" }
 crossterm.workspace = true
+notify.workspace = true
 pulldown-cmark.workspace = true
 ratatui.workspace = true
 

@@ -254,6 +254,66 @@ fn progressive_updates_and_manual_refresh_render_without_an_extra_keypress() {
 }
 
 #[test]
+fn disk_change_warns_without_input_retains_selection_and_manual_refresh_remains_available() {
+    let fixture = fixture();
+    let mut pty = Pty::start(&fixture, &[], &[]);
+
+    pty.wait_for("Store presentation complete");
+    pty.send(b"\r\r/HMD-E-001\r");
+    pty.wait_for("Minimum epic");
+    let epic = fixture.root.join(EPIC);
+    let content = fs::read_to_string(&epic).expect("epic");
+    fs::write(&epic, content.replace("Minimum epic", "Changed on disk"))
+        .expect("external disk change");
+    pty.wait_for("STALE DIRECT");
+    pty.send(b"r");
+    pty.wait_for("refresh complete.");
+    pty.send(b"q");
+
+    let transcript = pty.finish(true);
+    assert!(
+        transcript
+            .windows("Changed".len())
+            .any(|part| part == b"Changed")
+    );
+    assert!(
+        transcript
+            .windows("on disk".len())
+            .any(|part| part == b"on disk")
+    );
+    assert!(restored(&transcript));
+}
+
+#[test]
+fn watch_degradation_keeps_store_refresh_and_quit_usable() {
+    let fixture = fixture();
+    let mut pty = Pty::start(&fixture, &[], &[]);
+
+    pty.wait_for("Store presentation complete");
+    let moved = fixture.temporary.path().join("planning-moved");
+    fs::rename(&fixture.root, &moved).expect("rename watched Store root");
+    pty.wait_for("DEGRADED");
+    pty.send(b"R");
+    pty.wait_for("refresh failed;");
+    pty.send(b"q");
+
+    let transcript = pty.finish(true);
+    assert!(restored(&transcript));
+}
+
+#[test]
+fn quit_during_progressive_load_restores_terminal_promptly() {
+    let fixture = fixture();
+    let mut pty = Pty::start(&fixture, &[], &[]);
+    pty.wait_for("PROVISIONAL");
+    let started = Instant::now();
+    pty.send(b"q");
+    let transcript = pty.finish(true);
+    assert!(started.elapsed() < Duration::from_secs(2));
+    assert!(restored(&transcript));
+}
+
+#[test]
 fn explicit_editor_preserves_arguments_applies_and_rescans() {
     let fixture = fixture();
     let editor = fixture.temporary.path().join("editor");

@@ -9,6 +9,7 @@ mod review;
 #[cfg(test)]
 mod test_support;
 mod ui;
+mod watching;
 mod workbench;
 
 pub use interaction::{EditIntent, Interaction};
@@ -53,7 +54,27 @@ pub fn run_loading_resuming(
     store: Store,
     resume: Option<WorkbenchResume>,
 ) -> io::Result<WorkbenchOutcome> {
-    run_loading_with_observations(store, resume, None)
+    let (mut watcher, handoff, initial_observation) =
+        watching::WatchCoordinator::start(store.observation_root());
+    let _guard = TerminalGuard::enter()?;
+    let backend = CrosstermBackend::new(io::stdout());
+    let mut terminal = Terminal::new(backend)?;
+    let mut coordinator = progressive::Coordinator::start_at(
+        store.presentation_session(),
+        Some(handoff),
+        initial_observation,
+    )
+    .map_err(|error| io::Error::other(error.to_string()))?;
+    let mut app = workbench::App::from_projection(coordinator.projection(), resume);
+    app.set_status(coordinator.status());
+    let result = app
+        .run_progressive_watched(&mut terminal, &mut coordinator, &mut watcher)
+        .map(|(interaction, resume)| WorkbenchOutcome {
+            interaction,
+            resume,
+        });
+    terminal.show_cursor()?;
+    result
 }
 
 /// Opens the progressive workbench with the typed observation/report handoff used by watchers.
