@@ -1,6 +1,6 @@
 schema_version = 1
 name = "humans-md"
-version = "0.4.9"
+version = "0.4.10"
 publisher = "alsi-lawr"
 repository = "alsi-lawr/HUMANS.md"
 repository_url = "https://github.com/alsi-lawr/HUMANS.md"
