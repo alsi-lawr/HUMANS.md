@@ -512,6 +512,7 @@ struct LoadedState {
     target: PresentationTarget,
     activation: Activation,
     scan: ScanResult,
+    complete: bool,
 }
 
 trait PresentationReader: Send + Sync {
@@ -526,6 +527,16 @@ struct FsPresentationReader {
 }
 
 impl FsPresentationReader {
+    fn validate_root(&self) -> Result<(), StoreError> {
+        let metadata = fs::symlink_metadata(&self.root)?;
+        if metadata.file_type().is_symlink() || !metadata.is_dir() {
+            return Err(StoreError::Invalid(
+                "presentation root must remain a non-symlink directory".into(),
+            ));
+        }
+        Ok(())
+    }
+
     fn target(&self, relative: &str) -> Result<PathBuf, StoreError> {
         if relative.is_empty() {
             return Ok(self.root.clone());
@@ -541,6 +552,7 @@ impl FsPresentationReader {
     }
 
     fn validate_ancestors(&self, relative: &str) -> Result<(), StoreError> {
+        self.validate_root()?;
         let relative = Path::new(relative);
         let mut current = self.root.clone();
         if let Some(parent) = relative.parent() {
@@ -561,6 +573,7 @@ impl FsPresentationReader {
 
 impl PresentationReader for FsPresentationReader {
     fn activation(&self) -> Result<(ActivationState, Activation, Vec<Diagnostic>), StoreError> {
+        self.validate_root()?;
         activation(&self.root)
     }
 
@@ -600,7 +613,8 @@ impl PresentationReader for FsPresentationReader {
 
     fn metadata(&self, relative: &str) -> Result<ReaderMetadata, StoreError> {
         self.validate_ancestors(relative)?;
-        let metadata = fs::symlink_metadata(self.target(relative)?)?;
+        let target = self.target(relative)?;
+        let metadata = fs::symlink_metadata(&target)?;
         let kind = if metadata.file_type().is_symlink() {
             PresentationFileKind::Symlink
         } else if metadata.is_dir() {
@@ -622,7 +636,7 @@ impl PresentationReader for FsPresentationReader {
                 length,
                 modified_unix_nanos,
             },
-            freshness: metadata_freshness(&metadata, modified_unix_nanos),
+            freshness: path_metadata_freshness(&target, &metadata, modified_unix_nanos)?,
         })
     }
 
@@ -636,9 +650,17 @@ impl PresentationReader for FsPresentationReader {
             ));
         }
         let mut file = File::open(target)?;
-        if !file.metadata()?.is_file() {
+        let opened_metadata = file.metadata()?;
+        if !opened_metadata.is_file() {
             return Err(StoreError::Invalid(
                 "presentation content must remain a regular file".into(),
+            ));
+        }
+        if open_file_freshness(&file, &opened_metadata)?
+            != path_metadata_freshness(&self.target(relative)?, &metadata, None)?
+        {
+            return Err(StoreError::Invalid(
+                "presentation content changed before its file handle was opened".into(),
             ));
         }
         let mut bytes = Vec::new();
@@ -659,6 +681,7 @@ fn run_load(
         payload: PresentationCoverageState::Pending,
         facts: PresentationCoverageState::Pending,
     };
+    let mut catalogue_emitted = false;
     let result = (|| -> Result<(), StoreError> {
         let (state, activation, diagnostics) = inner.reader.activation()?;
         let catalogue = catalogue(state, &activation, diagnostics);
@@ -678,6 +701,7 @@ fn run_load(
         ) {
             return Ok(());
         }
+        catalogue_emitted = true;
         if state != ActivationState::Active {
             send_bounded(
                 &sender,
@@ -700,6 +724,10 @@ fn run_load(
         }
         validate_target(&request.target, &activation)?;
         let descriptors = collect_descriptors(&inner, &request.target, &activation, &cancelled)?;
+        inner.state.lock().expect("presentation state").insert(
+            request.target.clone(),
+            initial_loaded_state(&request.target, &activation, &descriptors),
+        );
         if cancelled.load(Ordering::Acquire) {
             return Ok(());
         }
@@ -723,21 +751,27 @@ fn run_load(
         ) {
             return Ok(());
         }
-        let (entries, scan) = load_entries(
+        let (entries, mut scan) = load_entries(
             &inner,
             &request.target,
             &activation,
             &descriptors,
             &cancelled,
         )?;
-        inner.state.lock().expect("presentation state").insert(
+        let mut states = inner.state.lock().expect("presentation state");
+        if let Some(initial) = states.remove(&request.target) {
+            merge_loaded_lazy_entries(&mut scan, &initial.scan);
+        }
+        states.insert(
             request.target.clone(),
             LoadedState {
                 target: request.target.clone(),
                 activation,
                 scan,
+                complete: true,
             },
         );
+        drop(states);
         let eager_paths = descriptors
             .iter()
             .filter(|descriptor| {
@@ -780,13 +814,22 @@ fn run_load(
         Ok(())
     })();
     if let Err(error) = result {
+        let failure_coverage = PresentationCoverage {
+            catalogue: if catalogue_emitted {
+                PresentationCoverageState::Complete
+            } else {
+                PresentationCoverageState::Pending
+            },
+            payload: PresentationCoverageState::Pending,
+            facts: PresentationCoverageState::Pending,
+        };
         send_bounded(
             &sender,
             &cancelled,
             PresentationEvent::Failure {
                 generation: request.generation,
                 target: failure_target,
-                coverage: pending,
+                coverage: failure_coverage,
                 progress: PresentationProgress {
                     completed: 0,
                     total: None,
@@ -950,6 +993,85 @@ fn collect_descriptors(
     Ok(descriptors)
 }
 
+fn initial_loaded_state(
+    target: &PresentationTarget,
+    active: &Activation,
+    descriptors: &[Descriptor],
+) -> LoadedState {
+    let mut diagnostics = Vec::new();
+    let entries = descriptors
+        .iter()
+        .filter_map(|descriptor| {
+            if descriptor.metadata.public.kind == PresentationFileKind::Symlink {
+                diagnostics.push(Diagnostic::new(
+                    &descriptor.path,
+                    "unsafe_path",
+                    "governed paths cannot be symlinks",
+                ));
+                return Some(EntrySnapshot {
+                    path: descriptor.path.clone(),
+                    classification: Classification::Invalid,
+                    kind: descriptor.kind,
+                    identity: None,
+                    content_revision: digest(&[]),
+                    summary: None,
+                    original_bytes: Vec::new(),
+                });
+            }
+            descriptor.lazy.then(|| EntrySnapshot {
+                path: descriptor.path.clone(),
+                classification: if scope_for(&descriptor.path, active).is_some() {
+                    Classification::Raw
+                } else {
+                    Classification::Ungoverned
+                },
+                kind: None,
+                identity: None,
+                content_revision: digest(&[]),
+                summary: None,
+                original_bytes: Vec::new(),
+            })
+        })
+        .collect();
+    LoadedState {
+        target: target.clone(),
+        activation: active.clone(),
+        scan: ScanResult {
+            activation: ActivationState::Active,
+            investigation_roots: investigation_roots(active),
+            snapshot: CasefileSnapshot {
+                revision: digest(b"partial presentation projection"),
+                entries,
+            },
+            diagnostics: stable(diagnostics),
+        },
+        complete: false,
+    }
+}
+
+fn merge_loaded_lazy_entries(complete: &mut ScanResult, initial: &ScanResult) {
+    let loaded = initial
+        .snapshot
+        .entries
+        .iter()
+        .filter(|entry| !entry.original_bytes.is_empty())
+        .map(|entry| (entry.path.as_str(), entry))
+        .collect::<BTreeMap<_, _>>();
+    for entry in &mut complete.snapshot.entries {
+        if let Some(replacement) = loaded.get(entry.path.as_str()) {
+            *entry = (*replacement).clone();
+        }
+    }
+    complete.diagnostics.extend(
+        initial
+            .diagnostics
+            .iter()
+            .filter(|diagnostic| loaded.contains_key(diagnostic.path.as_str()))
+            .cloned(),
+    );
+    complete.diagnostics = stable(std::mem::take(&mut complete.diagnostics));
+}
+
 fn load_entries(
     inner: &SessionInner,
     target: &PresentationTarget,
@@ -1014,20 +1136,7 @@ fn load_entries(
     local_diagnostics.extend(binding_diagnostics(&snapshots));
     let scan = ScanResult {
         activation: ActivationState::Active,
-        investigation_roots: active
-            .projects
-            .iter()
-            .map(|(project, value)| {
-                (
-                    project.clone(),
-                    value
-                        .investigations
-                        .iter()
-                        .filter_map(|path| investigation_identity(project, path).map(Into::into))
-                        .collect(),
-                )
-            })
-            .collect(),
+        investigation_roots: investigation_roots(active),
         snapshot: CasefileSnapshot {
             revision: digest(b"presentation projection"),
             entries: snapshots,
@@ -1041,6 +1150,23 @@ fn load_entries(
         .map(|descriptor| presentation_entry(descriptor, &scan, &derived, coherent))
         .collect();
     Ok((entries, scan))
+}
+
+fn investigation_roots(active: &Activation) -> BTreeMap<String, Vec<String>> {
+    active
+        .projects
+        .iter()
+        .map(|(project, value)| {
+            (
+                project.clone(),
+                value
+                    .investigations
+                    .iter()
+                    .filter_map(|path| investigation_identity(project, path).map(Into::into))
+                    .collect(),
+            )
+        })
+        .collect()
 }
 
 fn presentation_entry(
@@ -1229,11 +1355,13 @@ fn fetch_entry(
         {
             *entry = replacement;
         }
-        diagnostics.extend(cross_validate(
-            &loaded.scan.snapshot.entries,
-            &loaded.activation,
-        ));
-        diagnostics.extend(binding_diagnostics(&loaded.scan.snapshot.entries));
+        if loaded.complete {
+            diagnostics.extend(cross_validate(
+                &loaded.scan.snapshot.entries,
+                &loaded.activation,
+            ));
+            diagnostics.extend(binding_diagnostics(&loaded.scan.snapshot.entries));
+        }
         loaded.scan.diagnostics = stable(diagnostics);
     } else if let Some(entry) = loaded
         .scan
@@ -1252,7 +1380,7 @@ fn fetch_entry(
         &loaded_descriptor,
         &loaded.scan,
         &derived,
-        matches!(loaded.target, PresentationTarget::Store),
+        loaded.complete && matches!(loaded.target, PresentationTarget::Store),
     ))
 }
 
@@ -1432,6 +1560,39 @@ fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
+fn path_metadata_freshness(
+    path: &Path,
+    metadata: &fs::Metadata,
+    modified: Option<u128>,
+) -> Result<u128, StoreError> {
+    #[cfg(windows)]
+    {
+        if metadata.is_file() {
+            let file = File::open(path)?;
+            return open_file_freshness(&file, metadata);
+        }
+        Ok(modified.unwrap_or_default() ^ u128::from(metadata.len()))
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = path;
+        Ok(metadata_freshness(metadata, modified))
+    }
+}
+
+fn open_file_freshness(file: &File, _metadata: &fs::Metadata) -> Result<u128, StoreError> {
+    #[cfg(windows)]
+    {
+        windows_file_freshness(file)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = file;
+        Ok(metadata_freshness(_metadata, None))
+    }
+}
+
+#[cfg(not(windows))]
 fn metadata_freshness(metadata: &fs::Metadata, _modified: Option<u128>) -> u128 {
     #[cfg(unix)]
     {
@@ -1446,26 +1607,44 @@ fn metadata_freshness(metadata: &fs::Metadata, _modified: Option<u128>) -> u128 
         hasher.update(metadata.ctime_nsec().to_le_bytes());
         u128::from_le_bytes(hasher.finalize()[..16].try_into().expect("digest width"))
     }
-    #[cfg(windows)]
-    {
-        use std::os::windows::fs::MetadataExt;
-        let mut hasher = Sha256::new();
-        hasher.update(
-            metadata
-                .volume_serial_number()
-                .unwrap_or_default()
-                .to_le_bytes(),
-        );
-        hasher.update(metadata.file_index().unwrap_or_default().to_le_bytes());
-        hasher.update(metadata.file_size().to_le_bytes());
-        hasher.update(metadata.creation_time().to_le_bytes());
-        hasher.update(metadata.last_write_time().to_le_bytes());
-        u128::from_le_bytes(hasher.finalize()[..16].try_into().expect("digest width"))
-    }
-    #[cfg(not(any(unix, windows)))]
+    #[cfg(not(unix))]
     {
         _modified.unwrap_or_default() ^ u128::from(metadata.len())
     }
+}
+
+#[cfg(windows)]
+fn windows_file_freshness(file: &File) -> Result<u128, StoreError> {
+    use std::os::windows::io::AsRawHandle;
+    use windows_sys::Win32::{
+        Foundation::HANDLE,
+        Storage::FileSystem::{BY_HANDLE_FILE_INFORMATION, GetFileInformationByHandle},
+    };
+
+    let mut information = BY_HANDLE_FILE_INFORMATION::default();
+    // SAFETY: `file` owns a live file handle and `information` is writable for the call duration.
+    let succeeded = unsafe {
+        GetFileInformationByHandle(
+            file.as_raw_handle() as HANDLE,
+            std::ptr::addr_of_mut!(information),
+        )
+    };
+    if succeeded == 0 {
+        return Err(io::Error::last_os_error().into());
+    }
+    let mut hasher = Sha256::new();
+    hasher.update(information.dwVolumeSerialNumber.to_le_bytes());
+    hasher.update(information.nFileIndexHigh.to_le_bytes());
+    hasher.update(information.nFileIndexLow.to_le_bytes());
+    hasher.update(information.nFileSizeHigh.to_le_bytes());
+    hasher.update(information.nFileSizeLow.to_le_bytes());
+    hasher.update(information.ftCreationTime.dwHighDateTime.to_le_bytes());
+    hasher.update(information.ftCreationTime.dwLowDateTime.to_le_bytes());
+    hasher.update(information.ftLastWriteTime.dwHighDateTime.to_le_bytes());
+    hasher.update(information.ftLastWriteTime.dwLowDateTime.to_le_bytes());
+    Ok(u128::from_le_bytes(
+        hasher.finalize()[..16].try_into().expect("digest width"),
+    ))
 }
 
 fn send_entry_batches(
@@ -1874,6 +2053,30 @@ mod tests {
         let operations = reader.operations();
         assert!(!operations.contains(&Operation::Body(RAW.into())));
         assert!(!operations.contains(&Operation::Body(EVIDENCE.into())));
+
+        let raw_handle = match &early {
+            PresentationEvent::Entries { entries, .. } => entries
+                .iter()
+                .find(|entry| entry.path == RAW)
+                .expect("early raw")
+                .content_handle
+                .clone()
+                .expect("early handle"),
+            _ => unreachable!(),
+        };
+        let content = drain_content(
+            session
+                .fetch_content(content_request(41, raw_handle))
+                .expect("concurrent lazy content"),
+        );
+        assert!(matches!(
+            content[0],
+            PresentationContentEvent::Pending { .. }
+        ));
+        assert!(matches!(
+            content[1],
+            PresentationContentEvent::Loaded { .. }
+        ));
         reader.release();
 
         let mut events = vec![early];
@@ -1918,7 +2121,7 @@ mod tests {
         assert_eq!(evidence.summary, PresentationFact::Unavailable);
         assert_eq!(evidence.diagnostics, PresentationFact::Unavailable);
         let operations = reader.operations();
-        assert!(!operations.contains(&Operation::Body(RAW.into())));
+        assert_eq!(body_reads(&reader, RAW), 1);
         assert!(!operations.contains(&Operation::Body(EVIDENCE.into())));
     }
 
@@ -2150,6 +2353,62 @@ mod tests {
             events[1],
             PresentationContentEvent::Failure { .. }
         ));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn production_catalogue_and_fetch_reject_a_root_renamed_to_a_symlink() {
+        let root = fixture();
+        fs::write(root.path().join(INVESTIGATION).join("lazy.raw"), "original").expect("raw");
+        let store = crate::Store::open(root.path()).expect("store");
+        let session = store.presentation_session();
+        let entries = event_entries(&drain(
+            session
+                .load(load_request(14, PresentationTarget::Store))
+                .expect("load"),
+        ));
+        let handle = entries
+            .iter()
+            .find(|entry| entry.path.ends_with("lazy.raw"))
+            .expect("lazy entry")
+            .content_handle
+            .clone()
+            .expect("handle");
+
+        let moved = root.path().with_extension("hmd-047-moved");
+        let outside = TempDir::new().expect("outside");
+        fs::rename(root.path(), &moved).expect("move root");
+        std::os::unix::fs::symlink(outside.path(), root.path()).expect("swap root");
+
+        let content = drain_content(
+            session
+                .fetch_content(content_request(14, handle))
+                .expect("content"),
+        );
+        assert!(matches!(
+            content[0],
+            PresentationContentEvent::Pending { .. }
+        ));
+        assert!(matches!(
+            content[1],
+            PresentationContentEvent::Failure { .. }
+        ));
+        let catalogue = drain(
+            session
+                .load(load_request(15, PresentationTarget::Store))
+                .expect("catalogue failure stream"),
+        );
+        assert_eq!(catalogue.len(), 1);
+        assert!(matches!(
+            catalogue[0],
+            PresentationEvent::Failure {
+                ref coverage,
+                ..
+            } if coverage.catalogue == PresentationCoverageState::Pending
+        ));
+
+        fs::remove_file(root.path()).expect("remove root symlink");
+        fs::rename(moved, root.path()).expect("restore root");
     }
 
     #[test]
