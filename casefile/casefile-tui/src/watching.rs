@@ -262,6 +262,14 @@ impl PathClassifier {
         let absolute = lexical(value, self.windows).ok_or(())?;
         let relative = if absolute == self.root {
             return Ok(ScopeImpact::Store);
+        } else if self.root.is_empty() {
+            if is_windows_drive_relative(value, self.windows) {
+                return Err(());
+            }
+            if is_lexically_absolute(value, self.windows) {
+                return Ok(ScopeImpact::Ignore);
+            }
+            absolute.as_str()
         } else if let Some(relative) = strip_lexical_prefix(&absolute, &self.root) {
             relative
         } else {
@@ -313,6 +321,23 @@ impl PathClassifier {
             .find(|root| root.project == project && root.relative == path)
             .map(|root| root.identity.clone())
     }
+}
+
+fn is_lexically_absolute(value: &str, windows: bool) -> bool {
+    if !windows {
+        return Path::new(value).is_absolute();
+    }
+    let value = value.replace('\\', "/");
+    value.starts_with('/')
+        || (value.as_bytes().get(1) == Some(&b':') && value.as_bytes().get(2) == Some(&b'/'))
+}
+
+fn is_windows_drive_relative(value: &str, windows: bool) -> bool {
+    if !windows {
+        return false;
+    }
+    let value = value.replace('\\', "/");
+    value.as_bytes().get(1) == Some(&b':') && value.as_bytes().get(2) != Some(&b'/')
 }
 
 fn normalize_separators(value: &str, windows: bool) -> String {
@@ -822,6 +847,41 @@ mod tests {
         );
         assert_eq!(
             classifier.classify_str(r"c:\storehouse\x"),
+            Ok(ScopeImpact::Ignore)
+        );
+    }
+
+    #[test]
+    fn classifier_keeps_dot_root_relative_and_absolute_namespaces_distinct() {
+        let mut classifier = PathClassifier::new(".", false);
+        classifier.rebuild(&catalogue());
+        assert!(matches!(
+            classifier.classify_str("./projects/alpha/investigations/deep/ticket.md"),
+            Ok(ScopeImpact::Investigation { identity, .. }) if identity == "deep"
+        ));
+        assert_eq!(
+            classifier.classify_str("./.agent-workspace/session/log"),
+            Ok(ScopeImpact::Ignore)
+        );
+        assert_eq!(
+            classifier.classify_str("/outside/projects/alpha/investigations/deep/ticket.md"),
+            Ok(ScopeImpact::Ignore)
+        );
+        assert_eq!(classifier.classify_str("../outside"), Err(()));
+
+        let mut windows = PathClassifier::new(".", true);
+        windows.rebuild(&catalogue());
+        assert!(matches!(
+            windows.classify_str(r".\PROJECTS\ALPHA\INVESTIGATIONS\DEEP\ticket.md"),
+            Ok(ScopeImpact::Investigation { identity, .. }) if identity == "deep"
+        ));
+        assert_eq!(
+            windows.classify_str(r"C:\outside\ticket.md"),
+            Ok(ScopeImpact::Ignore)
+        );
+        assert_eq!(windows.classify_str(r"C:outside\ticket.md"), Err(()));
+        assert_eq!(
+            windows.classify_str(r"\\server\share\ticket.md"),
             Ok(ScopeImpact::Ignore)
         );
     }

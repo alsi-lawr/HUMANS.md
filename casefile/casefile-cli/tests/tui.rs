@@ -110,6 +110,28 @@ impl Pty {
         }
     }
 
+    fn start_default_root(fixture: &Fixture) -> Self {
+        let transcript = fixture.temporary.path().join("terminal-default-root.log");
+        let command = format!(
+            "cd '{}' && stty rows 30 cols 120; exec '{}' tui",
+            fixture.root.display(),
+            env!("CARGO_BIN_EXE_casefile"),
+        );
+        let mut child = Command::new("script")
+            .args(["--quiet", "--flush", "--return", "--command", &command])
+            .arg(&transcript)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("default-root PTY");
+        Self {
+            input: child.stdin.take().expect("PTY input"),
+            child,
+            transcript,
+        }
+    }
+
     fn send(&mut self, bytes: &[u8]) {
         self.input.write_all(bytes).expect("PTY input");
         self.input.flush().expect("PTY flush");
@@ -281,6 +303,26 @@ fn disk_change_warns_without_input_retains_selection_and_manual_refresh_remains_
             .windows("on disk".len())
             .any(|part| part == b"on disk")
     );
+    assert!(restored(&transcript));
+}
+
+#[test]
+fn default_dot_root_reports_external_disk_change_without_input() {
+    let fixture = fixture();
+    let mut pty = Pty::start_default_root(&fixture);
+
+    pty.wait_for("Store presentation complete");
+    let epic = fixture.root.join(EPIC);
+    let content = fs::read_to_string(&epic).expect("epic");
+    fs::write(
+        &epic,
+        content.replace("Minimum epic", "Changed through dot root"),
+    )
+    .expect("external disk change");
+    pty.wait_for("STALE DIRECT");
+    pty.send(b"q");
+
+    let transcript = pty.finish(true);
     assert!(restored(&transcript));
 }
 
