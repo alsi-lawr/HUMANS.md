@@ -597,9 +597,21 @@ pub(super) fn require_writer_progress(
 }
 
 fn ensure_binding_inactive(scan: &ScanResult, investigation: &str) -> Result<(), StoreError> {
+    let progress_path = format!("{investigation}/progress/log.toml");
+    let progress_is_absent = !scan
+        .snapshot
+        .entries
+        .iter()
+        .any(|entry| entry.path == progress_path)
+        && !scan
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.path == progress_path);
+    if progress_is_absent {
+        return Ok(());
+    }
     let log = canonical_progress(scan, investigation)?;
     let prefix = format!("{investigation}/tickets/accepted/");
-    let progress_path = format!("{investigation}/progress/log.toml");
     if scan
         .diagnostics
         .iter()

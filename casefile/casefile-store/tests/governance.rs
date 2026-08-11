@@ -469,14 +469,12 @@ fn binding_activity_is_derived_exactly_from_canonical_progress_and_spawn_require
 
     let missing = fixture();
     let store = Store::open(missing.path()).expect("store");
-    assert!(
-        store
-            .preview_writer_binding(WriterBindingRequest {
-                investigation: INVESTIGATION.into(),
-                binding_source: BINDING.into(),
-            })
-            .is_err()
-    );
+    store
+        .preview_writer_binding(WriterBindingRequest {
+            investigation: INVESTIGATION.into(),
+            binding_source: BINDING.into(),
+        })
+        .expect("absent progress is inactive");
     assert!(
         store
             .require_writer_progress(INVESTIGATION, "HMD-011")
