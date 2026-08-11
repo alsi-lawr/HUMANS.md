@@ -26,6 +26,9 @@ use crate::{
 
 type PriorFileState = (String, Option<Vec<u8>>);
 
+const UNSELECTED_STRATEGY_ID: &str = "unselected";
+const ABSENT_MATRIX_REVISION: &str = "absent";
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum GovernedOperationKind {
@@ -126,46 +129,79 @@ pub(super) fn preview_strategy_transition(
         .snapshot
         .entries
         .iter()
-        .find(|entry| entry.path == matrix_path)
-        .ok_or_else(|| StoreError::Invalid("governed phase matrix is missing".into()))?;
-    require_regular_target(root, &matrix_path, true)?;
-    let current_text = std::str::from_utf8(&current.original_bytes)
-        .map_err(|_| StoreError::Invalid("governed phase matrix must be UTF-8".into()))?;
-    let current_summary = parse_strategy(&matrix_path, current_text).map_err(diagnostics_error)?;
-    let current_projection = parse_strategy_projection(&matrix_path, current_text)
-        .map_err(diagnostics_error)?
-        .ok_or_else(|| StoreError::Invalid("governed phase matrix must be complete".into()))?;
+        .find(|entry| entry.path == matrix_path);
+    require_regular_target(root, &matrix_path, false)?;
     let selected_summary =
         parse_strategy(&matrix_path, &request.selected_matrix_source).map_err(diagnostics_error)?;
     let selected_projection =
         parse_strategy_projection(&matrix_path, &request.selected_matrix_source)
             .map_err(diagnostics_error)?
             .ok_or_else(|| StoreError::Invalid("selected matrix must be complete".into()))?;
-    if current_projection.root_binding != "root" || selected_projection.root_binding != "root" {
+    if selected_projection.root_binding != "root" {
         return Err(StoreError::Invalid(
             "strategy transition must preserve the root binding".into(),
         ));
     }
-    let (previous_strategy_id, current_phase) = match current_summary {
-        RecordSummary::Strategy {
-            strategy_id, phase, ..
-        } => (strategy_id, phase),
-        _ => unreachable!("strategy parser returns a strategy summary"),
-    };
     let (parsed_selected_id, selected_phase) = match selected_summary {
         RecordSummary::Strategy {
             strategy_id, phase, ..
         } => (strategy_id, phase),
         _ => unreachable!("strategy parser returns a strategy summary"),
     };
-    if current_phase != phase
-        || selected_phase != phase
-        || parsed_selected_id != selected_strategy_id
-    {
+    if selected_phase != phase || parsed_selected_id != selected_strategy_id {
         return Err(StoreError::Invalid(
             "selected matrix phase does not match governed phase state".into(),
         ));
     }
+    let (previous_strategy_id, expected_matrix_revision) = match current {
+        Some(current) => {
+            let current_text = std::str::from_utf8(&current.original_bytes)
+                .map_err(|_| StoreError::Invalid("governed phase matrix must be UTF-8".into()))?;
+            let current_summary =
+                parse_strategy(&matrix_path, current_text).map_err(diagnostics_error)?;
+            let current_projection = parse_strategy_projection(&matrix_path, current_text)
+                .map_err(diagnostics_error)?
+                .ok_or_else(|| {
+                    StoreError::Invalid("governed phase matrix must be complete".into())
+                })?;
+            if current_projection.root_binding != "root" {
+                return Err(StoreError::Invalid(
+                    "strategy transition must preserve the root binding".into(),
+                ));
+            }
+            let (strategy_id, current_phase) = match current_summary {
+                RecordSummary::Strategy {
+                    strategy_id, phase, ..
+                } => (strategy_id, phase),
+                _ => unreachable!("strategy parser returns a strategy summary"),
+            };
+            if current_phase != phase {
+                return Err(StoreError::Invalid(
+                    "selected matrix phase does not match governed phase state".into(),
+                ));
+            }
+            (strategy_id, current.content_revision.clone())
+        }
+        None => {
+            let transition_prefix = format!("{investigation}/strategy/transitions/");
+            let has_phase_history = before.snapshot.entries.iter().any(|entry| {
+                entry.path.starts_with(&transition_prefix)
+                    && matches!(
+                        entry.summary.as_ref(),
+                        Some(RecordSummary::StrategyTransition { record }) if record.phase == phase
+                    )
+            });
+            if has_phase_history {
+                return Err(StoreError::Invalid(
+                    "governed phase matrix is missing after a recorded transition".into(),
+                ));
+            }
+            (
+                UNSELECTED_STRATEGY_ID.into(),
+                Revision(ABSENT_MATRIX_REVISION.into()),
+            )
+        }
+    };
     let available = request
         .available_capabilities
         .iter()
@@ -210,7 +246,7 @@ pub(super) fn preview_strategy_transition(
         selected_matrix_origin: request.selected_matrix_origin.clone(),
         selected_matrix_sha256: raw_sha256(&selected_bytes),
         expected_store_revision: before.snapshot.revision.clone(),
-        expected_matrix_revision: current.content_revision.clone(),
+        expected_matrix_revision,
         proposed_matrix_revision: proposed_matrix_revision.clone(),
         root_binding: "root".into(),
         governed_state_updated: true,
@@ -221,7 +257,7 @@ pub(super) fn preview_strategy_transition(
     };
     let transition_record = match existing_transition {
         Some(entry) => {
-            if current.original_bytes != selected_bytes {
+            if current.is_none_or(|current| current.original_bytes != selected_bytes) {
                 return Err(StoreError::Invalid(
                     "strategy transition identity cannot be replayed over different governed state"
                         .into(),
@@ -257,7 +293,7 @@ pub(super) fn preview_strategy_transition(
     overlay.insert(transition_path.clone(), Some(record_bytes.clone()));
     let proposed = scan(root, &overlay)?;
     let diagnostics = scoped_introduced(&before, &proposed, &investigation);
-    let matrix_change = change(root, matrix_path, Some(current), selected_bytes)?;
+    let matrix_change = change(root, matrix_path, current, selected_bytes)?;
     let record_change = change(root, transition_path, existing_transition, record_bytes)?;
     let no_op = matrix_change.no_op && record_change.no_op && diagnostics.is_empty();
     Ok(StrategyTransitionPreview {

@@ -14,5 +14,10 @@ owners. The selected matrix and transition record are one failure-atomic, rollba
 transaction. Exact operation replay is a content no-op; reuse of its deterministic identity with
 different content is refused.
 
+The first transition for a phase may create its missing governed matrix. Its transition records
+`unselected` as the previous strategy and `absent` as the expected matrix revision. A missing matrix
+after a recorded transition for the same phase is rejected as damaged governed state rather than
+silently recreated.
+
 No transition backup, journal, or preview-history artifact is created. Git is the durable history
 authority. Historical pre-schema transition and backup files remain raw and untouched.
