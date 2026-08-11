@@ -390,27 +390,47 @@ impl PresentationCache {
 
     pub fn apply_content(&mut self, event: &PresentationContentEvent) {
         match event {
-            PresentationContentEvent::Pending { path, .. }
+            PresentationContentEvent::Pending { target, path, .. }
             | PresentationContentEvent::Failure {
-                path: Some(path), ..
+                target,
+                path: Some(path),
+                ..
             } => {
                 if let Some(entry) = self.entries.get_mut(path) {
-                    entry.body = PresentationFact::Unavailable;
-                    if entry.kind == Some(Kind::Evidence) {
-                        entry.classification = PresentationFact::Unavailable;
-                        entry.summary = PresentationFact::Unavailable;
-                        entry.diagnostics = PresentationFact::Unavailable;
-                        entry.relationships = PresentationFact::Unavailable;
-                        entry.boards = PresentationFact::Unavailable;
+                    invalidate_content(entry);
+                }
+                for ((_, staged_target), entries) in &mut self.staged {
+                    if staged_target == target {
+                        if let Some(entry) = entries.get_mut(path) {
+                            invalidate_content(entry);
+                        }
                     }
                 }
             }
-            PresentationContentEvent::Loaded { entry, .. } => {
-                self.entries
-                    .insert(entry.path.clone(), entry.as_ref().clone());
+            PresentationContentEvent::Loaded { target, entry, .. } => {
+                let entry = entry.as_ref().clone();
+                for ((_, staged_target), entries) in &mut self.staged {
+                    if staged_target == target {
+                        if let Some(existing) = entries.get_mut(&entry.path) {
+                            *existing = entry.clone();
+                        }
+                    }
+                }
+                self.entries.insert(entry.path.clone(), entry);
             }
             PresentationContentEvent::Failure { path: None, .. } => {}
         }
+    }
+}
+
+fn invalidate_content(entry: &mut PresentationEntry) {
+    entry.body = PresentationFact::Unavailable;
+    if entry.kind == Some(Kind::Evidence) {
+        entry.classification = PresentationFact::Unavailable;
+        entry.summary = PresentationFact::Unavailable;
+        entry.diagnostics = PresentationFact::Unavailable;
+        entry.relationships = PresentationFact::Unavailable;
+        entry.boards = PresentationFact::Unavailable;
     }
 }
 
@@ -2123,6 +2143,74 @@ mod tests {
         let operations = reader.operations();
         assert_eq!(body_reads(&reader, RAW), 1);
         assert!(!operations.contains(&Operation::Body(EVIDENCE.into())));
+    }
+
+    #[test]
+    fn cache_preserves_concurrent_lazy_content_through_target_completion() {
+        let reader = FakeReader::active();
+        reader.block(TICKET);
+        let session = PresentationSession::with_reader(reader.clone());
+        let stream = session
+            .load(load_request(42, PresentationTarget::Store))
+            .expect("load");
+        let mut cache = PresentationCache::default();
+
+        let catalogue = stream.recv().expect("catalogue");
+        assert!(matches!(catalogue, PresentationEvent::Catalogue { .. }));
+        cache.apply(&catalogue);
+        let early = stream.recv().expect("lazy catalogue entries");
+        cache.apply(&early);
+        let evidence_handle = match &early {
+            PresentationEvent::Entries { entries, .. } => entries
+                .iter()
+                .find(|entry| entry.path == EVIDENCE)
+                .expect("early evidence")
+                .content_handle
+                .clone()
+                .expect("early evidence handle"),
+            other => panic!("unexpected early event: {other:?}"),
+        };
+        reader.wait_until_blocked();
+
+        let content = drain_content(
+            session
+                .fetch_content(content_request(142, evidence_handle))
+                .expect("concurrent evidence content"),
+        );
+        assert!(content.iter().all(|event| match event {
+            PresentationContentEvent::Pending { generation, .. }
+            | PresentationContentEvent::Loaded { generation, .. }
+            | PresentationContentEvent::Failure { generation, .. } => *generation == 142,
+        }));
+        let loaded = content
+            .iter()
+            .find_map(|event| match event {
+                PresentationContentEvent::Loaded { entry, .. } => Some(entry.as_ref().clone()),
+                _ => None,
+            })
+            .expect("loaded evidence");
+        for event in &content {
+            cache.apply_content(event);
+        }
+        assert_eq!(cache.get(EVIDENCE), Some(&loaded));
+
+        reader.release();
+        let remaining = drain(stream);
+        assert!(matches!(
+            remaining.last(),
+            Some(PresentationEvent::Complete { .. })
+        ));
+        for event in &remaining {
+            cache.apply(event);
+        }
+
+        assert!(matches!(loaded.body, PresentationFact::Available(_)));
+        assert!(matches!(
+            loaded.classification,
+            PresentationFact::Available(_)
+        ));
+        assert!(matches!(loaded.summary, PresentationFact::Available(_)));
+        assert_eq!(cache.get(EVIDENCE), Some(&loaded));
     }
 
     #[test]
