@@ -115,9 +115,10 @@ impl App {
     }
 
     pub(crate) fn resume(&self) -> WorkbenchResume {
+        let board_paths = self.board_card_paths();
         WorkbenchResume {
             browser: self.browser.state(),
-            anchor: self.browser.anchor(&self.scan),
+            anchor: self.browser.anchor(&self.scan, &board_paths),
             detail: self.detail.state(),
             focus: self.focus,
         }
@@ -197,10 +198,11 @@ impl App {
     }
 
     fn apply_projection(&mut self, projection: UiProjection, change: ProjectionChange) {
+        let previous_board_paths = self.board_card_paths();
         let anchor = self
             .resume_anchor
             .clone()
-            .unwrap_or_else(|| self.browser.anchor(&self.scan));
+            .unwrap_or_else(|| self.browser.anchor(&self.scan, &previous_board_paths));
         let previous_revision = self
             .browser
             .selected(&self.scan)
@@ -212,7 +214,8 @@ impl App {
         match change {
             ProjectionChange::Complete => {
                 self.resume_anchor = None;
-                self.feedback = match self.browser.promote(&self.scan, &anchor) {
+                let board_paths = self.board_card_paths();
+                self.feedback = match self.browser.promote(&self.scan, &anchor, &board_paths) {
                     Some(PromotionNotice::FilteredOut) => {
                         Some("Selected item no longer matches the filter.".into())
                     }

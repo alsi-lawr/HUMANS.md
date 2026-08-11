@@ -170,7 +170,7 @@ impl Browser {
         }
     }
 
-    pub(crate) fn anchor(&self, scan: &ScanResult) -> SelectionAnchor {
+    pub(crate) fn anchor(&self, scan: &ScanResult, board_paths: &[String]) -> SelectionAnchor {
         let project_values = self.projects(scan);
         let investigation_values = self.investigations(scan);
         let record = self.selected_path.as_ref().map(|path| {
@@ -191,9 +191,9 @@ impl Browser {
             RecordAnchor {
                 path: path.clone(),
                 visible_index: self
-                    .entries(scan)
+                    .visible_record_paths(scan, board_paths)
                     .iter()
-                    .position(|entry| entry.path == *path),
+                    .position(|candidate| candidate == path),
                 governed,
             }
         });
@@ -213,6 +213,7 @@ impl Browser {
         &mut self,
         scan: &ScanResult,
         anchor: &SelectionAnchor,
+        board_paths: &[String],
     ) -> Option<PromotionNotice> {
         let all_projects = all_projects(scan);
         let visible_projects = self.projects(scan);
@@ -262,6 +263,7 @@ impl Browser {
                 (!investigation_changed)
                     .then_some(anchor.record.as_ref())
                     .flatten(),
+                board_paths,
                 &mut notice,
             );
         } else {
@@ -274,16 +276,31 @@ impl Browser {
         &self,
         scan: &ScanResult,
         anchor: Option<&RecordAnchor>,
+        board_paths: &[String],
         notice: &mut Option<PromotionNotice>,
     ) -> Option<String> {
-        let visible = self
-            .entries(scan)
-            .into_iter()
-            .map(|entry| entry.path.clone())
-            .collect::<Vec<_>>();
+        let visible = self.visible_record_paths(scan, board_paths);
         let Some(anchor) = anchor else {
             return visible.first().cloned();
         };
+        if self.view == View::Boards {
+            if visible.contains(&anchor.path) {
+                return Some(anchor.path.clone());
+            }
+            if let Some(governed) = &anchor.governed {
+                let matches = governed_matches(scan, governed);
+                if matches.len() > 1 {
+                    *notice = Some(PromotionNotice::Ambiguous);
+                    return None;
+                }
+                if let [entry] = matches.as_slice()
+                    && visible.contains(&entry.path)
+                {
+                    return Some(entry.path.clone());
+                }
+            }
+            return nearest(&visible, anchor.visible_index);
+        }
         if scan
             .snapshot
             .entries
@@ -297,20 +314,7 @@ impl Browser {
             return None;
         }
         if let Some(governed) = &anchor.governed {
-            let matches = scan
-                .snapshot
-                .entries
-                .iter()
-                .filter(|entry| {
-                    entry.classification == Classification::Governed
-                        && entry.kind == Some(governed.kind)
-                        && entry.identity.as_deref() == Some(governed.identity.as_str())
-                        && scan.scope_for_path(&entry.path).is_some_and(|scope| {
-                            scope.0 == governed.project
-                                && scope.1 == governed.investigation.as_deref()
-                        })
-                })
-                .collect::<Vec<_>>();
+            let matches = governed_matches(scan, governed);
             if matches.len() > 1 {
                 *notice = Some(PromotionNotice::Ambiguous);
                 return None;
@@ -327,6 +331,17 @@ impl Browser {
             }
         }
         nearest(&visible, anchor.visible_index)
+    }
+
+    fn visible_record_paths(&self, scan: &ScanResult, board_paths: &[String]) -> Vec<String> {
+        if self.view == View::Boards {
+            board_paths.to_vec()
+        } else {
+            self.entries(scan)
+                .into_iter()
+                .map(|entry| entry.path.clone())
+                .collect()
+        }
     }
 
     pub(crate) fn drill_down(&mut self, scan: &ScanResult) -> bool {
@@ -793,6 +808,21 @@ impl Browser {
                 self.selected_path.clone(),
             )
     }
+}
+
+fn governed_matches<'a>(scan: &'a ScanResult, governed: &GovernedAnchor) -> Vec<&'a EntrySnapshot> {
+    scan.snapshot
+        .entries
+        .iter()
+        .filter(|entry| {
+            entry.classification == Classification::Governed
+                && entry.kind == Some(governed.kind)
+                && entry.identity.as_deref() == Some(governed.identity.as_str())
+                && scan.scope_for_path(&entry.path).is_some_and(|scope| {
+                    scope.0 == governed.project && scope.1 == governed.investigation.as_deref()
+                })
+        })
+        .collect()
 }
 
 fn all_projects(scan: &ScanResult) -> Vec<String> {

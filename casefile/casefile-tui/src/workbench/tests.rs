@@ -710,6 +710,87 @@ fn board_keyboard_selection_marks_the_card_changes_detail_and_skips_unresolved_i
 }
 
 #[test]
+fn board_card_selection_survives_complete_projection_with_deletion_and_ambiguity_controls() {
+    let second_path = "projects/demo/investigations/sample/tickets/accepted/HMD-014.md";
+    let mut scan = test_support::scan();
+    scan.snapshot.entries.push(ticket_entry(
+        second_path,
+        "HMD-014",
+        "Follow-up",
+        b"follow-up",
+    ));
+    let mut derived = test_support::derived(&scan);
+    derived.boards.push(board_with_cards(
+        "Delivery",
+        vec![
+            board_card("HMD-013", "Navigator"),
+            board_card("HMD-014", "Follow-up"),
+        ],
+    ));
+    let mut app = App::new(scan.clone(), derived.clone());
+    app.handle(KeyCode::Char('6'));
+    app.handle(KeyCode::Down);
+    assert_eq!(app.browser.selected_path(), Some(second_path));
+
+    app.apply_projection(
+        UiProjection {
+            scan: scan.clone(),
+            derived: derived.clone(),
+            provisional: false,
+            unavailable: BTreeMap::new(),
+        },
+        ProjectionChange::Complete,
+    );
+    assert_eq!(app.browser.selected_path(), Some(second_path));
+    assert!(
+        test_support::render(&app, 160, 40).contains("> HMD-014  unknown  Follow-up  [selected]")
+    );
+
+    let mut deleted = test_support::derived(&scan);
+    deleted.boards.push(board_with_cards(
+        "Delivery",
+        vec![board_card("HMD-013", "Navigator")],
+    ));
+    app.apply_projection(
+        UiProjection {
+            scan: scan.clone(),
+            derived: deleted,
+            provisional: false,
+            unavailable: BTreeMap::new(),
+        },
+        ProjectionChange::Complete,
+    );
+    assert_eq!(app.browser.selected_path(), Some(TICKET_PATH));
+
+    let mut ambiguous = App::new(scan.clone(), derived.clone());
+    ambiguous.handle(KeyCode::Char('6'));
+    ambiguous.handle(KeyCode::Down);
+    let mut ambiguous_scan = scan;
+    ambiguous_scan.snapshot.entries.push(ticket_entry(
+        "projects/demo/investigations/sample/tickets/rejected/HMD-014.md",
+        "HMD-014",
+        "Duplicate",
+        b"duplicate",
+    ));
+    ambiguous.apply_projection(
+        UiProjection {
+            scan: ambiguous_scan,
+            derived,
+            provisional: false,
+            unavailable: BTreeMap::new(),
+        },
+        ProjectionChange::Complete,
+    );
+    assert!(ambiguous.browser.selected_path().is_none());
+    assert!(
+        ambiguous
+            .feedback
+            .as_deref()
+            .is_some_and(|feedback| feedback.contains("ambiguous"))
+    );
+}
+
+#[test]
 fn refresh_target_matrix_uses_project_full_investigation_and_store_fallback() {
     let (_root, mut coordinator) = presentation_coordinator();
     let projection = coordinator.projection();
