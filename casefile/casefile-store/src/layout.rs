@@ -48,7 +48,10 @@ fn portable_segment(segment: &str) -> bool {
         .split_once('.')
         .map_or(segment, |(basename, _)| basename)
         .to_ascii_uppercase();
-    if matches!(basename.as_str(), "CON" | "PRN" | "AUX" | "NUL" | "CLOCK$") {
+    if matches!(
+        basename.as_str(),
+        "CON" | "PRN" | "AUX" | "NUL" | "CLOCK$" | "CONIN$" | "CONOUT$"
+    ) {
         return false;
     }
     !["COM", "LPT"].iter().any(|prefix| {
@@ -182,6 +185,8 @@ mod tests {
             "AUX",
             "NUL",
             "CLOCK$",
+            "CONIN$",
+            "CONOUT$",
             "COM1",
             "COM2",
             "COM3",
@@ -216,6 +221,8 @@ mod tests {
             }
         }
         assert!(normalize_planning_relative("projects/cOn.TxT/demo").is_err());
+        assert!(normalize_planning_relative("projects/cOnIn$/demo").is_err());
+        assert!(normalize_planning_relative("projects/ConOut$.TxT/demo").is_err());
     }
 
     #[test]
