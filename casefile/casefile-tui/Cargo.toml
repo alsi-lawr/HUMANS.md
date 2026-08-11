@@ -10,3 +10,6 @@ casefile-store = { path = "../casefile-store" }
 crossterm.workspace = true
 pulldown-cmark.workspace = true
 ratatui.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

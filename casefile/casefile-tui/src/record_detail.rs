@@ -65,6 +65,12 @@ pub(crate) struct RecordDetail {
     rows: Cell<u16>,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct DetailState {
+    tab: DetailTab,
+    scroll: u16,
+}
+
 impl RecordDetail {
     pub(crate) fn new() -> Self {
         Self {
@@ -77,6 +83,18 @@ impl RecordDetail {
     pub(crate) fn select_tab(&mut self, offset: isize) {
         self.tab = self.tab.offset(offset);
         self.scroll = 0;
+    }
+
+    pub(crate) fn state(&self) -> DetailState {
+        DetailState {
+            tab: self.tab,
+            scroll: self.scroll,
+        }
+    }
+
+    pub(crate) fn restore(&mut self, state: DetailState) {
+        self.tab = state.tab;
+        self.scroll = state.scroll;
     }
 
     pub(crate) fn reset_scroll(&mut self) {

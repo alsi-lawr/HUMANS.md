@@ -59,6 +59,46 @@ pub(crate) struct Browser {
     entering_filter: bool,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct BrowserState {
+    view: View,
+    selected_project: Option<String>,
+    selected_investigation: Option<String>,
+    selected_path: Option<String>,
+    filter: String,
+    entering_filter: bool,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct SelectionAnchor {
+    project: Option<String>,
+    project_index: Option<usize>,
+    investigation: Option<String>,
+    investigation_index: Option<usize>,
+    record: Option<RecordAnchor>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct RecordAnchor {
+    path: String,
+    visible_index: Option<usize>,
+    governed: Option<GovernedAnchor>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct GovernedAnchor {
+    project: String,
+    investigation: Option<String>,
+    kind: Kind,
+    identity: String,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum PromotionNotice {
+    FilteredOut,
+    Ambiguous,
+}
+
 impl Browser {
     pub(crate) fn new(scan: &ScanResult) -> Self {
         let mut browser = Self {
@@ -84,6 +124,209 @@ impl Browser {
 
     pub(crate) fn view(&self) -> View {
         self.view
+    }
+
+    pub(crate) fn state(&self) -> BrowserState {
+        BrowserState {
+            view: self.view,
+            selected_project: self.selected_project.clone(),
+            selected_investigation: self.selected_investigation.clone(),
+            selected_path: self.selected_path.clone(),
+            filter: self.filter.clone(),
+            entering_filter: self.entering_filter,
+        }
+    }
+
+    pub(crate) fn restore(&mut self, state: BrowserState) {
+        self.view = state.view;
+        self.selected_project = state.selected_project;
+        self.selected_investigation = state.selected_investigation;
+        self.selected_path = state.selected_path;
+        self.filter = state.filter;
+        self.entering_filter = state.entering_filter;
+    }
+
+    pub(crate) fn selected_project(&self) -> Option<&str> {
+        self.selected_project.as_deref()
+    }
+
+    pub(crate) fn selected_investigation(&self) -> Option<&str> {
+        self.selected_investigation.as_deref()
+    }
+
+    pub(crate) fn selected_path(&self) -> Option<&str> {
+        self.selected_path.as_deref()
+    }
+
+    pub(crate) fn apply_partial(&mut self, scan: &ScanResult) {
+        if self.selected_project.is_none() {
+            self.selected_project = self.projects(scan).first().cloned();
+        }
+        if self.selected_investigation.is_none() {
+            self.selected_investigation = self.investigations(scan).first().cloned();
+        }
+        if self.selected_path.is_none() && self.view != View::Boards {
+            self.selected_path = self.entries(scan).first().map(|entry| entry.path.clone());
+        }
+    }
+
+    pub(crate) fn anchor(&self, scan: &ScanResult) -> SelectionAnchor {
+        let project_values = self.projects(scan);
+        let investigation_values = self.investigations(scan);
+        let record = self.selected_path.as_ref().map(|path| {
+            let entry = scan
+                .snapshot
+                .entries
+                .iter()
+                .find(|entry| &entry.path == path);
+            let governed = entry.and_then(|entry| {
+                let (project, investigation) = scan.scope_for_path(&entry.path)?;
+                (entry.classification == Classification::Governed).then_some(GovernedAnchor {
+                    project: project.into(),
+                    investigation: investigation.map(Into::into),
+                    kind: entry.kind?,
+                    identity: entry.identity.clone()?,
+                })
+            });
+            RecordAnchor {
+                path: path.clone(),
+                visible_index: self
+                    .entries(scan)
+                    .iter()
+                    .position(|entry| entry.path == *path),
+                governed,
+            }
+        });
+        SelectionAnchor {
+            project: self.selected_project.clone(),
+            project_index: selected_index(&project_values, self.selected_project.as_deref()),
+            investigation: self.selected_investigation.clone(),
+            investigation_index: selected_index(
+                &investigation_values,
+                self.selected_investigation.as_deref(),
+            ),
+            record,
+        }
+    }
+
+    pub(crate) fn promote(
+        &mut self,
+        scan: &ScanResult,
+        anchor: &SelectionAnchor,
+    ) -> Option<PromotionNotice> {
+        let all_projects = all_projects(scan);
+        let visible_projects = self.projects(scan);
+        let mut notice = None;
+        self.selected_project = resolve_exact_or_nearest(
+            anchor.project.as_deref(),
+            anchor.project_index,
+            &all_projects,
+            &visible_projects,
+            &mut notice,
+        );
+        let project_changed = self.selected_project.as_deref() != anchor.project.as_deref();
+        if project_changed {
+            self.selected_investigation = None;
+            self.selected_path = None;
+        }
+
+        let all_investigations = self
+            .selected_project
+            .as_deref()
+            .map(|project| all_investigations(scan, project))
+            .unwrap_or_default();
+        let visible_investigations = self.investigations(scan);
+        self.selected_investigation = resolve_exact_or_nearest(
+            (!project_changed)
+                .then_some(anchor.investigation.as_deref())
+                .flatten(),
+            (!project_changed)
+                .then_some(anchor.investigation_index)
+                .flatten(),
+            &all_investigations,
+            &visible_investigations,
+            &mut notice,
+        );
+        let investigation_changed = project_changed
+            || self.selected_investigation.as_deref() != anchor.investigation.as_deref();
+        if investigation_changed {
+            self.selected_path = None;
+        }
+
+        if matches!(
+            self.view,
+            View::Tickets | View::Files | View::Strategies | View::Boards
+        ) {
+            self.selected_path = self.resolve_record(
+                scan,
+                (!investigation_changed)
+                    .then_some(anchor.record.as_ref())
+                    .flatten(),
+                &mut notice,
+            );
+        } else {
+            self.selected_path = None;
+        }
+        notice
+    }
+
+    fn resolve_record(
+        &self,
+        scan: &ScanResult,
+        anchor: Option<&RecordAnchor>,
+        notice: &mut Option<PromotionNotice>,
+    ) -> Option<String> {
+        let visible = self
+            .entries(scan)
+            .into_iter()
+            .map(|entry| entry.path.clone())
+            .collect::<Vec<_>>();
+        let Some(anchor) = anchor else {
+            return visible.first().cloned();
+        };
+        if scan
+            .snapshot
+            .entries
+            .iter()
+            .any(|entry| entry.path == anchor.path)
+        {
+            if visible.contains(&anchor.path) {
+                return Some(anchor.path.clone());
+            }
+            *notice = Some(PromotionNotice::FilteredOut);
+            return None;
+        }
+        if let Some(governed) = &anchor.governed {
+            let matches = scan
+                .snapshot
+                .entries
+                .iter()
+                .filter(|entry| {
+                    entry.classification == Classification::Governed
+                        && entry.kind == Some(governed.kind)
+                        && entry.identity.as_deref() == Some(governed.identity.as_str())
+                        && scan.scope_for_path(&entry.path).is_some_and(|scope| {
+                            scope.0 == governed.project
+                                && scope.1 == governed.investigation.as_deref()
+                        })
+                })
+                .collect::<Vec<_>>();
+            if matches.len() > 1 {
+                *notice = Some(PromotionNotice::Ambiguous);
+                return None;
+            }
+            match matches.as_slice() {
+                [entry] if visible.contains(&entry.path) => return Some(entry.path.clone()),
+                [entry] => {
+                    debug_assert!(!visible.contains(&entry.path));
+                    *notice = Some(PromotionNotice::FilteredOut);
+                    return None;
+                }
+                [] => {}
+                _ => unreachable!("ambiguous identities were handled above"),
+            }
+        }
+        nearest(&visible, anchor.visible_index)
     }
 
     pub(crate) fn drill_down(&mut self, scan: &ScanResult) -> bool {
@@ -553,26 +796,64 @@ impl Browser {
 }
 
 fn all_projects(scan: &ScanResult) -> Vec<String> {
-    scan.snapshot
-        .entries
-        .iter()
-        .filter_map(|entry| entry_scope(scan, entry))
-        .map(|scope| scope.0.to_owned())
+    scan.investigation_roots
+        .keys()
+        .cloned()
+        .chain(
+            scan.snapshot
+                .entries
+                .iter()
+                .filter_map(|entry| entry_scope(scan, entry))
+                .map(|scope| scope.0.to_owned()),
+        )
         .collect::<BTreeSet<_>>()
         .into_iter()
         .collect()
 }
 
 fn all_investigations(scan: &ScanResult, project: &str) -> Vec<String> {
-    scan.snapshot
-        .entries
-        .iter()
-        .filter_map(|entry| entry_scope(scan, entry))
-        .filter(|scope| scope.0 == project)
-        .filter_map(|scope| scope.1.map(str::to_owned))
+    scan.investigation_roots
+        .get(project)
+        .into_iter()
+        .flatten()
+        .cloned()
+        .chain(
+            scan.snapshot
+                .entries
+                .iter()
+                .filter_map(|entry| entry_scope(scan, entry))
+                .filter(|scope| scope.0 == project)
+                .filter_map(|scope| scope.1.map(str::to_owned)),
+        )
         .collect::<BTreeSet<_>>()
         .into_iter()
         .collect()
+}
+
+fn resolve_exact_or_nearest(
+    anchor: Option<&str>,
+    old_index: Option<usize>,
+    all: &[String],
+    visible: &[String],
+    notice: &mut Option<PromotionNotice>,
+) -> Option<String> {
+    if let Some(anchor) = anchor
+        && all.iter().any(|value| value == anchor)
+    {
+        if visible.iter().any(|value| value == anchor) {
+            return Some(anchor.into());
+        }
+        *notice = Some(PromotionNotice::FilteredOut);
+        return None;
+    }
+    nearest(visible, old_index)
+}
+
+fn nearest(values: &[String], old_index: Option<usize>) -> Option<String> {
+    let index = old_index
+        .unwrap_or_default()
+        .min(values.len().saturating_sub(1));
+    values.get(index).cloned()
 }
 
 fn work_entries(scan: &ScanResult) -> Vec<&EntrySnapshot> {

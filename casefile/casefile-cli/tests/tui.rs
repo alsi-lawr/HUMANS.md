@@ -152,7 +152,7 @@ fn editor_args(editor: &Path, values: &[&str]) -> Vec<OsString> {
 fn begin_edit(pty: &mut Pty) {
     pty.wait_for("q quit");
     thread::sleep(Duration::from_millis(200));
-    pty.send(b"\r\re");
+    pty.send(b"\r\r/HMD-E-001\re");
 }
 
 fn restored(transcript: &[u8]) -> bool {
@@ -207,6 +207,7 @@ fn default_opener_ignores_editor_prompts_for_enter_and_cancels() {
     thread::sleep(Duration::from_millis(100));
     pty.send(&[b'j'; 35]);
     pty.wait_for("Verification");
+    pty.send(b"/HMD-E-001\r");
     pty.send(b"e");
     pty.wait_for("press Enter to continue");
     let opened = fs::read_to_string(&log).expect("opener log");
@@ -218,6 +219,7 @@ fn default_opener_ignores_editor_prompts_for_enter_and_cancels() {
     pty.wait_for("REVIEW CHANGES");
     pty.send(b"c");
     pty.wait_for("Cancelled; discarded draft");
+    pty.wait_for("\"HMD-E-001\"");
     thread::sleep(Duration::from_millis(100));
     pty.send(b"q");
     let transcript = pty.finish(true);
@@ -227,9 +229,27 @@ fn default_opener_ignores_editor_prompts_for_enter_and_cancels() {
             .contains("Minimum epic")
     );
     assert!(!draft.exists());
-    assert!(String::from_utf8_lossy(&transcript).contains("Loading Casefile..."));
+    assert!(String::from_utf8_lossy(&transcript).contains("PROVISIONAL"));
+    assert!(String::from_utf8_lossy(&transcript).contains("Store presentation complete"));
     assert!(String::from_utf8_lossy(&transcript).contains("Keyboard help"));
     assert!(String::from_utf8_lossy(&transcript).contains("Verification"));
+    assert!(restored(&transcript));
+}
+
+#[test]
+fn progressive_updates_and_manual_refresh_render_without_an_extra_keypress() {
+    let fixture = fixture();
+    let mut pty = Pty::start(&fixture, &[], &[]);
+
+    pty.wait_for("PROVISIONAL");
+    pty.wait_for("Store presentation complete");
+    pty.send(b"r");
+    pty.wait_for("demo refr");
+    pty.send(b"R");
+    thread::sleep(Duration::from_millis(300));
+    pty.send(b"q");
+
+    let transcript = pty.finish(true);
     assert!(restored(&transcript));
 }
 
@@ -257,6 +277,7 @@ fn explicit_editor_preserves_arguments_applies_and_rescans() {
     );
     pty.send(b"a");
     pty.wait_for("Applied");
+    pty.wait_for("\"HMD-E-001\"");
     thread::sleep(Duration::from_millis(100));
     pty.send(b"q");
     let transcript = pty.finish(true);

@@ -239,6 +239,7 @@ dependencies = [
  "crossterm",
  "pulldown-cmark",
  "ratatui",
+ "tempfile",
 ]
 
 [[package]]
