@@ -201,6 +201,58 @@ fn strategy_transition_is_strict_store_visible_idempotent_and_creates_no_backup(
 }
 
 #[test]
+fn first_phase_strategy_transition_creates_missing_matrix_and_refuses_later_recovery() {
+    let root = fixture();
+    fs::write(
+        root.path().join("casefile.toml"),
+        "schema_version = 1\n\n[projects.demo]\nprefix = \"HMD\"\ninvestigations = [\"projects/demo/investigations/sample\", \"projects/demo/investigations/other\"]\n",
+    )
+    .expect("activate unrelated investigation");
+    let store = Store::open(root.path()).expect("store");
+    let mut unrelated = transition_request();
+    unrelated.investigation = "projects/demo/investigations/other".into();
+    store
+        .apply_strategy_transition(
+            store
+                .preview_strategy_transition(unrelated)
+                .expect("unrelated initial transition preview"),
+        )
+        .expect("unrelated initial transition apply");
+
+    fs::remove_dir_all(root.path().join(INVESTIGATION).join("strategy"))
+        .expect("remove seeded strategy directory");
+    let preview = store
+        .preview_strategy_transition(transition_request())
+        .expect("initial transition preview");
+    assert_eq!(preview.transition_record.previous_strategy_id, "unselected");
+    assert_eq!(
+        preview.transition_record.expected_matrix_revision,
+        Revision("absent".into())
+    );
+    assert_eq!(preview.changes[0].expected_target_revision, None);
+    assert!(!preview.changes[0].no_op);
+
+    store
+        .apply_strategy_transition(preview)
+        .expect("initial transition apply");
+    assert_eq!(
+        fs::read(strategy(root.path())).expect("created matrix"),
+        fs::read(matrix_path("casefile-implement-pipeline.toml")).expect("selected matrix")
+    );
+    let replay = store
+        .preview_strategy_transition(transition_request())
+        .expect("initial transition replay");
+    assert!(replay.no_op);
+
+    fs::remove_file(strategy(root.path())).expect("remove governed matrix");
+    assert!(
+        store
+            .preview_strategy_transition(transition_request())
+            .is_err()
+    );
+}
+
+#[test]
 fn historical_transition_and_backup_files_remain_raw_and_untouched() {
     let root = fixture();
     let strategy = root.path().join(INVESTIGATION).join("strategy");
@@ -417,14 +469,12 @@ fn binding_activity_is_derived_exactly_from_canonical_progress_and_spawn_require
 
     let missing = fixture();
     let store = Store::open(missing.path()).expect("store");
-    assert!(
-        store
-            .preview_writer_binding(WriterBindingRequest {
-                investigation: INVESTIGATION.into(),
-                binding_source: BINDING.into(),
-            })
-            .is_err()
-    );
+    store
+        .preview_writer_binding(WriterBindingRequest {
+            investigation: INVESTIGATION.into(),
+            binding_source: BINDING.into(),
+        })
+        .expect("absent progress is inactive");
     assert!(
         store
             .require_writer_progress(INVESTIGATION, "HMD-011")
