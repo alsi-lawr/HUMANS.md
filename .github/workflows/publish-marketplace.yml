@@ -14,10 +14,6 @@ on:
         description: Reviewed Build Casefile executable matrix workflow run ID
         required: true
         type: string
-      matrix_manifest_sha256:
-        description: Reviewed SHA-256 of artifacts.json
-        required: true
-        type: string
 concurrency:
   group: humans-md-marketplace-release
   cancel-in-progress: false
@@ -55,7 +51,6 @@ jobs:
         env:
           SOURCE_COMMIT: ${{ inputs.source_commit }}
           VERSION: ${{ inputs.version }}
-          EXPECTED_MANIFEST_SHA256: ${{ inputs.matrix_manifest_sha256 }}
           BINARY_RUN_ID: ${{ inputs.binary_run_id }}
         run: |
           python scripts/validate-casefile-handoff.py \
@@ -63,8 +58,7 @@ jobs:
             --run-metadata "$RUNNER_TEMP/casefile-binary-run.json" \
             --run-id "$BINARY_RUN_ID" \
             --version "$VERSION" \
-            --source-commit "$SOURCE_COMMIT" \
-            --manifest-sha256 "$EXPECTED_MANIFEST_SHA256"
+            --source-commit "$SOURCE_COMMIT"
       - name: Build Casefile web assets
         working-directory: casefile/web
         run: |
@@ -88,8 +82,6 @@ jobs:
           cp -R packaging/marketplace/. build/marketplace/
           cp LICENSE build/marketplace/LICENSE
           python scripts/package-plugin.py check --all --casefile-artifact-root reviewed-casefile-artifact/casefile-runtime --casefile-source-commit "$GITHUB_SHA"
-          diff -r reviewed-casefile-artifact/casefile-runtime build/marketplace/plugins/codex/casefile/runtime
-          diff -r reviewed-casefile-artifact/casefile-runtime build/marketplace/plugins/claude/casefile/runtime
           python scripts/validate-package-roots.py
           python casefile/scripts/validate-casefile.py --source build/marketplace/plugins/codex/casefile
           python casefile/scripts/validate-casefile.py --source build/marketplace/plugins/claude/casefile

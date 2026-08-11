@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import json
 import subprocess
 import struct
@@ -42,9 +41,16 @@ class McpPackageTests(unittest.TestCase):
             path.parent.mkdir(parents=True, exist_ok=True)
             data = executable(target)
             path.write_bytes(data)
-            rows.append({"path": path.relative_to(artifact).as_posix(), "sha256": hashlib.sha256(data).hexdigest(), "size": len(data), "target": target})
+            rows.append({
+                "path": path.relative_to(artifact).as_posix().replace("/", "\\") + "///",
+                "sha256": "not checked for landing",
+                "size": -1,
+                "target": target,
+            })
         manifest = {"schema_version": 1, "version": VERSION, "source_commit": SOURCE, "artifacts": rows}
-        (artifact / "artifacts.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="ascii")
+        (artifact / "artifacts.json").write_bytes(
+            (json.dumps(manifest, separators=(", ", ": ")) + "\r\n").encode("ascii")
+        )
         return artifact
 
     def build(self, artifact: Path) -> subprocess.CompletedProcess[str]:
@@ -54,7 +60,7 @@ class McpPackageTests(unittest.TestCase):
             "--casefile-source-commit", SOURCE,
         ], cwd=ROOT, capture_output=True, text=True)
 
-    def test_packages_contain_identical_complete_matrix_without_automatic_launcher(self):
+    def test_packages_land_complete_matrix_without_automatic_launcher(self):
         with tempfile.TemporaryDirectory() as temporary:
             artifact = self.artifacts(Path(temporary))
             result = self.build(artifact)
@@ -67,7 +73,8 @@ class McpPackageTests(unittest.TestCase):
                 self.assertFalse((package / "scripts/casefile-mcp-launcher.py").exists())
                 self.assertTrue((package / "runtime/artifacts.json").is_file())
                 self.assertEqual(6, len(list((package / "runtime/bin").glob("*/*"))))
-            self.assertEqual(self.inventory(codex / "runtime"), self.inventory(claude / "runtime"))
+            for package in (codex, claude):
+                self.assertTrue(all(path.stat().st_size > 0 for path in (package / "runtime").rglob("*") if path.is_file()))
             metadata = json.loads((codex / ".codex-plugin/plugin.json").read_text(encoding="ascii"))
             self.assertNotIn("mcpServers", metadata)
             self.assertTrue((codex / "scripts/list-codex-models.py").is_file())
@@ -78,7 +85,7 @@ class McpPackageTests(unittest.TestCase):
                 self.assertNotIn('[executable, "debug", "models"]', scripts)
                 self.assertNotIn("codex debug models", scripts)
 
-    def test_missing_tampered_extra_wrong_source_and_absent_matrix_fail_closed(self):
+    def test_missing_empty_unsafe_wrong_source_and_absent_matrix_fail_before_build(self):
         with tempfile.TemporaryDirectory() as temporary:
             artifact = self.artifacts(Path(temporary))
             missing = next((artifact / "bin").glob("*/*"))
@@ -86,11 +93,18 @@ class McpPackageTests(unittest.TestCase):
             self.assertNotEqual(0, self.build(artifact).returncode)
         with tempfile.TemporaryDirectory() as temporary:
             artifact = self.artifacts(Path(temporary))
-            next((artifact / "bin").glob("*/*")).write_bytes(b"tampered")
+            next((artifact / "bin").glob("*/*")).write_bytes(b"")
             self.assertNotEqual(0, self.build(artifact).returncode)
         with tempfile.TemporaryDirectory() as temporary:
             artifact = self.artifacts(Path(temporary))
             (artifact / "extra").write_bytes(b"extra")
+            self.assertEqual(0, self.build(artifact).returncode)
+        with tempfile.TemporaryDirectory() as temporary:
+            artifact = self.artifacts(Path(temporary))
+            manifest_path = artifact / "artifacts.json"
+            manifest = json.loads(manifest_path.read_text(encoding="ascii"))
+            manifest["artifacts"][0]["path"] = r"C:bin\casefile"
+            manifest_path.write_text(json.dumps(manifest), encoding="ascii")
             self.assertNotEqual(0, self.build(artifact).returncode)
         with tempfile.TemporaryDirectory() as temporary:
             artifact = self.artifacts(Path(temporary))

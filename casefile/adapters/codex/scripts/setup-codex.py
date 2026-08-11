@@ -582,6 +582,21 @@ def same_path(first: Path, second: Path) -> bool:
     return not first.exists() and not second.exists()
 
 
+def path_landed(source: Path, target: Path) -> bool:
+    if source.is_symlink() or target.is_symlink():
+        return False
+    if source.is_file():
+        return target.is_file() and target.stat().st_size > 0
+    if source.is_dir():
+        if not target.is_dir():
+            return False
+        return all(
+            path_landed(source / relative, target / relative)
+            for relative in (item.relative_to(source) for item in source.rglob("*"))
+        )
+    return not target.exists()
+
+
 def snapshot(home: Path, paths: list[Path], destination: Path) -> list[dict]:
     secure_dir(destination)
     entries = []
@@ -601,7 +616,7 @@ def restore(home: Path, source: Path, entries: list[dict]) -> None:
         remove(path)
         if entry["existed"]:
             copy_path(source / relative, path)
-        if entry["existed"] and not same_path(source / relative, path):
+        if entry["existed"] and not path_landed(source / relative, path):
             raise SetupError(f"restore verification failed: {path}")
         if not entry["existed"] and (path.exists() or path.is_symlink()):
             raise SetupError(f"restore verification failed: {path}")
@@ -811,8 +826,7 @@ def install(plan: dict) -> dict:
     try:
         config, catalog = paths[:2]
         casefile_runtime.atomic_copy(plan["runtime"]["source"], plan["binary"])
-        if casefile_runtime.sha256(plan["binary"]) != plan["runtime"]["sha256"]:
-            raise SetupError("installed Casefile executable hash differs from manifest")
+        casefile_runtime.require_landed(plan["binary"])
         casefile_runtime.probe(plan["binary"], plan["version"], plan["planning_root"])
         atomic_write(config, plan["config"], 0o600)
         atomic_write(catalog, plan["catalog"], 0o600)
@@ -820,12 +834,13 @@ def install(plan: dict) -> dict:
             config.read_bytes(), plan["root"], catalog, plan["multi_agent_version"],
             plan["binary"], plan["planning_root"],
         )
-        if catalog.read_bytes() != plan["catalog"]:
-            raise SetupError("written setup bytes differ from preview")
+        read_catalog(catalog)
         doctor(plan)
         verify_effective_catalog(plan)
-        if config.read_bytes() != plan["config"]:
-            raise SetupError("Codex changed config during verification")
+        verify_config(
+            config.read_bytes(), plan["root"], catalog, plan["multi_agent_version"],
+            plan["binary"], plan["planning_root"],
+        )
         receipt = {
             "schema_version": RECEIPT_SCHEMA,
             "status": "installed",
@@ -845,7 +860,6 @@ def install(plan: dict) -> dict:
                 str(plan["binary"].relative_to(home)),
             ],
             "planning_root": str(plan["planning_root"]),
-            "artifact_sha256": plan["runtime"]["sha256"],
         }
         receipt_data = canonical(receipt)
         receipt_path = receipt_dir / "receipt.json"

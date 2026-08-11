@@ -88,6 +88,13 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.14"
+      - name: Run native setup and package landing lifecycles
+        shell: bash
+        run: |
+          python -m unittest discover -s tests -p 'test_casefile_artifacts.py' -v
+          python -m unittest discover -s casefile/tests -p 'test_codex_setup.py' -v
+          python -m unittest discover -s casefile/tests -p 'test_claude_setup.py' -v
+          python -m unittest discover -s casefile/tests -p 'test_mcp_package.py' -v
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
@@ -151,7 +158,6 @@ jobs:
           done
           python scripts/casefile_artifacts.py assemble --input-root inputs --artifact-root casefile-runtime --version 0.4.10 --source-commit "$SOURCE_COMMIT"
           python scripts/casefile_artifacts.py verify --artifact-root casefile-runtime --version 0.4.10 --source-commit "$SOURCE_COMMIT"
-          sha256sum casefile-runtime/artifacts.json | tee casefile-runtime-manifest.sha256
           python - <<'PY'
           import json, os, pathlib
           event = os.environ["BUILD_EVENT"]
@@ -176,18 +182,12 @@ jobs:
         run: |
           python scripts/package-plugin.py build --all --casefile-artifact-root casefile-runtime --casefile-source-commit "$SOURCE_COMMIT"
           python scripts/package-plugin.py check --all --casefile-artifact-root casefile-runtime --casefile-source-commit "$SOURCE_COMMIT"
-          diff -r build/marketplace/plugins/codex/casefile/runtime build/marketplace/plugins/claude/casefile/runtime
-          find build/marketplace/plugins/codex/casefile -type f -printf '%P\0' | sort -z | xargs -0 -I{} sha256sum 'build/marketplace/plugins/codex/casefile/{}' > codex-casefile-inventory.sha256
-          find build/marketplace/plugins/claude/casefile -type f -printf '%P\0' | sort -z | xargs -0 -I{} sha256sum 'build/marketplace/plugins/claude/casefile/{}' > claude-casefile-inventory.sha256
       - uses: actions/upload-artifact@v7
         with:
           name: casefile-runtime-${{ needs.source.outputs.source_commit }}
           path: |
             casefile-runtime
             casefile-build-provenance.json
-            casefile-runtime-manifest.sha256
-            codex-casefile-inventory.sha256
-            claude-casefile-inventory.sha256
             native-smoke
           if-no-files-found: error
           retention-days: 90

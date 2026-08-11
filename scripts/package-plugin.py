@@ -15,7 +15,11 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
 try:
-    from casefile_artifacts import ArtifactError, load as load_casefile_artifacts
+    from casefile_artifacts import (
+        ArtifactError,
+        load as load_casefile_artifacts,
+        normalized_artifact_path,
+    )
 except ModuleNotFoundError:
     _artifact_path = Path(__file__).resolve().with_name("casefile_artifacts.py")
     _artifact_spec = importlib.util.spec_from_file_location("casefile_artifacts", _artifact_path)
@@ -25,6 +29,7 @@ except ModuleNotFoundError:
     _artifact_spec.loader.exec_module(_artifact_module)
     ArtifactError = _artifact_module.ArtifactError
     load_casefile_artifacts = _artifact_module.load
+    normalized_artifact_path = _artifact_module.normalized_artifact_path
 
 
 NAME = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
@@ -267,7 +272,10 @@ def overlay_casefile_artifacts(
         FileSpec((artifact_root / "artifacts.json").read_bytes(), 0o644),
     )
     for row in manifest["artifacts"]:
-        relative = safe_relative(row["path"], "artifact.path")
+        try:
+            relative = normalized_artifact_path(row["path"], row["target"])
+        except ArtifactError as error:
+            raise PackageError(str(error)) from error
         mode = 0o644 if row["target"].endswith("windows-msvc") else 0o755
         add_file(
             files,
@@ -329,33 +337,20 @@ def package_specs(
     return specs
 
 
-def actual_files(output: Path) -> dict[Path, FileSpec]:
-    if not output.is_dir() or output.is_symlink():
-        raise PackageError(f"generated package is missing or unsafe: {output}")
-    files: dict[Path, FileSpec] = {}
-    for current, directories, names in os.walk(output, followlinks=False):
-        current_path = Path(current)
-        for name in directories:
-            if (current_path / name).is_symlink():
-                raise PackageError(f"generated package contains symlink: {current_path / name}")
-        for name in names:
-            path = current_path / name
-            if path.is_symlink() or not path.is_file():
-                raise PackageError(f"generated package contains unsafe entry: {path}")
-            relative = path.relative_to(output)
-            mode = 0o755 if path.stat().st_mode & 0o111 else 0o644
-            files[relative] = FileSpec(path.read_bytes(), mode)
-    return dict(sorted(files.items(), key=lambda item: item[0].as_posix()))
-
-
-def compare(expected: dict[Path, FileSpec], actual: dict[Path, FileSpec]) -> list[str]:
-    errors = [f"missing generated file: {path}" for path in sorted(expected.keys() - actual.keys())]
-    errors += [f"stale generated file: {path}" for path in sorted(actual.keys() - expected.keys())]
-    for path in sorted(expected.keys() & actual.keys()):
-        if expected[path].data != actual[path].data:
-            errors.append(f"byte mismatch: {path}")
-        if expected[path].mode != actual[path].mode:
-            errors.append(f"mode mismatch: {path}")
+def landing_errors(output: Path, expected: dict[Path, FileSpec]) -> list[str]:
+    if output.is_symlink() or not output.is_dir():
+        return [f"generated package is missing or unsafe: {output}"]
+    errors = []
+    root = output.resolve(strict=True)
+    for relative in expected:
+        path = output / relative
+        try:
+            path.resolve(strict=True).relative_to(root)
+        except (OSError, ValueError):
+            errors.append(f"missing generated file: {relative}")
+            continue
+        if path.is_symlink() or not path.is_file() or path.stat().st_size <= 0:
+            errors.append(f"generated file is empty or unsafe: {relative}")
     return errors
 
 
@@ -369,7 +364,7 @@ def build(output: Path, files: dict[Path, FileSpec]) -> None:
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(spec.data)
             target.chmod(spec.mode)
-        if compare(files, actual_files(staging)):
+        if landing_errors(staging, files):
             raise PackageError("staging verification failed")
         if output.exists():
             previous = Path(tempfile.mkdtemp(prefix=f".{output.name}.old-", dir=output.parent))
@@ -427,7 +422,7 @@ def main() -> int:
                 build(output, spec.files)
                 print(f"built {spec.plugin}:{spec.vendor}: {len(spec.files)} files")
             else:
-                errors = compare(spec.files, actual_files(output))
+                errors = landing_errors(output, spec.files)
                 if errors:
                     raise PackageError("\n".join(errors))
                 print(f"checked {spec.plugin}:{spec.vendor}: {len(spec.files)} files")

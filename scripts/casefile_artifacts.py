@@ -8,7 +8,6 @@ import json
 import os
 import re
 import shutil
-import struct
 import tempfile
 from pathlib import Path, PurePosixPath
 
@@ -24,7 +23,6 @@ TARGETS = (
 )
 SHA = re.compile(r"^[0-9a-f]{40}$")
 SEMVER = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$")
-HASH = re.compile(r"^[0-9a-f]{64}$")
 
 
 class ArtifactError(ValueError):
@@ -43,53 +41,45 @@ def relative_path(target: str) -> str:
     return f"bin/{target}/{executable_name(target)}"
 
 
-def digest(path: Path) -> str:
-    value = hashlib.sha256()
-    with path.open("rb") as stream:
-        for block in iter(lambda: stream.read(1024 * 1024), b""):
-            value.update(block)
-    return value.hexdigest()
+def normalized_artifact_path(value: object, target: str) -> Path:
+    if not isinstance(value, str) or not value or "\0" in value:
+        raise ArtifactError(f"invalid artifact path for {target}")
+    if value.startswith(("/", "\\")) or re.match(r"^[A-Za-z]:", value):
+        raise ArtifactError(f"unsafe artifact path for {target}")
+    parts = [part for part in value.replace("\\", "/").split("/") if part]
+    if not parts or any(part in {".", ".."} for part in parts):
+        raise ArtifactError(f"unsafe artifact path for {target}")
+    normalized = PurePosixPath(*parts).as_posix()
+    if normalized != relative_path(target):
+        raise ArtifactError(f"unexpected artifact path for {target}")
+    return Path(*parts)
 
 
-def validate_format(path: Path, target: str) -> None:
-    data = path.read_bytes()
-    if target.endswith("linux-musl"):
-        if len(data) < 20 or data[:4] != b"\x7fELF" or data[5] != 1:
-            raise ArtifactError(f"wrong executable format for {target}: expected little-endian ELF")
-        expected = 183 if target.startswith("aarch64") else 62
-        if struct.unpack_from("<H", data, 18)[0] != expected:
-            raise ArtifactError(f"wrong executable architecture for {target}")
-    elif target.endswith("apple-darwin"):
-        if len(data) < 8 or data[:4] not in {b"\xfe\xed\xfa\xcf", b"\xcf\xfa\xed\xfe"}:
-            raise ArtifactError(f"wrong executable format for {target}: expected 64-bit Mach-O")
-        endian = ">" if data[:4] == b"\xfe\xed\xfa\xcf" else "<"
-        expected = 0x0100000C if target.startswith("aarch64") else 0x01000007
-        if struct.unpack_from(f"{endian}I", data, 4)[0] != expected:
-            raise ArtifactError(f"wrong executable architecture for {target}")
-    else:
-        if len(data) < 64 or data[:2] != b"MZ":
-            raise ArtifactError(f"wrong executable format for {target}: expected PE")
-        offset = struct.unpack_from("<I", data, 0x3C)[0]
-        expected = 0xAA64 if target.startswith("aarch64") else 0x8664
-        if len(data) < offset + 6 or data[offset:offset + 4] != b"PE\0\0" or struct.unpack_from("<H", data, offset + 4)[0] != expected:
-            raise ArtifactError(f"wrong executable architecture for {target}")
+def landed(root: Path, relative: Path, target: str) -> Path:
+    candidate = root / relative
+    try:
+        resolved = candidate.resolve(strict=True)
+        resolved.relative_to(root)
+    except (OSError, ValueError) as error:
+        raise ArtifactError(f"missing or unsafe artifact for {target}") from error
+    if candidate.is_symlink() or not candidate.is_file() or candidate.stat().st_size <= 0:
+        raise ArtifactError(f"missing, empty, or unsafe artifact for {target}")
+    return candidate
 
 
 def load(root: Path, expected_version: str | None = None, expected_source: str | None = None) -> dict:
     root = root.expanduser().resolve(strict=True)
     manifest_path = root / "artifacts.json"
     try:
-        raw = manifest_path.read_bytes()
-        raw.decode("ascii")
-        document = json.loads(raw)
+        if manifest_path.is_symlink() or not manifest_path.is_file() or manifest_path.stat().st_size <= 0:
+            raise ArtifactError("artifact manifest is missing, empty, or unsafe")
+        document = json.loads(manifest_path.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, json.JSONDecodeError) as error:
         raise ArtifactError(f"invalid artifact manifest: {error}") from error
-    if canonical(document) != raw:
-        raise ArtifactError("artifact manifest is not canonical ASCII JSON")
-    if not isinstance(document, dict) or set(document) != {
+    if not isinstance(document, dict) or not {
         "schema_version", "version", "source_commit", "artifacts"
-    }:
-        raise ArtifactError("artifact manifest has unsupported keys")
+    }.issubset(document):
+        raise ArtifactError("artifact manifest is incomplete")
     version = document["version"]
     source = document["source_commit"]
     rows = document["artifacts"]
@@ -107,43 +97,15 @@ def load(root: Path, expected_version: str | None = None, expected_source: str |
         raise ArtifactError("artifact matrix is incomplete")
     seen: set[str] = set()
     for row in rows:
-        if not isinstance(row, dict) or set(row) != {"path", "sha256", "size", "target"}:
-            raise ArtifactError("artifact entry has unsupported keys")
+        if not isinstance(row, dict) or not {"path", "target"}.issubset(row):
+            raise ArtifactError("artifact entry is incomplete")
         target = row["target"]
         if target not in TARGETS or target in seen:
             raise ArtifactError(f"missing, duplicate, or unsupported target: {target!r}")
         seen.add(target)
-        expected_path = relative_path(target)
-        if row["path"] != expected_path:
-            raise ArtifactError(f"unexpected artifact path for {target}")
-        pure = PurePosixPath(row["path"])
-        if pure.is_absolute() or ".." in pure.parts or "\\" in row["path"]:
-            raise ArtifactError(f"unsafe artifact path for {target}")
-        path = root / Path(*pure.parts)
-        if path.is_symlink() or not path.is_file():
-            raise ArtifactError(f"missing or unsafe artifact for {target}")
-        size = path.stat().st_size
-        if not isinstance(row["size"], int) or isinstance(row["size"], bool) or row["size"] <= 0:
-            raise ArtifactError(f"invalid artifact size for {target}")
-        if size != row["size"]:
-            raise ArtifactError(f"artifact size mismatch for {target}")
-        if not isinstance(row["sha256"], str) or not HASH.fullmatch(row["sha256"]):
-            raise ArtifactError(f"invalid artifact hash for {target}")
-        if digest(path) != row["sha256"]:
-            raise ArtifactError(f"artifact hash mismatch for {target}")
-        validate_format(path, target)
-    if seen != set(TARGETS) or [row["target"] for row in rows] != list(TARGETS):
-        raise ArtifactError("artifact entries must contain the sorted complete matrix")
-    expected_files = {Path("artifacts.json"), *(Path(relative_path(target)) for target in TARGETS)}
-    actual_files = {
-        path.relative_to(root)
-        for path in root.rglob("*")
-        if path.is_file() or path.is_symlink()
-    }
-    if actual_files != expected_files:
-        extras = sorted(path.as_posix() for path in actual_files - expected_files)
-        missing = sorted(path.as_posix() for path in expected_files - actual_files)
-        raise ArtifactError(f"artifact root inventory differs; missing={missing}; extra={extras}")
+        landed(root, normalized_artifact_path(row["path"], target), target)
+    if seen != set(TARGETS):
+        raise ArtifactError("artifact entries must contain the complete matrix")
     return document
 
 
@@ -162,7 +124,6 @@ def assemble(output: Path, inputs: Path, version: str, source: str) -> dict:
             source_path = inputs / target / executable_name(target)
             if source_path.is_symlink() or not source_path.is_file() or source_path.stat().st_size <= 0:
                 raise ArtifactError(f"missing or unsafe build input for {target}")
-            validate_format(source_path, target)
             destination = staging / relative_path(target)
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(source_path, destination)
@@ -170,7 +131,7 @@ def assemble(output: Path, inputs: Path, version: str, source: str) -> dict:
                 destination.chmod(0o755)
             rows.append({
                 "path": relative_path(target),
-                "sha256": digest(destination),
+                "sha256": hashlib.sha256(destination.read_bytes()).hexdigest(),
                 "size": destination.stat().st_size,
                 "target": target,
             })

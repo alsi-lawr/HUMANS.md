@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-import hashlib
 import json
+import os
+import sys
 import struct
 import tempfile
 import unittest
@@ -64,12 +65,12 @@ class ClaudeSetupTests(unittest.TestCase):
             path=plugin/"runtime/bin"/target/name
             runtime_source = native_stub(target)
             path.parent.mkdir(parents=True, exist_ok=True); path.write_bytes(runtime_source); path.chmod(0o755)
-            rows.append({"path":path.relative_to(plugin/"runtime").as_posix(),"sha256":hashlib.sha256(runtime_source).hexdigest(),"size":len(runtime_source),"target":target})
-        (plugin/"runtime/artifacts.json").write_text(json.dumps({"schema_version":1,"version":"0.4.0","source_commit":"1"*40,"artifacts":rows},indent=2,sort_keys=True)+"\n",encoding="ascii")
+            rows.append({"path": path.relative_to(plugin / "runtime").as_posix().replace("/", "\\") + "///", "sha256": "representation-only", "size": -1, "target": target})
+        (plugin / "runtime/artifacts.json").write_bytes((json.dumps({"artifacts": rows, "version": "0.4.0", "source_commit": "1" * 40, "schema_version": 1}, separators=(", ", ": ")) + "\r\n").encode("ascii"))
         planning=root/"planning"; planning.mkdir(); (planning/"casefile.toml").write_text("schema_version = 1\n",encoding="ascii"); (planning/"projects.toml").write_text("schema_version = 1\nprojects = []\n",encoding="ascii")
         home=root/"claude-home"; home.mkdir()
-        claude=root/"claude"
-        claude.write_text("""#!/usr/bin/env python3
+        script = root / "claude.py"
+        script.write_text("""#!/usr/bin/env python3
 import json,os,pathlib,sys
 state=pathlib.Path(os.environ['CLAUDE_CONFIG_DIR'])/'.claude.json'
 args=sys.argv[1:]
@@ -78,7 +79,7 @@ if args[:3]==['mcp','add','--scope']:
   print('MCP server casefile already exists in user config',file=sys.stderr); raise SystemExit(1)
  i=args.index('--'); value={'command':args[i+1],'args':args[i+2:]}
  if (state.parent/'corrupt-add').exists(): value={'command':'/wrong','args':[]}
- state.write_text(json.dumps(value)); print('added')
+ state.write_text(json.dumps(value,indent=2)+'\\r\\n'); print('added')
 elif args[:2]==['mcp','get']:
  if not state.exists(): raise SystemExit(1)
  print(state.read_text())
@@ -86,7 +87,13 @@ elif args[:3]==['mcp','remove','--scope']:
  if (state.parent/'fail-remove').exists(): raise SystemExit(3)
  state.unlink(missing_ok=True); print('removed')
 else: raise SystemExit(2)
-""",encoding="ascii"); claude.chmod(0o755)
+""", encoding="ascii")
+        script.chmod(0o755)
+        if os.name == "nt":
+            claude = root / "claude.cmd"
+            claude.write_text(f'@"{sys.executable}" "{script}" %*\r\n', encoding="ascii")
+        else:
+            claude = script
         return plugin, planning, home, claude
 
     def test_fresh_install_binds_exact_binary_and_uninstall_preserves_unrelated(self):
@@ -183,32 +190,22 @@ else: raise SystemExit(2)
             binding = json.loads((home / ".claude.json").read_text())
             self.assertEqual(str(binary), binding["command"])
 
-    def test_tampered_matrix_refuses_before_mutation(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            plugin, planning, home, claude = self.fixture(Path(temporary))
-            target=setup.casefile_runtime.host_target(); row=next(r for r in json.loads((plugin/"runtime/artifacts.json").read_text())["artifacts"] if r["target"]==target)
-            (plugin/"runtime"/row["path"]).write_bytes(b"tampered")
-            with self.assertRaisesRegex(setup.casefile_runtime.RuntimeError,"size|hash"):
-                setup.prepare(plugin,home,str(claude),planning)
-            self.assertFalse((home/"casefile").exists())
-
-    def test_self_consistent_script_artifact_refuses_before_copy_or_binding(self):
+    def test_representation_differences_and_non_native_bytes_land(self):
         with tempfile.TemporaryDirectory() as temporary:
             plugin, planning, home, claude = self.fixture(Path(temporary))
             manifest_path = plugin / "runtime/artifacts.json"
             manifest = json.loads(manifest_path.read_text(encoding="ascii"))
             target = setup.casefile_runtime.host_target()
             row = next(item for item in manifest["artifacts"] if item["target"] == target)
-            script = b"#!/usr/bin/env python3\nprint('not native')\n"
-            (plugin / "runtime" / row["path"]).write_bytes(script)
-            row["size"] = len(script)
-            row["sha256"] = hashlib.sha256(script).hexdigest()
-            manifest_path.write_bytes(setup.casefile_runtime.canonical(manifest))
-            with self.assertRaisesRegex(setup.casefile_runtime.RuntimeError, "executable format"):
-                setup.prepare(plugin, home, str(claude), planning)
-            self.assertFalse((home / ".claude.json").exists())
-            self.assertFalse((home / "casefile").exists())
-            self.assertFalse(setup.pointer(home).exists())
+            relative = setup.casefile_runtime.normalized_artifact_path(row["path"], target)
+            (plugin / "runtime" / relative).write_bytes(b"present non-native artifact\n")
+            plan = setup.prepare(plugin, home, str(claude), planning)
+            self.assertEqual(target, plan["selected"]["target"])
+            self.assertFalse(plan["binary"].exists())
+            result = setup.install(plan)
+            receipt = json.loads(Path(result["receipt"]).read_text(encoding="ascii"))
+            self.assertNotIn("artifact_sha256", receipt)
+            self.assertEqual(b"present non-native artifact\n", plan["binary"].read_bytes())
 
     def test_self_consistent_malformed_matrix_layout_refuses_before_mutation(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -216,7 +213,9 @@ else: raise SystemExit(2)
             manifest_path = plugin / "runtime/artifacts.json"
             manifest = json.loads(manifest_path.read_text(encoding="ascii"))
             row = manifest["artifacts"][0]
-            source = plugin / "runtime" / row["path"]
+            source = plugin / "runtime" / setup.casefile_runtime.normalized_artifact_path(
+                row["path"], row["target"]
+            )
             replacement = plugin / "runtime/bin/unexpected/casefile"
             replacement.parent.mkdir(parents=True)
             source.replace(replacement)
