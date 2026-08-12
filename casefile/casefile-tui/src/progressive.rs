@@ -402,6 +402,28 @@ impl Coordinator {
                     ProjectionChange::Partial
                 }
             }
+            PresentationEvent::Investigations {
+                projects,
+                coverage,
+                progress,
+                ..
+            } => {
+                self.cache.apply(&event);
+                let active = self.active.as_mut().expect("active load");
+                let catalogue = active.catalogue.as_mut().expect("projects catalogue");
+                catalogue.projects = projects.clone();
+                active.coverage = Some(coverage.clone());
+                active.progress = progress.clone();
+                self.status = format!(
+                    "{} investigations ready; records are loading...",
+                    target_name(&active.target)
+                );
+                if self.has_complete {
+                    ProjectionChange::None
+                } else {
+                    ProjectionChange::Partial
+                }
+            }
             PresentationEvent::Entries {
                 entries,
                 coverage,
@@ -968,9 +990,47 @@ mod tests {
         );
         let projection = coordinator.projection();
         assert!(projection.provisional);
+        assert!(
+            projection
+                .scan
+                .investigation_roots
+                .get("demo")
+                .is_some_and(Vec::is_empty)
+        );
+        let investigations = coordinator
+            .active
+            .as_ref()
+            .expect("active")
+            .stream
+            .recv()
+            .expect("investigations");
+        assert!(matches!(
+            investigations,
+            PresentationEvent::Investigations { .. }
+        ));
         assert_eq!(
-            projection.scan.investigation_roots.get("demo"),
+            coordinator.apply_load_event(investigations),
+            ProjectionChange::Partial
+        );
+        assert_eq!(
+            coordinator
+                .projection()
+                .scan
+                .investigation_roots
+                .get("demo"),
             Some(&vec!["sample".into()])
+        );
+        let tickets = coordinator
+            .active
+            .as_ref()
+            .expect("active")
+            .stream
+            .recv()
+            .expect("tickets");
+        assert!(matches!(tickets, PresentationEvent::Entries { .. }));
+        assert_eq!(
+            coordinator.apply_load_event(tickets),
+            ProjectionChange::Partial
         );
         let early = coordinator
             .active

@@ -8,7 +8,9 @@ use crate::{
     activation::{
         Activation, ActivationState, activation, investigation_identity, project_for, scope_for,
     },
-    derived::{DerivedBoard, DerivedRelationship, DerivedTicketProgress, derive_snapshot},
+    derived::{
+        DerivedBoard, DerivedRelationship, DerivedTicketProgress, derive_presentation_snapshot,
+    },
     layout::{kind_for_path, normalize_planning_relative},
     scanning::{ScanResult, binding_diagnostics, classify, is_store_path_excluded},
     store::StoreError,
@@ -193,6 +195,13 @@ pub enum PresentationEvent {
         progress: PresentationProgress,
         catalogue: PresentationCatalogue,
     },
+    Investigations {
+        generation: u64,
+        target: PresentationTarget,
+        coverage: PresentationCoverage,
+        progress: PresentationProgress,
+        projects: Vec<PresentationProject>,
+    },
     Entries {
         generation: u64,
         target: PresentationTarget,
@@ -219,6 +228,7 @@ impl PresentationEvent {
     pub fn generation(&self) -> u64 {
         match self {
             Self::Catalogue { generation, .. }
+            | Self::Investigations { generation, .. }
             | Self::Entries { generation, .. }
             | Self::Complete { generation, .. }
             | Self::Failure { generation, .. } => *generation,
@@ -228,6 +238,7 @@ impl PresentationEvent {
     pub fn target(&self) -> &PresentationTarget {
         match self {
             Self::Catalogue { target, .. }
+            | Self::Investigations { target, .. }
             | Self::Entries { target, .. }
             | Self::Complete { target, .. }
             | Self::Failure { target, .. } => target,
@@ -300,10 +311,13 @@ impl PresentationStream {
 
     fn register_received_handles(&self, event: &PresentationEvent) {
         if let PresentationEvent::Entries {
-            target, entries, ..
+            generation,
+            target,
+            entries,
+            ..
         } = event
         {
-            register_handles(&self.inner, target, entries);
+            register_handles(&self.inner, *generation, target, entries);
         }
     }
 }
@@ -342,13 +356,17 @@ impl Drop for PresentationContentStream {
 #[derive(Default)]
 pub struct PresentationCache {
     catalogue: Option<PresentationCatalogue>,
+    staged_catalogues: BTreeMap<(u64, PresentationTarget), PresentationCatalogue>,
     entries: BTreeMap<String, PresentationEntry>,
     staged: BTreeMap<(u64, PresentationTarget), BTreeMap<String, PresentationEntry>>,
 }
 
 impl PresentationCache {
     pub fn catalogue(&self) -> Option<&PresentationCatalogue> {
-        self.catalogue.as_ref()
+        self.staged_catalogues
+            .values()
+            .next_back()
+            .or(self.catalogue.as_ref())
     }
 
     pub fn entries(&self) -> impl Iterator<Item = &PresentationEntry> {
@@ -363,19 +381,37 @@ impl PresentationCache {
         let key = (event.generation(), event.target().clone());
         match event {
             PresentationEvent::Catalogue { catalogue, .. } => {
-                self.catalogue = Some(catalogue.clone());
+                self.staged_catalogues
+                    .retain(|(_, target), _| target != event.target());
+                self.staged
+                    .retain(|(_, target), _| target != event.target());
+                self.staged_catalogues
+                    .insert(key.clone(), catalogue.clone());
                 self.staged.insert(key, BTreeMap::new());
             }
+            PresentationEvent::Investigations { projects, .. } => {
+                if let Some(catalogue) = self.staged_catalogues.get_mut(&key) {
+                    catalogue.projects = projects.clone();
+                }
+            }
             PresentationEvent::Entries { entries, .. } => {
-                let staged = self.staged.entry(key).or_default();
-                staged.extend(
-                    entries
-                        .iter()
-                        .cloned()
-                        .map(|entry| (entry.path.clone(), entry)),
-                );
+                if self.staged_catalogues.contains_key(&key) {
+                    let staged = self
+                        .staged
+                        .get_mut(&key)
+                        .expect("catalogue initialized stage");
+                    staged.extend(
+                        entries
+                            .iter()
+                            .cloned()
+                            .map(|entry| (entry.path.clone(), entry)),
+                    );
+                }
             }
             PresentationEvent::Complete { target, .. } => {
+                if let Some(catalogue) = self.staged_catalogues.remove(&key) {
+                    self.catalogue = Some(catalogue);
+                }
                 if let Some(replacement) = self.staged.remove(&key) {
                     self.entries
                         .retain(|path, _| !target_contains(target, path));
@@ -383,6 +419,7 @@ impl PresentationCache {
                 }
             }
             PresentationEvent::Failure { .. } => {
+                self.staged_catalogues.remove(&key);
                 self.staged.remove(&key);
             }
         }
@@ -444,8 +481,15 @@ struct SessionInner {
     reader: Arc<dyn PresentationReader>,
     handles: Mutex<BTreeMap<u64, EmittedContent>>,
     handles_by_path: Mutex<BTreeMap<(PresentationTarget, String), u64>>,
-    state: Mutex<BTreeMap<PresentationTarget, LoadedState>>,
+    state: Mutex<SessionLoadedState>,
     next_handle: AtomicU64,
+}
+
+#[derive(Default)]
+struct SessionLoadedState {
+    committed: BTreeMap<PresentationTarget, LoadedState>,
+    staged: BTreeMap<(u64, PresentationTarget), LoadedState>,
+    completed: BTreeSet<(u64, PresentationTarget)>,
 }
 
 impl PresentationSession {
@@ -460,7 +504,7 @@ impl PresentationSession {
                 reader,
                 handles: Mutex::new(BTreeMap::new()),
                 handles_by_path: Mutex::new(BTreeMap::new()),
-                state: Mutex::new(BTreeMap::new()),
+                state: Mutex::new(SessionLoadedState::default()),
                 next_handle: AtomicU64::new(1),
             }),
         }
@@ -525,6 +569,7 @@ struct Descriptor {
 #[derive(Clone)]
 struct EmittedContent {
     descriptor: Descriptor,
+    generation: u64,
     target: PresentationTarget,
 }
 
@@ -701,14 +746,51 @@ fn run_load(
         payload: PresentationCoverageState::Pending,
         facts: PresentationCoverageState::Pending,
     };
+    let projects_pending = PresentationCoverage {
+        catalogue: PresentationCoverageState::Partial,
+        ..pending.clone()
+    };
     let mut catalogue_emitted = false;
+    let state_key = (request.generation, request.target.clone());
+    let mut state_staged = false;
+    let mut state_promoted = false;
     let result = (|| -> Result<(), StoreError> {
         let (state, activation, diagnostics) = inner.reader.activation()?;
         let catalogue = catalogue(state, &activation, diagnostics);
+        let projects_catalogue = PresentationCatalogue {
+            activation: catalogue.activation,
+            projects: catalogue
+                .projects
+                .iter()
+                .map(|project| PresentationProject {
+                    slug: project.slug.clone(),
+                    prefix: project.prefix.clone(),
+                    investigations: Vec::new(),
+                })
+                .collect(),
+            diagnostics: catalogue.diagnostics.clone(),
+        };
         if !send_bounded(
             &sender,
             &cancelled,
             PresentationEvent::Catalogue {
+                generation: request.generation,
+                target: request.target.clone(),
+                coverage: projects_pending,
+                progress: PresentationProgress {
+                    completed: 0,
+                    total: None,
+                },
+                catalogue: projects_catalogue,
+            },
+        ) {
+            return Ok(());
+        }
+        catalogue_emitted = true;
+        if !send_bounded(
+            &sender,
+            &cancelled,
+            PresentationEvent::Investigations {
                 generation: request.generation,
                 target: request.target.clone(),
                 coverage: pending.clone(),
@@ -716,12 +798,11 @@ fn run_load(
                     completed: 0,
                     total: None,
                 },
-                catalogue,
+                projects: catalogue.projects,
             },
         ) {
             return Ok(());
         }
-        catalogue_emitted = true;
         if state != ActivationState::Active {
             send_bounded(
                 &sender,
@@ -744,10 +825,17 @@ fn run_load(
         }
         validate_target(&request.target, &activation)?;
         let descriptors = collect_descriptors(&inner, &request.target, &activation, &cancelled)?;
-        inner.state.lock().expect("presentation state").insert(
-            request.target.clone(),
-            initial_loaded_state(&request.target, &activation, &descriptors),
-        );
+        {
+            let mut states = inner.state.lock().expect("presentation state");
+            states
+                .staged
+                .retain(|(_, target), _| target != &request.target);
+            states.staged.insert(
+                state_key.clone(),
+                initial_loaded_state(&request.target, &activation, &descriptors),
+            );
+        }
+        state_staged = true;
         if cancelled.load(Ordering::Acquire) {
             return Ok(());
         }
@@ -759,14 +847,27 @@ fn run_load(
             .map(|descriptor| catalogue_entry(descriptor, &activation))
             .collect::<Vec<_>>();
         let total = descriptors.len();
-        let mut completed = 0;
+        let mut emitted_paths = BTreeSet::new();
+        let (ticket_entries, ticket_snapshots) =
+            load_ticket_entries(&inner, &activation, &descriptors, &cancelled)?;
+        if !send_entry_batches(
+            &sender,
+            &cancelled,
+            request.generation,
+            &request.target,
+            &ticket_entries,
+            &mut emitted_paths,
+            total,
+        ) {
+            return Ok(());
+        }
         if !send_entry_batches(
             &sender,
             &cancelled,
             request.generation,
             &request.target,
             &catalogue_entries,
-            &mut completed,
+            &mut emitted_paths,
             total,
         ) {
             return Ok(());
@@ -776,14 +877,15 @@ fn run_load(
             &request.target,
             &activation,
             &descriptors,
+            ticket_snapshots,
             &cancelled,
         )?;
         let mut states = inner.state.lock().expect("presentation state");
-        if let Some(initial) = states.remove(&request.target) {
+        if let Some(initial) = states.staged.remove(&state_key) {
             merge_loaded_lazy_entries(&mut scan, &initial.scan);
         }
-        states.insert(
-            request.target.clone(),
+        states.staged.insert(
+            state_key.clone(),
             LoadedState {
                 target: request.target.clone(),
                 activation,
@@ -809,12 +911,12 @@ fn run_load(
             request.generation,
             &request.target,
             &eager_entries,
-            &mut completed,
+            &mut emitted_paths,
             total,
         ) {
             return Ok(());
         }
-        send_bounded(
+        if !send_bounded(
             &sender,
             &cancelled,
             PresentationEvent::Complete {
@@ -830,9 +932,26 @@ fn run_load(
                     total: Some(total),
                 },
             },
-        );
+        ) {
+            return Ok(());
+        }
+        let mut states = inner.state.lock().expect("presentation state");
+        let completed = states.staged.remove(&state_key).ok_or_else(|| {
+            StoreError::Invalid("presentation payload staging was lost before completion".into())
+        })?;
+        states.committed.insert(request.target.clone(), completed);
+        states.completed.insert(state_key.clone());
+        state_promoted = true;
         Ok(())
     })();
+    if state_staged && !state_promoted {
+        inner
+            .state
+            .lock()
+            .expect("presentation state")
+            .staged
+            .remove(&state_key);
+    }
     if let Err(error) = result {
         let failure_coverage = PresentationCoverage {
             catalogue: if catalogue_emitted {
@@ -1092,11 +1211,84 @@ fn merge_loaded_lazy_entries(complete: &mut ScanResult, initial: &ScanResult) {
     complete.diagnostics = stable(std::mem::take(&mut complete.diagnostics));
 }
 
+fn load_ticket_entries(
+    inner: &SessionInner,
+    active: &Activation,
+    descriptors: &[Descriptor],
+    cancelled: &AtomicBool,
+) -> Result<(Vec<PresentationEntry>, BTreeMap<String, EntrySnapshot>), StoreError> {
+    let mut entries = Vec::new();
+    let mut snapshots = BTreeMap::new();
+    for descriptor in descriptors.iter().filter(|descriptor| {
+        descriptor.kind == Some(Kind::Ticket)
+            && descriptor.metadata.public.kind == PresentationFileKind::Regular
+            && !descriptor.lazy
+    }) {
+        if cancelled.load(Ordering::Acquire) {
+            return Err(StoreError::Invalid("presentation load cancelled".into()));
+        }
+        let bytes = read_fresh(inner.reader.as_ref(), descriptor)?;
+        let (classification, kind, identity, summary, _diagnostics) =
+            classify(&descriptor.path, &bytes, active);
+        let snapshot = EntrySnapshot {
+            path: descriptor.path.clone(),
+            classification,
+            kind,
+            identity,
+            content_revision: digest(&bytes),
+            summary,
+            original_bytes: bytes,
+        };
+        entries.push(ticket_core_entry(descriptor, &snapshot));
+        snapshots.insert(descriptor.path.clone(), snapshot);
+    }
+    Ok((entries, snapshots))
+}
+
+fn ticket_core_entry(descriptor: &Descriptor, snapshot: &EntrySnapshot) -> PresentationEntry {
+    let summary = snapshot.summary.clone().map(|record| PresentationSummary {
+        title: presentation_summary_title(&record),
+        record,
+    });
+    PresentationEntry {
+        path: descriptor.path.clone(),
+        scope: descriptor.scope.clone(),
+        kind: snapshot.kind,
+        metadata: descriptor.metadata.public.clone(),
+        content_handle: None,
+        classification: PresentationFact::Available(snapshot.classification),
+        identity: PresentationFact::Available(snapshot.identity.clone()),
+        summary: PresentationFact::Available(summary),
+        diagnostics: PresentationFact::Unavailable,
+        progress: PresentationFact::Unavailable,
+        relationships: PresentationFact::Unavailable,
+        boards: PresentationFact::Unavailable,
+        body: PresentationFact::Available(snapshot.original_bytes.clone()),
+    }
+}
+
+fn presentation_summary_title(summary: &RecordSummary) -> String {
+    match summary {
+        RecordSummary::Markdown { title }
+        | RecordSummary::WorkItem { title, .. }
+        | RecordSummary::Board { title, .. } => title.clone(),
+        RecordSummary::Strategy { strategy_id, .. } => strategy_id.clone(),
+        RecordSummary::StrategyBinding { binding } => format!("{} writer binding", binding.adapter),
+        RecordSummary::StrategyTransition { record } => {
+            format!("{} strategy transition", record.selected_strategy_id)
+        }
+        RecordSummary::Activation { .. } => "Casefile activation".into(),
+        RecordSummary::ProjectMap { .. } => "Project map".into(),
+        RecordSummary::Progress => "Ticket progress".into(),
+    }
+}
+
 fn load_entries(
     inner: &SessionInner,
     target: &PresentationTarget,
     active: &Activation,
     descriptors: &[Descriptor],
+    mut preloaded: BTreeMap<String, EntrySnapshot>,
     cancelled: &AtomicBool,
 ) -> Result<(Vec<PresentationEntry>, ScanResult), StoreError> {
     let mut snapshots = Vec::new();
@@ -1120,6 +1312,10 @@ fn load_entries(
                 summary: None,
                 original_bytes: Vec::new(),
             });
+            continue;
+        }
+        if let Some(snapshot) = preloaded.remove(&descriptor.path) {
+            snapshots.push(snapshot);
             continue;
         }
         if descriptor.lazy {
@@ -1163,11 +1359,12 @@ fn load_entries(
         },
         diagnostics: stable(local_diagnostics),
     };
-    let derived = derive_snapshot(&scan);
+    let derived = derive_presentation_snapshot(&scan);
     let coherent = matches!(target, PresentationTarget::Store);
+    let indexes = PresentationIndexes::new(&scan, &derived);
     let entries = descriptors
         .iter()
-        .map(|descriptor| presentation_entry(descriptor, &scan, &derived, coherent))
+        .map(|descriptor| presentation_entry(descriptor, &indexes, coherent))
         .collect();
     Ok((entries, scan))
 }
@@ -1189,17 +1386,67 @@ fn investigation_roots(active: &Activation) -> BTreeMap<String, Vec<String>> {
         .collect()
 }
 
+struct PresentationIndexes<'a> {
+    snapshots: BTreeMap<&'a str, &'a EntrySnapshot>,
+    records: BTreeMap<&'a str, &'a crate::derived::DerivedRecord>,
+    diagnostics: BTreeMap<&'a str, Vec<&'a Diagnostic>>,
+    relationships: BTreeMap<&'a crate::derived::ScopedIdentity, Vec<&'a DerivedRelationship>>,
+    boards: BTreeMap<&'a crate::derived::ScopedIdentity, Vec<&'a DerivedBoard>>,
+}
+
+impl<'a> PresentationIndexes<'a> {
+    fn new(scan: &'a ScanResult, derived: &'a crate::derived::DerivedSnapshot) -> Self {
+        let snapshots = scan
+            .snapshot
+            .entries
+            .iter()
+            .map(|entry| (entry.path.as_str(), entry))
+            .collect();
+        let records = derived
+            .records
+            .iter()
+            .map(|record| (record.path.as_str(), record))
+            .collect();
+        let mut diagnostics: BTreeMap<&str, Vec<&Diagnostic>> = BTreeMap::new();
+        for diagnostic in &scan.diagnostics {
+            diagnostics
+                .entry(diagnostic.path.as_str())
+                .or_default()
+                .push(diagnostic);
+        }
+        let mut relationships = BTreeMap::new();
+        for relationship in &derived.relationships {
+            relationships
+                .entry(&relationship.source)
+                .or_insert_with(Vec::new)
+                .push(relationship);
+        }
+        let mut boards = BTreeMap::new();
+        for board in &derived.boards {
+            boards
+                .entry(&board.identity)
+                .or_insert_with(Vec::new)
+                .push(board);
+        }
+        Self {
+            snapshots,
+            records,
+            diagnostics,
+            relationships,
+            boards,
+        }
+    }
+}
+
 fn presentation_entry(
     descriptor: &Descriptor,
-    scan: &ScanResult,
-    derived: &crate::derived::DerivedSnapshot,
+    indexes: &PresentationIndexes<'_>,
     coherent: bool,
 ) -> PresentationEntry {
-    let snapshot = scan
-        .snapshot
-        .entries
-        .iter()
-        .find(|entry| entry.path == descriptor.path)
+    let snapshot = indexes
+        .snapshots
+        .get(descriptor.path.as_str())
+        .copied()
         .expect("descriptor has a presentation snapshot");
     if descriptor.kind == Some(Kind::Evidence) && descriptor.lazy {
         return PresentationEntry {
@@ -1218,42 +1465,42 @@ fn presentation_entry(
             body: PresentationFact::Unavailable,
         };
     }
-    let record = derived
-        .records
-        .iter()
-        .find(|record| record.path == descriptor.path);
+    let record = indexes.records.get(descriptor.path.as_str()).copied();
     let title = record.map(|record| record.title.clone());
     let identity = snapshot.identity.clone();
     let summary = snapshot.summary.clone().map(|record| PresentationSummary {
         title: title.unwrap_or_else(|| descriptor.path.clone()),
         record,
     });
-    let diagnostics = scan
+    let diagnostics = indexes
         .diagnostics
-        .iter()
-        .filter(|diagnostic| diagnostic.path == descriptor.path)
-        .cloned()
+        .get(descriptor.path.as_str())
+        .into_iter()
+        .flatten()
+        .map(|diagnostic| (*diagnostic).clone())
         .collect();
     let progress = record.and_then(|record| record.progress.clone());
     let relationships = record
         .and_then(|record| record.identity.as_ref())
         .map(|identity| {
-            derived
+            indexes
                 .relationships
-                .iter()
-                .filter(|relationship| &relationship.source == identity)
-                .cloned()
+                .get(identity)
+                .into_iter()
+                .flatten()
+                .map(|relationship| (*relationship).clone())
                 .collect()
         })
         .unwrap_or_default();
     let boards = record
         .and_then(|record| record.identity.as_ref())
         .map(|identity| {
-            derived
+            indexes
                 .boards
-                .iter()
-                .filter(|board| &board.identity == identity)
-                .cloned()
+                .get(identity)
+                .into_iter()
+                .flatten()
+                .map(|board| (*board).clone())
                 .collect()
         })
         .unwrap_or_default();
@@ -1346,9 +1593,15 @@ fn fetch_entry(
         ));
     }
     let mut state = inner.state.lock().expect("presentation state");
-    let loaded = state
-        .get_mut(&emitted.target)
-        .ok_or_else(|| StoreError::Invalid("presentation payload has not completed".into()))?;
+    let state_key = (emitted.generation, emitted.target.clone());
+    let loaded = if state.staged.contains_key(&state_key) {
+        state.staged.get_mut(&state_key)
+    } else if state.completed.contains(&state_key) {
+        state.committed.get_mut(&emitted.target)
+    } else {
+        None
+    }
+    .ok_or_else(|| StoreError::Invalid("presentation payload has not completed".into()))?;
     if loaded.target != emitted.target {
         return Err(StoreError::Invalid(
             "presentation content target is no longer loaded".into(),
@@ -1393,13 +1646,13 @@ fn fetch_entry(
         entry.original_bytes = bytes;
         entry.content_revision = digest(&entry.original_bytes);
     }
-    let derived = derive_snapshot(&loaded.scan);
+    let derived = derive_presentation_snapshot(&loaded.scan);
+    let indexes = PresentationIndexes::new(&loaded.scan, &derived);
     let mut loaded_descriptor = descriptor.clone();
     loaded_descriptor.lazy = false;
     Ok(presentation_entry(
         &loaded_descriptor,
-        &loaded.scan,
-        &derived,
+        &indexes,
         loaded.complete && matches!(loaded.target, PresentationTarget::Store),
     ))
 }
@@ -1426,6 +1679,7 @@ fn read_fresh(
 
 fn register_handles(
     inner: &SessionInner,
+    generation: u64,
     target: &PresentationTarget,
     entries: &[PresentationEntry],
 ) {
@@ -1448,6 +1702,7 @@ fn register_handles(
             handle.id,
             EmittedContent {
                 descriptor,
+                generation,
                 target: target.clone(),
             },
         );
@@ -1673,12 +1928,13 @@ fn send_entry_batches(
     generation: u64,
     target: &PresentationTarget,
     entries: &[PresentationEntry],
-    completed: &mut usize,
+    emitted_paths: &mut BTreeSet<String>,
     total: usize,
 ) -> bool {
     for scope_entries in entries.chunk_by(|left, right| left.scope == right.scope) {
         for chunk in scope_entries.chunks(PRESENTATION_BATCH_LIMIT) {
-            *completed += chunk.len();
+            emitted_paths.extend(chunk.iter().map(|entry| entry.path.clone()));
+            let completed = emitted_paths.len();
             if !send_bounded(
                 sender,
                 cancelled,
@@ -1687,19 +1943,19 @@ fn send_entry_batches(
                     target: target.clone(),
                     coverage: PresentationCoverage {
                         catalogue: PresentationCoverageState::Complete,
-                        payload: if *completed == total {
+                        payload: if completed == total {
                             PresentationCoverageState::Complete
                         } else {
                             PresentationCoverageState::Partial
                         },
-                        facts: if *completed == total {
+                        facts: if completed == total {
                             PresentationCoverageState::Complete
                         } else {
                             PresentationCoverageState::Partial
                         },
                     },
                     progress: PresentationProgress {
-                        completed: *completed,
+                        completed,
                         total: Some(total),
                     },
                     entries: chunk.to_vec(),
@@ -1780,6 +2036,7 @@ mod tests {
 
     const INVESTIGATION: &str = "projects/demo/investigations/sample";
     const TICKET: &str = "projects/demo/investigations/sample/tickets/accepted/HMD-011.md";
+    const REVIEW: &str = "projects/demo/investigations/sample/review/round-1.md";
     const EVIDENCE: &str = "projects/demo/investigations/sample/evidence/observation.md";
     const RAW: &str = "projects/demo/investigations/sample/large.raw";
 
@@ -1841,6 +2098,10 @@ mod tests {
             reader.insert_file(
                 TICKET,
                 include_bytes!("../tests/fixtures/minimum/projects/demo/investigations/sample/tickets/accepted/HMD-011.md").to_vec(),
+            );
+            reader.insert_file(
+                REVIEW,
+                include_bytes!("../tests/fixtures/minimum/projects/demo/investigations/sample/review/round-1.md").to_vec(),
             );
             reader.insert_file(
                 EVIDENCE,
@@ -2037,9 +2298,9 @@ mod tests {
     }
 
     #[test]
-    fn catalogue_precedes_blocked_payload_and_lazy_body_reads() {
+    fn hierarchy_and_ticket_precede_blocked_remaining_and_lazy_body_reads() {
         let reader = FakeReader::active();
-        reader.block(TICKET);
+        reader.block(REVIEW);
         let session = PresentationSession::with_reader(reader.clone());
         let request = load_request(41, PresentationTarget::Store);
         let stream = session.load(request.clone()).expect("load");
@@ -2055,22 +2316,51 @@ mod tests {
             } => {
                 assert_eq!(generation, 41);
                 assert_eq!(target, request.target);
-                assert_eq!(coverage.catalogue, PresentationCoverageState::Complete);
+                assert_eq!(coverage.catalogue, PresentationCoverageState::Partial);
                 assert_eq!(coverage.payload, PresentationCoverageState::Pending);
                 assert_eq!(progress.total, None);
                 assert_eq!(catalogue.activation, ActivationState::Active);
                 assert_eq!(catalogue.projects[0].slug, "demo");
-                assert_eq!(catalogue.projects[0].investigations[0].path, INVESTIGATION);
+                assert!(catalogue.projects[0].investigations.is_empty());
             }
             other => panic!("unexpected first event: {other:?}"),
         }
 
+        let investigations = stream.recv().expect("investigation hierarchy");
+        assert!(
+            matches!(investigations, PresentationEvent::Investigations { ref projects, .. }
+            if projects[0].investigations[0].path == INVESTIGATION)
+        );
+        let tickets = stream.recv().expect("ticket entries");
+        assert!(
+            matches!(&tickets, PresentationEvent::Entries { entries, .. }
+            if entries.len() == 1
+                && entries[0].path == TICKET
+                && entries[0].kind == Some(Kind::Ticket)
+                && matches!(entries[0].classification, PresentationFact::Available(_))
+                && matches!(entries[0].identity, PresentationFact::Available(Some(_)))
+                && matches!(entries[0].summary, PresentationFact::Available(Some(_)))
+                && entries[0].diagnostics == PresentationFact::Unavailable
+                && entries[0].progress == PresentationFact::Unavailable
+                && entries[0].relationships == PresentationFact::Unavailable
+                && entries[0].boards == PresentationFact::Unavailable)
+        );
         let early = stream.recv().expect("lazy catalogue entries");
         assert!(matches!(&early, PresentationEvent::Entries { entries, .. }
             if entries.iter().any(|entry| entry.path == RAW)
                 && entries.iter().any(|entry| entry.path == EVIDENCE)));
         reader.wait_until_blocked();
         let operations = reader.operations();
+        let ticket_read = operations
+            .iter()
+            .position(|operation| operation == &Operation::Body(TICKET.into()))
+            .expect("ticket read");
+        let review_read = operations
+            .iter()
+            .position(|operation| operation == &Operation::Body(REVIEW.into()))
+            .expect("review read");
+        assert!(ticket_read < review_read);
+        assert_eq!(body_reads(&reader, TICKET), 1);
         assert!(!operations.contains(&Operation::Body(RAW.into())));
         assert!(!operations.contains(&Operation::Body(EVIDENCE.into())));
 
@@ -2099,7 +2389,7 @@ mod tests {
         ));
         reader.release();
 
-        let mut events = vec![early];
+        let mut events = vec![tickets, early];
         events.extend(drain(stream));
         let entries = event_entries(&events);
         assert!(events.iter().all(|event| event.generation() == 41));
@@ -2148,7 +2438,7 @@ mod tests {
     #[test]
     fn cache_preserves_concurrent_lazy_content_through_target_completion() {
         let reader = FakeReader::active();
-        reader.block(TICKET);
+        reader.block(REVIEW);
         let session = PresentationSession::with_reader(reader.clone());
         let stream = session
             .load(load_request(42, PresentationTarget::Store))
@@ -2158,6 +2448,8 @@ mod tests {
         let catalogue = stream.recv().expect("catalogue");
         assert!(matches!(catalogue, PresentationEvent::Catalogue { .. }));
         cache.apply(&catalogue);
+        cache.apply(&stream.recv().expect("investigations"));
+        cache.apply(&stream.recv().expect("ticket entries"));
         let early = stream.recv().expect("lazy catalogue entries");
         cache.apply(&early);
         let evidence_handle = match &early {
@@ -2509,7 +2801,7 @@ mod tests {
                     .load(load_request(3, PresentationTarget::Store))
                     .expect("early load"),
             );
-            assert_eq!(events.len(), 2);
+            assert_eq!(events.len(), 3);
             match &events[0] {
                 PresentationEvent::Catalogue { catalogue, .. } => {
                     assert_eq!(catalogue.activation, state);
@@ -2521,7 +2813,11 @@ mod tests {
                 }
                 other => panic!("unexpected early event: {other:?}"),
             }
-            assert!(matches!(events[1], PresentationEvent::Complete { .. }));
+            assert!(matches!(
+                events[1],
+                PresentationEvent::Investigations { .. }
+            ));
+            assert!(matches!(events[2], PresentationEvent::Complete { .. }));
             assert_eq!(reader.operations(), vec![Operation::Activation]);
         }
     }
@@ -2603,8 +2899,8 @@ mod tests {
             let first = paths(30);
             let second = paths(31);
             assert_eq!(first, second);
-            assert!(first.windows(2).all(|pair| pair[0] <= pair[1]));
             assert!(first.iter().all(|path| target_contains(&target, path)));
+            assert_eq!(first.first().map(String::as_str), Some(TICKET));
         }
     }
 
@@ -2642,6 +2938,45 @@ mod tests {
                 .expect("untouched content"),
         );
         assert!(matches!(events[1], PresentationContentEvent::Loaded { .. }));
+    }
+
+    #[test]
+    fn failed_refresh_keeps_committed_content_handles_usable() {
+        let reader = FakeReader::active();
+        let session = PresentationSession::with_reader(reader.clone());
+        let store_entries = event_entries(&drain(
+            session
+                .load(load_request(34, PresentationTarget::Store))
+                .expect("initial store load"),
+        ));
+        let handle = store_entries
+            .iter()
+            .find(|entry| entry.path == RAW)
+            .expect("raw")
+            .content_handle
+            .clone()
+            .expect("handle");
+
+        reader.fail_read(REVIEW);
+        let refresh = drain(
+            session
+                .load(load_request(35, PresentationTarget::Store))
+                .expect("failed refresh"),
+        );
+        assert!(matches!(
+            refresh.last(),
+            Some(PresentationEvent::Failure { .. })
+        ));
+
+        let content = drain_content(
+            session
+                .fetch_content(content_request(34, handle))
+                .expect("committed content"),
+        );
+        assert!(matches!(
+            content.get(1),
+            Some(PresentationContentEvent::Loaded { .. })
+        ));
     }
 
     #[test]
@@ -2690,6 +3025,7 @@ mod tests {
             .entries()
             .map(|entry| entry.path.clone())
             .collect::<Vec<_>>();
+        let committed_catalogue = cache.catalogue().cloned().expect("committed catalogue");
         let failed_target = PresentationTarget::Project {
             project: "demo".into(),
         };
@@ -2704,11 +3040,15 @@ mod tests {
             coverage: coverage.clone(),
             progress: progress.clone(),
             catalogue: PresentationCatalogue {
-                activation: ActivationState::Active,
+                activation: ActivationState::Invalid,
                 projects: Vec::new(),
                 diagnostics: Vec::new(),
             },
         });
+        assert_eq!(
+            cache.catalogue().expect("staged catalogue").activation,
+            ActivationState::Invalid
+        );
         cache.apply(&PresentationEvent::Failure {
             generation: 3,
             target: failed_target,
@@ -2723,6 +3063,7 @@ mod tests {
                 .collect::<Vec<_>>(),
             existing
         );
+        assert_eq!(cache.catalogue(), Some(&committed_catalogue));
 
         let path = "projects/demo/investigations/sample/one.raw";
         let mut loaded = cache.get(path).expect("cached raw").clone();
@@ -2774,6 +3115,7 @@ mod tests {
         for expected in &canonical.snapshot.entries {
             let actual = entries
                 .iter()
+                .rev()
                 .find(|entry| entry.path == expected.path)
                 .unwrap_or_else(|| panic!("missing presentation entry {}", expected.path));
             assert_eq!(actual.path, expected.path);
