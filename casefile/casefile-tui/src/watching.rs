@@ -185,9 +185,17 @@ struct ActivationRoot {
     identity: String,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum RootNamespace {
+    DotRelative,
+    FilesystemRoot,
+    Scoped,
+}
+
 #[derive(Clone, Debug)]
 struct PathClassifier {
     root: String,
+    root_namespace: RootNamespace,
     windows: bool,
     activation_roots: Vec<ActivationRoot>,
     projects: BTreeMap<String, String>,
@@ -200,8 +208,20 @@ impl PathClassifier {
     }
 
     fn new(root: &str, windows: bool) -> Self {
+        let normalized =
+            lexical(root, windows).unwrap_or_else(|| normalize_separators(root, windows));
+        let root_namespace = if normalized.is_empty() {
+            if is_lexically_absolute(root, windows) {
+                RootNamespace::FilesystemRoot
+            } else {
+                RootNamespace::DotRelative
+            }
+        } else {
+            RootNamespace::Scoped
+        };
         Self {
-            root: lexical(root, windows).unwrap_or_else(|| normalize_separators(root, windows)),
+            root: normalized,
+            root_namespace,
             windows,
             activation_roots: Vec::new(),
             projects: BTreeMap::new(),
@@ -253,26 +273,18 @@ impl PathClassifier {
     }
 
     fn is_root(&self, path: &Path) -> bool {
-        path.to_str()
-            .and_then(|path| lexical(path, self.windows))
-            .is_some_and(|path| path == self.root)
+        let Some(value) = path.to_str() else {
+            return false;
+        };
+        let Some(normalized) = lexical(value, self.windows) else {
+            return false;
+        };
+        matches!(self.root_relative(value, &normalized), Ok(Some("")))
     }
 
     fn classify_str(&self, value: &str) -> Result<ScopeImpact, ()> {
-        let absolute = lexical(value, self.windows).ok_or(())?;
-        let relative = if absolute == self.root {
-            return Ok(ScopeImpact::Store);
-        } else if self.root.is_empty() {
-            if is_windows_drive_relative(value, self.windows) {
-                return Err(());
-            }
-            if is_lexically_absolute(value, self.windows) {
-                return Ok(ScopeImpact::Ignore);
-            }
-            absolute.as_str()
-        } else if let Some(relative) = strip_lexical_prefix(&absolute, &self.root) {
-            relative
-        } else {
+        let normalized = lexical(value, self.windows).ok_or(())?;
+        let Some(relative) = self.root_relative(value, &normalized)? else {
             return Ok(ScopeImpact::Ignore);
         };
         if relative.is_empty() {
@@ -314,6 +326,36 @@ impl PathClassifier {
         Ok(ScopeImpact::Store)
     }
 
+    fn root_relative<'a>(&self, value: &str, normalized: &'a str) -> Result<Option<&'a str>, ()> {
+        match self.root_namespace {
+            RootNamespace::DotRelative => {
+                if is_windows_drive_relative(value, self.windows) {
+                    return Err(());
+                }
+                if is_lexically_absolute(value, self.windows) {
+                    return Ok(None);
+                }
+                Ok(Some(normalized))
+            }
+            RootNamespace::FilesystemRoot => {
+                if is_windows_drive_relative(value, self.windows) {
+                    return Err(());
+                }
+                if self.windows && is_windows_qualified_absolute(value) {
+                    return Ok(None);
+                }
+                Ok(Some(normalized.strip_prefix('/').unwrap_or(normalized)))
+            }
+            RootNamespace::Scoped => {
+                if normalized == self.root {
+                    Ok(Some(""))
+                } else {
+                    Ok(strip_lexical_prefix(normalized, &self.root))
+                }
+            }
+        }
+    }
+
     fn investigation_identity(&self, project: &str, path: &str) -> Option<String> {
         let path = lexical(path, self.windows)?;
         self.activation_roots
@@ -338,6 +380,12 @@ fn is_windows_drive_relative(value: &str, windows: bool) -> bool {
     }
     let value = value.replace('\\', "/");
     value.as_bytes().get(1) == Some(&b':') && value.as_bytes().get(2) != Some(&b'/')
+}
+
+fn is_windows_qualified_absolute(value: &str) -> bool {
+    let value = value.replace('\\', "/");
+    value.starts_with("//")
+        || (value.as_bytes().get(1) == Some(&b':') && value.as_bytes().get(2) == Some(&b'/'))
 }
 
 fn normalize_separators(value: &str, windows: bool) -> String {
@@ -884,6 +932,58 @@ mod tests {
             windows.classify_str(r"\\server\share\ticket.md"),
             Ok(ScopeImpact::Ignore)
         );
+
+        let mut unc = PathClassifier::new(r"\\Server\Share\Store", true);
+        unc.rebuild(&catalogue());
+        assert!(matches!(
+            unc.classify_str(
+                r"\\server\share\store\projects\alpha\investigations\deep\ticket.md"
+            ),
+            Ok(ScopeImpact::Investigation { identity, .. }) if identity == "deep"
+        ));
+        assert_eq!(
+            unc.classify_str(r"\\server\other\store\ticket.md"),
+            Ok(ScopeImpact::Ignore)
+        );
+    }
+
+    #[test]
+    fn classifier_preserves_posix_filesystem_root_namespace() {
+        let mut classifier = PathClassifier::new("/", false);
+        classifier.rebuild(&catalogue());
+        assert_eq!(classifier.root_namespace, RootNamespace::FilesystemRoot);
+        assert_eq!(classifier.classify_str("/"), Ok(ScopeImpact::Store));
+        assert_eq!(
+            classifier.classify_str("/casefile.toml"),
+            Ok(ScopeImpact::Store)
+        );
+        assert_eq!(
+            classifier.classify_str("/.git/config"),
+            Ok(ScopeImpact::Ignore)
+        );
+        assert!(matches!(
+            classifier.classify_str(
+                "/projects/alpha/investigations/deep/.git/nested-control.md"
+            ),
+            Ok(ScopeImpact::Investigation { identity, .. }) if identity == "deep"
+        ));
+        assert!(matches!(
+            classifier.classify_str(
+                "/projects/alpha/investigations/deep/tickets/changed.md"
+            ),
+            Ok(ScopeImpact::Investigation { identity, .. }) if identity == "deep"
+        ));
+        assert_eq!(
+            classifier.classify_str("/outside-the-catalogue/file.md"),
+            Ok(ScopeImpact::Store),
+            "every absolute POSIX path is contained when the watched root is /"
+        );
+        assert_eq!(
+            classifier.classify_str("relative-callback.md"),
+            Ok(ScopeImpact::Store),
+            "a backend-relative callback is also inside the filesystem root"
+        );
+        assert_eq!(classifier.classify_str("../unsafe"), Err(()));
     }
 
     #[test]
