@@ -17,6 +17,7 @@ use crate::{
     layout::checked_path,
     scanning::scan,
     store::{StoreError, require_safe_target_parent},
+    writing::git_diff,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -490,69 +491,7 @@ fn diff(
     before: Option<&[u8]>,
     after: Option<&[u8]>,
 ) -> Result<String, StoreError> {
-    // Delegate canonical diff normalisation to the existing generic writer implementation by using its stable path shape.
-    let old = before
-        .map(|bytes| {
-            tempfile::NamedTempFile::new_in(root).and_then(|mut file| {
-                file.write_all(bytes)?;
-                Ok(file)
-            })
-        })
-        .transpose()?;
-    let new = after
-        .map(|bytes| {
-            tempfile::NamedTempFile::new_in(root).and_then(|mut file| {
-                file.write_all(bytes)?;
-                Ok(file)
-            })
-        })
-        .transpose()?;
-    let output = std::process::Command::new("git")
-        .current_dir(root)
-        .args(["diff", "--no-index", "--"])
-        .arg(
-            old.as_ref()
-                .map(|file| file.path())
-                .unwrap_or_else(|| Path::new("/dev/null")),
-        )
-        .arg(
-            new.as_ref()
-                .map(|file| file.path())
-                .unwrap_or_else(|| Path::new("/dev/null")),
-        )
-        .output()?;
-    if output.status.code().is_some_and(|code| code > 1) {
-        return Err(StoreError::Invalid(
-            String::from_utf8_lossy(&output.stderr).into(),
-        ));
-    }
-    let before_exists = before.is_some();
-    let after_exists = after.is_some();
-    let source = String::from_utf8_lossy(&output.stdout);
-    Ok(source
-        .lines()
-        .map(|line| {
-            if line.starts_with("diff --git ") {
-                format!("diff --git a/{path} b/{path}")
-            } else if line.starts_with("--- ") {
-                if before_exists {
-                    format!("--- a/{path}")
-                } else {
-                    "--- /dev/null".into()
-                }
-            } else if line.starts_with("+++ ") {
-                if after_exists {
-                    format!("+++ b/{path}")
-                } else {
-                    "+++ /dev/null".into()
-                }
-            } else {
-                line.into()
-            }
-        })
-        .collect::<Vec<_>>()
-        .join("\n")
-        + if source.ends_with('\n') { "\n" } else { "" })
+    git_diff(root, path, before, after)
 }
 
 fn atomic_write(root: &Path, relative: &str, bytes: &[u8]) -> Result<(), StoreError> {

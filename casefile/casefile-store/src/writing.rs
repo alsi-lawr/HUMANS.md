@@ -10,10 +10,9 @@ use casefile_core::{
 };
 use std::{
     collections::{BTreeMap, BTreeSet},
-    ffi::OsStr,
     fs,
     io::Write,
-    path::{Path, PathBuf},
+    path::{Component, Path, PathBuf},
     process::Command,
 };
 use tempfile::NamedTempFile;
@@ -557,17 +556,19 @@ pub(super) fn git_diff(
     let new = after.map(|bytes| temp(root, bytes)).transpose()?;
     let old_path = old
         .as_ref()
-        .map(|file| file.path().as_os_str())
-        .unwrap_or_else(|| OsStr::new("/dev/null"));
+        .map(|file| contained_git_argument(root, file.path()))
+        .transpose()?
+        .unwrap_or_else(|| PathBuf::from("/dev/null"));
     let new_path = new
         .as_ref()
-        .map(|file| file.path().as_os_str())
-        .unwrap_or_else(|| OsStr::new("/dev/null"));
+        .map(|file| contained_git_argument(root, file.path()))
+        .transpose()?
+        .unwrap_or_else(|| PathBuf::from("/dev/null"));
     let output = Command::new("git")
         .current_dir(root)
         .args(["diff", "--no-index", "--"])
-        .arg(old_path)
-        .arg(new_path)
+        .arg(&old_path)
+        .arg(&new_path)
         .output()?;
     if output.status.code().is_some_and(|code| code > 1) {
         return Err(StoreError::Invalid(
@@ -581,6 +582,26 @@ pub(super) fn git_diff(
         after.is_some(),
     ))
 }
+
+fn contained_git_argument(root: &Path, path: &Path) -> Result<PathBuf, StoreError> {
+    let relative = path.strip_prefix(root).map_err(|_| {
+        StoreError::Invalid("temporary diff path escaped the configured Store root".into())
+    })?;
+    if relative.as_os_str().is_empty()
+        || relative.components().any(|component| {
+            matches!(
+                component,
+                Component::ParentDir | Component::RootDir | Component::Prefix(_)
+            )
+        })
+    {
+        return Err(StoreError::Invalid(
+            "temporary diff path escaped the configured Store root".into(),
+        ));
+    }
+    Ok(relative.to_path_buf())
+}
+
 fn canonical_diff(diff: &str, path: &str, before: bool, after: bool) -> String {
     diff.lines()
         .map(|line| {
@@ -623,6 +644,7 @@ fn temp(root: &Path, bytes: &[u8]) -> Result<NamedTempFile, StoreError> {
     file.write_all(bytes)?;
     Ok(file)
 }
+
 fn atomic_write(target: &Path, bytes: &[u8], create: bool) -> Result<(), StoreError> {
     let parent = target
         .parent()
@@ -640,4 +662,35 @@ fn atomic_write(target: &Path, bytes: &[u8], create: bool) -> Result<(), StoreEr
             .map_err(|error| StoreError::Io(error.error))?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod diff_argument_tests {
+    use super::*;
+
+    #[test]
+    fn contained_temporary_git_arguments_are_relative_and_keep_canonical_headers() {
+        let root = tempfile::tempdir().expect("temporary Store");
+        let temporary = temp(root.path(), b"before\n").expect("contained temporary file");
+        let argument =
+            contained_git_argument(root.path(), temporary.path()).expect("relative Git argument");
+        assert!(!argument.is_absolute());
+        assert_eq!(root.path().join(&argument), temporary.path());
+        assert_eq!(
+            contained_git_argument(Path::new("."), Path::new("./.casefile-temp"))
+                .expect("dot-root relative Git argument"),
+            PathBuf::from(".casefile-temp")
+        );
+        assert!(
+            contained_git_argument(root.path(), root.path().parent().expect("outside parent"))
+                .is_err()
+        );
+
+        let path = "projects/demo/investigations/sample/progress/log.toml";
+        let diff = git_diff(root.path(), path, None, Some(b"after\n")).expect("no-index diff");
+        assert!(diff.contains(&format!("diff --git a/{path} b/{path}")));
+        assert!(diff.contains("--- /dev/null"));
+        assert!(diff.contains(&format!("+++ b/{path}")));
+        assert!(!diff.contains(".tmp"));
+    }
 }
