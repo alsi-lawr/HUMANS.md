@@ -1120,7 +1120,10 @@ fn previews_and_applies_one_path_without_touching_index() {
         })
         .expect("replace preview");
     fs::write(root.path().join(&replace_path), "changed outside preview").expect("external change");
-    assert!(store.apply(stale).is_err());
+    assert!(matches!(
+        store.apply(stale),
+        Err(casefile_store::StoreError::StaleTargetRevision)
+    ));
     fs::write(root.path().join(&replace_path), original).expect("restore fixture");
     let mut replacement = ticket(root.path());
     if let RecordDraft::Ticket(item) = &mut replacement {

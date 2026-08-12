@@ -494,7 +494,7 @@ fn record_batch_promotes_mutually_related_tickets_as_one_valid_change() {
             ChangeRequest::Replace { .. } => unreachable!(),
         })
         .collect();
-    let preview = provider
+    let mut preview = provider
         .preview_record_batch(portable_requests)
         .expect("batch preview");
     assert!(preview.canonical.diagnostics.is_empty());
@@ -506,6 +506,20 @@ fn record_batch_promotes_mutually_related_tickets_as_one_valid_change() {
             .iter()
             .all(|request| !request.path().contains('\\') && !request.path().ends_with('/'))
     );
+    let stale_path = root.path().join(format!("{provisional}/HMD-012.md"));
+    let stale_original = fs::read(&stale_path).expect("batch stale baseline");
+    fs::write(&stale_path, [stale_original.as_slice(), b"\n"].concat())
+        .expect("batch external edit");
+    assert!(matches!(
+        provider.apply_record_batch(preview.clone()),
+        Err(ProviderError::Store(
+            casefile_store::StoreError::StaleTargetRevision
+        ))
+    ));
+    fs::write(&stale_path, stale_original).expect("restore batch target");
+    preview = provider
+        .preview_record_batch(preview.canonical.requests.clone())
+        .expect("fresh batch preview");
     provider
         .apply_record_batch(preview)
         .expect("atomic batch promotion");
@@ -607,6 +621,18 @@ fn progress_preview_integrity_covers_bootstrap_transition_replay_no_op_and_confl
     let transition = provider
         .preview_progress(operation.clone())
         .expect("transition preview");
+    let baseline_log = fs::read(&log).expect("progress baseline");
+    fs::write(&log, [baseline_log.as_slice(), b"\n"].concat()).expect("progress external edit");
+    assert!(matches!(
+        provider.apply_progress(transition.clone()),
+        Err(ProviderError::Store(
+            casefile_store::StoreError::StaleTargetRevision
+        ))
+    ));
+    fs::write(&log, baseline_log).expect("restore progress");
+    let transition = provider
+        .preview_progress(operation.clone())
+        .expect("fresh transition preview");
     assert!(
         !provider
             .apply_progress(transition.clone())
@@ -735,6 +761,15 @@ fn default_board_is_named_exact_preview_with_preflight_collision_and_byte_preser
         Err(ProviderError::PreviewIntegrity)
     ));
     assert!(!board.exists());
+    fs::create_dir_all(board.parent().expect("board parent")).expect("board parent");
+    fs::write(&board, &preview.rendered_bytes).expect("board appeared after preview");
+    assert!(matches!(
+        provider.apply_default_delivery_board(preview.clone()),
+        Err(ProviderError::Store(
+            casefile_store::StoreError::StaleTargetRevision
+        ))
+    ));
+    fs::remove_file(&board).expect("remove stale board");
     provider
         .apply_default_delivery_board(preview)
         .expect("board apply");

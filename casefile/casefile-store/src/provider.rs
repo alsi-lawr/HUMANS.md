@@ -480,14 +480,16 @@ impl<C: ProviderCache> Provider<C> {
             ),
         )?;
         let result = if preview.no_op {
-            let current = self.store.preview(preview.canonical.request.clone())?;
-            if current != preview.canonical {
+            let current = self.store.scan()?;
+            let path = preview.canonical.request.path();
+            let revision = entry_revision(&current, path);
+            if revision.as_ref() != preview.canonical.expected_target_revision.as_ref() {
                 return Err(StoreError::StaleTargetRevision.into());
             }
             ApplyResult {
-                path: current.request.path().into(),
-                resulting_target_revision: current.expected_target_revision,
-                resulting_store_revision: self.store.scan()?.snapshot.revision,
+                path: path.into(),
+                resulting_target_revision: revision,
+                resulting_store_revision: current.snapshot.revision,
                 diff: String::new(),
             }
         } else {
@@ -544,20 +546,21 @@ impl<C: ProviderCache> Provider<C> {
             ),
         )?;
         let result = if preview.no_op {
-            let current = self
-                .store
-                .preview_batch(preview.canonical.requests.clone())?;
-            if current != preview.canonical {
-                return Err(StoreError::StaleTargetRevision.into());
+            let current = self.store.scan()?;
+            for (path, expected) in &preview.canonical.expected_target_revisions {
+                if entry_revision(&current, path).as_ref() != expected.as_ref() {
+                    return Err(StoreError::StaleTargetRevision.into());
+                }
             }
             ChangeBatchApplyResult {
-                paths: current
+                paths: preview
+                    .canonical
                     .requests
                     .iter()
                     .map(|request| request.path().to_owned())
                     .collect(),
-                resulting_target_revisions: current.expected_target_revisions,
-                resulting_store_revision: self.store.scan()?.snapshot.revision,
+                resulting_target_revisions: preview.canonical.expected_target_revisions,
+                resulting_store_revision: current.snapshot.revision,
                 diff: String::new(),
             }
         } else {
@@ -726,14 +729,16 @@ impl<C: ProviderCache> Provider<C> {
             .into());
         }
         let result = if preview.no_op {
-            let current = self.store.preview(preview.canonical.request.clone())?;
-            if current != preview.canonical {
+            let current = self.store.scan()?;
+            let path = preview.canonical.request.path();
+            let revision = entry_revision(&current, path);
+            if revision.as_ref() != preview.canonical.expected_target_revision.as_ref() {
                 return Err(StoreError::StaleTargetRevision.into());
             }
             ApplyResult {
-                path: current.request.path().into(),
-                resulting_target_revision: current.expected_target_revision,
-                resulting_store_revision: self.store.scan()?.snapshot.revision,
+                path: path.into(),
+                resulting_target_revision: revision,
+                resulting_store_revision: current.snapshot.revision,
                 diff: String::new(),
             }
         } else {
@@ -1087,4 +1092,12 @@ fn default_board(id: String) -> BoardDraft {
         })
         .collect(),
     }
+}
+
+fn entry_revision(scan: &ScanResult, path: &str) -> Option<Revision> {
+    scan.snapshot
+        .entries
+        .iter()
+        .find(|entry| entry.path == path)
+        .map(|entry| entry.content_revision.clone())
 }

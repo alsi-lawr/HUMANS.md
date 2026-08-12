@@ -12,6 +12,7 @@ use crate::{
         DerivedBoard, DerivedRelationship, DerivedTicketProgress, derive_presentation_snapshot,
     },
     layout::{kind_for_path, normalize_planning_relative},
+    revision::{metadata_revision, open_file_revision, store_revision},
     scanning::{ScanResult, binding_diagnostics, classify, is_store_path_excluded},
     store::StoreError,
     validation::cross_validate,
@@ -21,7 +22,6 @@ use casefile_core::{
     stable,
 };
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs::{self, File},
@@ -116,6 +116,7 @@ pub struct PresentationFileMetadata {
     pub length: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub modified_unix_nanos: Option<u128>,
+    pub revision: Revision,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -149,8 +150,6 @@ pub struct PresentationContentHandle {
     session: u64,
     id: u64,
     path: String,
-    #[serde(skip)]
-    freshness: u128,
 }
 
 impl PresentationContentHandle {
@@ -177,6 +176,15 @@ pub struct PresentationEntry {
     pub relationships: PresentationFact<Vec<DerivedRelationship>>,
     pub boards: PresentationFact<Vec<DerivedBoard>>,
     pub body: PresentationFact<Vec<u8>>,
+}
+
+pub fn presentation_revision(entries: &[PresentationEntry]) -> Revision {
+    store_revision(
+        entries
+            .iter()
+            .map(|entry| (entry.path.as_str(), &entry.metadata.revision)),
+        true,
+    )
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -553,7 +561,6 @@ impl PresentationSession {
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct ReaderMetadata {
     public: PresentationFileMetadata,
-    freshness: u128,
 }
 
 #[derive(Clone)]
@@ -695,13 +702,14 @@ impl PresentationReader for FsPresentationReader {
             .and_then(|value| value.duration_since(UNIX_EPOCH).ok())
             .map(|value| value.as_nanos());
         let length = metadata.len();
+        let revision = metadata_revision(&target, &metadata)?;
         Ok(ReaderMetadata {
             public: PresentationFileMetadata {
                 kind,
                 length,
                 modified_unix_nanos,
+                revision,
             },
-            freshness: path_metadata_freshness(&target, &metadata, modified_unix_nanos)?,
         })
     }
 
@@ -714,16 +722,14 @@ impl PresentationReader for FsPresentationReader {
                 "presentation content must remain a regular non-symlink file".into(),
             ));
         }
-        let mut file = File::open(target)?;
+        let mut file = File::open(&target)?;
         let opened_metadata = file.metadata()?;
         if !opened_metadata.is_file() {
             return Err(StoreError::Invalid(
                 "presentation content must remain a regular file".into(),
             ));
         }
-        if open_file_freshness(&file, &opened_metadata)?
-            != path_metadata_freshness(&self.target(relative)?, &metadata, None)?
-        {
+        if open_file_revision(&file, &opened_metadata)? != metadata_revision(&target, &metadata)? {
             return Err(StoreError::Invalid(
                 "presentation content changed before its file handle was opened".into(),
             ));
@@ -1116,7 +1122,6 @@ fn collect_descriptors(
                 session: inner.session_id,
                 id: inner.next_handle.fetch_add(1, Ordering::Relaxed),
                 path: path.clone(),
-                freshness: metadata.freshness,
             });
             descriptors.push(Descriptor {
                 scope: presentation_scope(&path, active),
@@ -1138,7 +1143,7 @@ fn initial_loaded_state(
     descriptors: &[Descriptor],
 ) -> LoadedState {
     let mut diagnostics = Vec::new();
-    let entries = descriptors
+    let entries: Vec<EntrySnapshot> = descriptors
         .iter()
         .filter_map(|descriptor| {
             if descriptor.metadata.public.kind == PresentationFileKind::Symlink {
@@ -1152,7 +1157,7 @@ fn initial_loaded_state(
                     classification: Classification::Invalid,
                     kind: descriptor.kind,
                     identity: None,
-                    content_revision: digest(&[]),
+                    content_revision: descriptor.metadata.public.revision.clone(),
                     summary: None,
                     original_bytes: Vec::new(),
                 });
@@ -1166,7 +1171,7 @@ fn initial_loaded_state(
                 },
                 kind: None,
                 identity: None,
-                content_revision: digest(&[]),
+                content_revision: descriptor.metadata.public.revision.clone(),
                 summary: None,
                 original_bytes: Vec::new(),
             })
@@ -1179,7 +1184,12 @@ fn initial_loaded_state(
             activation: ActivationState::Active,
             investigation_roots: investigation_roots(active),
             snapshot: CasefileSnapshot {
-                revision: digest(b"partial presentation projection"),
+                revision: store_revision(
+                    entries
+                        .iter()
+                        .map(|entry| (entry.path.as_str(), &entry.content_revision)),
+                    true,
+                ),
                 entries,
             },
             diagnostics: stable(diagnostics),
@@ -1235,7 +1245,7 @@ fn load_ticket_entries(
             classification,
             kind,
             identity,
-            content_revision: digest(&bytes),
+            content_revision: descriptor.metadata.public.revision.clone(),
             summary,
             original_bytes: bytes,
         };
@@ -1308,7 +1318,7 @@ fn load_entries(
                 classification: Classification::Invalid,
                 kind: descriptor.kind,
                 identity: None,
-                content_revision: digest(&[]),
+                content_revision: descriptor.metadata.public.revision.clone(),
                 summary: None,
                 original_bytes: Vec::new(),
             });
@@ -1328,7 +1338,7 @@ fn load_entries(
                 },
                 kind: None,
                 identity: None,
-                content_revision: digest(&[]),
+                content_revision: descriptor.metadata.public.revision.clone(),
                 summary: None,
                 original_bytes: Vec::new(),
             });
@@ -1343,18 +1353,24 @@ fn load_entries(
             classification,
             kind,
             identity,
-            content_revision: digest(&bytes),
+            content_revision: descriptor.metadata.public.revision.clone(),
             summary,
             original_bytes: bytes,
         });
     }
     local_diagnostics.extend(cross_validate(&snapshots, active));
     local_diagnostics.extend(binding_diagnostics(&snapshots));
+    let revision = store_revision(
+        snapshots
+            .iter()
+            .map(|entry| (entry.path.as_str(), &entry.content_revision)),
+        true,
+    );
     let scan = ScanResult {
         activation: ActivationState::Active,
         investigation_roots: investigation_roots(active),
         snapshot: CasefileSnapshot {
-            revision: digest(b"presentation projection"),
+            revision,
             entries: snapshots,
         },
         diagnostics: stable(local_diagnostics),
@@ -1615,7 +1631,7 @@ fn fetch_entry(
             classification,
             kind,
             identity,
-            content_revision: digest(&bytes),
+            content_revision: descriptor.metadata.public.revision.clone(),
             summary,
             original_bytes: bytes,
         };
@@ -1644,7 +1660,7 @@ fn fetch_entry(
         .find(|entry| entry.path == descriptor.path)
     {
         entry.original_bytes = bytes;
-        entry.content_revision = digest(&entry.original_bytes);
+        entry.content_revision = descriptor.metadata.public.revision.clone();
     }
     let derived = derive_presentation_snapshot(&loaded.scan);
     let indexes = PresentationIndexes::new(&loaded.scan, &derived);
@@ -1691,7 +1707,6 @@ fn register_handles(
             path: entry.path.clone(),
             metadata: ReaderMetadata {
                 public: entry.metadata.clone(),
-                freshness: handle.freshness,
             },
             scope: entry.scope.clone(),
             kind: entry.kind,
@@ -1823,103 +1838,6 @@ fn available_if<T>(available: bool, value: T) -> PresentationFact<T> {
     } else {
         PresentationFact::Unavailable
     }
-}
-
-fn digest(bytes: &[u8]) -> Revision {
-    let mut hasher = Sha256::new();
-    hasher.update(bytes);
-    Revision(format!("sha256:{}", hex(&hasher.finalize())))
-}
-
-fn hex(bytes: &[u8]) -> String {
-    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
-}
-
-fn path_metadata_freshness(
-    path: &Path,
-    metadata: &fs::Metadata,
-    modified: Option<u128>,
-) -> Result<u128, StoreError> {
-    #[cfg(windows)]
-    {
-        if metadata.is_file() {
-            let file = File::open(path)?;
-            return open_file_freshness(&file, metadata);
-        }
-        Ok(modified.unwrap_or_default() ^ u128::from(metadata.len()))
-    }
-    #[cfg(not(windows))]
-    {
-        let _ = path;
-        Ok(metadata_freshness(metadata, modified))
-    }
-}
-
-fn open_file_freshness(file: &File, _metadata: &fs::Metadata) -> Result<u128, StoreError> {
-    #[cfg(windows)]
-    {
-        windows_file_freshness(file)
-    }
-    #[cfg(not(windows))]
-    {
-        let _ = file;
-        Ok(metadata_freshness(_metadata, None))
-    }
-}
-
-#[cfg(not(windows))]
-fn metadata_freshness(metadata: &fs::Metadata, _modified: Option<u128>) -> u128 {
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::MetadataExt;
-        let mut hasher = Sha256::new();
-        hasher.update(metadata.dev().to_le_bytes());
-        hasher.update(metadata.ino().to_le_bytes());
-        hasher.update(metadata.len().to_le_bytes());
-        hasher.update(metadata.mtime().to_le_bytes());
-        hasher.update(metadata.mtime_nsec().to_le_bytes());
-        hasher.update(metadata.ctime().to_le_bytes());
-        hasher.update(metadata.ctime_nsec().to_le_bytes());
-        u128::from_le_bytes(hasher.finalize()[..16].try_into().expect("digest width"))
-    }
-    #[cfg(not(unix))]
-    {
-        _modified.unwrap_or_default() ^ u128::from(metadata.len())
-    }
-}
-
-#[cfg(windows)]
-fn windows_file_freshness(file: &File) -> Result<u128, StoreError> {
-    use std::os::windows::io::AsRawHandle;
-    use windows_sys::Win32::{
-        Foundation::HANDLE,
-        Storage::FileSystem::{BY_HANDLE_FILE_INFORMATION, GetFileInformationByHandle},
-    };
-
-    let mut information = BY_HANDLE_FILE_INFORMATION::default();
-    // SAFETY: `file` owns a live file handle and `information` is writable for the call duration.
-    let succeeded = unsafe {
-        GetFileInformationByHandle(
-            file.as_raw_handle() as HANDLE,
-            std::ptr::addr_of_mut!(information),
-        )
-    };
-    if succeeded == 0 {
-        return Err(io::Error::last_os_error().into());
-    }
-    let mut hasher = Sha256::new();
-    hasher.update(information.dwVolumeSerialNumber.to_le_bytes());
-    hasher.update(information.nFileIndexHigh.to_le_bytes());
-    hasher.update(information.nFileIndexLow.to_le_bytes());
-    hasher.update(information.nFileSizeHigh.to_le_bytes());
-    hasher.update(information.nFileSizeLow.to_le_bytes());
-    hasher.update(information.ftCreationTime.dwHighDateTime.to_le_bytes());
-    hasher.update(information.ftCreationTime.dwLowDateTime.to_le_bytes());
-    hasher.update(information.ftLastWriteTime.dwHighDateTime.to_le_bytes());
-    hasher.update(information.ftLastWriteTime.dwLowDateTime.to_le_bytes());
-    Ok(u128::from_le_bytes(
-        hasher.finalize()[..16].try_into().expect("digest width"),
-    ))
 }
 
 fn send_entry_batches(
@@ -2269,8 +2187,8 @@ mod tests {
                     kind,
                     length,
                     modified_unix_nanos: Some(version),
+                    revision: Revision(format!("fake-fsmeta-v1:{version}")),
                 },
-                freshness: version,
             })
         }
 
@@ -3120,6 +3038,7 @@ mod tests {
                 .unwrap_or_else(|| panic!("missing presentation entry {}", expected.path));
             assert_eq!(actual.path, expected.path);
             assert_eq!(actual.kind, expected.kind);
+            assert_eq!(actual.metadata.revision, expected.content_revision);
             let expected_scope =
                 canonical
                     .scope_for_path(&expected.path)
@@ -3356,6 +3275,7 @@ mod tests {
                 kind: PresentationFileKind::Regular,
                 length: 1,
                 modified_unix_nanos: None,
+                revision: Revision("fake-fsmeta-v1:dummy".into()),
             },
             content_handle: None,
             classification: PresentationFact::Available(Classification::Raw),

@@ -1,8 +1,9 @@
 use crate::{
     activation::{
-        Activation, ActivationState, activation, activation_entry, investigation_identity,
+        Activation, ActivationState, activation_content, activation_entry, investigation_identity,
     },
     layout::kind_for_path,
+    revision::{metadata_revision, open_file_revision, store_revision, synthetic_revision},
     store::StoreError,
     validation::cross_validate,
 };
@@ -13,12 +14,12 @@ use casefile_core::{
     parse_strategy_transition, stable,
 };
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::BTreeMap,
     ffi::OsStr,
-    fs,
-    path::{Component, Path},
+    fs::{self, File},
+    io::Read,
+    path::{Component, Path, PathBuf},
 };
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -63,29 +64,55 @@ pub(super) fn scan(
     root: &Path,
     overlay: &BTreeMap<String, Option<Vec<u8>>>,
 ) -> Result<ScanResult, StoreError> {
-    let (activation, active, mut diagnostics) = activation(root)?;
-    let mut files = BTreeMap::new();
-    let mut unsafe_paths = BTreeSet::new();
-    collect(root, root, &mut files, &mut unsafe_paths)?;
+    let inventory = metadata_inventory(root)?;
+    let mut files = inventory
+        .entries
+        .iter()
+        .map(|(path, entry)| {
+            let bytes = if entry.kind == InventoryKind::Regular {
+                read_inventory_entry(entry)?
+            } else {
+                Vec::new()
+            };
+            Ok((
+                path.clone(),
+                CollectedFile {
+                    bytes,
+                    revision: entry.revision.clone(),
+                    unsafe_path: entry.kind != InventoryKind::Regular,
+                },
+            ))
+        })
+        .collect::<Result<BTreeMap<_, _>, StoreError>>()?;
     for (path, bytes) in overlay {
         if is_store_path_excluded(Path::new(path)) {
             continue;
         }
         match bytes {
             Some(bytes) => {
-                files.insert(path.clone(), bytes.clone());
+                files.insert(
+                    path.clone(),
+                    CollectedFile {
+                        bytes: bytes.clone(),
+                        revision: synthetic_revision(path, true),
+                        unsafe_path: false,
+                    },
+                );
             }
             None => {
                 files.remove(path);
             }
         }
     }
+    let (activation, active, mut diagnostics) =
+        activation_content(files.get("casefile.toml").map(|file| file.bytes.as_slice()));
     let mut entries = Vec::new();
-    for (path, bytes) in files {
+    for (path, file) in files {
+        let bytes = file.bytes;
         let (classification, kind, identity, summary, mut found) =
             if activation == ActivationState::Unactivated {
                 (Classification::Ungoverned, None, None, None, Vec::new())
-            } else if unsafe_paths.contains(&path) {
+            } else if file.unsafe_path {
                 invalid(
                     &path,
                     kind_for_path(&path, &active),
@@ -101,7 +128,7 @@ pub(super) fn scan(
             classification,
             kind,
             identity,
-            content_revision: digest(&bytes),
+            content_revision: file.revision,
             summary,
             original_bytes: bytes,
         });
@@ -109,13 +136,22 @@ pub(super) fn scan(
     diagnostics.extend(cross_validate(&entries, &active));
     diagnostics.extend(binding_diagnostics(&entries));
     entries.sort_by(|a, b| a.path.cmp(&b.path));
-    let mut input = Vec::new();
-    for entry in &entries {
-        input.extend_from_slice(entry.path.as_bytes());
-        input.push(0);
-        input.extend_from_slice(entry.content_revision.0.as_bytes());
-        input.push(0);
+    let verified_inventory = metadata_inventory(root)?;
+    if verified_inventory.revision != inventory.revision {
+        return Err(StoreError::Invalid(
+            "Store contents changed while they were scanned".into(),
+        ));
     }
+    let revision = if overlay.is_empty() {
+        inventory.revision
+    } else {
+        store_revision(
+            entries
+                .iter()
+                .map(|entry| (entry.path.as_str(), &entry.content_revision)),
+            true,
+        )
+    };
     Ok(ScanResult {
         activation,
         investigation_roots: active
@@ -132,19 +168,51 @@ pub(super) fn scan(
                 )
             })
             .collect(),
-        snapshot: CasefileSnapshot {
-            revision: digest(&input),
-            entries,
-        },
+        snapshot: CasefileSnapshot { revision, entries },
         diagnostics: stable(diagnostics),
     })
 }
 
-fn collect(
+struct CollectedFile {
+    bytes: Vec<u8>,
+    revision: Revision,
+    unsafe_path: bool,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum InventoryKind {
+    Regular,
+    Symlink,
+    Other,
+}
+
+pub(super) struct InventoryEntry {
+    pub(super) path: PathBuf,
+    pub(super) kind: InventoryKind,
+    pub(super) revision: Revision,
+}
+
+pub(super) struct MetadataInventory {
+    pub(super) entries: BTreeMap<String, InventoryEntry>,
+    pub(super) revision: Revision,
+}
+
+pub(super) fn metadata_inventory(root: &Path) -> Result<MetadataInventory, StoreError> {
+    let mut entries = BTreeMap::new();
+    collect_inventory(root, root, &mut entries)?;
+    let revision = store_revision(
+        entries
+            .iter()
+            .map(|(path, entry)| (path.as_str(), &entry.revision)),
+        false,
+    );
+    Ok(MetadataInventory { entries, revision })
+}
+
+fn collect_inventory(
     root: &Path,
     directory: &Path,
-    files: &mut BTreeMap<String, Vec<u8>>,
-    unsafe_paths: &mut BTreeSet<String>,
+    entries: &mut BTreeMap<String, InventoryEntry>,
 ) -> Result<(), StoreError> {
     for entry in fs::read_dir(directory)? {
         let entry = entry?;
@@ -154,18 +222,68 @@ fn collect(
             continue;
         }
         let metadata = fs::symlink_metadata(&path)?;
+        let revision = metadata_revision(&path, &metadata)?;
         if metadata.file_type().is_symlink() {
-            files.insert(relative.clone(), Vec::new());
-            unsafe_paths.insert(relative);
+            entries.insert(
+                relative,
+                InventoryEntry {
+                    path,
+                    kind: InventoryKind::Symlink,
+                    revision,
+                },
+            );
             continue;
         }
         if metadata.is_dir() {
-            collect(root, &path, files, unsafe_paths)?;
+            collect_inventory(root, &path, entries)?;
         } else if metadata.is_file() {
-            files.insert(relative, fs::read(path)?);
+            entries.insert(
+                relative,
+                InventoryEntry {
+                    path,
+                    kind: InventoryKind::Regular,
+                    revision,
+                },
+            );
+        } else {
+            entries.insert(
+                relative,
+                InventoryEntry {
+                    path,
+                    kind: InventoryKind::Other,
+                    revision,
+                },
+            );
         }
     }
     Ok(())
+}
+
+fn read_inventory_entry(entry: &InventoryEntry) -> Result<Vec<u8>, StoreError> {
+    let mut file = File::open(&entry.path)?;
+    let opened_metadata = file.metadata()?;
+    if !opened_metadata.is_file() {
+        return Err(StoreError::Invalid(
+            "Store content changed before it was opened".into(),
+        ));
+    }
+    let opened_revision = open_file_revision(&file, &opened_metadata)?;
+    if opened_revision != entry.revision {
+        return Err(StoreError::Invalid(
+            "Store content changed before it was read".into(),
+        ));
+    }
+    let mut bytes = Vec::new();
+    file.read_to_end(&mut bytes)?;
+    let after_open_revision = open_file_revision(&file, &file.metadata()?)?;
+    let after_path_metadata = fs::symlink_metadata(&entry.path)?;
+    let after_path_revision = metadata_revision(&entry.path, &after_path_metadata)?;
+    if opened_revision != after_open_revision || opened_revision != after_path_revision {
+        return Err(StoreError::Invalid(
+            "Store content changed while it was read".into(),
+        ));
+    }
+    Ok(bytes)
 }
 
 pub(super) fn classify(
@@ -376,16 +494,6 @@ fn relative(root: &Path, path: &Path) -> Result<String, StoreError> {
                 .collect::<Vec<_>>()
                 .join("/")
         })
-}
-
-fn digest(bytes: &[u8]) -> Revision {
-    let mut hasher = Sha256::new();
-    hasher.update(bytes);
-    Revision(format!("sha256:{}", hex(&hasher.finalize())))
-}
-
-fn hex(bytes: &[u8]) -> String {
-    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
 pub(super) fn binding_diagnostics(entries: &[EntrySnapshot]) -> Vec<Diagnostic> {

@@ -88,6 +88,14 @@ diagnostics and governed-write protections remain in force everywhere outside th
 trees. Presentation loaders and filesystem watchers must use the Store's exported
 `is_store_path_excluded` predicate rather than define another revision boundary.
 
+Entry and Store revisions are opaque, versioned aggregates of filesystem metadata rather than file
+content hashes. The contention stamp covers file type, native filesystem identity, length, and
+modification/change timestamps; preview/apply uses that stamp as its sole stale-target authority.
+Ordinary edits, replacements, type changes, creation, and removal are detected. A same-identity,
+same-size edit that deliberately preserves every timestamp may evade detection by design. Body
+reads remain available for parsing, diffs, semantic no-ops, rollback, and explicit provenance, but
+not for stronger stale admission. Overlay revisions are synthetic and non-authoritative.
+
 `Store::presentation_session` is a separate, bounded catalogue-first read model. Its generations,
 scope coverage, progress, entry batches, lazy content handles, and per-fact availability are
 presentation state only: they expose no canonical Store revision and never authorize Provider or
@@ -113,7 +121,8 @@ format metadata, JSON or TOML layout, line endings, whitespace, and unrelated ex
 invalidate a landed destination. Rooted, drive-qualified, UNC/device, dot, traversal, escaping,
 missing, empty, non-regular, and wrong-destination artifacts still fail closed before mutation. This
 deliberately gives up exact artifact authenticity and exact rollback integrity. Provider
-preview/apply authorization, retained-preview integrity, and stale-target admission remain exact.
+preview/apply authorization and retained-preview integrity remain exact; stale-target admission
+follows the filesystem-metadata policy above.
 
 At the 0.4.0 candidate boundary, Codex 0.145.0 and Claude Code 2.1.217 expose no direct marketplace
 OS/architecture selector. Both packages therefore carry all six binaries. Claude npm indirection was

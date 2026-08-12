@@ -9,6 +9,7 @@ mod layout;
 mod presentation;
 mod progress;
 mod provider;
+mod revision;
 mod scanning;
 mod store;
 mod validation;
@@ -35,6 +36,7 @@ pub use presentation::{
     PresentationFact, PresentationFileKind, PresentationFileMetadata, PresentationInvestigation,
     PresentationLoadRequest, PresentationProgress, PresentationProject, PresentationScope,
     PresentationSession, PresentationStream, PresentationSummary, PresentationTarget,
+    presentation_revision,
 };
 pub use progress::{ProgressApplyResult, ProgressChangeRequest, ProgressPreview};
 pub use provider::{

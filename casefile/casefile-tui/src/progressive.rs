@@ -8,10 +8,10 @@ use casefile_store::{
     PresentationCoverage, PresentationEntry, PresentationEvent, PresentationFact,
     PresentationLoadRequest, PresentationProgress, PresentationSession, PresentationStream,
     PresentationTarget, RecordScope, ScanResult, ScopedIdentity, StoreError, StrategyBindingState,
+    presentation_revision,
 };
 use std::{
-    collections::{BTreeMap, hash_map::DefaultHasher},
-    hash::{Hash, Hasher},
+    collections::BTreeMap,
     sync::mpsc::{Receiver, Sender, TryRecvError},
 };
 
@@ -675,13 +675,7 @@ fn build_projection(
     });
     diagnostics.dedup();
     let snapshots = entries.iter().map(snapshot_entry).collect::<Vec<_>>();
-    let mut hasher = DefaultHasher::new();
-    format!("{activation:?}").hash(&mut hasher);
-    for entry in &snapshots {
-        entry.path.hash(&mut hasher);
-        entry.content_revision.0.hash(&mut hasher);
-    }
-    let revision = Revision(format!("presentation:{:016x}", hasher.finish()));
+    let revision = presentation_revision(&entries);
     let scan = ScanResult {
         activation,
         investigation_roots,
@@ -740,7 +734,7 @@ fn snapshot_entry(entry: &PresentationEntry) -> EntrySnapshot {
             PresentationFact::Available(value) => value.clone(),
             PresentationFact::Unavailable => None,
         },
-        content_revision: presentation_content_revision(entry),
+        content_revision: entry.metadata.revision.clone(),
         summary: match &entry.summary {
             PresentationFact::Available(Some(summary)) => Some(summary.record.clone()),
             PresentationFact::Available(None) | PresentationFact::Unavailable => None,
@@ -750,22 +744,6 @@ fn snapshot_entry(entry: &PresentationEntry) -> EntrySnapshot {
             PresentationFact::Unavailable => Vec::new(),
         },
     }
-}
-
-fn presentation_content_revision(entry: &PresentationEntry) -> Revision {
-    let mut hasher = DefaultHasher::new();
-    match &entry.body {
-        PresentationFact::Available(bytes) => {
-            true.hash(&mut hasher);
-            bytes.hash(&mut hasher);
-        }
-        PresentationFact::Unavailable => {
-            false.hash(&mut hasher);
-            entry.metadata.length.hash(&mut hasher);
-            entry.metadata.modified_unix_nanos.hash(&mut hasher);
-        }
-    }
-    Revision(format!("presentation-content:{:016x}", hasher.finish()))
 }
 
 fn presentation_derived(
