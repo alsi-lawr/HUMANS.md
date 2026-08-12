@@ -2,7 +2,7 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     fs,
     io::Write,
-    path::{Path, PathBuf},
+    path::Path,
 };
 
 use casefile_core::{
@@ -16,7 +16,7 @@ use crate::{
     activation::{ActivationState, activation},
     layout::checked_path,
     scanning::scan,
-    store::StoreError,
+    store::{StoreError, require_safe_target_parent},
 };
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -560,24 +560,23 @@ fn atomic_write(root: &Path, relative: &str, bytes: &[u8]) -> Result<(), StoreEr
     let parent = target
         .parent()
         .ok_or_else(|| StoreError::Invalid("progress target has no parent".into()))?;
-    let mut current = PathBuf::new();
-    for component in parent.components() {
-        current.push(component);
-        if let Ok(metadata) = fs::symlink_metadata(&current)
-            && metadata.file_type().is_symlink()
-        {
+    require_safe_target_parent(
+        root,
+        Path::new(relative)
+            .parent()
+            .unwrap_or_else(|| Path::new("")),
+        "progress target",
+    )?;
+    fs::create_dir_all(parent)?;
+    match fs::symlink_metadata(&target) {
+        Ok(metadata) if !metadata.file_type().is_file() || metadata.file_type().is_symlink() => {
             return Err(StoreError::Invalid(
-                "progress target path must not contain a symlink".into(),
+                "progress target must be a regular non-symlink file".into(),
             ));
         }
-    }
-    fs::create_dir_all(parent)?;
-    if let Ok(metadata) = fs::symlink_metadata(&target)
-        && (!metadata.file_type().is_file() || metadata.file_type().is_symlink())
-    {
-        return Err(StoreError::Invalid(
-            "progress target must be a regular non-symlink file".into(),
-        ));
+        Ok(_) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => return Err(error.into()),
     }
     let mut temporary = NamedTempFile::new_in(parent)?;
     temporary.write_all(bytes)?;

@@ -2,7 +2,7 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     fs,
     io::Write,
-    path::{Path, PathBuf},
+    path::Path,
 };
 
 use casefile_core::{
@@ -20,7 +20,7 @@ use crate::{
     derived::{StrategyBindingState, derive_snapshot},
     layout::{checked_path, kind_for_path},
     scanning::{ScanResult, scan},
-    store::StoreError,
+    store::{StoreError, require_safe_target_parent},
     writing::{ensure_worktree, git_diff, introduced_diagnostics},
 };
 
@@ -996,20 +996,13 @@ fn atomic_write(root: &Path, relative: &str, bytes: &[u8]) -> Result<(), StoreEr
 
 fn require_regular_target(root: &Path, relative: &str, required: bool) -> Result<(), StoreError> {
     let target = root.join(relative);
-    let mut current = PathBuf::new();
-    for component in target.components() {
-        current.push(component);
-        match fs::symlink_metadata(&current) {
-            Ok(metadata) if metadata.file_type().is_symlink() => {
-                return Err(StoreError::Invalid(
-                    "governed target path must not contain a symlink".into(),
-                ));
-            }
-            Ok(_) => {}
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => break,
-            Err(error) => return Err(error.into()),
-        }
-    }
+    require_safe_target_parent(
+        root,
+        Path::new(relative)
+            .parent()
+            .unwrap_or_else(|| Path::new("")),
+        "governed target",
+    )?;
     match fs::symlink_metadata(&target) {
         Ok(metadata) if metadata.file_type().is_file() && !metadata.file_type().is_symlink() => {
             Ok(())

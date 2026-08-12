@@ -62,6 +62,26 @@ fn copy_tree(from: &Path, to: &Path) {
     }
 }
 
+fn link_directory(target: &Path, link: &Path) {
+    #[cfg(unix)]
+    {
+        std::os::unix::fs::symlink(target, link).expect("directory symlink");
+    }
+    #[cfg(windows)]
+    {
+        assert!(
+            Command::new("cmd")
+                .args(["/C", "mklink", "/J"])
+                .arg(link)
+                .arg(target)
+                .status()
+                .expect("directory junction")
+                .success(),
+            "directory junction creation failed"
+        );
+    }
+}
+
 fn matrix_path(name: &str) -> std::path::PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../adapters/codex/matrices")
@@ -791,6 +811,70 @@ fn binding_accepts_unrelated_changes_and_refuses_invalid_schema_and_symlink_targ
                 .is_err()
         );
         assert_eq!(fs::read_to_string(external).expect("preserved"), "external");
+    }
+}
+
+#[test]
+fn governed_and_progress_writes_allow_a_symlinked_ancestor_above_the_store_root() {
+    let actual = fixture();
+    write_progress(actual.path(), None);
+    let aliases = TempDir::new().expect("alias root");
+    let actual_parent = actual.path().parent().expect("actual parent");
+    let ancestor_link = aliases.path().join("linked-external-ancestor");
+    link_directory(actual_parent, &ancestor_link);
+    let linked_root = ancestor_link.join(actual.path().file_name().expect("Store directory name"));
+
+    let store = Store::open(&linked_root).expect("real Store below linked ancestor");
+    let binding = store
+        .preview_writer_binding(WriterBindingRequest {
+            investigation: INVESTIGATION.into(),
+            binding_source: BINDING.into(),
+        })
+        .expect("binding preview below linked ancestor");
+    store
+        .apply_writer_binding(binding)
+        .expect("binding apply below linked ancestor");
+
+    let progress = store
+        .preview_progress(ProgressChangeRequest {
+            investigation: INVESTIGATION.into(),
+            entries: vec![ProgressEntry::Transition {
+                id: "linked-ancestor-start".into(),
+                recorded_at: "2026-07-27T12:10:00Z".into(),
+                recorded_by: "root".into(),
+                ticket_id: "HMD-011".into(),
+                from: ProgressStatus::Unknown,
+                to: ProgressStatus::InProgress,
+            }],
+            replacement: None,
+            replacement_source: None,
+            bootstrap: false,
+        })
+        .expect("progress preview below linked ancestor");
+    store
+        .apply_progress(progress)
+        .expect("progress apply below linked ancestor");
+
+    assert!(
+        linked_root
+            .join(INVESTIGATION)
+            .join("strategy/bindings.toml")
+            .is_file()
+    );
+    assert!(
+        fs::read_to_string(linked_root.join(INVESTIGATION).join("progress/log.toml"))
+            .expect("progress log")
+            .contains("linked-ancestor-start")
+    );
+
+    #[cfg(unix)]
+    {
+        let root_link = aliases.path().join("Store-root-link");
+        std::os::unix::fs::symlink(actual.path(), &root_link).expect("Store root symlink");
+        assert!(
+            Store::open(root_link).is_err(),
+            "Store root symlink accepted"
+        );
     }
 }
 

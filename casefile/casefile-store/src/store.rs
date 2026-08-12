@@ -16,7 +16,7 @@ use casefile_core::{
 use std::{
     collections::BTreeMap,
     fs,
-    path::{Path, PathBuf},
+    path::{Component, Path, PathBuf},
 };
 use thiserror::Error;
 
@@ -28,6 +28,55 @@ pub enum StoreError {
     Invalid(String),
     #[error("stale target revision")]
     StaleTargetRevision,
+}
+
+pub(super) fn require_safe_target_parent(
+    root: &Path,
+    relative_parent: &Path,
+    target_name: &str,
+) -> Result<(), StoreError> {
+    let mut current = root.to_path_buf();
+    match fs::symlink_metadata(&current) {
+        Ok(metadata) if metadata.file_type().is_symlink() => {
+            return Err(StoreError::Invalid(format!(
+                "{target_name} path must not contain a symlink"
+            )));
+        }
+        Ok(metadata) if !metadata.file_type().is_dir() => {
+            return Err(StoreError::Invalid(
+                "configured Store root must be a non-symlink directory".into(),
+            ));
+        }
+        Ok(_) => {}
+        Err(error) => return Err(error.into()),
+    }
+    for component in relative_parent.components() {
+        match component {
+            Component::CurDir => continue,
+            Component::Normal(component) => current.push(component),
+            Component::ParentDir | Component::RootDir | Component::Prefix(_) => {
+                return Err(StoreError::Invalid(format!(
+                    "{target_name} path must remain inside the configured Store root"
+                )));
+            }
+        }
+        match fs::symlink_metadata(&current) {
+            Ok(metadata) if metadata.file_type().is_symlink() => {
+                return Err(StoreError::Invalid(format!(
+                    "{target_name} path must not contain a symlink"
+                )));
+            }
+            Ok(metadata) if !metadata.file_type().is_dir() => {
+                return Err(StoreError::Invalid(format!(
+                    "{target_name} parent must be a directory"
+                )));
+            }
+            Ok(_) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => break,
+            Err(error) => return Err(error.into()),
+        }
+    }
+    Ok(())
 }
 
 #[derive(Clone, Debug)]
@@ -156,5 +205,31 @@ impl Store {
 impl RevisionSource for Store {
     fn current_revision(&self) -> Result<Revision, StoreError> {
         Ok(self.scan()?.snapshot.revision)
+    }
+}
+
+#[cfg(all(test, unix))]
+mod safety_tests {
+    use super::*;
+
+    #[test]
+    fn safe_target_parent_rejects_the_root_and_in_store_descendant_symlinks() {
+        use std::os::unix::fs::symlink;
+
+        let temporary = tempfile::tempdir().expect("temporary root");
+        let root = temporary.path().join("Store");
+        let external = temporary.path().join("external");
+        fs::create_dir_all(&root).expect("Store root");
+        fs::create_dir_all(&external).expect("external directory");
+
+        let root_link = temporary.path().join("Store-link");
+        symlink(&root, &root_link).expect("root symlink");
+        assert!(require_safe_target_parent(&root_link, Path::new(""), "test target").is_err());
+
+        symlink(&external, root.join("linked-parent")).expect("descendant symlink");
+        assert!(
+            require_safe_target_parent(&root, Path::new("linked-parent/nested"), "test target")
+                .is_err()
+        );
     }
 }
