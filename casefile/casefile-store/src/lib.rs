@@ -6,6 +6,7 @@ mod derived;
 mod governance;
 mod index;
 mod layout;
+mod presentation;
 mod progress;
 mod provider;
 mod scanning;
@@ -25,6 +26,16 @@ pub use governance::{
     StrategyTransitionRequest, WriterBindingPreview, WriterBindingRequest,
 };
 pub use index::{DerivedIndex, Indexed, RevisionSource};
+pub use layout::normalize_planning_relative;
+pub use presentation::{
+    FactAvailability, PRESENTATION_BATCH_LIMIT, PRESENTATION_CHANNEL_CAPACITY, PresentationCache,
+    PresentationCatalogue, PresentationContentEvent, PresentationContentHandle,
+    PresentationContentRequest, PresentationContentSelector, PresentationContentStream,
+    PresentationCoverage, PresentationCoverageState, PresentationEntry, PresentationEvent,
+    PresentationFact, PresentationFileKind, PresentationFileMetadata, PresentationInvestigation,
+    PresentationLoadRequest, PresentationProgress, PresentationProject, PresentationScope,
+    PresentationSession, PresentationStream, PresentationSummary, PresentationTarget,
+};
 pub use progress::{ProgressApplyResult, ProgressChangeRequest, ProgressPreview};
 pub use provider::{
     CacheState, DefaultBoardApplyResult, DefaultBoardPreview, NoCache, PROVIDER_PROTOCOL_VERSION,
@@ -35,5 +46,5 @@ pub use provider::{
     ProviderRecordBatchApplyResult, ProviderSnapshot, ProviderStrategyTransitionPreview,
     ProviderWriterBindingPreview, StrategyTransitionProjection,
 };
-pub use scanning::ScanResult;
+pub use scanning::{ScanResult, is_store_path_excluded};
 pub use store::{Store, StoreError};

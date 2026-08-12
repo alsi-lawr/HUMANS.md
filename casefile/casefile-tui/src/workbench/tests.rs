@@ -7,10 +7,11 @@ use casefile_core::{
 };
 use casefile_store::{
     ActivationState, DerivedBoard, DerivedBoardColumn, DerivedCard, DerivedRecord, DerivedStrategy,
-    DerivedStrategyBinding, EffectiveWriterBinding, RecordScope, ScanResult, StrategyBindingState,
-    WriterBindingSource,
+    DerivedStrategyBinding, EffectiveWriterBinding, RecordScope, ScanResult, Store,
+    StrategyBindingState, WriterBindingSource,
 };
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, fs, path::Path, time::Duration};
+use tempfile::TempDir;
 
 const TICKET_PATH: &str = "projects/demo/investigations/sample/tickets/accepted/HMD-013.md";
 const STRATEGY_PATH: &str = "projects/demo/investigations/sample/strategy/implementation.toml";
@@ -220,7 +221,7 @@ fn rendered_and_source_tabs_keep_markdown_readable_and_exact() {
     let rendered = test_support::render(&app, 120, 40);
     assert!(rendered.contains("Rendered"));
     assert!(rendered.contains("Navigator"));
-    assert!(rendered.contains("• first line"));
+    assert!(rendered.contains("\u{2022} first line"));
     assert!(rendered.contains("Safe"));
     assert!(!rendered.contains("# Navigator"));
     assert!(!rendered.contains('\x1b'));
@@ -708,6 +709,427 @@ fn board_keyboard_selection_marks_the_card_changes_detail_and_skips_unresolved_i
     );
 }
 
+#[test]
+fn board_card_selection_survives_complete_projection_with_deletion_and_ambiguity_controls() {
+    let second_path = "projects/demo/investigations/sample/tickets/accepted/HMD-014.md";
+    let mut scan = test_support::scan();
+    scan.snapshot.entries.push(ticket_entry(
+        second_path,
+        "HMD-014",
+        "Follow-up",
+        b"follow-up",
+    ));
+    let mut derived = test_support::derived(&scan);
+    derived.boards.push(board_with_cards(
+        "Delivery",
+        vec![
+            board_card("HMD-013", "Navigator"),
+            board_card("HMD-014", "Follow-up"),
+        ],
+    ));
+    let mut app = App::new(scan.clone(), derived.clone());
+    app.handle(KeyCode::Char('6'));
+    app.handle(KeyCode::Down);
+    assert_eq!(app.browser.selected_path(), Some(second_path));
+
+    app.apply_projection(
+        UiProjection {
+            scan: scan.clone(),
+            derived: derived.clone(),
+            provisional: false,
+            unavailable: BTreeMap::new(),
+        },
+        ProjectionChange::Complete,
+    );
+    assert_eq!(app.browser.selected_path(), Some(second_path));
+    assert!(
+        test_support::render(&app, 160, 40).contains("> HMD-014  unknown  Follow-up  [selected]")
+    );
+
+    let mut deleted = test_support::derived(&scan);
+    deleted.boards.push(board_with_cards(
+        "Delivery",
+        vec![board_card("HMD-013", "Navigator")],
+    ));
+    app.apply_projection(
+        UiProjection {
+            scan: scan.clone(),
+            derived: deleted,
+            provisional: false,
+            unavailable: BTreeMap::new(),
+        },
+        ProjectionChange::Complete,
+    );
+    assert_eq!(app.browser.selected_path(), Some(TICKET_PATH));
+
+    let mut ambiguous = App::new(scan.clone(), derived.clone());
+    ambiguous.handle(KeyCode::Char('6'));
+    ambiguous.handle(KeyCode::Down);
+    let mut ambiguous_scan = scan;
+    ambiguous_scan.snapshot.entries.push(ticket_entry(
+        "projects/demo/investigations/sample/tickets/rejected/HMD-014.md",
+        "HMD-014",
+        "Duplicate",
+        b"duplicate",
+    ));
+    ambiguous.apply_projection(
+        UiProjection {
+            scan: ambiguous_scan,
+            derived,
+            provisional: false,
+            unavailable: BTreeMap::new(),
+        },
+        ProjectionChange::Complete,
+    );
+    assert!(ambiguous.browser.selected_path().is_none());
+    assert!(
+        ambiguous
+            .feedback
+            .as_deref()
+            .is_some_and(|feedback| feedback.contains("ambiguous"))
+    );
+}
+
+#[test]
+fn refresh_target_matrix_uses_project_full_investigation_and_store_fallback() {
+    let (_root, mut coordinator) = presentation_coordinator();
+    let projection = coordinator.projection();
+    let mut app = App::from_projection(projection, None);
+
+    app.handle(KeyCode::Char('1'));
+    assert_eq!(
+        app.refresh_target(&coordinator, RefreshIntent::Current),
+        PresentationTarget::Project {
+            project: "demo".into()
+        }
+    );
+    for key in ['2', '3', '4', '5', '6'] {
+        app.handle(KeyCode::Char(key));
+        assert_eq!(
+            app.refresh_target(&coordinator, RefreshIntent::Current),
+            PresentationTarget::Investigation {
+                project: "demo".into(),
+                path: "projects/demo/investigations/sample".into(),
+            },
+            "view {key}"
+        );
+    }
+    assert_eq!(
+        app.refresh_target(&coordinator, RefreshIntent::Store),
+        PresentationTarget::Store
+    );
+    assert!(coordinator.observe(crate::RefreshObservation {
+        generation: 8,
+        minimum_scope: crate::RefreshMinimumScope::Store {
+            reason: "activation changed".into(),
+        },
+    }));
+    let narrow_target = app.refresh_target(&coordinator, RefreshIntent::Current);
+    let rejected = coordinator
+        .refresh(narrow_target)
+        .expect_err("narrow refresh");
+    app.feedback = Some(rejected);
+    assert!(test_support::render(&app, 140, 32).contains("press R"));
+    let store_target = app.refresh_target(&coordinator, RefreshIntent::Store);
+    coordinator
+        .refresh(store_target)
+        .expect("Store refresh remains available");
+
+    let empty = ScanResult {
+        activation: ActivationState::Unactivated,
+        investigation_roots: BTreeMap::new(),
+        snapshot: CasefileSnapshot {
+            revision: Revision("empty".into()),
+            entries: Vec::new(),
+        },
+        diagnostics: Vec::new(),
+    };
+    let empty_projection = ui_projection(empty, false);
+    let mut empty_app = App::from_projection(empty_projection, None);
+    for key in ['1', '2', '3', '4', '5', '6'] {
+        empty_app.handle(KeyCode::Char(key));
+        assert_eq!(
+            empty_app.refresh_target(&coordinator, RefreshIntent::Current),
+            PresentationTarget::Store,
+            "empty view {key}"
+        );
+    }
+}
+
+#[test]
+fn promotion_preserves_pending_exact_and_semantic_anchors_and_handles_deletion() {
+    let mut source = multi_ticket_scan();
+    let mut app = App::new(source.clone(), test_support::derived(&source));
+    app.handle(KeyCode::Char('3'));
+    app.handle(KeyCode::Down);
+    let selected = app.browser.selected_path().expect("selected").to_owned();
+
+    let mut partial = source.clone();
+    partial
+        .snapshot
+        .entries
+        .retain(|entry| entry.path != selected);
+    app.apply_projection(ui_projection(partial, true), ProjectionChange::Partial);
+    assert_eq!(app.browser.selected_path(), Some(selected.as_str()));
+    assert!(test_support::render(&app, 140, 32).contains("Selected item is still loading"));
+
+    source.snapshot.entries.insert(
+        0,
+        ticket_entry("HMD-009.md", "HMD-009", "Inserted", b"inserted"),
+    );
+    app.apply_projection(
+        ui_projection(source.clone(), false),
+        ProjectionChange::Complete,
+    );
+    assert_eq!(app.browser.selected_path(), Some(selected.as_str()));
+
+    let moved = "projects/demo/investigations/sample/tickets/accepted/moved-HMD-014.md";
+    let entry = source
+        .snapshot
+        .entries
+        .iter_mut()
+        .find(|entry| entry.path == selected)
+        .expect("selected entry");
+    entry.path = moved.into();
+    app.apply_projection(
+        ui_projection(source.clone(), false),
+        ProjectionChange::Complete,
+    );
+    assert_eq!(app.browser.selected_path(), Some(moved));
+
+    source.snapshot.entries.push(ticket_entry(
+        "projects/demo/investigations/sample/tickets/rejected/duplicate-HMD-014.md",
+        "HMD-014",
+        "Ambiguous",
+        b"duplicate",
+    ));
+    source.snapshot.entries.push(ticket_entry(
+        "projects/demo/investigations/sample/tickets/provisional/duplicate-HMD-014.md",
+        "HMD-014",
+        "Also ambiguous",
+        b"duplicate-two",
+    ));
+    source.snapshot.entries.retain(|entry| entry.path != moved);
+    app.apply_projection(ui_projection(source, false), ProjectionChange::Complete);
+    assert!(app.browser.selected_path().is_none());
+    assert!(
+        app.feedback
+            .as_deref()
+            .is_some_and(|value| value.contains("ambiguous"))
+    );
+
+    let mut deletion = multi_ticket_scan();
+    let mut app = App::new(deletion.clone(), test_support::derived(&deletion));
+    app.handle(KeyCode::Char('3'));
+    app.handle(KeyCode::Down);
+    let deleted = app.browser.selected_path().expect("middle").to_owned();
+    let following = deletion.snapshot.entries[2].path.clone();
+    deletion
+        .snapshot
+        .entries
+        .retain(|entry| entry.path != deleted);
+    app.apply_projection(ui_projection(deletion, false), ProjectionChange::Complete);
+    assert_eq!(app.browser.selected_path(), Some(following.as_str()));
+}
+
+#[test]
+fn unchanged_filter_exact_disappearance_is_explained_and_resume_is_round_tripped() {
+    let scan = test_support::scan();
+    let mut app = App::new(scan.clone(), test_support::derived(&scan));
+    app.handle(KeyCode::Char('3'));
+    app.handle(KeyCode::Char('/'));
+    for character in "Navigator".chars() {
+        app.handle(KeyCode::Char(character));
+    }
+    app.handle(KeyCode::Enter);
+    app.handle(KeyCode::Right);
+    app.handle(KeyCode::Tab);
+    let resume = app.resume();
+
+    let restored = App::from_projection(ui_projection(scan.clone(), false), Some(resume.clone()));
+    assert_eq!(restored.resume(), resume);
+
+    let empty = ScanResult {
+        activation: ActivationState::Active,
+        investigation_roots: scan.investigation_roots.clone(),
+        snapshot: CasefileSnapshot {
+            revision: Revision("partial".into()),
+            entries: Vec::new(),
+        },
+        diagnostics: Vec::new(),
+    };
+    let mut resumed = App::from_projection(ui_projection(empty, true), Some(resume.clone()));
+    let mut moved = scan.clone();
+    moved
+        .snapshot
+        .entries
+        .iter_mut()
+        .find(|entry| entry.path == TICKET_PATH)
+        .expect("ticket")
+        .path = "projects/demo/investigations/sample/tickets/accepted/moved-HMD-013.md".into();
+    resumed.apply_projection(ui_projection(moved, false), ProjectionChange::Complete);
+    assert_eq!(
+        resumed.browser.selected_path(),
+        Some("projects/demo/investigations/sample/tickets/accepted/moved-HMD-013.md")
+    );
+
+    let mut changed = scan;
+    let selected = changed
+        .snapshot
+        .entries
+        .iter_mut()
+        .find(|entry| entry.path == TICKET_PATH)
+        .expect("ticket");
+    selected.summary = Some(RecordSummary::WorkItem {
+        id: "HMD-013".into(),
+        title: "Renamed away".into(),
+        status: "accepted".into(),
+        rank: Some(3),
+    });
+    app.apply_projection(ui_projection(changed, false), ProjectionChange::Complete);
+    assert!(app.browser.selected_path().is_none());
+    assert_eq!(
+        app.feedback.as_deref(),
+        Some("Selected item no longer matches the filter.")
+    );
+}
+
+#[test]
+fn detail_scroll_resets_only_when_selected_content_revision_changes() {
+    let mut scan = test_support::scan();
+    scan.snapshot.entries[0].original_bytes = "long content ".repeat(500).into_bytes();
+    scan.snapshot.entries[0].content_revision = Revision("content-one".into());
+    let mut app = App::new(scan.clone(), test_support::derived(&scan));
+    app.handle(KeyCode::Char('3'));
+    app.handle(KeyCode::Tab);
+    test_support::render(&app, 80, 24);
+    app.handle(KeyCode::PageDown);
+    assert!(app.detail.scroll_position() > 0);
+    let scroll = app.detail.scroll_position();
+
+    let mut inserted = scan.clone();
+    inserted.snapshot.entries.push(ticket_entry(
+        "projects/demo/investigations/sample/tickets/accepted/HMD-999.md",
+        "HMD-999",
+        "Inserted",
+        b"inserted",
+    ));
+    app.apply_projection(
+        ui_projection(inserted.clone(), false),
+        ProjectionChange::Complete,
+    );
+    assert_eq!(app.detail.scroll_position(), scroll);
+
+    let moved_path = "projects/demo/investigations/sample/tickets/accepted/moved-HMD-013.md";
+    inserted
+        .snapshot
+        .entries
+        .iter_mut()
+        .find(|entry| entry.path == TICKET_PATH)
+        .expect("ticket")
+        .path = moved_path.into();
+    app.apply_projection(
+        ui_projection(inserted.clone(), false),
+        ProjectionChange::Complete,
+    );
+    assert_eq!(app.browser.selected_path(), Some(moved_path));
+    assert_eq!(app.detail.scroll_position(), scroll);
+
+    inserted
+        .snapshot
+        .entries
+        .iter_mut()
+        .find(|entry| entry.path == moved_path)
+        .expect("moved ticket")
+        .content_revision = Revision("content-two".into());
+    app.apply_projection(ui_projection(inserted, false), ProjectionChange::Content);
+    assert_eq!(app.detail.scroll_position(), 0);
+}
+
+#[test]
+fn project_and_investigation_deletions_use_following_then_preceding_fallback() {
+    let mut scan = test_support::scan();
+    scan.investigation_roots = BTreeMap::from([
+        (
+            "demo".into(),
+            vec!["alpha".into(), "beta".into(), "gamma".into()],
+        ),
+        ("other".into(), vec!["only".into()]),
+    ]);
+    scan.snapshot.entries = vec![
+        ticket_entry(
+            "projects/demo/investigations/alpha/tickets/accepted/HMD-101.md",
+            "HMD-101",
+            "Alpha",
+            b"alpha",
+        ),
+        ticket_entry(
+            "projects/demo/investigations/beta/tickets/accepted/HMD-102.md",
+            "HMD-102",
+            "Beta",
+            b"beta",
+        ),
+        ticket_entry(
+            "projects/demo/investigations/gamma/tickets/accepted/HMD-103.md",
+            "HMD-103",
+            "Gamma",
+            b"gamma",
+        ),
+        ticket_entry(
+            "projects/other/investigations/only/tickets/accepted/OTH-001.md",
+            "OTH-001",
+            "Other",
+            b"other",
+        ),
+    ];
+
+    let mut investigation = App::new(scan.clone(), test_support::derived(&scan));
+    investigation.handle(KeyCode::Char('2'));
+    investigation.handle(KeyCode::Down);
+    assert_eq!(investigation.browser.selected_investigation(), Some("beta"));
+    let mut without_beta = scan.clone();
+    without_beta
+        .investigation_roots
+        .get_mut("demo")
+        .expect("demo")
+        .retain(|value| value != "beta");
+    without_beta
+        .snapshot
+        .entries
+        .retain(|entry| !entry.path.contains("/beta/"));
+    investigation.apply_projection(
+        ui_projection(without_beta, false),
+        ProjectionChange::Complete,
+    );
+    assert_eq!(
+        investigation.browser.selected_investigation(),
+        Some("gamma")
+    );
+
+    let mut project = App::new(scan.clone(), test_support::derived(&scan));
+    project.handle(KeyCode::Down);
+    assert_eq!(project.browser.selected_project(), Some("other"));
+    scan.investigation_roots.remove("other");
+    scan.snapshot
+        .entries
+        .retain(|entry| !entry.path.starts_with("projects/other/"));
+    project.apply_projection(ui_projection(scan, false), ProjectionChange::Complete);
+    assert_eq!(project.browser.selected_project(), Some("demo"));
+    assert_eq!(project.browser.selected_investigation(), Some("alpha"));
+}
+
+#[test]
+fn provisional_projection_and_refresh_help_are_visible() {
+    let mut app = App::from_projection(ui_projection(test_support::scan(), true), None);
+    app.set_status("facts are unavailable while loading");
+    let rendered = test_support::render(&app, 140, 32);
+    assert!(rendered.contains("PROVISIONAL"));
+    assert!(rendered.contains("facts are unavailable"));
+    app.handle(KeyCode::Char('?'));
+    let help = test_support::render(&app, 140, 32);
+    assert!(help.contains("Refresh current scope or the whole Store"));
+}
+
 fn board_with_cards(title: &str, cards: Vec<DerivedCard>) -> DerivedBoard {
     DerivedBoard {
         identity: casefile_store::ScopedIdentity {
@@ -743,4 +1165,87 @@ fn board_card(id: &str, title: &str) -> DerivedCard {
         status: "unknown".into(),
         rank: None,
     }
+}
+
+fn presentation_coordinator() -> (TempDir, Coordinator) {
+    let temporary = TempDir::new().expect("temporary root");
+    copy_tree(
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../casefile-store/tests/fixtures/minimum")
+            .as_path(),
+        temporary.path(),
+    );
+    let store = Store::open(temporary.path()).expect("store");
+    let mut coordinator =
+        Coordinator::start(store.presentation_session(), None).expect("coordinator");
+    for _ in 0..1000 {
+        coordinator.drain();
+        if coordinator.investigation_target("demo", "sample").is_some() {
+            return (temporary, coordinator);
+        }
+        std::thread::sleep(Duration::from_millis(1));
+    }
+    panic!("catalogue did not arrive");
+}
+
+fn copy_tree(from: &Path, to: &Path) {
+    for entry in fs::read_dir(from).expect("fixture entries") {
+        let entry = entry.expect("fixture entry");
+        let target = to.join(entry.file_name());
+        if entry.file_type().expect("fixture type").is_dir() {
+            fs::create_dir_all(&target).expect("fixture directory");
+            copy_tree(&entry.path(), &target);
+        } else {
+            fs::copy(entry.path(), target).expect("fixture file");
+        }
+    }
+}
+
+fn ui_projection(scan: ScanResult, provisional: bool) -> UiProjection {
+    UiProjection {
+        derived: test_support::derived(&scan),
+        scan,
+        provisional,
+        unavailable: BTreeMap::new(),
+    }
+}
+
+fn multi_ticket_scan() -> ScanResult {
+    let mut scan = test_support::scan();
+    scan.snapshot.entries = vec![
+        ticket_entry(
+            "projects/demo/investigations/sample/tickets/accepted/HMD-013.md",
+            "HMD-013",
+            "First",
+            b"first",
+        ),
+        ticket_entry(
+            "projects/demo/investigations/sample/tickets/accepted/HMD-014.md",
+            "HMD-014",
+            "Middle",
+            b"middle",
+        ),
+        ticket_entry(
+            "projects/demo/investigations/sample/tickets/accepted/HMD-015.md",
+            "HMD-015",
+            "Following",
+            b"following",
+        ),
+    ];
+    scan
+}
+
+fn ticket_entry(path: &str, id: &str, title: &str, bytes: &[u8]) -> casefile_core::EntrySnapshot {
+    test_support::entry(
+        path,
+        Classification::Governed,
+        Some(Kind::Ticket),
+        Some(RecordSummary::WorkItem {
+            id: id.into(),
+            title: title.into(),
+            status: "accepted".into(),
+            rank: None,
+        }),
+        bytes,
+    )
 }

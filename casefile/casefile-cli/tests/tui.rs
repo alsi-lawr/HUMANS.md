@@ -110,6 +110,28 @@ impl Pty {
         }
     }
 
+    fn start_default_root(fixture: &Fixture) -> Self {
+        let transcript = fixture.temporary.path().join("terminal-default-root.log");
+        let command = format!(
+            "cd '{}' && stty rows 30 cols 120; exec '{}' tui",
+            fixture.root.display(),
+            env!("CARGO_BIN_EXE_casefile"),
+        );
+        let mut child = Command::new("script")
+            .args(["--quiet", "--flush", "--return", "--command", &command])
+            .arg(&transcript)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("default-root PTY");
+        Self {
+            input: child.stdin.take().expect("PTY input"),
+            child,
+            transcript,
+        }
+    }
+
     fn send(&mut self, bytes: &[u8]) {
         self.input.write_all(bytes).expect("PTY input");
         self.input.flush().expect("PTY flush");
@@ -152,7 +174,7 @@ fn editor_args(editor: &Path, values: &[&str]) -> Vec<OsString> {
 fn begin_edit(pty: &mut Pty) {
     pty.wait_for("q quit");
     thread::sleep(Duration::from_millis(200));
-    pty.send(b"\r\re");
+    pty.send(b"\r\r/HMD-E-001\re");
 }
 
 fn restored(transcript: &[u8]) -> bool {
@@ -207,6 +229,7 @@ fn default_opener_ignores_editor_prompts_for_enter_and_cancels() {
     thread::sleep(Duration::from_millis(100));
     pty.send(&[b'j'; 35]);
     pty.wait_for("Verification");
+    pty.send(b"/HMD-E-001\r");
     pty.send(b"e");
     pty.wait_for("press Enter to continue");
     let opened = fs::read_to_string(&log).expect("opener log");
@@ -218,6 +241,7 @@ fn default_opener_ignores_editor_prompts_for_enter_and_cancels() {
     pty.wait_for("REVIEW CHANGES");
     pty.send(b"c");
     pty.wait_for("Cancelled; discarded draft");
+    pty.wait_for("\"HMD-E-001\"");
     thread::sleep(Duration::from_millis(100));
     pty.send(b"q");
     let transcript = pty.finish(true);
@@ -227,9 +251,118 @@ fn default_opener_ignores_editor_prompts_for_enter_and_cancels() {
             .contains("Minimum epic")
     );
     assert!(!draft.exists());
-    assert!(String::from_utf8_lossy(&transcript).contains("Loading Casefile..."));
+    assert!(String::from_utf8_lossy(&transcript).contains("PROVISIONAL"));
+    assert!(String::from_utf8_lossy(&transcript).contains("Store presentation complete"));
     assert!(String::from_utf8_lossy(&transcript).contains("Keyboard help"));
     assert!(String::from_utf8_lossy(&transcript).contains("Verification"));
+    assert!(restored(&transcript));
+}
+
+#[test]
+fn progressive_updates_and_manual_refresh_render_without_an_extra_keypress() {
+    let fixture = fixture();
+    let mut pty = Pty::start(&fixture, &[], &[]);
+
+    pty.wait_for("PROVISIONAL");
+    pty.wait_for("Store presentation complete");
+    pty.send(b"r");
+    pty.wait_for("demo refr");
+    pty.send(b"R");
+    thread::sleep(Duration::from_millis(300));
+    pty.send(b"q");
+
+    let transcript = pty.finish(true);
+    assert!(restored(&transcript));
+}
+
+#[test]
+fn disk_change_warns_without_input_retains_selection_and_manual_refresh_remains_available() {
+    let fixture = fixture();
+    let mut pty = Pty::start(&fixture, &[], &[]);
+
+    pty.wait_for("Store presentation complete");
+    pty.send(b"\r\r/HMD-E-001\r");
+    pty.wait_for("Minimum epic");
+    let epic = fixture.root.join(EPIC);
+    let content = fs::read_to_string(&epic).expect("epic");
+    fs::write(&epic, content.replace("Minimum epic", "Changed on disk"))
+        .expect("external disk change");
+    pty.wait_for("STALE DIRECT");
+    pty.send(b"r");
+    pty.wait_for("Changed");
+    pty.wait_for("on disk");
+    pty.send(b"q");
+
+    let transcript = pty.finish(true);
+    assert!(
+        transcript
+            .windows("STALE DIRECT".len())
+            .any(|part| part == b"STALE DIRECT")
+    );
+    assert!(
+        transcript
+            .windows("HMD-E-001".len())
+            .any(|part| part == b"HMD-E-001")
+    );
+    assert!(
+        transcript
+            .windows("Changed".len())
+            .any(|part| part == b"Changed")
+    );
+    assert!(
+        transcript
+            .windows("on disk".len())
+            .any(|part| part == b"on disk")
+    );
+    assert!(restored(&transcript));
+}
+
+#[test]
+fn default_dot_root_reports_external_disk_change_without_input() {
+    let fixture = fixture();
+    let mut pty = Pty::start_default_root(&fixture);
+
+    pty.wait_for("Store presentation complete");
+    let epic = fixture.root.join(EPIC);
+    let content = fs::read_to_string(&epic).expect("epic");
+    fs::write(
+        &epic,
+        content.replace("Minimum epic", "Changed through dot root"),
+    )
+    .expect("external disk change");
+    pty.wait_for("STALE DIRECT");
+    pty.send(b"q");
+
+    let transcript = pty.finish(true);
+    assert!(restored(&transcript));
+}
+
+#[test]
+fn watch_degradation_keeps_store_refresh_and_quit_usable() {
+    let fixture = fixture();
+    let mut pty = Pty::start(&fixture, &[], &[]);
+
+    pty.wait_for("Store presentation complete");
+    let moved = fixture.temporary.path().join("planning-moved");
+    fs::rename(&fixture.root, &moved).expect("rename watched Store root");
+    pty.wait_for("DEGRADED");
+    pty.send(b"R");
+    pty.wait_for("refresh failed;");
+    pty.send(b"q");
+
+    let transcript = pty.finish(true);
+    assert!(restored(&transcript));
+}
+
+#[test]
+fn quit_during_progressive_load_restores_terminal_promptly() {
+    let fixture = fixture();
+    let mut pty = Pty::start(&fixture, &[], &[]);
+    pty.wait_for("PROVISIONAL");
+    let started = Instant::now();
+    pty.send(b"q");
+    let transcript = pty.finish(true);
+    assert!(started.elapsed() < Duration::from_secs(2));
     assert!(restored(&transcript));
 }
 
@@ -257,6 +390,7 @@ fn explicit_editor_preserves_arguments_applies_and_rescans() {
     );
     pty.send(b"a");
     pty.wait_for("Applied");
+    pty.wait_for("\"HMD-E-001\"");
     thread::sleep(Duration::from_millis(100));
     pty.send(b"q");
     let transcript = pty.finish(true);

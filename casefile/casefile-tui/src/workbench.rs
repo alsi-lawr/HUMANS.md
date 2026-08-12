@@ -1,11 +1,13 @@
 use crate::{
     Interaction, PAGE_SIZE,
-    browsing::{Browser, View},
+    browsing::{Browser, BrowserState, PromotionNotice, SelectionAnchor, View},
     interaction::edit_selection,
-    record_detail::RecordDetail,
+    progressive::{Coordinator, ProjectionChange, UiProjection},
+    record_detail::{DetailState, RecordDetail},
     ui::{ACCENT, MUTED, WARN, safe_inline},
+    watching::{SelectedScope, WatchCoordinator},
 };
-use casefile_store::{DerivedBoard, DerivedSnapshot, ScanResult};
+use casefile_store::{DerivedBoard, DerivedSnapshot, PresentationTarget, ScanResult};
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use ratatui::{
     Terminal,
@@ -16,9 +18,14 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Block, BorderType, Borders, Clear, Paragraph, Widget, Wrap},
 };
-use std::io::{self, Stdout};
+use std::{
+    collections::BTreeMap,
+    io::{self, Stdout},
+    time::Duration,
+};
 
 const WIDE_MINIMUM: u16 = 96;
+const EVENT_POLL_INTERVAL: Duration = Duration::from_millis(25);
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum LayoutMode {
@@ -30,6 +37,20 @@ enum LayoutMode {
 enum Focus {
     List,
     Detail,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct WorkbenchResume {
+    browser: BrowserState,
+    anchor: SelectionAnchor,
+    detail: DetailState,
+    focus: Focus,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum RefreshIntent {
+    Current,
+    Store,
 }
 
 impl Focus {
@@ -49,6 +70,12 @@ pub(crate) struct App {
     focus: Focus,
     show_help: bool,
     feedback: Option<String>,
+    status: Option<String>,
+    freshness: Option<String>,
+    provisional: bool,
+    unavailable: BTreeMap<String, String>,
+    resume_anchor: Option<SelectionAnchor>,
+    refresh_intent: Option<RefreshIntent>,
     interaction: Option<Interaction>,
 }
 
@@ -63,23 +90,261 @@ impl App {
             focus: Focus::List,
             show_help: false,
             feedback: None,
+            status: None,
+            freshness: None,
+            provisional: false,
+            unavailable: BTreeMap::new(),
+            resume_anchor: None,
+            refresh_intent: None,
             interaction: None,
         }
+    }
+
+    pub(crate) fn from_projection(
+        projection: UiProjection,
+        resume: Option<WorkbenchResume>,
+    ) -> Self {
+        let mut app = Self::new(projection.scan, projection.derived);
+        app.provisional = projection.provisional;
+        app.unavailable = projection.unavailable;
+        if let Some(resume) = resume {
+            app.browser.restore(resume.browser);
+            app.detail.restore(resume.detail);
+            app.focus = resume.focus;
+            app.resume_anchor = Some(resume.anchor);
+        }
+        app.browser.apply_partial(&app.scan);
+        app
+    }
+
+    pub(crate) fn resume(&self) -> WorkbenchResume {
+        let board_paths = self.board_card_paths();
+        WorkbenchResume {
+            browser: self.browser.state(),
+            anchor: self.browser.anchor(&self.scan, &board_paths),
+            detail: self.detail.state(),
+            focus: self.focus,
+        }
+    }
+
+    pub(crate) fn set_status(&mut self, status: impl Into<String>) {
+        self.status = Some(status.into());
     }
 
     pub(crate) fn run(
         &mut self,
         terminal: &mut Terminal<CrosstermBackend<Stdout>>,
     ) -> io::Result<Interaction> {
+        let mut dirty = true;
         while self.interaction.is_none() {
-            terminal.draw(|frame| self.render(frame.area(), frame.buffer_mut()))?;
-            if let Event::Key(key) = event::read()?
-                && key.kind == KeyEventKind::Press
-            {
-                self.handle(key.code);
+            if dirty {
+                terminal.draw(|frame| self.render(frame.area(), frame.buffer_mut()))?;
+                dirty = false;
+            }
+            if event::poll(EVENT_POLL_INTERVAL)? {
+                match event::read()? {
+                    Event::Key(key) if key.kind == KeyEventKind::Press => {
+                        self.handle(key.code);
+                        dirty = true;
+                    }
+                    Event::Resize(_, _) => dirty = true,
+                    _ => {}
+                }
             }
         }
         Ok(self.interaction.take().unwrap_or(Interaction::Quit))
+    }
+
+    pub(crate) fn run_progressive(
+        &mut self,
+        terminal: &mut Terminal<CrosstermBackend<Stdout>>,
+        coordinator: &mut Coordinator,
+    ) -> io::Result<(Interaction, WorkbenchResume)> {
+        let mut dirty = true;
+        while self.interaction.is_none() {
+            let update = coordinator.drain();
+            if update.projection != ProjectionChange::None {
+                self.apply_projection(coordinator.projection(), update.projection);
+            }
+            if update.dirty {
+                self.status = Some(coordinator.status().into());
+                dirty = true;
+            }
+            if coordinator.request_content(self.browser.selected_path()) {
+                self.status = Some(coordinator.status().into());
+                dirty = true;
+            }
+            if dirty {
+                terminal.draw(|frame| self.render(frame.area(), frame.buffer_mut()))?;
+                dirty = false;
+            }
+            if event::poll(EVENT_POLL_INTERVAL)? {
+                match event::read()? {
+                    Event::Key(key) if key.kind == KeyEventKind::Press => {
+                        self.handle(key.code);
+                        if let Some(intent) = self.refresh_intent.take() {
+                            let target = self.refresh_target(coordinator, intent);
+                            match coordinator.refresh(target) {
+                                Ok(()) => self.status = Some(coordinator.status().into()),
+                                Err(message) => self.feedback = Some(message),
+                            }
+                        }
+                        dirty = true;
+                    }
+                    Event::Resize(_, _) => dirty = true,
+                    _ => {}
+                }
+            }
+        }
+        let interaction = self.interaction.take().unwrap_or(Interaction::Quit);
+        Ok((interaction, self.resume()))
+    }
+
+    pub(crate) fn run_progressive_watched(
+        &mut self,
+        terminal: &mut Terminal<CrosstermBackend<Stdout>>,
+        coordinator: &mut Coordinator,
+        watcher: &mut WatchCoordinator,
+    ) -> io::Result<(Interaction, WorkbenchResume)> {
+        let mut dirty = true;
+        while self.interaction.is_none() {
+            dirty |= watcher.drain();
+            let update = coordinator.drain();
+            if update.projection != ProjectionChange::None {
+                self.apply_projection(coordinator.projection(), update.projection);
+                if update.projection == ProjectionChange::Complete
+                    && matches!(
+                        coordinator.take_completed_target(),
+                        Some(PresentationTarget::Store)
+                    )
+                    && let Some(catalogue) = coordinator.catalogue()
+                {
+                    watcher.rebuild(catalogue);
+                }
+            }
+            if update.dirty {
+                self.status = Some(coordinator.status().into());
+                dirty = true;
+            }
+            if coordinator.request_content(self.browser.selected_path()) {
+                self.status = Some(coordinator.status().into());
+                dirty = true;
+            }
+            self.freshness = watcher.warning(&self.selected_scope());
+            if dirty {
+                terminal.draw(|frame| self.render(frame.area(), frame.buffer_mut()))?;
+                dirty = false;
+            }
+            if event::poll(EVENT_POLL_INTERVAL)? {
+                match event::read()? {
+                    Event::Key(key) if key.kind == KeyEventKind::Press => {
+                        self.handle(key.code);
+                        if let Some(intent) = self.refresh_intent.take() {
+                            let target = self.refresh_target(coordinator, intent);
+                            match coordinator.refresh(target) {
+                                Ok(()) => self.status = Some(coordinator.status().into()),
+                                Err(message) => self.feedback = Some(message),
+                            }
+                        }
+                        dirty = true;
+                    }
+                    Event::Resize(_, _) => dirty = true,
+                    _ => {}
+                }
+            }
+        }
+        let interaction = self.interaction.take().unwrap_or(Interaction::Quit);
+        Ok((interaction, self.resume()))
+    }
+
+    fn selected_scope(&self) -> SelectedScope {
+        match (
+            self.browser.selected_project(),
+            self.browser.selected_investigation(),
+        ) {
+            (Some(project), Some(identity)) => SelectedScope::Investigation {
+                project: project.into(),
+                identity: identity.into(),
+            },
+            (Some(project), None) => SelectedScope::Project {
+                project: project.into(),
+            },
+            _ => SelectedScope::Store,
+        }
+    }
+
+    fn apply_projection(&mut self, projection: UiProjection, change: ProjectionChange) {
+        let previous_board_paths = self.board_card_paths();
+        let anchor = self
+            .resume_anchor
+            .clone()
+            .unwrap_or_else(|| self.browser.anchor(&self.scan, &previous_board_paths));
+        let previous_revision = self
+            .browser
+            .selected(&self.scan)
+            .map(|entry| entry.content_revision.clone());
+        self.scan = projection.scan;
+        self.derived = projection.derived;
+        self.provisional = projection.provisional;
+        self.unavailable = projection.unavailable;
+        match change {
+            ProjectionChange::Complete => {
+                self.resume_anchor = None;
+                let board_paths = self.board_card_paths();
+                self.feedback = match self.browser.promote(&self.scan, &anchor, &board_paths) {
+                    Some(PromotionNotice::FilteredOut) => {
+                        Some("Selected item no longer matches the filter.".into())
+                    }
+                    Some(PromotionNotice::Ambiguous) => {
+                        Some("Selected governed identity is ambiguous; selection cleared.".into())
+                    }
+                    None => None,
+                };
+            }
+            ProjectionChange::Partial => self.browser.apply_partial(&self.scan),
+            ProjectionChange::Content => {}
+            ProjectionChange::None => unreachable!("projection changes are applied explicitly"),
+        }
+        let current_revision = self
+            .browser
+            .selected(&self.scan)
+            .map(|entry| entry.content_revision.clone());
+        if previous_revision != current_revision
+            && !(change == ProjectionChange::Partial && current_revision.is_none())
+        {
+            self.detail.reset_scroll();
+        }
+    }
+
+    fn refresh_target(
+        &self,
+        coordinator: &Coordinator,
+        intent: RefreshIntent,
+    ) -> PresentationTarget {
+        if intent == RefreshIntent::Store {
+            return PresentationTarget::Store;
+        }
+        match self.browser.view() {
+            View::Projects => self
+                .browser
+                .selected_project()
+                .map(|project| PresentationTarget::Project {
+                    project: project.into(),
+                })
+                .unwrap_or(PresentationTarget::Store),
+            View::Investigations
+            | View::Tickets
+            | View::Files
+            | View::Strategies
+            | View::Boards => self
+                .browser
+                .selected_project()
+                .zip(self.browser.selected_investigation())
+                .and_then(|(project, investigation)| {
+                    coordinator.investigation_target(project, investigation)
+                })
+                .unwrap_or(PresentationTarget::Store),
+        }
     }
 
     fn handle(&mut self, key: KeyCode) {
@@ -138,6 +403,8 @@ impl App {
             KeyCode::Home => self.move_to_edge(false),
             KeyCode::End => self.move_to_edge(true),
             KeyCode::Char('e') => self.request_edit(),
+            KeyCode::Char('r') => self.refresh_intent = Some(RefreshIntent::Current),
+            KeyCode::Char('R') => self.refresh_intent = Some(RefreshIntent::Store),
             _ => {}
         }
     }
@@ -218,16 +485,58 @@ impl App {
     }
 
     pub(crate) fn render(&self, area: Rect, buffer: &mut Buffer) {
-        let [header, body, footer] = Layout::default()
+        let [header, status, body, footer] = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
                 Constraint::Length(4),
+                Constraint::Length(1),
                 Constraint::Min(5),
                 Constraint::Length(1),
             ])
             .areas(area);
         self.browser
             .render_header(&self.scan, self.board_count(), header, buffer);
+        let mut status_text = if self.provisional {
+            format!(
+                " PROVISIONAL - {}",
+                self.status
+                    .as_deref()
+                    .unwrap_or("facts or payload are not yet complete")
+            )
+        } else {
+            self.status.clone().unwrap_or_default()
+        };
+        if self.provisional
+            && self.browser.selected_path().is_some()
+            && self.browser.selected(&self.scan).is_none()
+        {
+            status_text.push_str("  |  Selected item is still loading...");
+        }
+        if let Some(fields) = self
+            .browser
+            .selected_path()
+            .and_then(|path| self.unavailable.get(path))
+        {
+            if !status_text.is_empty() {
+                status_text.push_str("  |  ");
+            }
+            status_text.push_str(&format!("Unavailable: {fields}"));
+        }
+        if let Some(freshness) = &self.freshness {
+            if !status_text.is_empty() {
+                status_text.push_str("  |  ");
+            }
+            status_text.push_str(freshness);
+        }
+        Paragraph::new(status_text)
+            .style(
+                Style::default().fg(if self.provisional || self.freshness.is_some() {
+                    WARN
+                } else {
+                    MUTED
+                }),
+            )
+            .render(status, buffer);
 
         match layout_mode(body) {
             LayoutMode::Wide => {
@@ -251,7 +560,7 @@ impl App {
         } else if let Some(feedback) = &self.feedback {
             feedback
         } else {
-            " 1-6 tabs  Enter drill down  Backspace up  Tab focus  j/k move  h/l detail  e edit  / filter  ? help  q quit "
+            " 1-6 views  Enter open  Backspace up  Tab focus  j/k move  h/l detail  e edit  r/R refresh  / filter  ? help  q quit "
         };
         Paragraph::new(footer_text)
             .style(Style::default().fg(MUTED))
@@ -581,6 +890,7 @@ fn render_help(area: Rect, buffer: &mut Buffer) {
         help_line("/", "Enter filter mode"),
         help_line("c", "Clear the active filter"),
         help_line("e", "Edit selected governed ticket, epic, or board"),
+        help_line("r / R", "Refresh current scope or the whole Store"),
         Line::from(""),
         help_line("? / Esc / Enter", "Close this help"),
         help_line("q", "Quit Casefile"),

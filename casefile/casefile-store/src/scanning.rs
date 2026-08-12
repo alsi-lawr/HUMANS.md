@@ -16,8 +16,9 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{
     collections::{BTreeMap, BTreeSet},
+    ffi::OsStr,
     fs,
-    path::Path,
+    path::{Component, Path},
 };
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -46,6 +47,18 @@ impl ScanResult {
     }
 }
 
+/// Returns whether a root-relative filesystem path is outside the canonical Store input.
+///
+/// Only direct-root `.git` and `.agent-workspace` trees are excluded. A same-named component
+/// anywhere below another root-relative component remains visible to the Store.
+pub fn is_store_path_excluded(root_relative: &Path) -> bool {
+    matches!(
+        root_relative.components().next(),
+        Some(Component::Normal(component))
+            if component == OsStr::new(".git") || component == OsStr::new(".agent-workspace")
+    )
+}
+
 pub(super) fn scan(
     root: &Path,
     overlay: &BTreeMap<String, Option<Vec<u8>>>,
@@ -55,6 +68,9 @@ pub(super) fn scan(
     let mut unsafe_paths = BTreeSet::new();
     collect(root, root, &mut files, &mut unsafe_paths)?;
     for (path, bytes) in overlay {
+        if is_store_path_excluded(Path::new(path)) {
+            continue;
+        }
         match bytes {
             Some(bytes) => {
                 files.insert(path.clone(), bytes.clone());
@@ -133,8 +149,11 @@ fn collect(
     for entry in fs::read_dir(directory)? {
         let entry = entry?;
         let path = entry.path();
-        let metadata = fs::symlink_metadata(&path)?;
         let relative = relative(root, &path)?;
+        if is_store_path_excluded(Path::new(&relative)) {
+            continue;
+        }
+        let metadata = fs::symlink_metadata(&path)?;
         if metadata.file_type().is_symlink() {
             files.insert(relative.clone(), Vec::new());
             unsafe_paths.insert(relative);
@@ -149,7 +168,7 @@ fn collect(
     Ok(())
 }
 
-fn classify(
+pub(super) fn classify(
     path: &str,
     bytes: &[u8],
     active: &Activation,
@@ -369,7 +388,7 @@ fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
-fn binding_diagnostics(entries: &[EntrySnapshot]) -> Vec<Diagnostic> {
+pub(super) fn binding_diagnostics(entries: &[EntrySnapshot]) -> Vec<Diagnostic> {
     let scope = |entry: &EntrySnapshot| {
         entry
             .path
@@ -441,4 +460,41 @@ fn binding_diagnostics(entries: &[EntrySnapshot]) -> Vec<Diagnostic> {
         }
     }
     diagnostics
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn store_path_exclusion_is_exactly_direct_root_implementation_metadata() {
+        for path in [
+            ".git",
+            ".git/config",
+            ".git/objects/ab/cd",
+            ".agent-workspace",
+            ".agent-workspace/session/log.txt",
+        ] {
+            assert!(
+                is_store_path_excluded(Path::new(path)),
+                "unexpectedly included {path:?}"
+            );
+        }
+        for path in [
+            "git/config",
+            ".gitignore",
+            ".github/workflows/ci.yml",
+            "agent-workspace/session/log.txt",
+            ".agent-workspace-old/session/log.txt",
+            "projects/demo/.git/config",
+            "projects/demo/.agent-workspace/session/log.txt",
+            "projects/.git",
+            "projects/.agent-workspace",
+        ] {
+            assert!(
+                !is_store_path_excluded(Path::new(path)),
+                "unexpectedly excluded {path:?}"
+            );
+        }
+    }
 }

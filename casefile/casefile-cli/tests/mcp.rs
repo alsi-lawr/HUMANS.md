@@ -103,6 +103,8 @@ fn fixed_root_session_negotiates_and_exposes_canonical_snapshot_and_query() {
             json!({"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}),
             json!({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"casefile_snapshot","arguments":{}}}),
             json!({"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"casefile_query","arguments":{"query":"tickets","scope":null,"search":null}}}),
+            json!({"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"casefile_query","arguments":{"query":"tickets","scope":{"project":"demo///","investigation":"sample\\\\"},"search":null}}}),
+            json!({"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"casefile_query","arguments":{"query":"tickets","scope":{"project":"C:demo"},"search":null}}}),
         ],
     );
     assert!(
@@ -121,7 +123,7 @@ fn fixed_root_session_negotiates_and_exposes_canonical_snapshot_and_query() {
         .filter(|line| !line.is_empty())
         .map(|line| serde_json::from_slice::<Value>(line).expect("response"))
         .collect::<Vec<_>>();
-    assert_eq!(responses.len(), 4);
+    assert_eq!(responses.len(), 6);
     assert_eq!(responses[0]["result"]["protocolVersion"], "2025-11-25");
     let tools = responses[1]["result"]["tools"].as_array().expect("tools");
     assert_eq!(tools.len(), 12);
@@ -182,6 +184,14 @@ fn fixed_root_session_negotiates_and_exposes_canonical_snapshot_and_query() {
     let query = &response(4)["result"]["structuredContent"];
     assert_eq!(query["result"], "records");
     assert_eq!(query["records"].as_array().expect("records").len(), 1);
+    assert_eq!(
+        response(5)["result"]["structuredContent"]["records"]
+            .as_array()
+            .expect("portable scoped records")
+            .len(),
+        1
+    );
+    assert_eq!(response(6)["result"]["isError"], true);
     assert_eq!(
         directory_state(root.path()),
         before,
@@ -376,7 +386,7 @@ fn provider_preview_and_apply_remain_one_session_exact_operations() {
     let preview_request = json!({
         "jsonrpc":"2.0","id":2,"method":"tools/call","params":{
             "name":"casefile_preview_progress",
-            "arguments":{"operation":{"operation":"bootstrap","investigation":"projects/demo/investigations/sample"}}
+            "arguments":{"operation":{"operation":"bootstrap","investigation":"projects\\\\demo//investigations\\\\sample///"}}
         }
     });
     serde_json::to_writer(&mut input, &preview_request).expect("preview request");

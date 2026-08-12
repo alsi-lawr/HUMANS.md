@@ -2,7 +2,7 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     fs,
     io::Write,
-    path::{Path, PathBuf},
+    path::Path,
 };
 
 use casefile_core::{
@@ -14,8 +14,10 @@ use tempfile::NamedTempFile;
 
 use crate::{
     activation::{ActivationState, activation},
+    layout::checked_path,
     scanning::scan,
-    store::StoreError,
+    store::{StoreError, require_safe_target_parent},
+    writing::git_diff,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -56,8 +58,9 @@ pub struct ProgressApplyResult {
 
 pub(super) fn preview(
     root: &Path,
-    request: ProgressChangeRequest,
+    mut request: ProgressChangeRequest,
 ) -> Result<ProgressPreview, StoreError> {
+    request.investigation = checked_path(&request.investigation)?;
     ensure_worktree(root)?;
     let (path, scope_prefix) = progress_path(root, &request.investigation)?;
     let before = scan(root, &BTreeMap::new())?;
@@ -228,8 +231,9 @@ pub(super) fn preview(
 
 pub(super) fn apply(
     root: &Path,
-    preview: ProgressPreview,
+    mut preview: ProgressPreview,
 ) -> Result<ProgressApplyResult, StoreError> {
+    preview.request.investigation = checked_path(&preview.request.investigation)?;
     ensure_worktree(root)?;
     if !preview.diagnostics.is_empty() {
         return Err(StoreError::Invalid(
@@ -302,9 +306,10 @@ pub(super) fn bootstrap(
     root: &Path,
     investigation: &str,
 ) -> Result<ProgressChangeRequest, StoreError> {
-    progress_path(root, investigation)?;
+    let investigation = checked_path(investigation)?;
+    progress_path(root, &investigation)?;
     Ok(ProgressChangeRequest {
-        investigation: investigation.into(),
+        investigation,
         entries: Vec::new(),
         replacement: None,
         replacement_source: None,
@@ -409,11 +414,7 @@ fn accepted_ticket_ids(scan: &crate::scanning::ScanResult, scope_prefix: &str) -
 }
 
 fn progress_path(root: &Path, investigation: &str) -> Result<(String, String), StoreError> {
-    if !crate::layout::safe_relative(investigation) {
-        return Err(StoreError::Invalid(
-            "investigation path must be contained".into(),
-        ));
-    }
+    let investigation = checked_path(investigation)?;
     let (state, active, _) = activation(root)?;
     if state != ActivationState::Active {
         return Err(StoreError::Invalid(
@@ -424,13 +425,13 @@ fn progress_path(root: &Path, investigation: &str) -> Result<(String, String), S
         project
             .investigations
             .iter()
-            .any(|value| value == investigation)
+            .any(|value| value == &investigation)
     }) {
         return Err(StoreError::Invalid("investigation is not activated".into()));
     }
     Ok((
-        format!("{}/progress/log.toml", investigation.trim_end_matches('/')),
-        format!("{}/", investigation.trim_end_matches('/')),
+        format!("{investigation}/progress/log.toml"),
+        format!("{investigation}/"),
     ))
 }
 
@@ -490,69 +491,7 @@ fn diff(
     before: Option<&[u8]>,
     after: Option<&[u8]>,
 ) -> Result<String, StoreError> {
-    // Delegate canonical diff normalisation to the existing generic writer implementation by using its stable path shape.
-    let old = before
-        .map(|bytes| {
-            tempfile::NamedTempFile::new_in(root).and_then(|mut file| {
-                file.write_all(bytes)?;
-                Ok(file)
-            })
-        })
-        .transpose()?;
-    let new = after
-        .map(|bytes| {
-            tempfile::NamedTempFile::new_in(root).and_then(|mut file| {
-                file.write_all(bytes)?;
-                Ok(file)
-            })
-        })
-        .transpose()?;
-    let output = std::process::Command::new("git")
-        .current_dir(root)
-        .args(["diff", "--no-index", "--"])
-        .arg(
-            old.as_ref()
-                .map(|file| file.path())
-                .unwrap_or_else(|| Path::new("/dev/null")),
-        )
-        .arg(
-            new.as_ref()
-                .map(|file| file.path())
-                .unwrap_or_else(|| Path::new("/dev/null")),
-        )
-        .output()?;
-    if output.status.code().is_some_and(|code| code > 1) {
-        return Err(StoreError::Invalid(
-            String::from_utf8_lossy(&output.stderr).into(),
-        ));
-    }
-    let before_exists = before.is_some();
-    let after_exists = after.is_some();
-    let source = String::from_utf8_lossy(&output.stdout);
-    Ok(source
-        .lines()
-        .map(|line| {
-            if line.starts_with("diff --git ") {
-                format!("diff --git a/{path} b/{path}")
-            } else if line.starts_with("--- ") {
-                if before_exists {
-                    format!("--- a/{path}")
-                } else {
-                    "--- /dev/null".into()
-                }
-            } else if line.starts_with("+++ ") {
-                if after_exists {
-                    format!("+++ b/{path}")
-                } else {
-                    "+++ /dev/null".into()
-                }
-            } else {
-                line.into()
-            }
-        })
-        .collect::<Vec<_>>()
-        .join("\n")
-        + if source.ends_with('\n') { "\n" } else { "" })
+    git_diff(root, path, before, after)
 }
 
 fn atomic_write(root: &Path, relative: &str, bytes: &[u8]) -> Result<(), StoreError> {
@@ -560,24 +499,23 @@ fn atomic_write(root: &Path, relative: &str, bytes: &[u8]) -> Result<(), StoreEr
     let parent = target
         .parent()
         .ok_or_else(|| StoreError::Invalid("progress target has no parent".into()))?;
-    let mut current = PathBuf::new();
-    for component in parent.components() {
-        current.push(component);
-        if let Ok(metadata) = fs::symlink_metadata(&current)
-            && metadata.file_type().is_symlink()
-        {
+    require_safe_target_parent(
+        root,
+        Path::new(relative)
+            .parent()
+            .unwrap_or_else(|| Path::new("")),
+        "progress target",
+    )?;
+    fs::create_dir_all(parent)?;
+    match fs::symlink_metadata(&target) {
+        Ok(metadata) if !metadata.file_type().is_file() || metadata.file_type().is_symlink() => {
             return Err(StoreError::Invalid(
-                "progress target path must not contain a symlink".into(),
+                "progress target must be a regular non-symlink file".into(),
             ));
         }
-    }
-    fs::create_dir_all(parent)?;
-    if let Ok(metadata) = fs::symlink_metadata(&target)
-        && (!metadata.file_type().is_file() || metadata.file_type().is_symlink())
-    {
-        return Err(StoreError::Invalid(
-            "progress target must be a regular non-symlink file".into(),
-        ));
+        Ok(_) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => return Err(error.into()),
     }
     let mut temporary = NamedTempFile::new_in(parent)?;
     temporary.write_all(bytes)?;

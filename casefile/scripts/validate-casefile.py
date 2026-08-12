@@ -2,8 +2,8 @@
 """Validate Casefile-owned source or generated package boundaries."""
 from __future__ import annotations
 import argparse
-import hashlib
 import json
+import re
 from pathlib import Path
 
 SKILLS = {
@@ -22,6 +22,19 @@ MATRIX = {
     "x86_64-apple-darwin", "aarch64-apple-darwin",
     "x86_64-pc-windows-msvc", "aarch64-pc-windows-msvc",
 }
+
+def artifact_path(value: object, target: object) -> Path | None:
+    if not isinstance(value, str) or not isinstance(target, str) or not value or "\0" in value:
+        return None
+    if value.startswith(("/", "\\")) or re.match(r"^[A-Za-z]:", value):
+        return None
+    parts = [part for part in value.replace("\\", "/").split("/") if part]
+    if not parts or any(part in {".", ".."} for part in parts):
+        return None
+    name = "casefile.exe" if target.endswith("windows-msvc") else "casefile"
+    if parts != ["bin", target, name]:
+        return None
+    return Path(*parts)
 
 def owned_markdown(root: Path):
     return (
@@ -44,7 +57,7 @@ def main() -> int:
     codex = root / ".codex-plugin/plugin.json"
     claude = root / ".claude-plugin/plugin.json"
     if codex.exists() or claude.exists():
-        metadata = json.loads((codex if codex.exists() else claude).read_text(encoding="ascii"))
+        metadata = json.loads((codex if codex.exists() else claude).read_text(encoding="utf-8"))
         version = metadata.get("version")
         if metadata.get("name") != "casefile" or not isinstance(version, str) or not version:
             errors.append("generated Casefile metadata lacks its package identity")
@@ -59,8 +72,14 @@ def main() -> int:
         if codex.exists() and not (root / "scripts/list-codex-models.py").is_file():
             errors.append("generated Codex Casefile package lacks stable model discovery")
         try:
-            raw = (root / "runtime/artifacts.json").read_bytes()
-            manifest = json.loads(raw.decode("ascii"))
+            manifest_path = root / "runtime/artifacts.json"
+            if (
+                manifest_path.is_symlink()
+                or not manifest_path.is_file()
+                or manifest_path.stat().st_size <= 0
+            ):
+                raise OSError("artifact manifest is missing, empty, or unsafe")
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         except (OSError, UnicodeError, json.JSONDecodeError):
             manifest = None
             errors.append("generated Casefile package lacks a valid artifact manifest")
@@ -71,8 +90,22 @@ def main() -> int:
                 errors.append("generated Casefile artifact matrix is incomplete or version-mismatched")
             else:
                 for row in rows:
-                    path = root / "runtime" / row.get("path", "")
-                    if not path.is_file() or path.stat().st_size != row.get("size") or hashlib.sha256(path.read_bytes()).hexdigest() != row.get("sha256"):
+                    relative = artifact_path(row.get("path"), row.get("target"))
+                    path = root / "runtime" / relative if relative is not None else None
+                    contained = False
+                    if path is not None:
+                        try:
+                            path.resolve(strict=True).relative_to((root / "runtime").resolve(strict=True))
+                            contained = True
+                        except (OSError, ValueError):
+                            pass
+                    if (
+                        path is None
+                        or not contained
+                        or path.is_symlink()
+                        or not path.is_file()
+                        or path.stat().st_size <= 0
+                    ):
                         errors.append(f"generated Casefile artifact is invalid: {row.get('target')}")
     elif not (root / "casefile-workflow").is_dir():
         errors.append("source lacks Casefile workflow assets")

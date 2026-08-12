@@ -80,16 +80,40 @@ loopback host only for all-record and relationship projections not covered by pr
 The host fixes one planning root at launch and embeds the tracked browser build; it transports
 provider previews and results, and the browser never parses or writes planning files directly.
 
+The canonical Store input includes every filesystem path below that root except paths whose first
+root-relative component is exactly `.git` or `.agent-workspace`. Those two direct-root trees are
+pruned before descent or file reads and do not contribute entries, diagnostics, raw discovery, or
+the Store revision. Same-named directories below any other component remain visible. Symlink
+diagnostics and governed-write protections remain in force everywhere outside the two excluded
+trees. Presentation loaders and filesystem watchers must use the Store's exported
+`is_store_path_excluded` predicate rather than define another revision boundary.
+
+`Store::presentation_session` is a separate, bounded catalogue-first read model. Its generations,
+scope coverage, progress, entry batches, lazy content handles, and per-fact availability are
+presentation state only: they expose no canonical Store revision and never authorize Provider or
+writer operations. Presentation completion means the advertised catalogue and availability state
+finished loading. Only `Store::scan` and derivation from that complete scan provide canonical
+validation, revisions, original bytes, and write-admission inputs.
+
 ### Native MCP package boundary
 
-The generated Codex and Claude Casefile packages contain byte-identical copies of the complete
-supported executable matrix and its source-bound SHA-256 manifest. They contain no `.mcp.json`,
-package-local Cargo workspace, or source launcher. Host-specific receipt-backed setup requires one
-explicit absolute planning root, verifies the complete matrix and selected artifact, atomically
-installs the matching executable in a stable versioned user path, probes the exact identity,
-protocol, capabilities, and 12-tool stdio surface, then registers
+The generated Codex and Claude Casefile packages contain the complete supported executable matrix
+and its artifact manifest. They contain no `.mcp.json`, package-local Cargo workspace, or source
+launcher. Host-specific receipt-backed setup requires one explicit absolute planning root, checks
+that every expected matrix artifact is a regular non-empty file at its normalized contained path,
+atomically installs the matching executable in a stable versioned user path, probes the exact
+identity, protocol, capabilities, and 12-tool stdio surface, then registers
 `casefile mcp-package --planning-root <absolute-root>` directly. Runtime startup needs no Cargo,
 Rust, Python, Node, network, or `PATH` lookup.
+
+Artifact, package, setup, handoff, publication, and rollback verification are landing checks. Safe
+artifact-relative `/` and `\` separators, including repeated internal and trailing separators,
+select the same contained destination. Representation differences in bytes, hashes, sizes, native
+format metadata, JSON or TOML layout, line endings, whitespace, and unrelated extra output do not
+invalidate a landed destination. Rooted, drive-qualified, UNC/device, dot, traversal, escaping,
+missing, empty, non-regular, and wrong-destination artifacts still fail closed before mutation. This
+deliberately gives up exact artifact authenticity and exact rollback integrity. Provider
+preview/apply authorization, retained-preview integrity, and stale-target admission remain exact.
 
 At the 0.4.0 candidate boundary, Codex 0.145.0 and Claude Code 2.1.217 expose no direct marketplace
 OS/architecture selector. Both packages therefore carry all six binaries. Claude npm indirection was
@@ -349,8 +373,9 @@ The three `*/packaging/plugin.toml` manifests are the package-version authority.
 rendered from those manifests; do not hard-code a release version in generated templates or tests.
 Casefile package generation additionally requires `--casefile-artifact-root` and the exact reviewed
 source commit. `.github/workflows/build-casefile-binaries.yml` is the build-only six-host matrix;
-publication downloads one explicitly identified prior run, verifies version, source, manifest
-digest, size, format, and hashes, and never recompiles release binaries.
+publication downloads one explicitly identified prior run, verifies its authorized workflow, source,
+complete six-target landing, native smoke entries, and package destinations, and never recompiles
+release binaries.
 
 The Casefile browser build under `casefile/casefile-server/web/` is tracked and embedded by Rust.
 After changing `casefile/web/`, rebuild it and verify that the committed assets are intentional.
@@ -382,9 +407,9 @@ The reviewed handoff is the downloaded output of one successful `Build Casefile 
 run at `SOURCE_COMMIT`. Before that workflow exists on the default branch, its only bootstrap is a
 separately approved push of the exact reviewed commit to a branch matching `casefile/build-*`. Once
 the workflow exists on the default branch, use `workflow_dispatch` with the explicit source-commit
-input. Record the run ID, event, head branch, retained build provenance, and `artifacts.json`
-SHA-256 with the candidate. Neither build event authorizes publication. Do not use locally invented
-fixture artifacts for a release candidate.
+input. Record the run ID, event, head branch, and retained build provenance with the candidate.
+Neither build event authorizes publication. Do not use locally invented fixture artifacts for a
+release candidate.
 
 Generated marketplace history is published from source; do not edit the marketplace repository by
 hand.
@@ -405,12 +430,12 @@ For a release:
 5. After separate authorization, obtain the build-only Casefile matrix at the exact reviewed source
    commit through the permitted scoped bootstrap or normal manual-dispatch path. Record the
    successful workflow run ID and event, download and verify its build provenance, complete
-   native-smoke and package-inventory handoff, and record the reviewed `artifacts.json` SHA-256.
-6. Dispatch `publish-marketplace.yml` with all four reviewed inputs: `version`, `source_commit`,
-   `binary_run_id`, and `matrix_manifest_sha256`. The workflow rejects another workflow, a failed or
-   incomplete run, a different source SHA, or an incomplete handoff and never rebuilds binaries.
+   native-smoke and complete artifact landing handoff.
+6. Dispatch `publish-marketplace.yml` with the three reviewed inputs: `version`, `source_commit`,
+   and `binary_run_id`. The workflow rejects another workflow, a failed or incomplete run, a
+   different source SHA, or an incomplete handoff and never rebuilds binaries.
 7. Verify the annotated marketplace tag, generated versions, `Source-Commit` provenance, packaged
-   executable hashes, and hosted install lifecycle.
+   executable destinations, and hosted install lifecycle.
 
 Release, history rewrite, branch deletion, and repository-setting changes require explicit human
 authority.

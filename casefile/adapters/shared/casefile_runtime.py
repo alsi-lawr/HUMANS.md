@@ -1,13 +1,11 @@
 """Verified selection and probing for a bundled Casefile executable."""
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import platform
 import re
 import shutil
-import struct
 import subprocess
 import tempfile
 from pathlib import Path, PurePosixPath
@@ -40,14 +38,6 @@ def canonical(value: object) -> bytes:
     return (json.dumps(value, indent=2, sort_keys=True, ensure_ascii=True) + "\n").encode("ascii")
 
 
-def sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        for block in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(block)
-    return digest.hexdigest()
-
-
 def executable_name(target: str) -> str:
     return "casefile.exe" if target.endswith("windows-msvc") else "casefile"
 
@@ -56,32 +46,29 @@ def artifact_path(target: str) -> str:
     return f"bin/{target}/{executable_name(target)}"
 
 
-def validate_native_executable(path: Path, target: str) -> None:
-    data = path.read_bytes()
-    if target.endswith("linux-musl"):
-        if len(data) < 20 or data[:4] != b"\x7fELF" or data[4:6] != b"\x02\x01":
-            raise RuntimeError(f"wrong executable format for {target}: expected 64-bit little-endian ELF")
-        expected = 183 if target.startswith("aarch64") else 62
-        if struct.unpack_from("<H", data, 18)[0] != expected:
-            raise RuntimeError(f"wrong executable architecture for {target}")
-    elif target.endswith("apple-darwin"):
-        if len(data) < 8 or data[:4] not in {b"\xfe\xed\xfa\xcf", b"\xcf\xfa\xed\xfe"}:
-            raise RuntimeError(f"wrong executable format for {target}: expected 64-bit Mach-O")
-        endian = ">" if data[:4] == b"\xfe\xed\xfa\xcf" else "<"
-        expected = 0x0100000C if target.startswith("aarch64") else 0x01000007
-        if struct.unpack_from(f"{endian}I", data, 4)[0] != expected:
-            raise RuntimeError(f"wrong executable architecture for {target}")
-    else:
-        if len(data) < 64 or data[:2] != b"MZ":
-            raise RuntimeError(f"wrong executable format for {target}: expected PE")
-        offset = struct.unpack_from("<I", data, 0x3C)[0]
-        expected = 0xAA64 if target.startswith("aarch64") else 0x8664
-        if (
-            len(data) < offset + 6
-            or data[offset : offset + 4] != b"PE\0\0"
-            or struct.unpack_from("<H", data, offset + 4)[0] != expected
-        ):
-            raise RuntimeError(f"wrong executable architecture for {target}")
+def normalized_artifact_path(value: object, target: str) -> Path:
+    if not isinstance(value, str) or not value or "\0" in value:
+        raise RuntimeError(f"Casefile artifact path is invalid for {target}")
+    if value.startswith(("/", "\\")) or re.match(r"^[A-Za-z]:", value):
+        raise RuntimeError("Casefile artifact path is unsafe")
+    parts = [part for part in value.replace("\\", "/").split("/") if part]
+    if not parts or any(part in {".", ".."} for part in parts):
+        raise RuntimeError("Casefile artifact path is unsafe")
+    if PurePosixPath(*parts).as_posix() != artifact_path(target):
+        raise RuntimeError(f"Casefile artifact path is invalid for {target}")
+    return Path(*parts)
+
+
+def require_landed(path: Path, root: Path | None = None) -> Path:
+    try:
+        resolved = path.resolve(strict=True)
+        if root is not None:
+            resolved.relative_to(root.resolve(strict=True))
+    except (OSError, ValueError) as error:
+        raise RuntimeError(f"Casefile artifact did not land at {path}") from error
+    if path.is_symlink() or not path.is_file() or path.stat().st_size <= 0:
+        raise RuntimeError(f"Casefile artifact did not land at {path}")
+    return path
 
 
 def host_target(system: str | None = None, machine: str | None = None) -> str:
@@ -101,45 +88,34 @@ def host_target(system: str | None = None, machine: str | None = None) -> str:
 def select(plugin_root: Path, version: str, target: str | None = None) -> dict:
     runtime = plugin_root / "runtime"
     try:
-        raw = (runtime / "artifacts.json").read_bytes()
-        raw.decode("ascii")
-        manifest = json.loads(raw)
+        manifest_path = runtime / "artifacts.json"
+        if manifest_path.is_symlink() or not manifest_path.is_file() or manifest_path.stat().st_size <= 0:
+            raise RuntimeError("Casefile artifact manifest did not land")
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, json.JSONDecodeError) as error:
         raise RuntimeError(f"invalid Casefile artifact manifest: {error}") from error
     if (
-        canonical(manifest) != raw
-        or set(manifest) != {"schema_version", "version", "source_commit", "artifacts"}
+        not isinstance(manifest, dict)
+        or not {"schema_version", "version", "source_commit", "artifacts"}.issubset(manifest)
         or manifest.get("schema_version") != 1
         or not isinstance(manifest.get("source_commit"), str)
         or re.fullmatch(r"[0-9a-f]{40}", manifest["source_commit"]) is None
     ):
-        raise RuntimeError("Casefile artifact manifest is not canonical schema 1")
+        raise RuntimeError("Casefile artifact manifest is not complete schema 1")
     if manifest.get("version") != version:
         raise RuntimeError("Casefile artifact version differs from plugin version")
     rows = manifest.get("artifacts")
     if not isinstance(rows, list) or len(rows) != 6:
         raise RuntimeError("Casefile artifact matrix is incomplete")
-    if [row.get("target") if isinstance(row, dict) else None for row in rows] != sorted(MATRIX):
-        raise RuntimeError("Casefile artifact matrix must use the complete sorted target order")
     by_target = {}
     for row in rows:
-        if not isinstance(row, dict) or set(row) != {"path", "sha256", "size", "target"}:
+        if not isinstance(row, dict) or not {"path", "target"}.issubset(row):
             raise RuntimeError("Casefile artifact entry is invalid")
         row_target = row.get("target")
         if row_target not in MATRIX or row_target in by_target:
             raise RuntimeError("Casefile artifact matrix has duplicate or unsupported targets")
-        relative = row.get("path")
-        if relative != artifact_path(row_target):
-            raise RuntimeError(f"Casefile artifact path is invalid for {row_target}")
-        pure = PurePosixPath(relative)
-        if pure.is_absolute() or ".." in pure.parts or "\\" in relative:
-            raise RuntimeError("Casefile artifact path is unsafe")
-        candidate = runtime / Path(*pure.parts)
-        if candidate.is_symlink() or not candidate.is_file() or candidate.stat().st_size != row.get("size"):
-            raise RuntimeError("Casefile artifact is missing, unsafe, or has the wrong size")
-        if sha256(candidate) != row.get("sha256"):
-            raise RuntimeError("Casefile artifact hash mismatch")
-        validate_native_executable(candidate, row_target)
+        relative = normalized_artifact_path(row.get("path"), row_target)
+        candidate = require_landed(runtime / relative, runtime)
         by_target[row_target] = (row, candidate)
     if set(by_target) != MATRIX:
         raise RuntimeError("Casefile artifact matrix is incomplete")
@@ -148,19 +124,8 @@ def select(plugin_root: Path, version: str, target: str | None = None) -> dict:
     selected = selected_pair[0] if selected_pair else None
     if selected is None:
         raise RuntimeError(f"Casefile artifact matrix lacks host target {target}")
-    expected_files = {
-        Path("artifacts.json"),
-        *(Path(*PurePosixPath(artifact_path(item)).parts) for item in MATRIX),
-    }
-    actual_files = {
-        path.relative_to(runtime)
-        for path in runtime.rglob("*")
-        if path.is_file() or path.is_symlink()
-    }
-    if actual_files != expected_files:
-        raise RuntimeError("Casefile artifact root inventory is incomplete or contains extra files")
     source = selected_pair[1]
-    return {"target": target, "source": source, "sha256": selected["sha256"], "manifest": manifest}
+    return {"target": target, "source": source, "manifest": manifest}
 
 
 def destination(home: Path, version: str, target: str) -> Path:

@@ -4,8 +4,11 @@ use casefile_store::Store;
 use std::{path::Path, process::ExitCode};
 
 pub(super) fn run(store: &Store, root: &Path, editor: EditorConfig) -> Result<ExitCode> {
+    let mut resume = None;
     loop {
-        match casefile_tui::run_loading(store.clone())? {
+        let outcome = casefile_tui::run_loading_resuming(store.clone(), resume.take())?;
+        resume = Some(outcome.resume);
+        match outcome.interaction {
             casefile_tui::Interaction::Quit => return Ok(ExitCode::SUCCESS),
             casefile_tui::Interaction::Edit(intent) => {
                 let Some((preview, draft_path)) =

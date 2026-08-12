@@ -134,9 +134,9 @@ format = "json"
         output = self.root / document["vendors"]["codex"]["output"]
         package.build(output, expected)
         (output / "stale.txt").write_text("stale\n", encoding="ascii")
-        self.assertTrue(
-            any("stale generated file" in item for item in package.compare(expected, package.actual_files(output)))
-        )
+        self.assertEqual([], package.landing_errors(output, expected))
+        (output / "payload/file.txt").write_bytes(b"")
+        self.assertTrue(any("empty" in item for item in package.landing_errors(output, expected)))
 
 
 if __name__ == "__main__":

@@ -2,7 +2,7 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     fs,
     io::Write,
-    path::{Path, PathBuf},
+    path::Path,
 };
 
 use casefile_core::{
@@ -18,9 +18,9 @@ use tempfile::NamedTempFile;
 use crate::{
     activation::{ActivationState, activation},
     derived::{StrategyBindingState, derive_snapshot},
-    layout::{kind_for_path, safe_relative},
+    layout::{checked_path, kind_for_path},
     scanning::{ScanResult, scan},
-    store::StoreError,
+    store::{StoreError, require_safe_target_parent},
     writing::{ensure_worktree, git_diff, introduced_diagnostics},
 };
 
@@ -105,6 +105,7 @@ pub(super) fn preview_strategy_transition(
     root: &Path,
     request: StrategyTransitionRequest,
 ) -> Result<StrategyTransitionPreview, StoreError> {
+    let request = canonical_strategy_request(request)?;
     ensure_worktree(root)?;
     let investigation = activated_investigation(root, &request.investigation)?;
     validate_strategy_matrix(&request.selected_matrix_source).map_err(diagnostics_error)?;
@@ -180,7 +181,10 @@ pub(super) fn preview_strategy_transition(
                     "selected matrix phase does not match governed phase state".into(),
                 ));
             }
-            (strategy_id, current.content_revision.clone())
+            (
+                strategy_id,
+                digest(&normalized_eol(&current.original_bytes)),
+            )
         }
         None => {
             let transition_prefix = format!("{investigation}/strategy/transitions/");
@@ -230,8 +234,15 @@ pub(super) fn preview_strategy_transition(
         request.operation_id
     );
     require_regular_target(root, &transition_path, false)?;
-    let selected_bytes = request.selected_matrix_source.as_bytes().to_vec();
-    let proposed_matrix_revision = digest(&selected_bytes);
+    let selected_source_bytes = request.selected_matrix_source.as_bytes().to_vec();
+    let normalized_selected_bytes = normalized_eol(&selected_source_bytes);
+    let selected_bytes = current
+        .filter(|entry| eol_equivalent(&entry.original_bytes, &selected_source_bytes))
+        .map_or_else(
+            || selected_source_bytes.clone(),
+            |entry| entry.original_bytes.clone(),
+        );
+    let proposed_matrix_revision = digest(&normalized_selected_bytes);
     let existing_transition = before
         .snapshot
         .entries
@@ -244,7 +255,7 @@ pub(super) fn preview_strategy_transition(
         previous_strategy_id,
         selected_strategy_id: selected_strategy_id.into(),
         selected_matrix_origin: request.selected_matrix_origin.clone(),
-        selected_matrix_sha256: raw_sha256(&selected_bytes),
+        selected_matrix_sha256: raw_sha256(&normalized_selected_bytes),
         expected_store_revision: before.snapshot.revision.clone(),
         expected_matrix_revision,
         proposed_matrix_revision: proposed_matrix_revision.clone(),
@@ -257,7 +268,9 @@ pub(super) fn preview_strategy_transition(
     };
     let transition_record = match existing_transition {
         Some(entry) => {
-            if current.is_none_or(|current| current.original_bytes != selected_bytes) {
+            if current.is_none_or(|current| {
+                !eol_equivalent(&current.original_bytes, &selected_source_bytes)
+            }) {
                 return Err(StoreError::Invalid(
                     "strategy transition identity cannot be replayed over different governed state"
                         .into(),
@@ -269,8 +282,16 @@ pub(super) fn preview_strategy_transition(
             let existing =
                 parse_strategy_transition(&transition_path, text).map_err(diagnostics_error)?;
             if !transition_matches_request(&existing, &request, phase, selected_strategy_id)
-                || existing.proposed_matrix_revision != proposed_matrix_revision
-                || existing.selected_matrix_sha256 != raw_sha256(&selected_bytes)
+                || !matrix_revision_matches(
+                    &existing.proposed_matrix_revision,
+                    &selected_source_bytes,
+                    current.map(|entry| entry.original_bytes.as_slice()),
+                )
+                || !matrix_hash_matches(
+                    &existing.selected_matrix_sha256,
+                    &selected_source_bytes,
+                    current.map(|entry| entry.original_bytes.as_slice()),
+                )
             {
                 return Err(StoreError::Invalid(
                     "strategy transition identity already has different content".into(),
@@ -280,14 +301,18 @@ pub(super) fn preview_strategy_transition(
         }
         None => fresh_record,
     };
-    let record_bytes = render_strategy_transition(&transition_record).into_bytes();
-    if let Some(existing) = existing_transition
-        && existing.original_bytes != record_bytes
-    {
-        return Err(StoreError::Invalid(
-            "strategy transition record is not in canonical form".into(),
-        ));
-    }
+    let rendered_record_bytes = render_strategy_transition(&transition_record).into_bytes();
+    let record_bytes = match existing_transition {
+        Some(existing) if eol_equivalent(&existing.original_bytes, &rendered_record_bytes) => {
+            existing.original_bytes.clone()
+        }
+        Some(_) => {
+            return Err(StoreError::Invalid(
+                "strategy transition record differs from its governed representation".into(),
+            ));
+        }
+        None => rendered_record_bytes,
+    };
     let mut overlay = BTreeMap::new();
     overlay.insert(matrix_path.clone(), Some(selected_bytes.clone()));
     overlay.insert(transition_path.clone(), Some(record_bytes.clone()));
@@ -308,8 +333,9 @@ pub(super) fn preview_strategy_transition(
 
 pub(super) fn apply_strategy_transition(
     root: &Path,
-    preview: StrategyTransitionPreview,
+    mut preview: StrategyTransitionPreview,
 ) -> Result<GovernedApplyResult, StoreError> {
+    preview.request = canonical_strategy_request(preview.request)?;
     ensure_worktree(root)?;
     if preview.operation != GovernedOperationKind::StrategyTransition {
         return Err(StoreError::Invalid("wrong governed operation kind".into()));
@@ -320,10 +346,21 @@ pub(super) fn apply_strategy_transition(
         ));
     }
     let current = scan(root, &BTreeMap::new())?;
+    for change in &preview.changes {
+        let entry = current
+            .snapshot
+            .entries
+            .iter()
+            .find(|entry| entry.path == change.path);
+        if entry.map(|entry| &entry.content_revision) != change.expected_target_revision.as_ref() {
+            return Err(StoreError::StaleTargetRevision);
+        }
+    }
     let mut canonical = preview_strategy_transition(root, preview.request.clone())?;
     canonical.transition_record.expected_store_revision =
         preview.transition_record.expected_store_revision.clone();
-    let record_bytes = render_strategy_transition(&canonical.transition_record).into_bytes();
+    let rendered_record_bytes =
+        render_strategy_transition(&canonical.transition_record).into_bytes();
     let record_path = canonical
         .changes
         .get(1)
@@ -337,21 +374,14 @@ pub(super) fn apply_strategy_transition(
         .entries
         .iter()
         .find(|entry| entry.path == record_path);
+    let record_bytes = existing_record
+        .filter(|entry| eol_equivalent(&entry.original_bytes, &rendered_record_bytes))
+        .map_or(rendered_record_bytes, |entry| entry.original_bytes.clone());
     canonical.changes[1] = change(root, record_path, existing_record, record_bytes)?;
     if canonical != preview {
         return Err(StoreError::Invalid(
             "strategy transition preview was altered".into(),
         ));
-    }
-    for change in &preview.changes {
-        let entry = current
-            .snapshot
-            .entries
-            .iter()
-            .find(|entry| entry.path == change.path);
-        if entry.map(|entry| &entry.content_revision) != change.expected_target_revision.as_ref() {
-            return Err(StoreError::StaleTargetRevision);
-        }
     }
     if preview.no_op {
         return result_from_scan(
@@ -394,6 +424,7 @@ pub(super) fn preview_writer_binding(
     root: &Path,
     request: WriterBindingRequest,
 ) -> Result<WriterBindingPreview, StoreError> {
+    let request = canonical_writer_binding_request(request)?;
     ensure_worktree(root)?;
     let investigation = activated_investigation(root, &request.investigation)?;
     let path = format!("{investigation}/strategy/bindings.toml");
@@ -471,8 +502,9 @@ pub(super) fn preview_writer_binding(
 
 pub(super) fn apply_writer_binding(
     root: &Path,
-    preview: WriterBindingPreview,
+    mut preview: WriterBindingPreview,
 ) -> Result<GovernedApplyResult, StoreError> {
+    preview.request = canonical_writer_binding_request(preview.request)?;
     ensure_worktree(root)?;
     if preview.operation != GovernedOperationKind::WriterBinding {
         return Err(StoreError::Invalid("wrong governed operation kind".into()));
@@ -692,12 +724,7 @@ fn canonical_progress(
 }
 
 fn activated_investigation(root: &Path, value: &str) -> Result<String, StoreError> {
-    if !safe_relative(value) {
-        return Err(StoreError::Invalid(
-            "investigation path must be contained".into(),
-        ));
-    }
-    let investigation = value.trim_end_matches('/').to_owned();
+    let investigation = checked_path(value)?;
     let (state, active, _) = activation(root)?;
     if state != ActivationState::Active
         || !active.projects.values().any(|project| {
@@ -712,6 +739,90 @@ fn activated_investigation(root: &Path, value: &str) -> Result<String, StoreErro
         ));
     }
     Ok(investigation)
+}
+
+fn canonical_strategy_request(
+    mut request: StrategyTransitionRequest,
+) -> Result<StrategyTransitionRequest, StoreError> {
+    request.investigation = checked_path(&request.investigation)?;
+    request.preserved_work_paths = request
+        .preserved_work_paths
+        .into_iter()
+        .map(|path| checked_path(&path))
+        .collect::<Result<Vec<_>, _>>()?;
+    for ownership in &mut request.active_ownership {
+        ownership.paths = ownership
+            .paths
+            .drain(..)
+            .map(|path| checked_path(&path))
+            .collect::<Result<Vec<_>, _>>()?;
+    }
+    Ok(request)
+}
+
+fn canonical_writer_binding_request(
+    mut request: WriterBindingRequest,
+) -> Result<WriterBindingRequest, StoreError> {
+    request.investigation = checked_path(&request.investigation)?;
+    Ok(request)
+}
+
+fn normalized_eol(bytes: &[u8]) -> Vec<u8> {
+    let mut normalized = Vec::with_capacity(bytes.len());
+    let mut index = 0;
+    while index < bytes.len() {
+        if bytes[index..].starts_with(b"\r\n") {
+            normalized.push(b'\n');
+            index += 2;
+        } else {
+            normalized.push(bytes[index]);
+            index += 1;
+        }
+    }
+    normalized
+}
+
+fn eol_equivalent(left: &[u8], right: &[u8]) -> bool {
+    left == right || normalized_eol(left) == normalized_eol(right)
+}
+
+fn matrix_hash_matches(value: &str, selected: &[u8], current: Option<&[u8]>) -> bool {
+    matrix_identity_bytes(selected, current)
+        .iter()
+        .any(|bytes| value == raw_sha256(bytes))
+}
+
+fn matrix_revision_matches(value: &Revision, selected: &[u8], current: Option<&[u8]>) -> bool {
+    matrix_identity_bytes(selected, current)
+        .iter()
+        .any(|bytes| value == &digest(bytes))
+}
+
+fn matrix_identity_bytes(selected: &[u8], current: Option<&[u8]>) -> Vec<Vec<u8>> {
+    let normalized_selected = normalized_eol(selected);
+    let mut candidates = vec![
+        selected.to_vec(),
+        normalized_selected.clone(),
+        crlf_eol(&normalized_selected),
+    ];
+    if let Some(current) = current {
+        let normalized_current = normalized_eol(current);
+        candidates.push(current.to_vec());
+        candidates.push(normalized_current.clone());
+        candidates.push(crlf_eol(&normalized_current));
+    }
+    candidates
+}
+
+fn crlf_eol(bytes: &[u8]) -> Vec<u8> {
+    let mut crlf = Vec::with_capacity(bytes.len());
+    for byte in bytes {
+        if *byte == b'\n' {
+            crlf.push(b'\r');
+        }
+        crlf.push(*byte);
+    }
+    crlf
 }
 
 fn transition_matches_request(
@@ -885,20 +996,13 @@ fn atomic_write(root: &Path, relative: &str, bytes: &[u8]) -> Result<(), StoreEr
 
 fn require_regular_target(root: &Path, relative: &str, required: bool) -> Result<(), StoreError> {
     let target = root.join(relative);
-    let mut current = PathBuf::new();
-    for component in target.components() {
-        current.push(component);
-        match fs::symlink_metadata(&current) {
-            Ok(metadata) if metadata.file_type().is_symlink() => {
-                return Err(StoreError::Invalid(
-                    "governed target path must not contain a symlink".into(),
-                ));
-            }
-            Ok(_) => {}
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => break,
-            Err(error) => return Err(error.into()),
-        }
-    }
+    require_safe_target_parent(
+        root,
+        Path::new(relative)
+            .parent()
+            .unwrap_or_else(|| Path::new("")),
+        "governed target",
+    )?;
     match fs::symlink_metadata(&target) {
         Ok(metadata) if metadata.file_type().is_file() && !metadata.file_type().is_symlink() => {
             Ok(())

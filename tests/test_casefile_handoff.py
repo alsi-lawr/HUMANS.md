@@ -43,16 +43,12 @@ class CasefileHandoffTests(unittest.TestCase):
         self.assertIn('gh api "repos/$GITHUB_REPOSITORY/actions/runs/$BINARY_RUN_ID"', publish)
         self.assertIn("--run-id \"$BINARY_RUN_ID\"", publish)
         self.assertIn("--source-commit \"$SOURCE_COMMIT\"", publish)
-        self.assertIn("--manifest-sha256 \"$EXPECTED_MANIFEST_SHA256\"", publish)
         self.assertLess(publish.index(validator), publish.index(packaging))
         self.assertNotIn("cargo build", publish)
         build = (ROOT / ".github/workflows/build-casefile-binaries.yml").read_text(encoding="ascii")
         for retained in (
             "casefile-build-provenance.json",
             "native-smoke",
-            "codex-casefile-inventory.sha256",
-            "claude-casefile-inventory.sha256",
-            "casefile-runtime-manifest.sha256",
         ):
             self.assertIn(retained, build)
 
@@ -99,7 +95,7 @@ class CasefileHandoffTests(unittest.TestCase):
         root: Path,
         event: str = "workflow_dispatch",
         head_branch: str = "main",
-    ) -> tuple[Path, Path, str]:
+    ) -> tuple[Path, Path]:
         inputs = root / "inputs"
         for target in artifacts.TARGETS:
             path = inputs / target / artifacts.executable_name(target)
@@ -107,32 +103,33 @@ class CasefileHandoffTests(unittest.TestCase):
             path.write_bytes(native_stub(target))
         runtime = root / "handoff/casefile-runtime"
         manifest = artifacts.assemble(runtime, inputs, "0.4.0", SOURCE)
-        manifest_hash = artifacts.digest(runtime / "artifacts.json")
-        handoff_root = root / "handoff"
-        (handoff_root / "casefile-runtime-manifest.sha256").write_text(
-            f"{manifest_hash}  casefile-runtime/artifacts.json\n", encoding="ascii"
+        for index, row in enumerate(manifest["artifacts"]):
+            row["path"] = row["path"].replace("/", "\\" if index % 2 else "//") + "///"
+            row["sha256"] = "not checked"
+            row["size"] = -1
+        manifest["ignored_metadata"] = "caf\u00e9"
+        (runtime / "artifacts.json").write_bytes(
+            (
+                json.dumps(manifest, ensure_ascii=False, separators=(", ", ": ")) + "\r\n"
+            ).encode("utf-8")
         )
+        (runtime / "unrelated").write_text("accepted\n", encoding="ascii")
+        handoff_root = root / "handoff"
         smoke = handoff_root / "native-smoke"
         smoke.mkdir()
         for target in artifacts.TARGETS:
             (smoke / f"{target}.json").write_text(
-                json.dumps({"identity": "casefile", "tools": 12, "version": "0.4.0"}) + "\n",
-                encoding="ascii",
-            )
-        runtime_inventory = {"runtime/artifacts.json": manifest_hash}
-        runtime_inventory.update(
-            {f"runtime/{row['path']}": row["sha256"] for row in manifest["artifacts"]}
-        )
-        for vendor in ("codex", "claude"):
-            lines = [
-                f"{checksum}  build/marketplace/plugins/{vendor}/casefile/{relative}"
-                for relative, checksum in sorted(runtime_inventory.items())
-            ]
-            lines.append(
-                f"{'2' * 64}  build/marketplace/plugins/{vendor}/casefile/skills/casefile/SKILL.md"
-            )
-            (handoff_root / f"{vendor}-casefile-inventory.sha256").write_text(
-                "\n".join(lines) + "\n", encoding="ascii"
+                json.dumps(
+                    {
+                        "identity": "casefile",
+                        "tools": 12,
+                        "version": "0.4.0",
+                        "ignored_metadata": "na\u00efve",
+                    },
+                    ensure_ascii=False,
+                )
+                + "\r\n",
+                encoding="utf-8",
             )
         provenance = {
             "event": event,
@@ -144,23 +141,28 @@ class CasefileHandoffTests(unittest.TestCase):
             "workflow_path": handoff.WORKFLOW_PATH,
         }
         (handoff_root / "casefile-build-provenance.json").write_text(
-            json.dumps(provenance, indent=2, sort_keys=True) + "\n", encoding="ascii"
+            json.dumps(provenance, separators=(", ", ": ")) + "\r\n", encoding="utf-8"
         )
         run = root / "run.json"
         run.write_text(
-            json.dumps({
-                "id": int(RUN_ID),
-                "name": handoff.WORKFLOW_NAME,
-                "path": handoff.WORKFLOW_PATH,
-                "event": event,
-                "head_branch": head_branch,
-                "status": "completed",
-                "conclusion": "success",
-                "head_sha": SOURCE,
-            }),
-            encoding="ascii",
+            json.dumps(
+                {
+                    "id": int(RUN_ID),
+                    "name": handoff.WORKFLOW_NAME,
+                    "path": handoff.WORKFLOW_PATH,
+                    "event": event,
+                    "head_branch": head_branch,
+                    "status": "completed",
+                    "conclusion": "success",
+                    "head_sha": SOURCE,
+                    "ignored_metadata": "jalape\u00f1o",
+                },
+                ensure_ascii=False,
+            )
+            + "\r\n",
+            encoding="utf-8",
         )
-        return handoff_root, run, manifest_hash
+        return handoff_root, run
 
     def test_accepts_exact_dispatch_and_scoped_push_build_handoffs(self):
         for event, branch in (
@@ -168,8 +170,8 @@ class CasefileHandoffTests(unittest.TestCase):
             ("push", "casefile/build-reviewed-fda6eea"),
         ):
             with self.subTest(event=event), tempfile.TemporaryDirectory() as temporary:
-                root, run, manifest_hash = self.fixture(Path(temporary), event, branch)
-                handoff.validate_handoff(root, run, RUN_ID, "0.4.0", SOURCE, manifest_hash)
+                root, run = self.fixture(Path(temporary), event, branch)
+                handoff.validate_handoff(root, run, RUN_ID, "0.4.0", SOURCE)
 
     def test_rejects_wrong_workflow_status_run_or_source(self):
         for key, value in (
@@ -181,12 +183,12 @@ class CasefileHandoffTests(unittest.TestCase):
             ("id", 999),
         ):
             with self.subTest(key=key), tempfile.TemporaryDirectory() as temporary:
-                root, run, manifest_hash = self.fixture(Path(temporary))
-                metadata = json.loads(run.read_text(encoding="ascii"))
+                root, run = self.fixture(Path(temporary))
+                metadata = json.loads(run.read_text(encoding="utf-8"))
                 metadata[key] = value
                 run.write_text(json.dumps(metadata), encoding="ascii")
                 with self.assertRaisesRegex(handoff.HandoffError, "reviewed binary build"):
-                    handoff.validate_handoff(root, run, RUN_ID, "0.4.0", SOURCE, manifest_hash)
+                    handoff.validate_handoff(root, run, RUN_ID, "0.4.0", SOURCE)
 
     def test_rejects_unapproved_events_and_push_branches(self):
         for event, branch in (
@@ -197,39 +199,35 @@ class CasefileHandoffTests(unittest.TestCase):
             ("push", ""),
         ):
             with self.subTest(event=event, branch=branch), tempfile.TemporaryDirectory() as temporary:
-                root, run, manifest_hash = self.fixture(Path(temporary), event, branch)
+                root, run = self.fixture(Path(temporary), event, branch)
                 with self.assertRaisesRegex(handoff.HandoffError, "allowed Casefile binary event"):
                     handoff.validate_handoff(
-                        root, run, RUN_ID, "0.4.0", SOURCE, manifest_hash
+                        root, run, RUN_ID, "0.4.0", SOURCE
                     )
 
     def test_rejects_retained_provenance_that_differs_from_run(self):
         with tempfile.TemporaryDirectory() as temporary:
-            root, run, manifest_hash = self.fixture(
+            root, run = self.fixture(
                 Path(temporary), "push", "casefile/build-reviewed"
             )
             provenance = root / "casefile-build-provenance.json"
-            value = json.loads(provenance.read_text(encoding="ascii"))
+            value = json.loads(provenance.read_text(encoding="utf-8"))
             value["source_commit"] = "2" * 40
             provenance.write_text(json.dumps(value), encoding="ascii")
             with self.assertRaisesRegex(handoff.HandoffError, "retained build provenance"):
-                handoff.validate_handoff(root, run, RUN_ID, "0.4.0", SOURCE, manifest_hash)
+                handoff.validate_handoff(root, run, RUN_ID, "0.4.0", SOURCE)
 
-    def test_rejects_missing_smoke_and_mismatched_package_inventory(self):
+    def test_rejects_missing_smoke_and_missing_runtime_destination(self):
         with tempfile.TemporaryDirectory() as temporary:
-            root, run, manifest_hash = self.fixture(Path(temporary))
+            root, run = self.fixture(Path(temporary))
             next((root / "native-smoke").iterdir()).unlink()
             with self.assertRaisesRegex(handoff.HandoffError, "native smoke inventory"):
-                handoff.validate_handoff(root, run, RUN_ID, "0.4.0", SOURCE, manifest_hash)
+                handoff.validate_handoff(root, run, RUN_ID, "0.4.0", SOURCE)
         with tempfile.TemporaryDirectory() as temporary:
-            root, run, manifest_hash = self.fixture(Path(temporary))
-            inventory = root / "claude-casefile-inventory.sha256"
-            inventory.write_text(
-                inventory.read_text(encoding="ascii").replace(manifest_hash, "3" * 64, 1),
-                encoding="ascii",
-            )
-            with self.assertRaisesRegex(handoff.HandoffError, "reviewed runtime bytes"):
-                handoff.validate_handoff(root, run, RUN_ID, "0.4.0", SOURCE, manifest_hash)
+            root, run = self.fixture(Path(temporary))
+            next((root / "casefile-runtime/bin").glob("*/*")).unlink()
+            with self.assertRaisesRegex(artifacts.ArtifactError, "missing"):
+                handoff.validate_handoff(root, run, RUN_ID, "0.4.0", SOURCE)
 
 
 if __name__ == "__main__":

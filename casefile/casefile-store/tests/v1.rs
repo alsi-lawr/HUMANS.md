@@ -170,6 +170,75 @@ fn scans_the_current_v1_fixture_with_windows_line_endings() {
 }
 
 #[test]
+fn canonical_scan_excludes_only_direct_root_implementation_metadata() {
+    let root = fixture();
+    let store = Store::open(root.path()).expect("store");
+    let before = store.scan().expect("baseline scan");
+
+    fs::write(root.path().join(".git/hmd-046-probe"), "git metadata").expect("Git probe");
+    fs::create_dir_all(root.path().join(".agent-workspace/session")).expect("workspace probe");
+    fs::write(
+        root.path().join(".agent-workspace/session/probe.txt"),
+        "agent metadata",
+    )
+    .expect("workspace probe file");
+
+    let after_metadata = store.scan().expect("scan after metadata changes");
+    assert_eq!(after_metadata, before);
+    assert!(
+        after_metadata
+            .snapshot
+            .entries
+            .iter()
+            .all(|entry| { !casefile_store::is_store_path_excluded(Path::new(&entry.path)) })
+    );
+
+    let investigation = root.path().join("projects/demo/investigations/sample");
+    for (relative, contents) in [
+        (".git/nested.txt", "nested Git name"),
+        (
+            ".agent-workspace/session/nested.txt",
+            "nested workspace name",
+        ),
+        ("raw-observation.txt", "active raw content"),
+    ] {
+        let path = investigation.join(relative);
+        fs::create_dir_all(path.parent().expect("parent")).expect("nested directory");
+        fs::write(path, contents).expect("nested content");
+    }
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(
+        "missing-target",
+        investigation.join("evidence/in-scope-link.md"),
+    )
+    .expect("in-scope symlink");
+
+    let visible = store.scan().expect("visible nested content scan");
+    assert_ne!(visible.snapshot.revision, before.snapshot.revision);
+    for path in [
+        "projects/demo/investigations/sample/.git/nested.txt",
+        "projects/demo/investigations/sample/.agent-workspace/session/nested.txt",
+        "projects/demo/investigations/sample/raw-observation.txt",
+    ] {
+        assert!(
+            visible
+                .snapshot
+                .entries
+                .iter()
+                .any(|entry| { entry.path == path && entry.classification == Classification::Raw })
+        );
+    }
+    assert!(visible.snapshot.entries.iter().any(|entry| {
+        entry.path.ends_with("tickets/accepted/HMD-011.md")
+            && entry.classification == Classification::Governed
+    }));
+    #[cfg(unix)]
+    assert!(visible.diagnostics.iter().any(|diagnostic| {
+        diagnostic.path.ends_with("evidence/in-scope-link.md") && diagnostic.code == "unsafe_path"
+    }));
+}
+
+#[test]
 fn accepted_tickets_project_unknown_and_a_valid_log_folds_progress_notes_and_progress_boards() {
     let root = fixture();
     let store = Store::open(root.path()).expect("store");
@@ -530,6 +599,28 @@ fn atomic_progress_write_failure_preserves_the_previous_log() {
 fn progress_target_paths_must_remain_contained() {
     let root = fixture();
     let store = Store::open(root.path()).expect("store");
+    let portable = r"projects\\demo//investigations\\sample///";
+    let preview = store
+        .preview_progress(ProgressChangeRequest {
+            investigation: portable.into(),
+            entries: Vec::new(),
+            replacement: None,
+            replacement_source: None,
+            bootstrap: true,
+        })
+        .expect("portable progress preview");
+    assert_eq!(
+        preview.request.investigation,
+        "projects/demo/investigations/sample"
+    );
+    assert_eq!(
+        preview.path,
+        "projects/demo/investigations/sample/progress/log.toml"
+    );
+    store.apply_progress(preview).expect("portable apply");
+    #[cfg(unix)]
+    assert!(!root.path().join(portable).exists());
+
     let request = ProgressChangeRequest {
         investigation: "../outside".into(),
         entries: Vec::new(),

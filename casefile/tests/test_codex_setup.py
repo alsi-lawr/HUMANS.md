@@ -3,7 +3,6 @@ from __future__ import annotations
 import contextlib
 import io
 import json
-import hashlib
 import shutil
 import struct
 import subprocess
@@ -113,8 +112,8 @@ class CodexSetupTests(unittest.TestCase):
             runtime_source = native_stub(target)
             binary.write_bytes(runtime_source)
             binary.chmod(0o755)
-            rows.append({"path":binary.relative_to(plugin / 'runtime').as_posix(),"sha256":hashlib.sha256(runtime_source).hexdigest(),"size":len(runtime_source),"target":target})
-        (plugin / "runtime/artifacts.json").write_text(json.dumps({"schema_version":1,"version":PLUGIN_VERSION,"source_commit":"1"*40,"artifacts":rows}, indent=2, sort_keys=True)+"\n", encoding="ascii")
+            rows.append({"path": binary.relative_to(plugin / "runtime").as_posix().replace("/", "\\") + "///", "sha256": "representation-only", "size": -1, "target": target})
+        (plugin / "runtime/artifacts.json").write_bytes((json.dumps({"artifacts": rows, "source_commit": "1" * 40, "version": PLUGIN_VERSION, "schema_version": 1}, separators=(", ", ": ")) + "\r\n").encode("ascii"))
         (plugin / "templates").mkdir()
         shutil.copy2(ROOT / "AGENTS.md", plugin / "templates/AGENTS.md")
 
@@ -321,7 +320,7 @@ class CodexSetupTests(unittest.TestCase):
                 legacy["plugin_version"] = "0.3.4"
                 legacy.pop("casefile_binary")
                 legacy.pop("planning_root")
-                legacy.pop("artifact_sha256")
+                legacy.pop("artifact_sha256", None)
                 legacy.pop("owned_binaries")
                 legacy["before"] = legacy["before"][:2]
                 first_path.write_bytes(setup.canonical(legacy))
@@ -521,7 +520,20 @@ class CodexSetupTests(unittest.TestCase):
                 encoding="ascii",
             )
             with self.fake_command(FakeCodex(catalog)):
-                self.assertIn("gpt-5.6-sol", setup.prepare(plugin, home, "codex")["catalog_models"])
+                plan = setup.prepare(plugin, home, "codex")
+                self.assertIn("gpt-5.6-sol", plan["catalog_models"])
+
+                def reformat_written_configuration(current):
+                    config = current["home"] / "config.toml"
+                    config.write_bytes(config.read_bytes().replace(b"\n", b"\r\n"))
+                    catalog_path = current["home"] / "models-casefile-v1.json"
+                    document = json.loads(catalog_path.read_bytes())
+                    catalog_path.write_bytes(
+                        (json.dumps(document, separators=(", ", ": ")) + "\r\n").encode("ascii")
+                    )
+
+                with mock.patch.object(setup, "doctor", side_effect=reformat_written_configuration):
+                    self.assertEqual("installed", setup.install(plan)["status"])
 
     def test_fdopen_failure_and_rollback_restore_original_bytes(self):
         with tempfile.TemporaryDirectory() as temporary:

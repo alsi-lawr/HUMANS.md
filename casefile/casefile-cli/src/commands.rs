@@ -6,6 +6,7 @@ use casefile_core::{
 use casefile_store::{
     ActivationState, ProgressChangeRequest, ProgressOperation, ProgressPreview, Provider, Store,
     StrategyBindingState, StrategyTransitionRequest, WriterBindingRequest,
+    normalize_planning_relative,
 };
 use serde::Serialize;
 use std::{
@@ -98,6 +99,9 @@ pub(super) fn execute(root: PathBuf, command: Command) -> Result<ExitCode> {
             require_activation,
             investigation,
         } => {
+            let investigation = investigation
+                .map(|value| canonical_investigation(&value))
+                .transpose()?;
             if let Some(investigation) = &investigation {
                 store.validate_investigation(investigation)?;
             }
@@ -105,7 +109,7 @@ pub(super) fn execute(root: PathBuf, command: Command) -> Result<ExitCode> {
             let diagnostics = investigation.as_ref().map_or_else(
                 || scan.diagnostics.clone(),
                 |investigation| {
-                    let prefix = format!("{}/", investigation.trim_end_matches('/'));
+                    let prefix = format!("{investigation}/");
                     scan.diagnostics
                         .iter()
                         .filter(|diagnostic| diagnostic.path.starts_with(&prefix))
@@ -227,6 +231,7 @@ pub(super) fn execute(root: PathBuf, command: Command) -> Result<ExitCode> {
             investigation,
             ticket_id,
         } => {
+            let investigation = canonical_investigation(&investigation)?;
             store.require_writer_progress(&investigation, &ticket_id)?;
             print_json(&serde_json::json!({
                 "investigation": investigation,
@@ -418,17 +423,13 @@ fn review_preview(id: &str, approval_required: bool, preview: &impl Serialize) -
 }
 
 fn strategy_path(investigation: &str) -> Result<String> {
-    let investigation = investigation.trim_end_matches('/');
-    if investigation.is_empty()
-        || investigation.starts_with('/')
-        || investigation.contains('\\')
-        || investigation
-            .split('/')
-            .any(|component| component.is_empty() || matches!(component, "." | ".."))
-    {
-        anyhow::bail!("investigation path must be a contained relative path");
-    }
+    let investigation = canonical_investigation(investigation)?;
     Ok(format!("{investigation}/strategy/implementation.toml"))
+}
+
+fn canonical_investigation(investigation: &str) -> Result<String> {
+    normalize_planning_relative(investigation)
+        .map_err(|message| anyhow::anyhow!("investigation path {message}"))
 }
 
 fn read_json<T: serde::de::DeserializeOwned>(path: &PathBuf) -> Result<T> {
