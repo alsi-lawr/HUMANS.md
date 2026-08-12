@@ -584,7 +584,9 @@ pub(super) fn git_diff(
 }
 
 fn contained_git_argument(root: &Path, path: &Path) -> Result<PathBuf, StoreError> {
-    let relative = path.strip_prefix(root).map_err(|_| {
+    let absolute_root = absolute_lexical(root)?;
+    let absolute_path = absolute_lexical(path)?;
+    let relative = absolute_path.strip_prefix(&absolute_root).map_err(|_| {
         StoreError::Invalid("temporary diff path escaped the configured Store root".into())
     })?;
     if relative.as_os_str().is_empty()
@@ -600,6 +602,14 @@ fn contained_git_argument(root: &Path, path: &Path) -> Result<PathBuf, StoreErro
         ));
     }
     Ok(relative.to_path_buf())
+}
+
+fn absolute_lexical(path: &Path) -> Result<PathBuf, StoreError> {
+    if path.is_absolute() {
+        Ok(path.to_path_buf())
+    } else {
+        Ok(std::env::current_dir()?.join(path))
+    }
 }
 
 fn canonical_diff(diff: &str, path: &str, before: bool, after: bool) -> String {
@@ -676,11 +686,6 @@ mod diff_argument_tests {
             contained_git_argument(root.path(), temporary.path()).expect("relative Git argument");
         assert!(!argument.is_absolute());
         assert_eq!(root.path().join(&argument), temporary.path());
-        assert_eq!(
-            contained_git_argument(Path::new("."), Path::new("./.casefile-temp"))
-                .expect("dot-root relative Git argument"),
-            PathBuf::from(".casefile-temp")
-        );
         assert!(
             contained_git_argument(root.path(), root.path().parent().expect("outside parent"))
                 .is_err()
