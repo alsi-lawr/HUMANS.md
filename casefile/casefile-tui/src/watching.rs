@@ -367,7 +367,10 @@ impl PathClassifier {
 
 fn is_lexically_absolute(value: &str, windows: bool) -> bool {
     if !windows {
-        return Path::new(value).is_absolute();
+        // This branch models a POSIX namespace even when the pure classifier tests execute on a
+        // Windows host. `Path::is_absolute` applies host rules, where `/` is rooted but not fully
+        // qualified, and would collapse POSIX filesystem-root and dot-relative namespaces.
+        return value.starts_with('/');
     }
     let value = value.replace('\\', "/");
     value.starts_with('/')
@@ -902,6 +905,7 @@ mod tests {
     #[test]
     fn classifier_keeps_dot_root_relative_and_absolute_namespaces_distinct() {
         let mut classifier = PathClassifier::new(".", false);
+        assert_eq!(classifier.root_namespace, RootNamespace::DotRelative);
         classifier.rebuild(&catalogue());
         assert!(matches!(
             classifier.classify_str("./projects/alpha/investigations/deep/ticket.md"),
