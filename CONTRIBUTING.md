@@ -92,9 +92,9 @@ Entry and Store revisions are opaque, versioned aggregates of filesystem metadat
 content hashes. The contention stamp covers file type, native filesystem identity, length, and
 modification/change timestamps; preview/apply uses that stamp as its sole stale-target authority.
 Ordinary edits, replacements, type changes, creation, and removal are detected. A same-identity,
-same-size edit that deliberately preserves every timestamp may evade detection by design. Body
-reads remain available for parsing, diffs, semantic no-ops, rollback, and explicit provenance, but
-not for stronger stale admission. Overlay revisions are synthetic and non-authoritative.
+same-size edit that deliberately preserves every timestamp may evade detection by design. Body reads
+remain available for parsing, diffs, semantic no-ops, rollback, and explicit provenance, but not for
+stronger stale admission. Overlay revisions are synthetic and non-authoritative.
 
 `Store::presentation_session` is a separate, bounded catalogue-first read model. Its generations,
 scope coverage, progress, entry batches, lazy content handles, and per-fact availability are
