@@ -170,13 +170,6 @@ impl Coordinator {
     }
 
     pub(crate) fn refresh(&mut self, target: PresentationTarget) -> Result<(), String> {
-        if !matches!(target, PresentationTarget::Store)
-            && let RefreshMinimumScope::Store { reason } = &self.observation.minimum_scope
-        {
-            return Err(format!(
-                "Narrow refresh unavailable: {reason}; press R to refresh the Store."
-            ));
-        }
         self.start_target(target, false)
             .map_err(|error| format!("Refresh could not start: {error}"))
     }
@@ -1050,12 +1043,31 @@ mod tests {
     }
 
     #[test]
-    fn store_minimum_scope_rejects_narrow_refresh_without_starting_a_generation() {
+    fn store_minimum_scope_allows_contextual_refresh_and_reports_its_exact_coverage() {
         let root = fixture();
         let store = Store::open(root.path()).expect("store");
-        let mut coordinator =
-            Coordinator::start(store.presentation_session(), None).expect("coordinator");
+        let (_observation_sender, observation_receiver) = mpsc::channel();
+        let (report_sender, report_receiver) = mpsc::channel();
+        let mut coordinator = Coordinator::start(
+            store.presentation_session(),
+            Some(ObservationHandoff::new(observation_receiver, report_sender)),
+        )
+        .expect("coordinator");
         finish_active(&mut coordinator);
+        assert!(matches!(
+            report_receiver.recv().expect("initial start report"),
+            RefreshReport::Started {
+                target: PresentationTarget::Store,
+                ..
+            }
+        ));
+        assert!(matches!(
+            report_receiver.recv().expect("initial success report"),
+            RefreshReport::Succeeded {
+                target: PresentationTarget::Store,
+                ..
+            }
+        ));
         assert!(coordinator.observe(RefreshObservation {
             generation: 7,
             minimum_scope: RefreshMinimumScope::Store {
@@ -1063,20 +1075,40 @@ mod tests {
             },
         }));
         let generation = coordinator.next_generation;
-
-        let error = coordinator
-            .refresh(PresentationTarget::Project {
-                project: "demo".into(),
-            })
-            .expect_err("narrow rejection");
-        assert!(error.contains("press R"));
-        assert_eq!(coordinator.next_generation, generation);
-        assert!(coordinator.active.is_none());
+        let target = PresentationTarget::Project {
+            project: "demo".into(),
+        };
 
         coordinator
-            .refresh(PresentationTarget::Store)
-            .expect("Store refresh");
+            .refresh(target.clone())
+            .expect("contextual Project refresh");
         assert_eq!(coordinator.next_generation, generation + 1);
+        assert_eq!(
+            coordinator.active.as_ref().map(|active| &active.target),
+            Some(&target)
+        );
+        assert!(matches!(
+            report_receiver.recv().expect("contextual start report"),
+            RefreshReport::Started {
+                target: PresentationTarget::Project { ref project },
+                observation_generation: 7,
+                ..
+            } if project == "demo"
+        ));
+        finish_active(&mut coordinator);
+        assert!(matches!(
+            report_receiver.recv().expect("contextual success report"),
+            RefreshReport::Succeeded {
+                target: PresentationTarget::Project { ref project },
+                started_observation_generation: 7,
+                completed_observation_generation: 7,
+                ..
+            } if project == "demo"
+        ));
+        assert!(matches!(
+            coordinator.observation.minimum_scope,
+            RefreshMinimumScope::Store { .. }
+        ));
     }
 
     #[test]

@@ -825,11 +825,10 @@ fn refresh_target_matrix_uses_project_full_investigation_and_store_fallback() {
         },
     }));
     let narrow_target = app.refresh_target(&coordinator, RefreshIntent::Current);
-    let rejected = coordinator
+    coordinator
         .refresh(narrow_target)
-        .expect_err("narrow refresh");
-    app.feedback = Some(rejected);
-    assert!(test_support::render(&app, 140, 32).contains("press R"));
+        .expect("Store guidance does not reject a contextual refresh");
+    assert!(coordinator.status().contains("Refreshing investigation"));
     let store_target = app.refresh_target(&coordinator, RefreshIntent::Store);
     coordinator
         .refresh(store_target)
