@@ -314,6 +314,12 @@ fn disk_change_warns_without_input_retains_selection_and_manual_refresh_remains_
             .windows("on disk".len())
             .any(|part| part == b"on disk")
     );
+    assert!(
+        !transcript
+            .windows("STALE INHERITED".len())
+            .any(|part| part == b"STALE INHERITED"),
+        "refreshing the selected investigation must not leave its own warning inherited"
+    );
     assert!(restored(&transcript));
 }
 
@@ -330,7 +336,7 @@ fn default_dot_root_reports_external_disk_change_without_input() {
         content.replace("Minimum epic", "Changed through dot root"),
     )
     .expect("external disk change");
-    pty.wait_for("STALE DIRECT");
+    pty.wait_for("STALE SCOPE (project demo)");
     pty.send(b"q");
 
     let transcript = pty.finish(true);

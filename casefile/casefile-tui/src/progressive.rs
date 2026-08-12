@@ -126,7 +126,6 @@ pub(crate) struct Coordinator {
     handoff: Option<ObservationHandoff>,
     status: String,
     content_status: Option<String>,
-    completed_target: Option<PresentationTarget>,
 }
 
 impl Coordinator {
@@ -163,7 +162,6 @@ impl Coordinator {
             handoff,
             status: String::new(),
             content_status: None,
-            completed_target: None,
         };
         coordinator.start_target(PresentationTarget::Store, true)?;
         Ok(coordinator)
@@ -357,10 +355,6 @@ impl Coordinator {
         self.visible_catalogue()
     }
 
-    pub(crate) fn take_completed_target(&mut self) -> Option<PresentationTarget> {
-        self.completed_target.take()
-    }
-
     pub(crate) fn investigation_target(
         &self,
         project: &str,
@@ -441,7 +435,6 @@ impl Coordinator {
                 self.complete_entry_targets
                     .extend(active.entry_targets.clone());
                 self.has_complete = true;
-                self.completed_target = Some(active.target.clone());
                 let later_observation =
                     self.observation.generation > active.started_observation_generation;
                 self.status = if later_observation {

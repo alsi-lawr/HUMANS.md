@@ -212,11 +212,7 @@ impl App {
             let update = coordinator.drain();
             if update.projection != ProjectionChange::None {
                 self.apply_projection(coordinator.projection(), update.projection);
-                if update.projection == ProjectionChange::Complete
-                    && matches!(
-                        coordinator.take_completed_target(),
-                        Some(PresentationTarget::Store)
-                    )
+                if (update.projection == ProjectionChange::Complete || !watcher.has_catalogue())
                     && let Some(catalogue) = coordinator.catalogue()
                 {
                     watcher.rebuild(catalogue);
@@ -258,18 +254,31 @@ impl App {
     }
 
     fn selected_scope(&self) -> SelectedScope {
-        match (
-            self.browser.selected_project(),
-            self.browser.selected_investigation(),
-        ) {
-            (Some(project), Some(identity)) => SelectedScope::Investigation {
-                project: project.into(),
-                identity: identity.into(),
-            },
-            (Some(project), None) => SelectedScope::Project {
-                project: project.into(),
-            },
-            _ => SelectedScope::Store,
+        match self.browser.view() {
+            View::Projects => SelectedScope::Store,
+            View::Investigations => self
+                .browser
+                .selected_project()
+                .map(|project| SelectedScope::Project {
+                    project: project.into(),
+                })
+                .unwrap_or(SelectedScope::Store),
+            View::Tickets | View::Files | View::Strategies | View::Boards => self
+                .browser
+                .selected_project()
+                .zip(self.browser.selected_investigation())
+                .map(|(project, identity)| SelectedScope::Investigation {
+                    project: project.into(),
+                    identity: identity.into(),
+                })
+                .or_else(|| {
+                    self.browser
+                        .selected_project()
+                        .map(|project| SelectedScope::Project {
+                            project: project.into(),
+                        })
+                })
+                .unwrap_or(SelectedScope::Store),
         }
     }
 

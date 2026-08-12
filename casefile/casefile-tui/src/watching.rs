@@ -545,7 +545,14 @@ impl FreshnessReducer {
                         .is_some_and(|(started_target, started)| {
                             started_target == target && started == started_observation_generation
                         });
-                if !valid || started_observation_generation != completed_observation_generation {
+                if !valid
+                    || completed_observation_generation < started_observation_generation
+                    || self.has_relevant_later_observation(
+                        &target,
+                        started_observation_generation,
+                        completed_observation_generation,
+                    )
+                {
                     return false;
                 }
                 let before = self.records.clone();
@@ -566,7 +573,15 @@ impl FreshnessReducer {
                     PresentationTarget::Investigation { project, path } => {
                         if let Some(identity) = classifier.investigation_identity(&project, &path) {
                             for record in &mut self.records {
-                                if record.generation <= started_observation_generation {
+                                if record.generation <= started_observation_generation
+                                    && matches!(
+                                        &record.impact,
+                                        ScopeImpact::Investigation {
+                                            project: stale_project,
+                                            identity: stale_identity,
+                                        } if stale_project == &project && stale_identity == &identity
+                                    )
+                                {
                                     record
                                         .direct_clears
                                         .insert((project.clone(), identity.clone()));
@@ -578,6 +593,37 @@ impl FreshnessReducer {
                 before != self.records
             }
         }
+    }
+
+    fn has_relevant_later_observation(
+        &self,
+        target: &PresentationTarget,
+        started: u64,
+        completed: u64,
+    ) -> bool {
+        if completed == started {
+            return false;
+        }
+        if matches!(target, PresentationTarget::Store) {
+            return true;
+        }
+        let project = match target {
+            PresentationTarget::Project { project }
+            | PresentationTarget::Investigation { project, .. } => project,
+            PresentationTarget::Store => unreachable!("Store handled above"),
+        };
+        self.records.iter().any(|record| {
+            record.generation > started
+                && record.generation <= completed
+                && (record.degraded
+                    || matches!(record.impact, ScopeImpact::Store)
+                    || matches!(
+                        &record.impact,
+                        ScopeImpact::Project { project: stale }
+                            | ScopeImpact::Investigation { project: stale, .. }
+                            if stale == project
+                    ))
+        })
     }
 
     fn warning(&self, scope: &SelectedScope) -> Option<String> {
@@ -597,9 +643,21 @@ impl FreshnessReducer {
                 ) => project == stale,
                 (
                     SelectedScope::Investigation { project, .. },
-                    ScopeImpact::Project { project: stale }
-                    | ScopeImpact::Investigation { project: stale, .. },
+                    ScopeImpact::Project { project: stale },
                 ) => project == stale,
+                (
+                    SelectedScope::Investigation { project, identity },
+                    ScopeImpact::Investigation {
+                        project: stale_project,
+                        identity: stale_identity,
+                    },
+                ) => {
+                    project == stale_project
+                        && !(identity == stale_identity
+                            && record
+                                .direct_clears
+                                .contains(&(project.clone(), identity.clone())))
+                }
                 _ => false,
             })
             .collect::<Vec<_>>();
@@ -693,6 +751,10 @@ impl WatchCoordinator {
 
     pub(crate) fn rebuild(&mut self, catalogue: &PresentationCatalogue) {
         self.classifier.rebuild(catalogue);
+    }
+
+    pub(crate) fn has_catalogue(&self) -> bool {
+        self.classifier.catalogue_known
     }
 
     pub(crate) fn drain(&mut self) -> bool {
@@ -1099,8 +1161,7 @@ mod tests {
     }
 
     #[test]
-    fn investigation_refresh_clears_only_direct_warning_and_store_refresh_is_required_for_store_wide()
-     {
+    fn investigation_refresh_suppresses_exact_warning_but_retains_broader_visibility() {
         let mut classifier = PathClassifier::new("/store", false);
         classifier.rebuild(&catalogue());
         let mut reducer = FreshnessReducer::new(WatchHealth::Healthy);
@@ -1141,29 +1202,87 @@ mod tests {
                     project: "alpha".into(),
                     identity: "deep".into(),
                 })
+                .is_none(),
+            "the exact refreshed investigation must not remain permanently inherited"
+        );
+        assert!(
+            reducer
+                .warning(&SelectedScope::Investigation {
+                    project: "alpha".into(),
+                    identity: "short".into(),
+                })
                 .unwrap()
                 .contains("INHERITED")
         );
+        assert!(
+            reducer
+                .warning(&SelectedScope::Project {
+                    project: "alpha".into(),
+                })
+                .is_some()
+        );
+        assert!(reducer.warning(&SelectedScope::Store).is_some());
 
-        reducer.mark(ScopeImpact::Store, false, "configuration".into());
+        reducer.mark(
+            ScopeImpact::Project {
+                project: "alpha".into(),
+            },
+            false,
+            "broader project cause".into(),
+        );
         reducer.report(
             RefreshReport::Started {
                 generation: 8,
-                target: PresentationTarget::Project {
+                target: PresentationTarget::Investigation {
                     project: "alpha".into(),
+                    path: "projects/alpha/investigations/deep".into(),
                 },
                 observation_generation: 2,
             },
             &classifier,
         );
-        reducer.report(
+        assert!(!reducer.report(
             RefreshReport::Succeeded {
                 generation: 8,
-                target: PresentationTarget::Project {
+                target: PresentationTarget::Investigation {
                     project: "alpha".into(),
+                    path: "projects/alpha/investigations/deep".into(),
                 },
                 started_observation_generation: 2,
                 completed_observation_generation: 2,
+            },
+            &classifier,
+        ));
+        assert!(
+            reducer
+                .warning(&SelectedScope::Investigation {
+                    project: "alpha".into(),
+                    identity: "deep".into(),
+                })
+                .unwrap()
+                .contains("INHERITED"),
+            "an exact clear must not hide a broader Project cause"
+        );
+
+        reducer.mark(ScopeImpact::Store, false, "configuration".into());
+        reducer.report(
+            RefreshReport::Started {
+                generation: 9,
+                target: PresentationTarget::Project {
+                    project: "alpha".into(),
+                },
+                observation_generation: 3,
+            },
+            &classifier,
+        );
+        reducer.report(
+            RefreshReport::Succeeded {
+                generation: 9,
+                target: PresentationTarget::Project {
+                    project: "alpha".into(),
+                },
+                started_observation_generation: 3,
+                completed_observation_generation: 3,
             },
             &classifier,
         );
@@ -1171,6 +1290,67 @@ mod tests {
             reducer.observation().minimum_scope,
             RefreshMinimumScope::Store { .. }
         ));
+    }
+
+    #[test]
+    fn unrelated_project_observation_does_not_invalidate_scoped_refresh_success() {
+        let classifier = PathClassifier::new("/store", false);
+        let mut reducer = FreshnessReducer::new(WatchHealth::Healthy);
+        reducer.mark(
+            ScopeImpact::Project {
+                project: "alpha".into(),
+            },
+            false,
+            "alpha before refresh".into(),
+        );
+        reducer.report(
+            RefreshReport::Started {
+                generation: 1,
+                target: PresentationTarget::Project {
+                    project: "alpha".into(),
+                },
+                observation_generation: 1,
+            },
+            &classifier,
+        );
+        reducer.mark(
+            ScopeImpact::Project {
+                project: "beta".into(),
+            },
+            false,
+            "beta during refresh".into(),
+        );
+        assert!(reducer.report(
+            RefreshReport::Succeeded {
+                generation: 1,
+                target: PresentationTarget::Project {
+                    project: "alpha".into(),
+                },
+                started_observation_generation: 1,
+                completed_observation_generation: 2,
+            },
+            &classifier,
+        ));
+        assert!(
+            reducer
+                .warning(&SelectedScope::Project {
+                    project: "alpha".into(),
+                })
+                .is_none()
+        );
+        assert!(
+            reducer
+                .warning(&SelectedScope::Project {
+                    project: "beta".into(),
+                })
+                .is_some()
+        );
+        assert!(
+            reducer
+                .warning(&SelectedScope::Store)
+                .unwrap()
+                .contains("beta")
+        );
     }
 
     #[test]
@@ -1217,6 +1397,49 @@ mod tests {
         assert!(watcher.drain(), "coalesced redraw deadline fires");
         drop(watcher);
         assert!(stopped.load(Ordering::SeqCst));
+    }
+
+    #[test]
+    fn first_catalogue_rebuild_changes_events_from_store_wide_to_scoped() {
+        let root = Path::new("/store");
+        let (mut watcher, events, observations, _reports, _stopped) = WatchCoordinator::fake(root);
+        assert!(!watcher.has_catalogue());
+        let changed = PathBuf::from("/store/projects/alpha/investigations/deep/tickets/A-1.md");
+        events
+            .send(NativeObservation::Event(
+                Event::new(EventKind::Modify(notify::event::ModifyKind::Any))
+                    .add_path(changed.clone()),
+            ))
+            .expect("pre-catalogue event");
+        assert!(watcher.drain());
+        assert!(matches!(
+            observations
+                .recv()
+                .expect("pre-catalogue observation")
+                .minimum_scope,
+            RefreshMinimumScope::Store { .. }
+        ));
+
+        watcher.rebuild(&catalogue());
+        assert!(watcher.has_catalogue());
+        events
+            .send(NativeObservation::Event(
+                Event::new(EventKind::Modify(notify::event::ModifyKind::Any)).add_path(changed),
+            ))
+            .expect("post-catalogue event");
+        assert!(!watcher.drain(), "burst redraw remains coalesced");
+        assert_eq!(
+            observations
+                .recv()
+                .expect("post-catalogue observation")
+                .generation,
+            2
+        );
+        assert!(watcher.reducer.records.iter().any(|record| matches!(
+            record.impact,
+            ScopeImpact::Investigation { ref project, ref identity }
+                if project == "alpha" && identity == "deep"
+        )));
     }
 
     #[test]
