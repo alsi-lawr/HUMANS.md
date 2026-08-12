@@ -7,7 +7,7 @@ use crate::{
     index::RevisionSource,
     presentation::PresentationSession,
     progress::{self, ProgressApplyResult, ProgressChangeRequest, ProgressPreview},
-    scanning::{ScanResult, scan},
+    scanning::{ScanResult, metadata_inventory, scan},
     writing,
 };
 use casefile_core::{
@@ -204,13 +204,28 @@ impl Store {
 
 impl RevisionSource for Store {
     fn current_revision(&self) -> Result<Revision, StoreError> {
-        Ok(self.scan()?.snapshot.revision)
+        Ok(metadata_inventory(&self.root)?.revision)
     }
 }
 
 #[cfg(all(test, unix))]
 mod safety_tests {
     use super::*;
+    use std::os::unix::fs::PermissionsExt;
+    use tempfile::TempDir;
+
+    #[test]
+    fn current_revision_uses_metadata_inventory_without_body_reads() {
+        let root = TempDir::new().expect("root");
+        let path = root.path().join("unreadable.raw");
+        fs::write(&path, b"not readable").expect("file");
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o000)).expect("permissions");
+        let store = Store::open(root.path()).expect("store");
+
+        let revision = RevisionSource::current_revision(&store).expect("metadata revision");
+        assert!(revision.0.starts_with("fsmeta-tree-v1:"));
+        assert!(store.scan().is_err());
+    }
 
     #[test]
     fn safe_target_parent_rejects_the_root_and_in_store_descendant_symlinks() {

@@ -537,7 +537,11 @@ def verify_config(
         relative = PurePosixPath(row["agent_file"].replace("\\", "/"))
         expected = root / Path(*relative.parts)
         actual = agents.get(row["profile"], {}).get("config_file")
-        if actual != str(expected) or not expected.is_file():
+        if (
+            not isinstance(actual, str)
+            or Path(actual) != expected
+            or not Path(actual).is_file()
+        ):
             raise SetupError(f"role binding is incorrect: {row['profile']}")
         agent = tomllib.loads(expected.read_text(encoding="ascii"))
         if row in override_rows:

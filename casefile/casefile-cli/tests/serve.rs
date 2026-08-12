@@ -305,10 +305,6 @@ fn serve_exposes_only_the_fixed_read_contract() {
 
     for query in [
         json!({"query":"snapshot"}),
-        json!({"query":"tickets", "scope":{"project":"demo", "investigation":"sample"}}),
-        json!({"query":"epics", "scope":{"project":"demo", "investigation":"sample"}}),
-        json!({"query":"progress", "scope":{"project":"demo", "investigation":"sample"}}),
-        json!({"query":"strategy_transitions", "scope":{"project":"demo", "investigation":"sample"}}),
         json!({"query":"relationships", "identity":{"scope":{"project":"demo", "investigation":"sample"}, "identity":"HMD-011"}}),
         json!({"query":"boards", "scope":{"project":"demo", "investigation":"sample"}}),
         json!({"query":"diagnostics"}),

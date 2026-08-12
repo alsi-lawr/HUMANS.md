@@ -110,7 +110,11 @@ else: raise SystemExit(2)
             self.assertTrue(binary.is_file())
             binding=json.loads((home/".claude.json").read_text())
             self.assertEqual(str(binary),binding["command"])
-            self.assertEqual(["mcp-package","--planning-root",str(planning)],binding["args"])
+            self.assertEqual(str(plan["planning_root"]),receipt["planning_root"])
+            self.assertEqual(
+                ["mcp-package","--planning-root",str(plan["planning_root"])],
+                binding["args"],
+            )
             # Depth ceiling comes from the deepest matrix the plugin ships, not a constant.
             self.assertEqual(2,receipt["subagent_spawn_depth"])
             self.assertIsNone(receipt["subagent_spawn_depth_before"])

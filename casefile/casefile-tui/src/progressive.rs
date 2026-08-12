@@ -8,10 +8,10 @@ use casefile_store::{
     PresentationCoverage, PresentationEntry, PresentationEvent, PresentationFact,
     PresentationLoadRequest, PresentationProgress, PresentationSession, PresentationStream,
     PresentationTarget, RecordScope, ScanResult, ScopedIdentity, StoreError, StrategyBindingState,
+    presentation_revision,
 };
 use std::{
-    collections::{BTreeMap, hash_map::DefaultHasher},
-    hash::{Hash, Hasher},
+    collections::BTreeMap,
     sync::mpsc::{Receiver, Sender, TryRecvError},
 };
 
@@ -126,7 +126,6 @@ pub(crate) struct Coordinator {
     handoff: Option<ObservationHandoff>,
     status: String,
     content_status: Option<String>,
-    completed_target: Option<PresentationTarget>,
 }
 
 impl Coordinator {
@@ -163,20 +162,12 @@ impl Coordinator {
             handoff,
             status: String::new(),
             content_status: None,
-            completed_target: None,
         };
         coordinator.start_target(PresentationTarget::Store, true)?;
         Ok(coordinator)
     }
 
     pub(crate) fn refresh(&mut self, target: PresentationTarget) -> Result<(), String> {
-        if !matches!(target, PresentationTarget::Store)
-            && let RefreshMinimumScope::Store { reason } = &self.observation.minimum_scope
-        {
-            return Err(format!(
-                "Narrow refresh unavailable: {reason}; press R to refresh the Store."
-            ));
-        }
         self.start_target(target, false)
             .map_err(|error| format!("Refresh could not start: {error}"))
     }
@@ -364,10 +355,6 @@ impl Coordinator {
         self.visible_catalogue()
     }
 
-    pub(crate) fn take_completed_target(&mut self) -> Option<PresentationTarget> {
-        self.completed_target.take()
-    }
-
     pub(crate) fn investigation_target(
         &self,
         project: &str,
@@ -415,6 +402,28 @@ impl Coordinator {
                     ProjectionChange::Partial
                 }
             }
+            PresentationEvent::Investigations {
+                projects,
+                coverage,
+                progress,
+                ..
+            } => {
+                self.cache.apply(&event);
+                let active = self.active.as_mut().expect("active load");
+                let catalogue = active.catalogue.as_mut().expect("projects catalogue");
+                catalogue.projects = projects.clone();
+                active.coverage = Some(coverage.clone());
+                active.progress = progress.clone();
+                self.status = format!(
+                    "{} investigations ready; records are loading...",
+                    target_name(&active.target)
+                );
+                if self.has_complete {
+                    ProjectionChange::None
+                } else {
+                    ProjectionChange::Partial
+                }
+            }
             PresentationEvent::Entries {
                 entries,
                 coverage,
@@ -448,7 +457,6 @@ impl Coordinator {
                 self.complete_entry_targets
                     .extend(active.entry_targets.clone());
                 self.has_complete = true;
-                self.completed_target = Some(active.target.clone());
                 let later_observation =
                     self.observation.generation > active.started_observation_generation;
                 self.status = if later_observation {
@@ -667,13 +675,7 @@ fn build_projection(
     });
     diagnostics.dedup();
     let snapshots = entries.iter().map(snapshot_entry).collect::<Vec<_>>();
-    let mut hasher = DefaultHasher::new();
-    format!("{activation:?}").hash(&mut hasher);
-    for entry in &snapshots {
-        entry.path.hash(&mut hasher);
-        entry.content_revision.0.hash(&mut hasher);
-    }
-    let revision = Revision(format!("presentation:{:016x}", hasher.finish()));
+    let revision = presentation_revision(&entries);
     let scan = ScanResult {
         activation,
         investigation_roots,
@@ -732,7 +734,7 @@ fn snapshot_entry(entry: &PresentationEntry) -> EntrySnapshot {
             PresentationFact::Available(value) => value.clone(),
             PresentationFact::Unavailable => None,
         },
-        content_revision: presentation_content_revision(entry),
+        content_revision: entry.metadata.revision.clone(),
         summary: match &entry.summary {
             PresentationFact::Available(Some(summary)) => Some(summary.record.clone()),
             PresentationFact::Available(None) | PresentationFact::Unavailable => None,
@@ -742,22 +744,6 @@ fn snapshot_entry(entry: &PresentationEntry) -> EntrySnapshot {
             PresentationFact::Unavailable => Vec::new(),
         },
     }
-}
-
-fn presentation_content_revision(entry: &PresentationEntry) -> Revision {
-    let mut hasher = DefaultHasher::new();
-    match &entry.body {
-        PresentationFact::Available(bytes) => {
-            true.hash(&mut hasher);
-            bytes.hash(&mut hasher);
-        }
-        PresentationFact::Unavailable => {
-            false.hash(&mut hasher);
-            entry.metadata.length.hash(&mut hasher);
-            entry.metadata.modified_unix_nanos.hash(&mut hasher);
-        }
-    }
-    Revision(format!("presentation-content:{:016x}", hasher.finish()))
 }
 
 fn presentation_derived(
@@ -982,9 +968,47 @@ mod tests {
         );
         let projection = coordinator.projection();
         assert!(projection.provisional);
+        assert!(
+            projection
+                .scan
+                .investigation_roots
+                .get("demo")
+                .is_some_and(Vec::is_empty)
+        );
+        let investigations = coordinator
+            .active
+            .as_ref()
+            .expect("active")
+            .stream
+            .recv()
+            .expect("investigations");
+        assert!(matches!(
+            investigations,
+            PresentationEvent::Investigations { .. }
+        ));
         assert_eq!(
-            projection.scan.investigation_roots.get("demo"),
+            coordinator.apply_load_event(investigations),
+            ProjectionChange::Partial
+        );
+        assert_eq!(
+            coordinator
+                .projection()
+                .scan
+                .investigation_roots
+                .get("demo"),
             Some(&vec!["sample".into()])
+        );
+        let tickets = coordinator
+            .active
+            .as_ref()
+            .expect("active")
+            .stream
+            .recv()
+            .expect("tickets");
+        assert!(matches!(tickets, PresentationEvent::Entries { .. }));
+        assert_eq!(
+            coordinator.apply_load_event(tickets),
+            ProjectionChange::Partial
         );
         let early = coordinator
             .active
@@ -1050,12 +1074,31 @@ mod tests {
     }
 
     #[test]
-    fn store_minimum_scope_rejects_narrow_refresh_without_starting_a_generation() {
+    fn store_minimum_scope_allows_contextual_refresh_and_reports_its_exact_coverage() {
         let root = fixture();
         let store = Store::open(root.path()).expect("store");
-        let mut coordinator =
-            Coordinator::start(store.presentation_session(), None).expect("coordinator");
+        let (_observation_sender, observation_receiver) = mpsc::channel();
+        let (report_sender, report_receiver) = mpsc::channel();
+        let mut coordinator = Coordinator::start(
+            store.presentation_session(),
+            Some(ObservationHandoff::new(observation_receiver, report_sender)),
+        )
+        .expect("coordinator");
         finish_active(&mut coordinator);
+        assert!(matches!(
+            report_receiver.recv().expect("initial start report"),
+            RefreshReport::Started {
+                target: PresentationTarget::Store,
+                ..
+            }
+        ));
+        assert!(matches!(
+            report_receiver.recv().expect("initial success report"),
+            RefreshReport::Succeeded {
+                target: PresentationTarget::Store,
+                ..
+            }
+        ));
         assert!(coordinator.observe(RefreshObservation {
             generation: 7,
             minimum_scope: RefreshMinimumScope::Store {
@@ -1063,20 +1106,40 @@ mod tests {
             },
         }));
         let generation = coordinator.next_generation;
-
-        let error = coordinator
-            .refresh(PresentationTarget::Project {
-                project: "demo".into(),
-            })
-            .expect_err("narrow rejection");
-        assert!(error.contains("press R"));
-        assert_eq!(coordinator.next_generation, generation);
-        assert!(coordinator.active.is_none());
+        let target = PresentationTarget::Project {
+            project: "demo".into(),
+        };
 
         coordinator
-            .refresh(PresentationTarget::Store)
-            .expect("Store refresh");
+            .refresh(target.clone())
+            .expect("contextual Project refresh");
         assert_eq!(coordinator.next_generation, generation + 1);
+        assert_eq!(
+            coordinator.active.as_ref().map(|active| &active.target),
+            Some(&target)
+        );
+        assert!(matches!(
+            report_receiver.recv().expect("contextual start report"),
+            RefreshReport::Started {
+                target: PresentationTarget::Project { ref project },
+                observation_generation: 7,
+                ..
+            } if project == "demo"
+        ));
+        finish_active(&mut coordinator);
+        assert!(matches!(
+            report_receiver.recv().expect("contextual success report"),
+            RefreshReport::Succeeded {
+                target: PresentationTarget::Project { ref project },
+                started_observation_generation: 7,
+                completed_observation_generation: 7,
+                ..
+            } if project == "demo"
+        ));
+        assert!(matches!(
+            coordinator.observation.minimum_scope,
+            RefreshMinimumScope::Store { .. }
+        ));
     }
 
     #[test]

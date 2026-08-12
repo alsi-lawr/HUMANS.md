@@ -202,7 +202,7 @@ fn scoped_check_requires_an_exact_activated_investigation() {
 
 fn assert_result(value: &Value, activation: &str, valid: Value, diagnostics: Value) {
     let revision = value["revision"].as_str().expect("revision");
-    assert!(revision.starts_with("sha256:"), "{revision}");
+    assert!(revision.starts_with("fsmeta-tree-v1:"), "{revision}");
     assert_eq!(
         json!({
             "activation": activation,

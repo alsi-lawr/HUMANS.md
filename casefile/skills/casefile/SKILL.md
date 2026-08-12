@@ -15,6 +15,12 @@ never clone or mirror the planning store in task scratch. Use the session's `.ag
 for disposable, non-authoritative previews, content-hash backups, isolated output, and command logs.
 Never infer a source path or replace the root.
 
+Establish read context hierarchically through Provider protocol v2: call `casefile_snapshot`, use
+its catalogue to resolve the exact project and complete investigation scope, then request that
+scope's `record_index`. Request `record_detail` only for the exact identities necessary for the
+current step. Never request unscoped or bulk records, infer an investigation path by concatenation,
+or combine snapshot, index, detail, board, or transition results carrying different revisions.
+
 Route the current phase to `casefile-investigate`, `casefile-review`, `casefile-implement`, or
 `casefile-close`. Every governed phase requires an explicit compatible strategy. Present compatible
 choices and a recommendation, then wait for human selection.

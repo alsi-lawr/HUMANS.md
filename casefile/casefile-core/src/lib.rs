@@ -29,7 +29,9 @@ pub use progress::{
     render_progress_log, validate_progress_log,
 };
 #[doc(hidden)]
-pub use project_map::parse as parse_project_map;
+pub use project_map::{
+    ProjectMap, parse as parse_project_map, parse_map as parse_project_map_values,
+};
 pub use record::{Classification, Kind, RecordDraft, RecordSummary};
 pub use rendering::render_markdown_html;
 #[doc(hidden)]

@@ -7,7 +7,7 @@ use std::{
 };
 use tempfile::TempDir;
 
-const OPERATIONS: &str = "snapshot,query_tickets,query_epics,query_boards,query_progress,query_strategy_transitions,preview_record_draft,apply_record_draft,bootstrap_progress,preview_progress,apply_progress,preview_default_delivery_board,apply_default_delivery_board,preview_strategy_transition,apply_strategy_transition,preview_writer_binding,apply_writer_binding";
+const OPERATIONS: &str = "snapshot,record_index,record_detail,boards,strategy_transitions,preview_record_draft,apply_record_draft,bootstrap_progress,preview_progress,apply_progress,preview_default_delivery_board,apply_default_delivery_board,preview_strategy_transition,apply_strategy_transition,preview_writer_binding,apply_writer_binding";
 
 fn copy_tree(from: &Path, to: &Path) {
     for entry in fs::read_dir(from).expect("fixture entries") {
@@ -39,7 +39,7 @@ fn command(root: &Path) -> Command {
         .arg(root)
         .arg("--expected-root")
         .arg(root)
-        .args(["--expected-provider-protocol", "1"])
+        .args(["--expected-provider-protocol", "2"])
         .args(["--required-provider-operations", OPERATIONS]);
     command
 }
@@ -81,13 +81,13 @@ fn compatibility_contract_is_machine_readable_and_complete() {
     );
     let value: Value = serde_json::from_slice(&output.stdout).expect("JSON");
     assert_eq!(value["identity"], "casefile");
-    assert_eq!(value["provider_protocol_version"], 1);
+    assert_eq!(value["provider_protocol_version"], 2);
     assert_eq!(
         value["required_provider_operations"]
             .as_array()
             .expect("operations")
             .len(),
-        17
+        16
     );
 }
 
@@ -102,9 +102,9 @@ fn fixed_root_session_negotiates_and_exposes_canonical_snapshot_and_query() {
             json!({"jsonrpc":"2.0","method":"notifications/initialized"}),
             json!({"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}),
             json!({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"casefile_snapshot","arguments":{}}}),
-            json!({"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"casefile_query","arguments":{"query":"tickets","scope":null,"search":null}}}),
-            json!({"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"casefile_query","arguments":{"query":"tickets","scope":{"project":"demo///","investigation":"sample\\\\"},"search":null}}}),
-            json!({"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"casefile_query","arguments":{"query":"tickets","scope":{"project":"C:demo"},"search":null}}}),
+            json!({"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"casefile_query","arguments":{"query":"record_index","scope":{"project":"demo","investigation":"sample"}}}}),
+            json!({"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"casefile_query","arguments":{"query":"record_detail","identity":{"scope":{"project":"demo///","investigation":"sample\\\\"},"identity":"HMD-011"}}}}),
+            json!({"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"casefile_query","arguments":{"query":"record_index","scope":{"project":"C:demo","investigation":"sample"}}}}),
         ],
     );
     assert!(
@@ -133,6 +133,13 @@ fn fixed_root_session_negotiates_and_exposes_canonical_snapshot_and_query() {
             .all(|tool| tool["inputSchema"]["additionalProperties"] != true),
         "tool argument roots must not be unconstrained objects"
     );
+    assert!(tools.iter().all(|tool| tool.get("outputSchema").is_some()));
+    assert!(
+        tools
+            .iter()
+            .all(|tool| tool["outputSchema"] != json!({"type": "object"})),
+        "every success shape must be explicitly bounded"
+    );
     assert!(
         tools
             .iter()
@@ -148,7 +155,7 @@ fn fixed_root_session_negotiates_and_exposes_canonical_snapshot_and_query() {
     };
     assert_eq!(
         schema("casefile_query")["oneOf"].as_array().unwrap().len(),
-        5
+        4
     );
     assert_eq!(
         schema("casefile_preview_record")["oneOf"]
@@ -165,6 +172,30 @@ fn fixed_root_session_negotiates_and_exposes_canonical_snapshot_and_query() {
         schema("casefile_apply_progress")["required"],
         json!(["preview_id"])
     );
+    let output_schema = |name: &str| {
+        &tools
+            .iter()
+            .find(|tool| tool["name"] == name)
+            .expect("named tool")["outputSchema"]
+    };
+    assert_eq!(
+        output_schema("casefile_preview_progress")["additionalProperties"],
+        false
+    );
+    assert_eq!(
+        output_schema("casefile_apply_progress")["required"],
+        json!(["result", "cache"])
+    );
+    let project_schema = &output_schema("casefile_snapshot")["properties"]["catalogue"]["properties"]
+        ["projects"]["items"];
+    assert_eq!(
+        project_schema["properties"]["name"],
+        json!({"type": "string"})
+    );
+    assert_eq!(
+        project_schema["properties"]["source_root"],
+        json!({"type": "string"})
+    );
     let response = |id: i64| {
         responses
             .iter()
@@ -173,25 +204,18 @@ fn fixed_root_session_negotiates_and_exposes_canonical_snapshot_and_query() {
     };
     let snapshot = &response(3)["result"]["structuredContent"];
     assert_eq!(snapshot["activation"], "active");
-    assert_eq!(snapshot["capabilities"]["protocol_version"], 1);
-    assert_eq!(
-        snapshot["projections"]["tickets"]
-            .as_array()
-            .expect("tickets")
-            .len(),
-        1
-    );
+    assert_eq!(snapshot["capabilities"]["protocol_version"], 2);
+    assert_eq!(snapshot["catalogue"]["projects"][0]["name"], "demo");
+    assert!(snapshot.get("projections").is_none());
     let query = &response(4)["result"]["structuredContent"];
-    assert_eq!(query["result"], "records");
-    assert_eq!(query["records"].as_array().expect("records").len(), 1);
+    assert_eq!(query["result"], "record_index");
+    assert_eq!(query["records"].as_array().expect("records").len(), 2);
     assert_eq!(
-        response(5)["result"]["structuredContent"]["records"]
-            .as_array()
-            .expect("portable scoped records")
-            .len(),
-        1
+        response(5)["result"]["structuredContent"]["record"]["identity"]["identity"],
+        "HMD-011"
     );
     assert_eq!(response(6)["result"]["isError"], true);
+    assert!(response(6)["result"].get("structuredContent").is_none());
     assert_eq!(
         directory_state(root.path()),
         before,
@@ -225,8 +249,8 @@ fn root_protocol_and_capability_refusals_happen_before_tool_service() {
     for (flag, value, diagnostic) in [
         (
             "--expected-provider-protocol",
-            "2",
-            "requires provider protocol 2",
+            "1",
+            "requires provider protocol 1",
         ),
         (
             "--required-provider-operations",

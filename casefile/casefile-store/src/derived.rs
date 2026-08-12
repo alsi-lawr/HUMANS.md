@@ -209,6 +209,17 @@ fn strategy_metadata_by_scope<'a>(
 }
 
 pub(super) fn derive_snapshot(scan: &ScanResult) -> DerivedSnapshot {
+    derive_snapshot_with_display(scan, true)
+}
+
+pub(super) fn derive_presentation_snapshot(scan: &ScanResult) -> DerivedSnapshot {
+    derive_snapshot_with_display(scan, false)
+}
+
+fn derive_snapshot_with_display(
+    scan: &ScanResult,
+    retain_display_payload: bool,
+) -> DerivedSnapshot {
     let scopes = scan
         .snapshot
         .entries
@@ -224,16 +235,22 @@ pub(super) fn derive_snapshot(scan: &ScanResult) -> DerivedSnapshot {
         .iter()
         .zip(scopes)
         .map(|(entry, scope)| {
-            let content = String::from_utf8(entry.original_bytes.clone()).ok();
-            let rendered_markdown = content
-                .as_deref()
-                .filter(|_| entry.path.ends_with(".md"))
-                .map(casefile_core::render_markdown_html);
+            let source = std::str::from_utf8(&entry.original_bytes).ok();
+            let content = retain_display_payload
+                .then(|| source.map(str::to_owned))
+                .flatten();
+            let rendered_markdown = retain_display_payload
+                .then(|| {
+                    source
+                        .filter(|_| entry.path.ends_with(".md"))
+                        .map(casefile_core::render_markdown_html)
+                })
+                .flatten();
             let title = entry.summary.as_ref().map_or_else(
                 || entry.identity.clone().unwrap_or_else(|| entry.path.clone()),
                 summary_title,
             );
-            let draft = content.as_deref().and_then(|text| match entry.kind {
+            let draft = source.and_then(|text| match entry.kind {
                 Some(kind)
                     if kind.is_writable() && entry.classification == Classification::Governed =>
                 {
@@ -279,7 +296,7 @@ pub(super) fn derive_snapshot(scan: &ScanResult) -> DerivedSnapshot {
             let metadata = strategy_metadata
                 .get(&scope)
                 .expect("strategy metadata exists for every record scope");
-            let strategy = match (&entry.summary, content.as_deref()) {
+            let strategy = match (&entry.summary, source) {
                 (Some(RecordSummary::Strategy { phase, adapter, .. }), Some(text)) => {
                     parse_strategy_projection(&entry.path, text)
                         .ok()
@@ -328,7 +345,11 @@ pub(super) fn derive_snapshot(scan: &ScanResult) -> DerivedSnapshot {
                 kind: entry.kind,
                 identity,
                 title: title.clone(),
-                search_text: format!("{title}\n{}", content.as_deref().unwrap_or_default()),
+                search_text: if retain_display_payload {
+                    format!("{title}\n{}", source.unwrap_or_default())
+                } else {
+                    title.clone()
+                },
                 content,
                 rendered_markdown,
                 work_item,
@@ -413,60 +434,239 @@ fn progress_by_scope(
             invalid.insert(scope);
             continue;
         };
-        let values = result.entry(scope).or_insert_with(BTreeMap::new);
-        for entry in log.entries {
-            match entry {
-                ProgressEntry::Transition {
+        result.insert(scope, fold_progress(log.entries));
+    }
+    (result, invalid)
+}
+
+pub(super) fn scoped_progress(
+    entries: &[EntrySnapshot],
+    diagnostics: &[Diagnostic],
+    path: &str,
+) -> BTreeMap<String, DerivedTicketProgress> {
+    debug_assert!(
+        entries
+            .iter()
+            .all(|entry| entry.path.starts_with(&format!("{path}/")))
+    );
+    let Some(entry) = entries
+        .iter()
+        .find(|entry| entry.kind == Some(Kind::Progress))
+    else {
+        return BTreeMap::new();
+    };
+    if entry.classification != Classification::Governed
+        || diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.path == entry.path)
+    {
+        return BTreeMap::new();
+    }
+    let Ok(text) = std::str::from_utf8(&entry.original_bytes) else {
+        return BTreeMap::new();
+    };
+    let Ok(log) = parse_progress_log(&entry.path, text) else {
+        return BTreeMap::new();
+    };
+    fold_progress(log.entries)
+}
+
+fn fold_progress(entries: Vec<ProgressEntry>) -> BTreeMap<String, DerivedTicketProgress> {
+    let mut values = BTreeMap::new();
+    for entry in entries {
+        match entry {
+            ProgressEntry::Transition {
+                id,
+                recorded_at,
+                recorded_by,
+                ticket_id,
+                from,
+                to,
+            } => {
+                let value = values
+                    .entry(ticket_id)
+                    .or_insert_with(|| DerivedTicketProgress {
+                        status: ProgressStatus::Unknown,
+                        last_transition: None,
+                        notes: Vec::new(),
+                    });
+                value.status = to;
+                value.last_transition = Some(DerivedProgressTransition {
                     id,
                     recorded_at,
                     recorded_by,
-                    ticket_id,
                     from,
                     to,
-                } => {
-                    let value = values
-                        .entry(ticket_id)
-                        .or_insert_with(|| DerivedTicketProgress {
-                            status: ProgressStatus::Unknown,
-                            last_transition: None,
-                            notes: Vec::new(),
-                        });
-                    value.status = to;
-                    value.last_transition = Some(DerivedProgressTransition {
-                        id,
-                        recorded_at,
-                        recorded_by,
-                        from,
-                        to,
-                    });
-                }
-                ProgressEntry::Note {
-                    id,
-                    recorded_at,
-                    recorded_by,
-                    ticket_id,
-                    category,
-                    message,
-                } => {
-                    let value = values
-                        .entry(ticket_id)
-                        .or_insert_with(|| DerivedTicketProgress {
-                            status: ProgressStatus::Unknown,
-                            last_transition: None,
-                            notes: Vec::new(),
-                        });
-                    value.notes.push(DerivedProgressNote {
+                });
+            }
+            ProgressEntry::Note {
+                id,
+                recorded_at,
+                recorded_by,
+                ticket_id,
+                category,
+                message,
+            } => {
+                values
+                    .entry(ticket_id)
+                    .or_insert_with(|| DerivedTicketProgress {
+                        status: ProgressStatus::Unknown,
+                        last_transition: None,
+                        notes: Vec::new(),
+                    })
+                    .notes
+                    .push(DerivedProgressNote {
                         id,
                         recorded_at,
                         recorded_by,
                         category,
                         message,
                     });
-                }
             }
         }
     }
-    (result, invalid)
+    values
+}
+
+pub(super) fn scoped_boards(
+    entries: &[EntrySnapshot],
+    diagnostics: &[Diagnostic],
+    project: &str,
+    investigation: &str,
+    path: &str,
+) -> Vec<DerivedBoard> {
+    let progress = scoped_progress(entries, diagnostics, path);
+    let progress_valid = entries
+        .iter()
+        .find(|entry| entry.kind == Some(Kind::Progress))
+        .is_none_or(|entry| {
+            entry.classification == Classification::Governed
+                && !diagnostics
+                    .iter()
+                    .any(|diagnostic| diagnostic.path == entry.path)
+        });
+    let scope = RecordScope {
+        project: project.into(),
+        investigation: Some(investigation.into()),
+    };
+    let cards = entries
+        .iter()
+        .filter_map(|entry| {
+            let Some(RecordSummary::WorkItem {
+                id,
+                title,
+                status,
+                rank,
+            }) = &entry.summary
+            else {
+                return None;
+            };
+            let kind = entry
+                .kind
+                .filter(|kind| matches!(kind, Kind::Ticket | Kind::Epic))?;
+            (entry.classification == Classification::Governed).then_some((
+                ScopedIdentity {
+                    scope: scope.clone(),
+                    identity: id.clone(),
+                },
+                kind,
+                title.clone(),
+                status.clone(),
+                *rank,
+            ))
+        })
+        .collect::<Vec<_>>();
+    let mut boards = entries
+        .iter()
+        .filter(|entry| {
+            entry.kind == Some(Kind::Board) && entry.classification == Classification::Governed
+        })
+        .filter_map(|entry| {
+            let text = std::str::from_utf8(&entry.original_bytes).ok()?;
+            let RecordDraft::Board(board) =
+                casefile_core::parse_draft(&entry.path, Kind::Board, text).ok()?
+            else {
+                return None;
+            };
+            let identity = ScopedIdentity {
+                scope: scope.clone(),
+                identity: board.id.clone(),
+            };
+            let mut columns = board
+                .columns
+                .iter()
+                .map(|column| DerivedBoardColumn {
+                    name: column.name.clone(),
+                    statuses: column.statuses.clone(),
+                    cards: Vec::new(),
+                })
+                .collect::<Vec<_>>();
+            for (card_id, kind, title, disposition, rank) in &cards {
+                let (status, eligible) = match board.status_source {
+                    BoardStatusSource::Disposition => (disposition.clone(), true),
+                    BoardStatusSource::Progress => match progress.get(&card_id.identity) {
+                        Some(progress) => (
+                            progress.status.as_str().into(),
+                            disposition == "accepted" && *kind == Kind::Ticket,
+                        ),
+                        None if progress_valid
+                            && disposition == "accepted"
+                            && *kind == Kind::Ticket =>
+                        {
+                            (ProgressStatus::Unknown.as_str().into(), true)
+                        }
+                        None => continue,
+                    },
+                };
+                if !eligible
+                    || board
+                        .filter_statuses
+                        .as_ref()
+                        .is_some_and(|values| !values.contains(&status))
+                    || board.filter_kinds.as_ref().is_some_and(|values| {
+                        !values.iter().any(|value| {
+                            value
+                                == if *kind == Kind::Ticket {
+                                    "ticket"
+                                } else {
+                                    "epic"
+                                }
+                        })
+                    })
+                {
+                    continue;
+                }
+                if let Some(column) = columns
+                    .iter_mut()
+                    .find(|column| column.statuses.contains(&status))
+                {
+                    column.cards.push(DerivedCard {
+                        identity: card_id.clone(),
+                        kind: *kind,
+                        title: title.clone(),
+                        status,
+                        rank: *rank,
+                    });
+                }
+            }
+            for column in &mut columns {
+                column.cards.sort_by(|left, right| {
+                    (left.rank.unwrap_or(u64::MAX), &left.identity.identity)
+                        .cmp(&(right.rank.unwrap_or(u64::MAX), &right.identity.identity))
+                });
+            }
+            Some(DerivedBoard {
+                identity,
+                title: board.title,
+                status_source: board.status_source,
+                filter_statuses: board.filter_statuses,
+                filter_kinds: board.filter_kinds,
+                columns,
+            })
+        })
+        .collect::<Vec<_>>();
+    boards.sort_by(|left, right| left.identity.cmp(&right.identity));
+    boards
 }
 
 fn resolve_binding(
@@ -547,6 +747,19 @@ fn record_scope(path: &str, scan: &ScanResult) -> Option<RecordScope> {
 }
 
 fn derive_relationships(records: &[DerivedRecord]) -> Vec<DerivedRelationship> {
+    let mut decisions: BTreeMap<(&str, &str), Vec<&ScopedIdentity>> = BTreeMap::new();
+    let mut work_items: BTreeMap<(&str, &str), Vec<&ScopedIdentity>> = BTreeMap::new();
+    for record in records {
+        let Some(identity) = record.identity.as_ref() else {
+            continue;
+        };
+        let key = (identity.scope.project.as_str(), identity.identity.as_str());
+        if record.kind == Some(Kind::Decision) {
+            decisions.entry(key).or_default().push(identity);
+        } else if matches!(record.kind, Some(Kind::Ticket | Kind::Epic)) {
+            work_items.entry(key).or_default().push(identity);
+        }
+    }
     let mut result = Vec::new();
     for record in records {
         let (Some(source), Some(item)) = (&record.identity, &record.work_item) else {
@@ -559,29 +772,17 @@ fn derive_relationships(records: &[DerivedRecord]) -> Vec<DerivedRelationship> {
             (&item.superseded_by, RelationshipKind::SupersededBy),
         ] {
             for reference in references {
-                let targets = records
-                    .iter()
-                    .filter(|target| {
-                        target.identity.as_ref().is_some_and(|identity| {
-                            identity.identity == *reference
-                                && match kind {
-                                    RelationshipKind::Decision => {
-                                        target.kind == Some(Kind::Decision)
-                                            && identity.scope.project == source.scope.project
-                                    }
-                                    _ => {
-                                        matches!(target.kind, Some(Kind::Ticket | Kind::Epic))
-                                            && identity.scope.project == source.scope.project
-                                    }
-                                }
-                        })
-                    })
-                    .filter_map(|target| target.identity.clone())
-                    .collect::<Vec<_>>();
+                let key = (source.scope.project.as_str(), reference.as_str());
+                let targets = if kind == RelationshipKind::Decision {
+                    decisions.get(&key)
+                } else {
+                    work_items.get(&key)
+                };
+                let targets = targets.map(Vec::as_slice).unwrap_or_default();
                 if targets.len() == 1 {
                     result.push(DerivedRelationship {
                         source: source.clone(),
-                        target: targets[0].clone(),
+                        target: (*targets[0]).clone(),
                         kind,
                     });
                 }
@@ -604,12 +805,7 @@ fn derive_boards(records: &[DerivedRecord], scan: &ScanResult) -> Vec<DerivedBoa
     for record in records.iter().filter(|record| {
         record.kind == Some(Kind::Board) && record.classification == Classification::Governed
     }) {
-        let Some(text) = record.content.as_deref() else {
-            continue;
-        };
-        let Ok(RecordDraft::Board(board)) =
-            casefile_core::parse_draft(&record.path, Kind::Board, text)
-        else {
+        let Some(board) = record.board.clone() else {
             continue;
         };
         let Some(scope) = record_scope(&record.path, scan) else {

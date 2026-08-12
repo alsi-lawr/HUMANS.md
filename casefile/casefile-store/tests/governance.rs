@@ -2,9 +2,11 @@ use std::{fs, path::Path, process::Command};
 
 use casefile_core::{Diagnostic, Kind, ProgressEntry, ProgressLog, ProgressStatus, Revision};
 use casefile_store::{
-    GovernedOperationKind, ProgressChangeRequest, Provider, ProviderError, ProviderOperation,
-    ProviderQuery, ProviderQueryResult, Store, StrategyTransitionRequest, WriterBindingRequest,
+    GovernedOperationKind, InvestigationScope, ProgressChangeRequest, Provider, ProviderError,
+    ProviderOperation, ProviderQuery, ProviderQueryResult, Store, StrategyTransitionRequest,
+    WriterBindingRequest,
 };
+use sha2::{Digest, Sha256};
 use tempfile::TempDir;
 
 const INVESTIGATION: &str = "projects/demo/investigations/sample";
@@ -188,16 +190,20 @@ fn strategy_transition_is_strict_store_visible_idempotent_and_creates_no_backup(
     assert_eq!(scan.snapshot.revision, result.resulting_store_revision);
     let provider = Provider::without_cache(store.clone());
     let snapshot = provider.snapshot().expect("provider snapshot");
-    assert_eq!(snapshot.projections.strategy_transitions.len(), 1);
     assert!(
         snapshot
             .capabilities
             .operations
-            .contains(&ProviderOperation::QueryStrategyTransitions)
+            .contains(&ProviderOperation::StrategyTransitions)
     );
     assert!(matches!(
         provider
-            .query(ProviderQuery::StrategyTransitions { scope: None })
+            .query(ProviderQuery::StrategyTransitions {
+                scope: InvestigationScope {
+                    project: "demo".into(),
+                    investigation: "sample".into(),
+                }
+            })
             .expect("transition query"),
         ProviderQueryResult::StrategyTransitions { transitions, .. } if transitions.len() == 1
     ));
@@ -284,14 +290,16 @@ fn strategy_replay_equates_only_line_endings_and_keeps_raw_preview_staleness() {
     );
 
     let scan = store.scan().expect("CRLF scan");
-    let raw_matrix_revision = scan
+    let matrix_entry = scan
         .snapshot
         .entries
         .iter()
         .find(|entry| entry.path == matrix_path)
-        .expect("matrix entry")
-        .content_revision
-        .clone();
+        .expect("matrix entry");
+    let raw_matrix_revision = Revision(format!(
+        "sha256:{:x}",
+        Sha256::digest(&matrix_entry.original_bytes)
+    ));
     let record_entry = scan
         .snapshot
         .entries
@@ -739,6 +747,14 @@ fn binding_provider_preview_is_complete_strict_atomic_and_has_no_archive_or_scra
         ));
         assert!(!target.exists());
     }
+    fs::write(&target, BINDING).expect("binding appeared after preview");
+    assert!(matches!(
+        provider.apply_writer_binding(preview.clone()),
+        Err(ProviderError::Store(
+            casefile_store::StoreError::StaleTargetRevision
+        ))
+    ));
+    fs::remove_file(&target).expect("remove stale binding");
     let result = provider.apply_writer_binding(preview).expect("apply");
     assert!(!result.result.no_op);
     assert_eq!(fs::read_to_string(&target).expect("binding"), BINDING);

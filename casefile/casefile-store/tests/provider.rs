@@ -2,9 +2,9 @@ use casefile_core::{
     ChangeRequest, Diagnostic, Kind, ProgressEntry, ProgressStatus, RecordDraft, Revision,
 };
 use casefile_store::{
-    ActivationState, CacheState, NoCache, ProgressOperation, ProgressProjection, Provider,
-    ProviderApprovalPolicy, ProviderCache, ProviderError, ProviderMutationState, ProviderOperation,
-    ProviderQuery, ProviderQueryResult, RecordScope, Store,
+    ActivationState, CacheState, InvestigationScope, InvestigationScopedIdentity, NoCache,
+    ProgressOperation, Provider, ProviderApprovalPolicy, ProviderCache, ProviderError,
+    ProviderMutationState, ProviderOperation, ProviderQuery, ProviderQueryResult, Store,
 };
 use std::{fs, path::Path, process::Command};
 use tempfile::TempDir;
@@ -66,7 +66,7 @@ fn new_ticket(root: &Path) -> (String, RecordDraft) {
 }
 
 #[test]
-fn snapshot_negotiates_one_single_scan_v1_baseline_and_queries_store_projections() {
+fn snapshot_and_exact_scoped_reads_are_bounded_protocol_v2() {
     let root = fixture();
     let store = Store::open(root.path()).expect("store");
     let provider = Provider::without_cache(store.clone());
@@ -94,9 +94,9 @@ fn snapshot_negotiates_one_single_scan_v1_baseline_and_queries_store_projections
                 .expect("progress preview"),
         )
         .expect("progress apply");
-    let snapshot = provider.snapshot_for_protocol(1).expect("snapshot");
+    let snapshot = provider.snapshot_for_protocol(2).expect("snapshot");
     assert_eq!(snapshot.activation, ActivationState::Active);
-    assert_eq!(snapshot.capabilities.protocol_version, 1);
+    assert_eq!(snapshot.capabilities.protocol_version, 2);
     assert_eq!(snapshot.capabilities.planning_format_versions, [1]);
     assert_eq!(
         snapshot.capabilities.mutation,
@@ -133,7 +133,7 @@ fn snapshot_negotiates_one_single_scan_v1_baseline_and_queries_store_projections
             .contains(&ProviderOperation::ApplyProgress)
     );
     assert!(matches!(
-        provider.snapshot_for_protocol(2),
+        provider.snapshot_for_protocol(1),
         Err(ProviderError::UnsupportedProtocol { .. })
     ));
 
@@ -151,102 +151,98 @@ fn snapshot_negotiates_one_single_scan_v1_baseline_and_queries_store_projections
         snapshot
     );
 
-    let derived = store.derived_snapshot().expect("derived");
-    let tickets = derived
-        .records
-        .iter()
-        .filter(|record| record.kind == Some(Kind::Ticket))
-        .cloned()
-        .collect::<Vec<_>>();
-    let epics = derived
-        .records
-        .iter()
-        .filter(|record| record.kind == Some(Kind::Epic))
-        .cloned()
-        .collect::<Vec<_>>();
-    let progress = tickets
-        .iter()
-        .filter(|record| record.progress.is_some())
-        .cloned()
-        .map(|record| ProgressProjection { record })
-        .collect::<Vec<_>>();
-    assert_eq!(snapshot.revision, derived.source_revision);
-    assert_eq!(snapshot.diagnostics, derived.diagnostics);
-    assert_eq!(snapshot.projections.tickets, tickets);
-    assert_eq!(snapshot.projections.epics, epics);
-    assert_eq!(snapshot.projections.boards, derived.boards);
-    assert_eq!(snapshot.projections.progress, progress);
-
-    for (query, expected) in [
-        (
-            ProviderQuery::Tickets {
-                scope: None,
-                search: None,
-            },
-            ProviderQueryResult::Records {
-                revision: derived.source_revision.clone(),
-                records: tickets,
-            },
-        ),
-        (
-            ProviderQuery::Epics {
-                scope: None,
-                search: None,
-            },
-            ProviderQueryResult::Records {
-                revision: derived.source_revision.clone(),
-                records: epics,
-            },
-        ),
-        (
-            ProviderQuery::Boards { scope: None },
-            ProviderQueryResult::Boards {
-                revision: derived.source_revision.clone(),
-                boards: derived.boards,
-            },
-        ),
-        (
-            ProviderQuery::Progress { scope: None },
-            ProviderQueryResult::Progress {
-                revision: derived.source_revision.clone(),
-                progress,
-            },
-        ),
+    assert_eq!(snapshot.catalogue.projects[0].name, "demo");
+    assert_eq!(
+        snapshot.catalogue.projects[0].source_root.as_deref(),
+        Some("/source/demo")
+    );
+    assert!(snapshot.catalogue.projects[0].governed);
+    assert_eq!(
+        snapshot.catalogue.projects[0].prefix.as_deref(),
+        Some("HMD")
+    );
+    assert_eq!(
+        snapshot.catalogue.projects[0].investigations[0].identity,
+        "sample"
+    );
+    assert_eq!(
+        snapshot.diagnostic_coverage.records,
+        casefile_store::ProviderRecordDiagnosticCoverage::NotLoaded
+    );
+    let encoded = serde_json::to_string(&snapshot).expect("snapshot JSON");
+    for forbidden in [
+        "projections",
+        "content",
+        "rendered_markdown",
+        "search_text",
+        "work_item",
+        "original_bytes",
     ] {
-        assert_eq!(provider.query(query).expect("query"), expected);
+        assert!(!encoded.contains(forbidden), "root leaked {forbidden}");
     }
+    let scope = InvestigationScope {
+        project: "demo".into(),
+        investigation: "sample".into(),
+    };
     match provider
-        .query(ProviderQuery::Tickets {
-            scope: None,
-            search: Some("HMD-011".into()),
-        })
-        .expect("query")
-    {
-        ProviderQueryResult::Records { records, .. } => assert_eq!(records.len(), 1),
-        other => panic!("unexpected query result: {other:?}"),
-    }
-    match provider
-        .query(ProviderQuery::Tickets {
-            scope: Some(RecordScope {
+        .query(ProviderQuery::RecordIndex {
+            scope: InvestigationScope {
                 project: "demo///".into(),
-                investigation: Some(r"sample\\".into()),
-            }),
-            search: None,
+                investigation: r"sample\\".into(),
+            },
         })
         .expect("portable scoped query")
     {
-        ProviderQueryResult::Records { records, .. } => assert_eq!(records.len(), 1),
+        ProviderQueryResult::RecordIndex {
+            records,
+            revision,
+            diagnostic_coverage,
+            ..
+        } => {
+            assert_eq!(records.len(), 2);
+            assert_eq!(revision, snapshot.revision);
+            assert_eq!(diagnostic_coverage.scope.project, "demo");
+            assert_eq!(
+                diagnostic_coverage.kind,
+                casefile_store::ProviderIndexDiagnosticCoverageKind::LocalAndInvestigation
+            );
+            let ticket = records
+                .iter()
+                .find(|record| record.identity.as_deref() == Some("HMD-011"))
+                .expect("ticket index");
+            assert_eq!(
+                ticket.progress.as_ref().expect("progress").status,
+                ProgressStatus::InProgress
+            );
+        }
         other => panic!("unexpected scoped query result: {other:?}"),
     }
+    match provider
+        .query(ProviderQuery::Boards {
+            scope: scope.clone(),
+        })
+        .expect("purpose-built scoped boards")
+    {
+        ProviderQueryResult::Boards {
+            revision, boards, ..
+        } => {
+            assert_eq!(revision, snapshot.revision);
+            let canonical_scan = store.scan().expect("canonical board comparison scan");
+            assert_eq!(boards, store.derive_snapshot(&canonical_scan).boards);
+            assert_eq!(boards[0].columns[0].cards[0].identity.identity, "HMD-011");
+        }
+        other => panic!("unexpected scoped board result: {other:?}"),
+    }
+    let identity = InvestigationScopedIdentity {
+        scope,
+        identity: "HMD-011".into(),
+    };
     assert!(matches!(
-        provider.query(ProviderQuery::Tickets {
-            scope: Some(RecordScope {
-                project: "C:demo".into(),
-                investigation: None,
-            }),
-            search: None,
-        }),
-        Err(ProviderError::Store(casefile_store::StoreError::Invalid(_)))
+        provider.query(ProviderQuery::RecordDetail { identity }),
+        Ok(ProviderQueryResult::RecordDetail {
+            record: Some(_),
+            ..
+        })
     ));
 
     let scan = store.scan().expect("controlled baseline");
@@ -266,6 +262,153 @@ fn snapshot_negotiates_one_single_scan_v1_baseline_and_queries_store_projections
             .operations
             .contains(&ProviderOperation::ApplyRecordDraft)
     );
+}
+
+#[cfg(unix)]
+#[test]
+fn hierarchical_reads_are_selective_bounded_and_exact() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let root = fixture();
+    let ticket = root
+        .path()
+        .join(format!("{INVESTIGATION}/tickets/accepted/HMD-011.md"));
+    let baseline = fs::read_to_string(&ticket).expect("ticket");
+    let provider = Provider::without_cache(Store::open(root.path()).expect("store"));
+    let snapshot_before = serde_json::to_vec(&provider.snapshot().expect("root")).expect("JSON");
+    let scope = InvestigationScope {
+        project: "demo".into(),
+        investigation: "sample".into(),
+    };
+    let index_before = serde_json::to_vec(
+        &provider
+            .query(ProviderQuery::RecordIndex {
+                scope: scope.clone(),
+            })
+            .expect("index before"),
+    )
+    .expect("index JSON");
+    fs::write(
+        &ticket,
+        format!("{baseline}\nSENTINEL_BODY\n{}\n", "x".repeat(1_000_000)),
+    )
+    .expect("large body");
+    let snapshot_after = serde_json::to_vec(&provider.snapshot().expect("root")).expect("JSON");
+    assert_eq!(snapshot_before.len(), snapshot_after.len());
+    assert!(
+        !String::from_utf8(snapshot_after)
+            .expect("UTF-8")
+            .contains("SENTINEL_BODY")
+    );
+
+    let other = root.path().join("projects/demo/investigations/other");
+    fs::create_dir_all(other.join("tickets/accepted")).expect("other");
+    let unreadable = other.join("tickets/accepted/HMD-999.md");
+    fs::write(&unreadable, b"unreadable").expect("unreadable");
+    fs::set_permissions(&unreadable, fs::Permissions::from_mode(0o000)).expect("permissions");
+    let mut activation = fs::read_to_string(root.path().join("casefile.toml")).expect("activation");
+    activation = activation.replace(
+        "investigations = [\"projects/demo/investigations/sample\"]",
+        "investigations = [\"projects/demo/investigations/sample\", \"projects/demo/investigations/other\"]",
+    );
+    fs::write(root.path().join("casefile.toml"), activation).expect("activation");
+    provider
+        .snapshot()
+        .expect("root snapshot ignores unreadable record bodies");
+    let index = provider
+        .query(ProviderQuery::RecordIndex {
+            scope: scope.clone(),
+        })
+        .expect("scoped index ignores other body");
+    let ProviderQueryResult::RecordIndex { records, .. } = index else {
+        panic!("record index")
+    };
+    let index_after = serde_json::to_vec(
+        &provider
+            .query(ProviderQuery::RecordIndex {
+                scope: scope.clone(),
+            })
+            .expect("index after"),
+    )
+    .expect("index JSON");
+    assert_eq!(index_before.len(), index_after.len());
+    let encoded = serde_json::to_string(&records).expect("index JSON");
+    for forbidden in [
+        "SENTINEL_BODY",
+        "rendered_markdown",
+        "search_text",
+        "work_item",
+        "original_bytes",
+    ] {
+        assert!(!encoded.contains(forbidden), "index leaked {forbidden}");
+    }
+
+    let missing = provider
+        .query(ProviderQuery::RecordDetail {
+            identity: InvestigationScopedIdentity {
+                scope: scope.clone(),
+                identity: "HMD-404".into(),
+            },
+        })
+        .expect("missing detail");
+    assert!(matches!(
+        missing,
+        ProviderQueryResult::RecordDetail { record: None, .. }
+    ));
+    let duplicate = root
+        .path()
+        .join(format!("{INVESTIGATION}/tickets/provisional/HMD-011.md"));
+    fs::create_dir_all(duplicate.parent().expect("parent")).expect("duplicate parent");
+    let duplicate_bytes = fs::read_to_string(&ticket)
+        .expect("duplicate identity")
+        .replace("status: accepted", "status: provisional");
+    fs::write(&duplicate, duplicate_bytes).expect("duplicate identity");
+    let ambiguous = provider.query(ProviderQuery::RecordDetail {
+        identity: InvestigationScopedIdentity {
+            scope,
+            identity: "HMD-011".into(),
+        },
+    });
+    assert!(matches!(
+        ambiguous,
+        Err(ProviderError::AmbiguousRecordIdentity { ref paths }) if paths.len() == 2
+    ));
+}
+
+#[test]
+fn catalogue_union_keeps_mapping_only_and_governed_missing_mapping_projects() {
+    let root = fixture();
+    fs::write(
+        root.path().join("projects.toml"),
+        "schema_version = 1\n[projects]\ndemo = '/source/demo'\nmapped = '/source/mapped'\n",
+    )
+    .expect("project map");
+    let mut activation = fs::read_to_string(root.path().join("casefile.toml")).expect("activation");
+    activation.push_str(
+        "\n[projects.governed]\nprefix = 'GOV'\ninvestigations = ['projects/governed/investigations/one']\n",
+    );
+    fs::write(root.path().join("casefile.toml"), activation).expect("activation");
+    let snapshot = Provider::without_cache(Store::open(root.path()).expect("store"))
+        .snapshot()
+        .expect("catalogue");
+    let mapped = snapshot
+        .catalogue
+        .projects
+        .iter()
+        .find(|project| project.name == "mapped")
+        .expect("mapping-only");
+    assert!(!mapped.governed);
+    assert_eq!(mapped.source_root.as_deref(), Some("/source/mapped"));
+    let governed = snapshot
+        .catalogue
+        .projects
+        .iter()
+        .find(|project| project.name == "governed")
+        .expect("governed-only");
+    assert!(governed.governed);
+    assert!(governed.source_root.is_none());
+    assert_eq!(governed.investigations[0].identity, "one");
+    assert!(snapshot.diagnostic_coverage.catalogue.count > 0);
 }
 
 #[test]
@@ -298,14 +441,10 @@ fn invalid_unactivated_and_legacy_activation_fail_closed_without_conversion() {
             before,
             fs::read(root.path().join("projects.toml")).expect("unchanged")
         );
-        if activation.is_some_and(|text| text.contains("investigations")) {
-            assert!(
-                snapshot
-                    .diagnostics
-                    .iter()
-                    .any(|item| item.code == "invalid_activation")
-            );
-        }
+        assert_eq!(
+            snapshot.diagnostic_coverage.catalogue.count > 0,
+            activation.is_some()
+        );
     }
 }
 
@@ -454,12 +593,14 @@ fn record_batch_promotes_mutually_related_tickets_as_one_valid_change() {
         )
         .expect("write provisional ticket");
     }
-    assert!(
+    assert_eq!(
         provider
             .snapshot()
             .expect("valid provisional Store")
-            .diagnostics
-            .is_empty()
+            .diagnostic_coverage
+            .catalogue
+            .count,
+        0
     );
 
     let requests = ["HMD-012", "HMD-013"]
@@ -494,7 +635,7 @@ fn record_batch_promotes_mutually_related_tickets_as_one_valid_change() {
             ChangeRequest::Replace { .. } => unreachable!(),
         })
         .collect();
-    let preview = provider
+    let mut preview = provider
         .preview_record_batch(portable_requests)
         .expect("batch preview");
     assert!(preview.canonical.diagnostics.is_empty());
@@ -506,6 +647,20 @@ fn record_batch_promotes_mutually_related_tickets_as_one_valid_change() {
             .iter()
             .all(|request| !request.path().contains('\\') && !request.path().ends_with('/'))
     );
+    let stale_path = root.path().join(format!("{provisional}/HMD-012.md"));
+    let stale_original = fs::read(&stale_path).expect("batch stale baseline");
+    fs::write(&stale_path, [stale_original.as_slice(), b"\n"].concat())
+        .expect("batch external edit");
+    assert!(matches!(
+        provider.apply_record_batch(preview.clone()),
+        Err(ProviderError::Store(
+            casefile_store::StoreError::StaleTargetRevision
+        ))
+    ));
+    fs::write(&stale_path, stale_original).expect("restore batch target");
+    preview = provider
+        .preview_record_batch(preview.canonical.requests.clone())
+        .expect("fresh batch preview");
     provider
         .apply_record_batch(preview)
         .expect("atomic batch promotion");
@@ -518,12 +673,14 @@ fn record_batch_promotes_mutually_related_tickets_as_one_valid_change() {
                 .is_file()
         );
     }
-    assert!(
+    assert_eq!(
         provider
             .snapshot()
             .expect("valid promoted Store")
-            .diagnostics
-            .is_empty()
+            .diagnostic_coverage
+            .catalogue
+            .count,
+        0
     );
 }
 
@@ -607,6 +764,18 @@ fn progress_preview_integrity_covers_bootstrap_transition_replay_no_op_and_confl
     let transition = provider
         .preview_progress(operation.clone())
         .expect("transition preview");
+    let baseline_log = fs::read(&log).expect("progress baseline");
+    fs::write(&log, [baseline_log.as_slice(), b"\n"].concat()).expect("progress external edit");
+    assert!(matches!(
+        provider.apply_progress(transition.clone()),
+        Err(ProviderError::Store(
+            casefile_store::StoreError::StaleTargetRevision
+        ))
+    ));
+    fs::write(&log, baseline_log).expect("restore progress");
+    let transition = provider
+        .preview_progress(operation.clone())
+        .expect("fresh transition preview");
     assert!(
         !provider
             .apply_progress(transition.clone())
@@ -735,6 +904,15 @@ fn default_board_is_named_exact_preview_with_preflight_collision_and_byte_preser
         Err(ProviderError::PreviewIntegrity)
     ));
     assert!(!board.exists());
+    fs::create_dir_all(board.parent().expect("board parent")).expect("board parent");
+    fs::write(&board, &preview.rendered_bytes).expect("board appeared after preview");
+    assert!(matches!(
+        provider.apply_default_delivery_board(preview.clone()),
+        Err(ProviderError::Store(
+            casefile_store::StoreError::StaleTargetRevision
+        ))
+    ));
+    fs::remove_file(&board).expect("remove stale board");
     provider
         .apply_default_delivery_board(preview)
         .expect("board apply");
@@ -877,6 +1055,11 @@ fn default_board_scopes_baseline_diagnostics_to_its_investigation() {
 
 struct FailingCache;
 impl ProviderCache for FailingCache {
+    fn observe(&self, _: &Revision) -> CacheState {
+        CacheState::Degraded {
+            message: "injected cache observation failure".into(),
+        }
+    }
     fn refresh(
         &self,
         _: &casefile_store::DerivedSnapshot,
@@ -906,6 +1089,10 @@ fn cache_refresh_failure_after_a_confirmed_write_is_degraded_not_authoritative()
     );
     assert!(matches!(
         provider.snapshot().expect("canonical snapshot").cache,
+        CacheState::Degraded { .. }
+    ));
+    assert!(matches!(
+        provider.refresh_full_cache().expect("explicit refresh"),
         CacheState::Degraded { .. }
     ));
 }

@@ -39,7 +39,7 @@ import json, sys
 if sys.argv[1:] == ['--version']:
     print('casefile 0.4.0')
 elif sys.argv[1:] == ['mcp-compatibility']:
-    print(json.dumps({'identity':'casefile','provider_protocol_version':1}))
+    print(json.dumps({'identity':'casefile','provider_protocol_version':2}))
 elif len(sys.argv) == 7 and sys.argv[1] == '--root' and sys.argv[3:] == ['check','--require-activation','--investigation','projects/demo/investigations/sample']:
     print(json.dumps({'activation':'active','valid':True,'diagnostics':[]}))
 else:
@@ -88,7 +88,7 @@ import json, sys
 if sys.argv[1:] == ['--version']:
     print('casefile 0.4.0')
 elif sys.argv[1:] == ['mcp-compatibility']:
-    print(json.dumps({'identity':'casefile','provider_protocol_version':1}))
+    print(json.dumps({'identity':'casefile','provider_protocol_version':2}))
 elif len(sys.argv) == 7 and sys.argv[1] == '--root' and sys.argv[3:] == ['check','--require-activation','--investigation','projects/demo/investigations/sample']:
     print(json.dumps({'activation':'active','valid':False,'diagnostics':[{'code':'missing_frontmatter','path':'projects/demo/investigations/sample/tickets/accepted/HMD-011.md'}]}))
     raise SystemExit(1)

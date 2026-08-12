@@ -19,6 +19,7 @@ use crate::{
     activation::{ActivationState, activation},
     derived::{StrategyBindingState, derive_snapshot},
     layout::{checked_path, kind_for_path},
+    revision::{require_target_revision, synthetic_revision},
     scanning::{ScanResult, scan},
     store::{StoreError, require_safe_target_parent},
     writing::{ensure_worktree, git_diff, introduced_diagnostics},
@@ -345,43 +346,13 @@ pub(super) fn apply_strategy_transition(
             "strategy transition preview contains diagnostics".into(),
         ));
     }
+    validate_strategy_preview(&preview)?;
     let current = scan(root, &BTreeMap::new())?;
     for change in &preview.changes {
-        let entry = current
-            .snapshot
-            .entries
-            .iter()
-            .find(|entry| entry.path == change.path);
-        if entry.map(|entry| &entry.content_revision) != change.expected_target_revision.as_ref() {
-            return Err(StoreError::StaleTargetRevision);
-        }
-    }
-    let mut canonical = preview_strategy_transition(root, preview.request.clone())?;
-    canonical.transition_record.expected_store_revision =
-        preview.transition_record.expected_store_revision.clone();
-    let rendered_record_bytes =
-        render_strategy_transition(&canonical.transition_record).into_bytes();
-    let record_path = canonical
-        .changes
-        .get(1)
-        .ok_or_else(|| {
-            StoreError::Invalid("strategy transition preview has no record target".into())
-        })?
-        .path
-        .clone();
-    let existing_record = current
-        .snapshot
-        .entries
-        .iter()
-        .find(|entry| entry.path == record_path);
-    let record_bytes = existing_record
-        .filter(|entry| eol_equivalent(&entry.original_bytes, &rendered_record_bytes))
-        .map_or(rendered_record_bytes, |entry| entry.original_bytes.clone());
-    canonical.changes[1] = change(root, record_path, existing_record, record_bytes)?;
-    if canonical != preview {
-        return Err(StoreError::Invalid(
-            "strategy transition preview was altered".into(),
-        ));
+        require_target_revision(
+            &root.join(&change.path),
+            change.expected_target_revision.as_ref(),
+        )?;
     }
     if preview.no_op {
         return result_from_scan(
@@ -514,13 +485,8 @@ pub(super) fn apply_writer_binding(
             "writer binding preview contains diagnostics".into(),
         ));
     }
+    validate_binding_preview(&preview)?;
     let current = scan(root, &BTreeMap::new())?;
-    let canonical = preview_writer_binding(root, preview.request.clone())?;
-    if canonical != preview {
-        return Err(StoreError::Invalid(
-            "writer binding preview was altered".into(),
-        ));
-    }
     let change = preview
         .changes
         .first()
@@ -530,9 +496,10 @@ pub(super) fn apply_writer_binding(
         .entries
         .iter()
         .find(|entry| entry.path == change.path);
-    if entry.map(|entry| &entry.content_revision) != change.expected_target_revision.as_ref() {
-        return Err(StoreError::StaleTargetRevision);
-    }
+    require_target_revision(
+        &root.join(&change.path),
+        change.expected_target_revision.as_ref(),
+    )?;
     if preview.no_op {
         return result_from_scan(
             GovernedOperationKind::WriterBinding,
@@ -883,13 +850,92 @@ fn change(
         )?
     };
     Ok(GovernedChange {
+        proposed_target_revision: Some(synthetic_revision(&path, true)),
         path,
         expected_target_revision: existing.map(|entry| entry.content_revision.clone()),
-        proposed_target_revision: Some(digest(&rendered_bytes)),
         rendered_bytes,
         diff,
         no_op,
     })
+}
+
+fn validate_strategy_preview(preview: &StrategyTransitionPreview) -> Result<(), StoreError> {
+    let selected: toml::Value = toml::from_str(&preview.request.selected_matrix_source)
+        .map_err(|error| StoreError::Invalid(error.to_string()))?;
+    let phase = selected
+        .get("phase")
+        .and_then(toml::Value::as_str)
+        .ok_or_else(|| StoreError::Invalid("selected matrix phase is missing".into()))?;
+    let strategy_id = selected
+        .get("strategy_id")
+        .and_then(toml::Value::as_str)
+        .ok_or_else(|| StoreError::Invalid("selected matrix strategy_id is missing".into()))?;
+    let timestamp_token = preview
+        .request
+        .recorded_at
+        .chars()
+        .filter(|character| character.is_ascii_digit() || *character == 'T' || *character == 'Z')
+        .collect::<String>();
+    let expected_paths = [
+        format!("{}/strategy/{phase}.toml", preview.request.investigation),
+        format!(
+            "{}/strategy/transitions/{timestamp_token}-{}.toml",
+            preview.request.investigation, preview.request.operation_id
+        ),
+    ];
+    if preview.changes.len() != 2
+        || preview
+            .changes
+            .iter()
+            .zip(&expected_paths)
+            .any(|(change, path)| {
+                change.path != *path
+                    || change.proposed_target_revision != Some(synthetic_revision(path, true))
+            })
+        || !eol_equivalent(
+            &preview.changes[0].rendered_bytes,
+            preview.request.selected_matrix_source.as_bytes(),
+        )
+        || preview.no_op != preview.changes.iter().all(|change| change.no_op)
+        || !transition_matches_request(
+            &preview.transition_record,
+            &preview.request,
+            phase,
+            strategy_id,
+        )
+    {
+        return Err(StoreError::Invalid(
+            "strategy transition preview was altered".into(),
+        ));
+    }
+    let record_text = std::str::from_utf8(&preview.changes[1].rendered_bytes)
+        .map_err(|_| StoreError::Invalid("strategy transition preview was altered".into()))?;
+    let record = parse_strategy_transition(&expected_paths[1], record_text)
+        .map_err(|_| StoreError::Invalid("strategy transition preview was altered".into()))?;
+    if record != preview.transition_record {
+        return Err(StoreError::Invalid(
+            "strategy transition preview was altered".into(),
+        ));
+    }
+    Ok(())
+}
+
+fn validate_binding_preview(preview: &WriterBindingPreview) -> Result<(), StoreError> {
+    let path = format!("{}/strategy/bindings.toml", preview.request.investigation);
+    let Some(change) = preview.changes.first() else {
+        return Err(StoreError::Invalid("binding preview has no target".into()));
+    };
+    if preview.changes.len() != 1
+        || change.path != path
+        || change.rendered_bytes != preview.request.binding_source.as_bytes()
+        || change.proposed_target_revision != Some(synthetic_revision(&path, true))
+        || preview.no_op != change.no_op
+    {
+        return Err(StoreError::Invalid(
+            "writer binding preview was altered".into(),
+        ));
+    }
+    Ok(())
 }
 
 fn result_from_scan(

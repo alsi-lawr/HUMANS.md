@@ -34,21 +34,30 @@ pub(super) fn activation(
     root: &Path,
 ) -> Result<(ActivationState, Activation, Vec<Diagnostic>), StoreError> {
     let path = root.join("casefile.toml");
-    let text = match fs::read_to_string(&path) {
-        Ok(text) => text,
+    let bytes = match fs::read(&path) {
+        Ok(bytes) => bytes,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            return Ok((
-                ActivationState::Unactivated,
-                Activation::default(),
-                Vec::new(),
-            ));
+            return Ok(activation_content(None));
         }
         Err(error) => return Err(error.into()),
     };
-    let activation: Activation = match toml::from_str(&text) {
-        Ok(value) => value,
+    Ok(activation_content(Some(&bytes)))
+}
+
+pub(super) fn activation_content(
+    bytes: Option<&[u8]>,
+) -> (ActivationState, Activation, Vec<Diagnostic>) {
+    let Some(bytes) = bytes else {
+        return (
+            ActivationState::Unactivated,
+            Activation::default(),
+            Vec::new(),
+        );
+    };
+    let text = match std::str::from_utf8(bytes) {
+        Ok(text) => text,
         Err(error) => {
-            return Ok((
+            return (
                 ActivationState::Invalid,
                 Activation::default(),
                 vec![Diagnostic::new(
@@ -56,7 +65,21 @@ pub(super) fn activation(
                     "invalid_activation",
                     error.to_string(),
                 )],
-            ));
+            );
+        }
+    };
+    let activation: Activation = match toml::from_str(text) {
+        Ok(value) => value,
+        Err(error) => {
+            return (
+                ActivationState::Invalid,
+                Activation::default(),
+                vec![Diagnostic::new(
+                    "casefile.toml",
+                    "invalid_activation",
+                    error.to_string(),
+                )],
+            );
         }
     };
     let mut diagnostics = Vec::new();
@@ -92,7 +115,7 @@ pub(super) fn activation(
     } else {
         ActivationState::Invalid
     };
-    Ok((state, activation, stable(diagnostics)))
+    (state, activation, stable(diagnostics))
 }
 
 pub(super) fn activation_from_scan(

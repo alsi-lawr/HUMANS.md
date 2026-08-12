@@ -1,24 +1,25 @@
 use crate::{
     activation::{
-        Activation, ActivationState, activation, activation_entry, investigation_identity,
+        Activation, ActivationState, activation_content, activation_entry, investigation_identity,
     },
     layout::kind_for_path,
+    revision::{metadata_revision, open_file_revision, store_revision, synthetic_revision},
     store::StoreError,
     validation::cross_validate,
 };
 use casefile_core::{
-    CasefileSnapshot, Classification, Diagnostic, EntrySnapshot, Kind, RecordDraft, RecordSummary,
-    Revision, parse_decision, parse_metadata_arrays, parse_progress_log, parse_project_map,
-    parse_request, parse_strategy, parse_strategy_binding, parse_strategy_projection,
-    parse_strategy_transition, stable,
+    CasefileSnapshot, Classification, Diagnostic, EntrySnapshot, Kind, ProjectMap, RecordDraft,
+    RecordSummary, Revision, parse_decision, parse_metadata_arrays, parse_progress_log,
+    parse_project_map, parse_project_map_values, parse_request, parse_strategy,
+    parse_strategy_binding, parse_strategy_projection, parse_strategy_transition, stable,
 };
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::BTreeMap,
     ffi::OsStr,
-    fs,
-    path::{Component, Path},
+    fs::{self, File},
+    io::Read,
+    path::{Component, Path, PathBuf},
 };
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -63,29 +64,55 @@ pub(super) fn scan(
     root: &Path,
     overlay: &BTreeMap<String, Option<Vec<u8>>>,
 ) -> Result<ScanResult, StoreError> {
-    let (activation, active, mut diagnostics) = activation(root)?;
-    let mut files = BTreeMap::new();
-    let mut unsafe_paths = BTreeSet::new();
-    collect(root, root, &mut files, &mut unsafe_paths)?;
+    let inventory = metadata_inventory(root)?;
+    let mut files = inventory
+        .entries
+        .iter()
+        .map(|(path, entry)| {
+            let bytes = if entry.kind == InventoryKind::Regular {
+                read_inventory_entry(entry)?
+            } else {
+                Vec::new()
+            };
+            Ok((
+                path.clone(),
+                CollectedFile {
+                    bytes,
+                    revision: entry.revision.clone(),
+                    unsafe_path: entry.kind != InventoryKind::Regular,
+                },
+            ))
+        })
+        .collect::<Result<BTreeMap<_, _>, StoreError>>()?;
     for (path, bytes) in overlay {
         if is_store_path_excluded(Path::new(path)) {
             continue;
         }
         match bytes {
             Some(bytes) => {
-                files.insert(path.clone(), bytes.clone());
+                files.insert(
+                    path.clone(),
+                    CollectedFile {
+                        bytes: bytes.clone(),
+                        revision: synthetic_revision(path, true),
+                        unsafe_path: false,
+                    },
+                );
             }
             None => {
                 files.remove(path);
             }
         }
     }
+    let (activation, active, mut diagnostics) =
+        activation_content(files.get("casefile.toml").map(|file| file.bytes.as_slice()));
     let mut entries = Vec::new();
-    for (path, bytes) in files {
+    for (path, file) in files {
+        let bytes = file.bytes;
         let (classification, kind, identity, summary, mut found) =
             if activation == ActivationState::Unactivated {
                 (Classification::Ungoverned, None, None, None, Vec::new())
-            } else if unsafe_paths.contains(&path) {
+            } else if file.unsafe_path {
                 invalid(
                     &path,
                     kind_for_path(&path, &active),
@@ -101,7 +128,7 @@ pub(super) fn scan(
             classification,
             kind,
             identity,
-            content_revision: digest(&bytes),
+            content_revision: file.revision,
             summary,
             original_bytes: bytes,
         });
@@ -109,13 +136,22 @@ pub(super) fn scan(
     diagnostics.extend(cross_validate(&entries, &active));
     diagnostics.extend(binding_diagnostics(&entries));
     entries.sort_by(|a, b| a.path.cmp(&b.path));
-    let mut input = Vec::new();
-    for entry in &entries {
-        input.extend_from_slice(entry.path.as_bytes());
-        input.push(0);
-        input.extend_from_slice(entry.content_revision.0.as_bytes());
-        input.push(0);
+    let verified_inventory = metadata_inventory(root)?;
+    if verified_inventory.revision != inventory.revision {
+        return Err(StoreError::Invalid(
+            "Store contents changed while they were scanned".into(),
+        ));
     }
+    let revision = if overlay.is_empty() {
+        inventory.revision
+    } else {
+        store_revision(
+            entries
+                .iter()
+                .map(|entry| (entry.path.as_str(), &entry.content_revision)),
+            true,
+        )
+    };
     Ok(ScanResult {
         activation,
         investigation_roots: active
@@ -132,19 +168,75 @@ pub(super) fn scan(
                 )
             })
             .collect(),
-        snapshot: CasefileSnapshot {
-            revision: digest(&input),
-            entries,
-        },
+        snapshot: CasefileSnapshot { revision, entries },
         diagnostics: stable(diagnostics),
     })
 }
 
-fn collect(
+struct CollectedFile {
+    bytes: Vec<u8>,
+    revision: Revision,
+    unsafe_path: bool,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum InventoryKind {
+    Regular,
+    Symlink,
+    Other,
+}
+
+pub(super) struct InventoryEntry {
+    pub(super) path: PathBuf,
+    pub(super) kind: InventoryKind,
+    pub(super) revision: Revision,
+}
+
+pub(super) struct MetadataInventory {
+    pub(super) entries: BTreeMap<String, InventoryEntry>,
+    pub(super) revision: Revision,
+}
+
+pub(super) struct CatalogueBaseline {
+    pub(super) revision: Revision,
+    pub(super) activation: ActivationState,
+    pub(super) active: Activation,
+    pub(super) projects: ProjectMap,
+    pub(super) diagnostics: Vec<Diagnostic>,
+}
+
+#[derive(Clone, Copy)]
+pub(super) enum ScopedRead {
+    RecordIndex,
+    Boards,
+    StrategyTransitions,
+}
+
+pub(super) struct ScopedReadResult {
+    pub(super) revision: Revision,
+    pub(super) project: String,
+    pub(super) investigation: String,
+    pub(super) path: String,
+    pub(super) entries: Vec<EntrySnapshot>,
+    pub(super) diagnostics: Vec<Diagnostic>,
+}
+
+pub(super) fn metadata_inventory(root: &Path) -> Result<MetadataInventory, StoreError> {
+    let mut entries = BTreeMap::new();
+    collect_inventory(root, root, &mut entries)?;
+    let revision = store_revision(
+        entries
+            .iter()
+            .map(|(path, entry)| (path.as_str(), &entry.revision)),
+        false,
+    );
+    Ok(MetadataInventory { entries, revision })
+}
+
+fn collect_inventory(
     root: &Path,
     directory: &Path,
-    files: &mut BTreeMap<String, Vec<u8>>,
-    unsafe_paths: &mut BTreeSet<String>,
+    entries: &mut BTreeMap<String, InventoryEntry>,
 ) -> Result<(), StoreError> {
     for entry in fs::read_dir(directory)? {
         let entry = entry?;
@@ -154,18 +246,322 @@ fn collect(
             continue;
         }
         let metadata = fs::symlink_metadata(&path)?;
+        let revision = metadata_revision(&path, &metadata)?;
         if metadata.file_type().is_symlink() {
-            files.insert(relative.clone(), Vec::new());
-            unsafe_paths.insert(relative);
+            entries.insert(
+                relative,
+                InventoryEntry {
+                    path,
+                    kind: InventoryKind::Symlink,
+                    revision,
+                },
+            );
             continue;
         }
         if metadata.is_dir() {
-            collect(root, &path, files, unsafe_paths)?;
+            collect_inventory(root, &path, entries)?;
         } else if metadata.is_file() {
-            files.insert(relative, fs::read(path)?);
+            entries.insert(
+                relative,
+                InventoryEntry {
+                    path,
+                    kind: InventoryKind::Regular,
+                    revision,
+                },
+            );
+        } else {
+            entries.insert(
+                relative,
+                InventoryEntry {
+                    path,
+                    kind: InventoryKind::Other,
+                    revision,
+                },
+            );
         }
     }
     Ok(())
+}
+
+pub(super) fn read_inventory_entry(entry: &InventoryEntry) -> Result<Vec<u8>, StoreError> {
+    let mut file = File::open(&entry.path)?;
+    let opened_metadata = file.metadata()?;
+    if !opened_metadata.is_file() {
+        return Err(StoreError::Invalid(
+            "Store content changed before it was opened".into(),
+        ));
+    }
+    let opened_revision = open_file_revision(&file, &opened_metadata)?;
+    if opened_revision != entry.revision {
+        return Err(StoreError::Invalid(
+            "Store content changed before it was read".into(),
+        ));
+    }
+    let mut bytes = Vec::new();
+    file.read_to_end(&mut bytes)?;
+    let after_open_revision = open_file_revision(&file, &file.metadata()?)?;
+    let after_path_metadata = fs::symlink_metadata(&entry.path)?;
+    let after_path_revision = metadata_revision(&entry.path, &after_path_metadata)?;
+    if opened_revision != after_open_revision || opened_revision != after_path_revision {
+        return Err(StoreError::Invalid(
+            "Store content changed while it was read".into(),
+        ));
+    }
+    Ok(bytes)
+}
+
+pub(super) fn catalogue_baseline(root: &Path) -> Result<CatalogueBaseline, StoreError> {
+    let inventory = metadata_inventory(root)?;
+    let activation_bytes = read_optional_regular(&inventory, "casefile.toml")?;
+    let projects_bytes = read_optional_regular(&inventory, "projects.toml")?;
+    let (activation, active, mut diagnostics) = activation_content(activation_bytes.as_deref());
+    let projects = match projects_bytes {
+        Some(bytes) => match parse_project_map_values("projects.toml", &bytes) {
+            Ok(projects) => projects,
+            Err(mut found) => {
+                diagnostics.append(&mut found);
+                ProjectMap::new()
+            }
+        },
+        None => {
+            diagnostics.push(Diagnostic::new(
+                "projects.toml",
+                "missing_project_map",
+                "projects.toml is required for project source-root mappings",
+            ));
+            ProjectMap::new()
+        }
+    };
+    for project in active.projects.keys() {
+        if !projects.contains_key(project) {
+            diagnostics.push(
+                Diagnostic::new(
+                    "projects.toml",
+                    "missing_governed_project",
+                    "projects.toml must map every governed project",
+                )
+                .field(project),
+            );
+        }
+    }
+    require_inventory_unchanged(root, &inventory)?;
+    Ok(CatalogueBaseline {
+        revision: inventory.revision,
+        activation,
+        active,
+        projects,
+        diagnostics: stable(diagnostics),
+    })
+}
+
+pub(super) fn scoped_scan(
+    root: &Path,
+    project: &str,
+    investigation: &str,
+    read: ScopedRead,
+) -> Result<ScopedReadResult, StoreError> {
+    let inventory = metadata_inventory(root)?;
+    let activation_bytes = read_optional_regular(&inventory, "casefile.toml")?;
+    let (activation, active, mut diagnostics) = activation_content(activation_bytes.as_deref());
+    if activation != ActivationState::Active {
+        return Err(StoreError::Invalid(
+            "investigation reads require active Casefile configuration".into(),
+        ));
+    }
+    let path = active
+        .projects
+        .get(project)
+        .into_iter()
+        .flat_map(|configuration| &configuration.investigations)
+        .filter(|path| investigation_identity(project, path) == Some(investigation))
+        .cloned()
+        .collect::<Vec<_>>();
+    let [path] = path.as_slice() else {
+        return Err(StoreError::Invalid(
+            "investigation scope must resolve to exactly one activated path".into(),
+        ));
+    };
+    let prefix = format!("{path}/");
+    let selected = inventory
+        .entries
+        .iter()
+        .filter_map(|(relative, entry)| {
+            let kind = kind_for_path(relative, &active)?;
+            let included = match read {
+                ScopedRead::RecordIndex => {
+                    matches!(kind, Kind::Ticket | Kind::Epic | Kind::Progress)
+                }
+                ScopedRead::Boards => {
+                    matches!(
+                        kind,
+                        Kind::Ticket | Kind::Epic | Kind::Progress | Kind::Board
+                    )
+                }
+                ScopedRead::StrategyTransitions => kind == Kind::StrategyTransition,
+            };
+            (relative.starts_with(&prefix) && included).then_some((relative, entry, kind))
+        })
+        .collect::<Vec<_>>();
+    let mut entries = Vec::new();
+    for (relative, inventory_entry, expected_kind) in selected {
+        let bytes = if inventory_entry.kind == InventoryKind::Regular {
+            read_inventory_entry(inventory_entry)?
+        } else {
+            Vec::new()
+        };
+        let (classification, kind, identity, summary, mut found) =
+            if inventory_entry.kind == InventoryKind::Regular {
+                classify(relative, &bytes, &active)
+            } else {
+                invalid(
+                    relative,
+                    Some(expected_kind),
+                    "unsafe_path",
+                    "governed paths must be regular non-symlink files",
+                )
+            };
+        diagnostics.append(&mut found);
+        entries.push(EntrySnapshot {
+            path: relative.clone(),
+            classification,
+            kind,
+            identity,
+            content_revision: inventory_entry.revision.clone(),
+            summary,
+            original_bytes: bytes,
+        });
+    }
+    entries.sort_by(|left, right| left.path.cmp(&right.path));
+    diagnostics.extend(binding_diagnostics(&entries));
+    require_inventory_unchanged(root, &inventory)?;
+    Ok(ScopedReadResult {
+        revision: inventory.revision,
+        project: project.into(),
+        investigation: investigation.into(),
+        path: path.clone(),
+        entries,
+        diagnostics: stable(diagnostics),
+    })
+}
+
+pub(super) fn scoped_detail_scan(
+    root: &Path,
+    project: &str,
+    investigation: &str,
+    identity: &str,
+) -> Result<ScopedReadResult, StoreError> {
+    let inventory = metadata_inventory(root)?;
+    let activation_bytes = read_optional_regular(&inventory, "casefile.toml")?;
+    let (activation, active, mut diagnostics) = activation_content(activation_bytes.as_deref());
+    if activation != ActivationState::Active {
+        return Err(StoreError::Invalid(
+            "record detail requires active Casefile configuration".into(),
+        ));
+    }
+    let path = resolve_investigation_path(&active, project, investigation)?;
+    let progress_path = format!("{path}/progress/log.toml");
+    let prefixes = [format!("{path}/tickets/"), format!("{path}/epics/")];
+    let file_name = format!("/{identity}.md");
+    let candidates = inventory
+        .entries
+        .iter()
+        .filter(|(relative, _)| {
+            **relative == progress_path
+                || (relative.ends_with(&file_name)
+                    && prefixes.iter().any(|prefix| relative.starts_with(prefix)))
+        })
+        .collect::<Vec<_>>();
+    let mut entries = Vec::new();
+    for (relative, inventory_entry) in candidates {
+        let bytes = if inventory_entry.kind == InventoryKind::Regular {
+            read_inventory_entry(inventory_entry)?
+        } else {
+            Vec::new()
+        };
+        let expected_kind = kind_for_path(relative, &active);
+        let (classification, kind, found_identity, summary, mut found) =
+            if inventory_entry.kind == InventoryKind::Regular {
+                classify(relative, &bytes, &active)
+            } else {
+                invalid(
+                    relative,
+                    expected_kind,
+                    "unsafe_path",
+                    "governed paths must be regular non-symlink files",
+                )
+            };
+        diagnostics.append(&mut found);
+        if kind == Some(Kind::Progress) || found_identity.as_deref() == Some(identity) {
+            entries.push(EntrySnapshot {
+                path: relative.clone(),
+                classification,
+                kind,
+                identity: found_identity,
+                content_revision: inventory_entry.revision.clone(),
+                summary,
+                original_bytes: bytes,
+            });
+        }
+    }
+    entries.sort_by(|left, right| left.path.cmp(&right.path));
+    require_inventory_unchanged(root, &inventory)?;
+    Ok(ScopedReadResult {
+        revision: inventory.revision,
+        project: project.into(),
+        investigation: investigation.into(),
+        path,
+        entries,
+        diagnostics: stable(diagnostics),
+    })
+}
+
+fn resolve_investigation_path(
+    active: &Activation,
+    project: &str,
+    investigation: &str,
+) -> Result<String, StoreError> {
+    let paths = active
+        .projects
+        .get(project)
+        .into_iter()
+        .flat_map(|configuration| &configuration.investigations)
+        .filter(|path| investigation_identity(project, path) == Some(investigation))
+        .cloned()
+        .collect::<Vec<_>>();
+    let [path] = paths.as_slice() else {
+        return Err(StoreError::Invalid(
+            "investigation scope must resolve to exactly one activated path".into(),
+        ));
+    };
+    Ok(path.clone())
+}
+
+fn read_optional_regular(
+    inventory: &MetadataInventory,
+    path: &str,
+) -> Result<Option<Vec<u8>>, StoreError> {
+    match inventory.entries.get(path) {
+        Some(entry) if entry.kind == InventoryKind::Regular => {
+            read_inventory_entry(entry).map(Some)
+        }
+        Some(_) => Err(StoreError::Invalid(format!(
+            "{path} must be a regular non-symlink file"
+        ))),
+        None => Ok(None),
+    }
+}
+
+fn require_inventory_unchanged(
+    root: &Path,
+    baseline: &MetadataInventory,
+) -> Result<(), StoreError> {
+    if metadata_inventory(root)?.revision == baseline.revision {
+        Ok(())
+    } else {
+        Err(StoreError::Invalid(
+            "Store contents changed during selective read".into(),
+        ))
+    }
 }
 
 pub(super) fn classify(
@@ -378,16 +774,6 @@ fn relative(root: &Path, path: &Path) -> Result<String, StoreError> {
         })
 }
 
-fn digest(bytes: &[u8]) -> Revision {
-    let mut hasher = Sha256::new();
-    hasher.update(bytes);
-    Revision(format!("sha256:{}", hex(&hasher.finalize())))
-}
-
-fn hex(bytes: &[u8]) -> String {
-    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
-}
-
 pub(super) fn binding_diagnostics(entries: &[EntrySnapshot]) -> Vec<Diagnostic> {
     let scope = |entry: &EntrySnapshot| {
         entry
@@ -465,6 +851,7 @@ pub(super) fn binding_diagnostics(entries: &[EntrySnapshot]) -> Vec<Diagnostic> 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tempfile::TempDir;
 
     #[test]
     fn store_path_exclusion_is_exactly_direct_root_implementation_metadata() {
@@ -496,5 +883,26 @@ mod tests {
                 "unexpectedly excluded {path:?}"
             );
         }
+    }
+
+    #[test]
+    fn selected_read_and_second_inventory_barriers_refuse_races() {
+        let selected = TempDir::new().expect("selected root");
+        fs::write(selected.path().join("selected.txt"), "before").expect("selected");
+        let inventory = metadata_inventory(selected.path()).expect("inventory");
+        fs::write(selected.path().join("selected.txt"), "after, longer").expect("selected race");
+        assert!(matches!(
+            read_inventory_entry(inventory.entries.get("selected.txt").expect("entry")),
+            Err(StoreError::Invalid(message)) if message.contains("changed before")
+        ));
+
+        let tree = TempDir::new().expect("tree root");
+        fs::write(tree.path().join("selected.txt"), "stable").expect("selected");
+        let inventory = metadata_inventory(tree.path()).expect("inventory");
+        fs::write(tree.path().join("unrelated.txt"), "appeared").expect("tree race");
+        assert!(matches!(
+            require_inventory_unchanged(tree.path(), &inventory),
+            Err(StoreError::Invalid(message)) if message.contains("changed during selective read")
+        ));
     }
 }

@@ -797,14 +797,38 @@ fn refresh_target_matrix_uses_project_full_investigation_and_store_fallback() {
     let mut app = App::from_projection(projection, None);
 
     app.handle(KeyCode::Char('1'));
+    assert_eq!(app.selected_scope(), crate::watching::SelectedScope::Store);
     assert_eq!(
         app.refresh_target(&coordinator, RefreshIntent::Current),
         PresentationTarget::Project {
             project: "demo".into()
         }
     );
-    for key in ['2', '3', '4', '5', '6'] {
+    app.handle(KeyCode::Char('2'));
+    assert_eq!(
+        app.selected_scope(),
+        crate::watching::SelectedScope::Project {
+            project: "demo".into(),
+        }
+    );
+    assert_eq!(
+        app.refresh_target(&coordinator, RefreshIntent::Current),
+        PresentationTarget::Investigation {
+            project: "demo".into(),
+            path: "projects/demo/investigations/sample".into(),
+        },
+        "view 2"
+    );
+    for key in ['3', '4', '5', '6'] {
         app.handle(KeyCode::Char(key));
+        assert_eq!(
+            app.selected_scope(),
+            crate::watching::SelectedScope::Investigation {
+                project: "demo".into(),
+                identity: "sample".into(),
+            },
+            "visible scope for view {key}"
+        );
         assert_eq!(
             app.refresh_target(&coordinator, RefreshIntent::Current),
             PresentationTarget::Investigation {
@@ -825,11 +849,10 @@ fn refresh_target_matrix_uses_project_full_investigation_and_store_fallback() {
         },
     }));
     let narrow_target = app.refresh_target(&coordinator, RefreshIntent::Current);
-    let rejected = coordinator
+    coordinator
         .refresh(narrow_target)
-        .expect_err("narrow refresh");
-    app.feedback = Some(rejected);
-    assert!(test_support::render(&app, 140, 32).contains("press R"));
+        .expect("Store guidance does not reject a contextual refresh");
+    assert!(coordinator.status().contains("Refreshing investigation"));
     let store_target = app.refresh_target(&coordinator, RefreshIntent::Store);
     coordinator
         .refresh(store_target)
@@ -848,6 +871,11 @@ fn refresh_target_matrix_uses_project_full_investigation_and_store_fallback() {
     let mut empty_app = App::from_projection(empty_projection, None);
     for key in ['1', '2', '3', '4', '5', '6'] {
         empty_app.handle(KeyCode::Char(key));
+        assert_eq!(
+            empty_app.selected_scope(),
+            crate::watching::SelectedScope::Store,
+            "empty visible scope for view {key}"
+        );
         assert_eq!(
             empty_app.refresh_target(&coordinator, RefreshIntent::Current),
             PresentationTarget::Store,

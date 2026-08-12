@@ -2,8 +2,8 @@ use anyhow::{Result, bail};
 use casefile_core::{ChangeRequest, Diagnostic, Revision};
 use casefile_store::{
     DerivedBoard, DerivedIndex, DerivedRecord, DerivedRelationship, Indexed, Provider,
-    ProviderApplyOutcome, ProviderPreview, ProviderQuery, ProviderQueryResult,
-    ProviderRecordApplyResult, ProviderSnapshot, RecordScope, ScopedIdentity,
+    ProviderApplyOutcome, ProviderPreview, ProviderRecordApplyResult, ProviderSnapshot,
+    RecordScope, ScopedIdentity,
 };
 use casefile_store_sqlite::SqliteIndex;
 
@@ -30,10 +30,6 @@ impl Workbench {
         Ok(self.provider.snapshot()?)
     }
 
-    pub(crate) fn provider_query(&self, query: ProviderQuery) -> Result<ProviderQueryResult> {
-        Ok(self.provider.query(query)?)
-    }
-
     pub(crate) fn relationships(
         &self,
         identity: &ScopedIdentity,
@@ -43,25 +39,13 @@ impl Workbench {
     }
 
     pub(crate) fn boards(&self, scope: &RecordScope) -> Result<Indexed<Vec<DerivedBoard>>> {
-        let ProviderQueryResult::Boards { revision, boards } =
-            self.provider.query(ProviderQuery::Boards {
-                scope: Some(scope.clone()),
-            })?
-        else {
-            unreachable!("board query returns boards")
-        };
-        Ok(Indexed::Current {
-            source_revision: revision,
-            value: boards,
-        })
+        let revision = self.refresh()?;
+        Ok(self.index.boards(&revision, scope)?)
     }
 
     pub(crate) fn diagnostics(&self) -> Result<Indexed<Vec<Diagnostic>>> {
-        let snapshot = self.provider.snapshot()?;
-        Ok(Indexed::Current {
-            source_revision: snapshot.revision,
-            value: snapshot.diagnostics,
-        })
+        let revision = self.refresh()?;
+        Ok(self.index.diagnostics(&revision)?)
     }
 
     pub(crate) fn preview(
@@ -80,13 +64,16 @@ impl Workbench {
     }
 
     fn refresh(&self) -> Result<Revision> {
-        let snapshot = self.provider.snapshot()?;
-        if !matches!(
-            self.index.state(&snapshot.revision)?,
-            Indexed::Current { .. }
-        ) {
+        let state = self.provider.refresh_full_cache()?;
+        let casefile_store::CacheState::Current {
+            source_revision: revision,
+        } = state
+        else {
+            bail!("provider cache did not publish the canonical revision")
+        };
+        if !matches!(self.index.state(&revision)?, Indexed::Current { .. }) {
             bail!("provider cache did not publish the canonical revision");
         }
-        Ok(snapshot.revision)
+        Ok(revision)
     }
 }

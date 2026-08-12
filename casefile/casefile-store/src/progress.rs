@@ -15,6 +15,7 @@ use tempfile::NamedTempFile;
 use crate::{
     activation::{ActivationState, activation},
     layout::checked_path,
+    revision::require_target_revision,
     scanning::scan,
     store::{StoreError, require_safe_target_parent},
     writing::git_diff,
@@ -252,8 +253,13 @@ pub(super) fn apply(
         .entries
         .iter()
         .find(|entry| entry.path == path);
-    let stale_target = current_entry.map(|entry| &entry.content_revision)
-        != preview.expected_target_revision.as_ref();
+    let stale_target =
+        match require_target_revision(&root.join(&path), preview.expected_target_revision.as_ref())
+        {
+            Ok(()) => false,
+            Err(StoreError::StaleTargetRevision) => true,
+            Err(error) => return Err(error),
+        };
     if stale_target {
         if completed_no_op(&preview.request, current_entry)? {
             return Ok(ProgressApplyResult {

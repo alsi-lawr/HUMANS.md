@@ -1,6 +1,7 @@
 use crate::{
     activation::activation,
     layout::{checked_path, kind_for_path},
+    revision::require_target_revision,
     scanning::scan,
     store::StoreError,
 };
@@ -274,18 +275,8 @@ pub(super) fn apply(root: &Path, mut preview: Preview) -> Result<ApplyResult, St
             "preview contains validation diagnostics".into(),
         ));
     }
-    let current = scan(root, &BTreeMap::new())?;
     let path = checked_path(preview.request.path())?;
-    let current_entry = current
-        .snapshot
-        .entries
-        .iter()
-        .find(|entry| entry.path == path);
-    if current_entry.map(|entry| &entry.content_revision)
-        != preview.expected_target_revision.as_ref()
-    {
-        return Err(StoreError::StaleTargetRevision);
-    }
+    require_target_revision(&root.join(&path), preview.expected_target_revision.as_ref())?;
     let target = root.join(&path);
     match &preview.request {
         ChangeRequest::Create { draft, .. } | ChangeRequest::Replace { draft, .. } => {
@@ -392,9 +383,7 @@ pub(super) fn apply_batch(
             .expected_target_revisions
             .get(&path)
             .ok_or_else(|| StoreError::Invalid("record batch target revision is missing".into()))?;
-        if current_entry.map(|entry| &entry.content_revision) != expected.as_ref() {
-            return Err(StoreError::StaleTargetRevision);
-        }
+        require_target_revision(&root.join(&path), expected.as_ref())?;
         let target = root.join(&path);
         let proposed = request
             .rendered()
