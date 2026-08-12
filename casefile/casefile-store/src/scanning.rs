@@ -890,7 +890,7 @@ mod tests {
         let selected = TempDir::new().expect("selected root");
         fs::write(selected.path().join("selected.txt"), "before").expect("selected");
         let inventory = metadata_inventory(selected.path()).expect("inventory");
-        fs::write(selected.path().join("selected.txt"), "after!").expect("selected race");
+        fs::write(selected.path().join("selected.txt"), "after, longer").expect("selected race");
         assert!(matches!(
             read_inventory_entry(inventory.entries.get("selected.txt").expect("entry")),
             Err(StoreError::Invalid(message)) if message.contains("changed before")
