@@ -48,6 +48,41 @@ class ClaudeSetupTests(unittest.TestCase):
         self.assertEqual("aarch64-apple-darwin", setup.casefile_runtime.host_target("Darwin", "aarch64"))
         self.assertEqual("x86_64-pc-windows-msvc", setup.casefile_runtime.host_target("Windows", "x86_64"))
 
+    def test_binding_verification_is_windows_portable_and_semantically_exact(self):
+        binary = r"C:\Users\Case File\.claude\casefile\runtime\casefile.exe"
+        planning = r"C:\Users\Case File\planning root"
+        human = "\n".join([
+            "casefile:",
+            "  Type: stdio",
+            "  Command: c:/Users/Case File/.claude/casefile/runtime/casefile.exe",
+            "  Args: mcp-package --planning-root c:/Users/Case File/planning root",
+            "  Environment:",
+        ])
+        self.assertTrue(setup.binding_matches(human, binary, planning))
+        encoded = json.dumps({
+            "command": r"c:\Users\Case File\.claude\casefile\runtime\casefile.exe",
+            "args": ["mcp-package", "--planning-root", r"c:\Users\Case File\planning root"],
+        })
+        self.assertTrue(setup.binding_matches(encoded, binary, planning))
+        for unsafe in (
+            human.replace("casefile.exe", "other.exe"),
+            human.replace("mcp-package", "serve"),
+            human.replace("  Environment:", "  Command: c:/duplicate.exe\n  Environment:"),
+        ):
+            self.assertFalse(setup.binding_matches(unsafe, binary, planning))
+        plan = {
+            "binary": Path(binary),
+            "planning_root": Path(planning),
+            "executable": "claude",
+            "environment": {},
+        }
+        with (
+            mock.patch.object(setup, "current_binding", return_value=human),
+            mock.patch.object(setup, "checked") as checked,
+        ):
+            setup.register(plan)
+            checked.assert_not_called()
+
     def fixture(self, root: Path):
         plugin = root / "plugin"
         (plugin / ".claude-plugin").mkdir(parents=True)
