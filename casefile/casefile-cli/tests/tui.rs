@@ -289,10 +289,21 @@ fn disk_change_warns_without_input_retains_selection_and_manual_refresh_remains_
         .expect("external disk change");
     pty.wait_for("STALE DIRECT");
     pty.send(b"r");
-    pty.wait_for("refresh complete.");
+    pty.wait_for("Changed");
+    pty.wait_for("on disk");
     pty.send(b"q");
 
     let transcript = pty.finish(true);
+    assert!(
+        transcript
+            .windows("STALE DIRECT".len())
+            .any(|part| part == b"STALE DIRECT")
+    );
+    assert!(
+        transcript
+            .windows("HMD-E-001".len())
+            .any(|part| part == b"HMD-E-001")
+    );
     assert!(
         transcript
             .windows("Changed".len())
