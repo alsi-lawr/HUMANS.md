@@ -542,16 +542,19 @@ impl<C: ProviderCache> Provider<C> {
         &self,
         scope: InvestigationScope,
     ) -> Result<ProviderQueryResult, ProviderError> {
-        let (revision, _, scan) = crate::scanning::scoped_scan(
+        let selected = crate::scanning::scoped_scan(
             self.store.observation_root(),
             &scope.project,
             &scope.investigation,
             crate::scanning::ScopedRead::RecordIndex,
         )?;
-        let progress = crate::derived::investigation_progress(&scan);
-        let diagnostics = diagnostic_counts(&scan);
-        let records = scan
-            .snapshot
+        let progress = crate::derived::scoped_progress(
+            &selected.entries,
+            &selected.diagnostics,
+            &selected.path,
+        );
+        let diagnostics = diagnostic_counts(&selected.diagnostics);
+        let records = selected
             .entries
             .iter()
             .filter(|entry| matches!(entry.kind, Some(Kind::Ticket | Kind::Epic)))
@@ -595,7 +598,7 @@ impl<C: ProviderCache> Provider<C> {
             })
             .collect();
         Ok(ProviderQueryResult::RecordIndex {
-            revision,
+            revision: selected.revision,
             diagnostic_coverage: ProviderIndexDiagnosticCoverage {
                 scope: scope.clone(),
                 kind: ProviderIndexDiagnosticCoverageKind::LocalAndInvestigation,
@@ -609,14 +612,13 @@ impl<C: ProviderCache> Provider<C> {
         &self,
         identity: InvestigationScopedIdentity,
     ) -> Result<ProviderQueryResult, ProviderError> {
-        let (revision, _, scan) = crate::scanning::scoped_detail_scan(
+        let selected = crate::scanning::scoped_detail_scan(
             self.store.observation_root(),
             &identity.scope.project,
             &identity.scope.investigation,
             &identity.identity,
         )?;
-        let matches = scan
-            .snapshot
+        let matches = selected
             .entries
             .iter()
             .filter(|entry| {
@@ -637,9 +639,13 @@ impl<C: ProviderCache> Provider<C> {
                 let kind = entry.kind.expect("filtered work item");
                 let draft = casefile_core::parse_draft(&entry.path, kind, text)
                     .map_err(|diagnostics| StoreError::Invalid(diagnostics[0].message.clone()))?;
-                let progress =
-                    crate::derived::investigation_progress(&scan).remove(&identity.identity);
-                let diagnostics = scan
+                let progress = crate::derived::scoped_progress(
+                    &selected.entries,
+                    &selected.diagnostics,
+                    &selected.path,
+                )
+                .remove(&identity.identity);
+                let diagnostics = selected
                     .diagnostics
                     .iter()
                     .filter(|diagnostic| diagnostic.path == entry.path)
@@ -657,22 +663,28 @@ impl<C: ProviderCache> Provider<C> {
             })
             .transpose()?;
         Ok(ProviderQueryResult::RecordDetail {
-            revision,
+            revision: selected.revision,
             identity,
             record,
         })
     }
 
     fn boards(&self, scope: InvestigationScope) -> Result<ProviderQueryResult, ProviderError> {
-        let (revision, _, scan) = crate::scanning::scoped_scan(
+        let selected = crate::scanning::scoped_scan(
             self.store.observation_root(),
             &scope.project,
             &scope.investigation,
             crate::scanning::ScopedRead::Boards,
         )?;
-        let boards = self.store.derive_snapshot(&scan).boards;
+        let boards = crate::derived::scoped_boards(
+            &selected.entries,
+            &selected.diagnostics,
+            &selected.project,
+            &selected.investigation,
+            &selected.path,
+        );
         Ok(ProviderQueryResult::Boards {
-            revision,
+            revision: selected.revision,
             scope,
             boards,
         })
@@ -682,14 +694,13 @@ impl<C: ProviderCache> Provider<C> {
         &self,
         scope: InvestigationScope,
     ) -> Result<ProviderQueryResult, ProviderError> {
-        let (revision, _, scan) = crate::scanning::scoped_scan(
+        let selected = crate::scanning::scoped_scan(
             self.store.observation_root(),
             &scope.project,
             &scope.investigation,
             crate::scanning::ScopedRead::StrategyTransitions,
         )?;
-        let transitions = scan
-            .snapshot
+        let transitions = selected
             .entries
             .iter()
             .filter_map(|entry| match &entry.summary {
@@ -704,7 +715,7 @@ impl<C: ProviderCache> Provider<C> {
             })
             .collect();
         Ok(ProviderQueryResult::StrategyTransitions {
-            revision,
+            revision: selected.revision,
             scope,
             transitions,
         })
@@ -1249,9 +1260,9 @@ fn record_approval_required(request: &ChangeRequest) -> bool {
     matches!(request, ChangeRequest::Delete { .. })
 }
 
-fn diagnostic_counts(scan: &ScanResult) -> BTreeMap<String, usize> {
+fn diagnostic_counts(diagnostics: &[Diagnostic]) -> BTreeMap<String, usize> {
     let mut counts = BTreeMap::new();
-    for diagnostic in &scan.diagnostics {
+    for diagnostic in diagnostics {
         *counts.entry(diagnostic.path.clone()).or_default() += 1;
     }
     counts

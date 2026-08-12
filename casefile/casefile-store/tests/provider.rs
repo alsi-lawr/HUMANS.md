@@ -194,10 +194,18 @@ fn snapshot_and_exact_scoped_reads_are_bounded_protocol_v2() {
         .expect("portable scoped query")
     {
         ProviderQueryResult::RecordIndex {
-            records, revision, ..
+            records,
+            revision,
+            diagnostic_coverage,
+            ..
         } => {
             assert_eq!(records.len(), 2);
             assert_eq!(revision, snapshot.revision);
+            assert_eq!(diagnostic_coverage.scope.project, "demo");
+            assert_eq!(
+                diagnostic_coverage.kind,
+                casefile_store::ProviderIndexDiagnosticCoverageKind::LocalAndInvestigation
+            );
             let ticket = records
                 .iter()
                 .find(|record| record.identity.as_deref() == Some("HMD-011"))
@@ -208,6 +216,22 @@ fn snapshot_and_exact_scoped_reads_are_bounded_protocol_v2() {
             );
         }
         other => panic!("unexpected scoped query result: {other:?}"),
+    }
+    match provider
+        .query(ProviderQuery::Boards {
+            scope: scope.clone(),
+        })
+        .expect("purpose-built scoped boards")
+    {
+        ProviderQueryResult::Boards {
+            revision, boards, ..
+        } => {
+            assert_eq!(revision, snapshot.revision);
+            let canonical_scan = store.scan().expect("canonical board comparison scan");
+            assert_eq!(boards, store.derive_snapshot(&canonical_scan).boards);
+            assert_eq!(boards[0].columns[0].cards[0].identity.identity, "HMD-011");
+        }
+        other => panic!("unexpected scoped board result: {other:?}"),
     }
     let identity = InvestigationScopedIdentity {
         scope,

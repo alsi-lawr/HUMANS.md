@@ -212,6 +212,15 @@ pub(super) enum ScopedRead {
     StrategyTransitions,
 }
 
+pub(super) struct ScopedReadResult {
+    pub(super) revision: Revision,
+    pub(super) project: String,
+    pub(super) investigation: String,
+    pub(super) path: String,
+    pub(super) entries: Vec<EntrySnapshot>,
+    pub(super) diagnostics: Vec<Diagnostic>,
+}
+
 pub(super) fn metadata_inventory(root: &Path) -> Result<MetadataInventory, StoreError> {
     let mut entries = BTreeMap::new();
     collect_inventory(root, root, &mut entries)?;
@@ -350,7 +359,7 @@ pub(super) fn scoped_scan(
     project: &str,
     investigation: &str,
     read: ScopedRead,
-) -> Result<(Revision, String, ScanResult), StoreError> {
+) -> Result<ScopedReadResult, StoreError> {
     let inventory = metadata_inventory(root)?;
     let activation_bytes = read_optional_regular(&inventory, "casefile.toml")?;
     let (activation, active, mut diagnostics) = activation_content(activation_bytes.as_deref());
@@ -425,17 +434,14 @@ pub(super) fn scoped_scan(
     entries.sort_by(|left, right| left.path.cmp(&right.path));
     diagnostics.extend(binding_diagnostics(&entries));
     require_inventory_unchanged(root, &inventory)?;
-    let revision = inventory.revision;
-    Ok((
-        revision.clone(),
-        path.clone(),
-        ScanResult {
-            activation,
-            investigation_roots: BTreeMap::from([(project.into(), vec![investigation.into()])]),
-            snapshot: CasefileSnapshot { revision, entries },
-            diagnostics: stable(diagnostics),
-        },
-    ))
+    Ok(ScopedReadResult {
+        revision: inventory.revision,
+        project: project.into(),
+        investigation: investigation.into(),
+        path: path.clone(),
+        entries,
+        diagnostics: stable(diagnostics),
+    })
 }
 
 pub(super) fn scoped_detail_scan(
@@ -443,7 +449,7 @@ pub(super) fn scoped_detail_scan(
     project: &str,
     investigation: &str,
     identity: &str,
-) -> Result<(Revision, String, ScanResult), StoreError> {
+) -> Result<ScopedReadResult, StoreError> {
     let inventory = metadata_inventory(root)?;
     let activation_bytes = read_optional_regular(&inventory, "casefile.toml")?;
     let (activation, active, mut diagnostics) = activation_content(activation_bytes.as_deref());
@@ -499,17 +505,14 @@ pub(super) fn scoped_detail_scan(
     }
     entries.sort_by(|left, right| left.path.cmp(&right.path));
     require_inventory_unchanged(root, &inventory)?;
-    let revision = inventory.revision;
-    Ok((
-        revision.clone(),
+    Ok(ScopedReadResult {
+        revision: inventory.revision,
+        project: project.into(),
+        investigation: investigation.into(),
         path,
-        ScanResult {
-            activation,
-            investigation_roots: BTreeMap::from([(project.into(), vec![investigation.into()])]),
-            snapshot: CasefileSnapshot { revision, entries },
-            diagnostics: stable(diagnostics),
-        },
-    ))
+        entries,
+        diagnostics: stable(diagnostics),
+    })
 }
 
 fn resolve_investigation_path(

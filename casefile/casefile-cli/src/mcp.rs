@@ -1218,8 +1218,8 @@ fn capabilities_schema() -> Value {
 fn project_schema() -> Value {
     object_schema(
         json!({
-            "name": non_empty_string(),
-            "source_root": non_empty_string(),
+            "name": {"type": "string"},
+            "source_root": {"type": "string"},
             "governed": {"type": "boolean"},
             "prefix": non_empty_string(),
             "investigations": {

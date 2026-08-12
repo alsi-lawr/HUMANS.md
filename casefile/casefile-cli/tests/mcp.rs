@@ -186,6 +186,16 @@ fn fixed_root_session_negotiates_and_exposes_canonical_snapshot_and_query() {
         output_schema("casefile_apply_progress")["required"],
         json!(["result", "cache"])
     );
+    let project_schema = &output_schema("casefile_snapshot")["properties"]["catalogue"]["properties"]
+        ["projects"]["items"];
+    assert_eq!(
+        project_schema["properties"]["name"],
+        json!({"type": "string"})
+    );
+    assert_eq!(
+        project_schema["properties"]["source_root"],
+        json!({"type": "string"})
+    );
     let response = |id: i64| {
         responses
             .iter()
