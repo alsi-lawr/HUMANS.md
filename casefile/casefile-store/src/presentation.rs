@@ -922,25 +922,19 @@ fn run_load(
         ) {
             return Ok(());
         }
-        if !send_bounded(
-            &sender,
-            &cancelled,
-            PresentationEvent::Complete {
-                generation: request.generation,
-                target: request.target.clone(),
-                coverage: PresentationCoverage {
-                    catalogue: PresentationCoverageState::Complete,
-                    payload: PresentationCoverageState::Complete,
-                    facts: PresentationCoverageState::Complete,
-                },
-                progress: PresentationProgress {
-                    completed: total,
-                    total: Some(total),
-                },
+        let complete = PresentationEvent::Complete {
+            generation: request.generation,
+            target: request.target.clone(),
+            coverage: PresentationCoverage {
+                catalogue: PresentationCoverageState::Complete,
+                payload: PresentationCoverageState::Complete,
+                facts: PresentationCoverageState::Complete,
             },
-        ) {
-            return Ok(());
-        }
+            progress: PresentationProgress {
+                completed: total,
+                total: Some(total),
+            },
+        };
         let mut states = inner.state.lock().expect("presentation state");
         let completed = states.staged.remove(&state_key).ok_or_else(|| {
             StoreError::Invalid("presentation payload staging was lost before completion".into())
@@ -948,6 +942,8 @@ fn run_load(
         states.committed.insert(request.target.clone(), completed);
         states.completed.insert(state_key.clone());
         state_promoted = true;
+        drop(states);
+        send_bounded(&sender, &cancelled, complete);
         Ok(())
     })();
     if state_staged && !state_promoted {
@@ -1949,7 +1945,11 @@ fn send_content_failure(
 mod tests {
     use super::*;
     use crate::activation::Project;
-    use std::{collections::BTreeSet, sync::Condvar};
+    use std::{
+        collections::BTreeSet,
+        sync::{Condvar, TryLockError},
+        time::Instant,
+    };
     use tempfile::TempDir;
 
     const INVESTIGATION: &str = "projects/demo/investigations/sample";
@@ -2895,6 +2895,75 @@ mod tests {
             content.get(1),
             Some(PresentationContentEvent::Loaded { .. })
         ));
+    }
+
+    #[test]
+    fn committed_content_is_usable_while_complete_delivery_is_backpressured() {
+        let reader = FakeReader::active();
+        let session = PresentationSession::with_reader(reader);
+        let request = load_request(36, PresentationTarget::Store);
+        let (sender, receiver) = mpsc::sync_channel(0);
+        let cancelled = Arc::new(AtomicBool::new(false));
+        let inner = session.inner.clone();
+        let worker_inner = inner.clone();
+        let worker_cancelled = cancelled.clone();
+        let worker = thread::spawn(move || {
+            run_load(worker_inner, request, sender, worker_cancelled);
+        });
+
+        let mut raw_handle = None;
+        let handle = loop {
+            let event = receiver.recv().expect("load event");
+            let PresentationEvent::Entries {
+                generation,
+                target,
+                progress,
+                entries,
+                ..
+            } = event
+            else {
+                continue;
+            };
+            register_handles(&inner, generation, &target, &entries);
+            raw_handle = raw_handle.or_else(|| {
+                entries
+                    .iter()
+                    .find(|entry| entry.path == RAW)
+                    .and_then(|entry| entry.content_handle.clone())
+            });
+            if progress.total == Some(progress.completed) {
+                break raw_handle.expect("complete payload includes emitted raw handle");
+            }
+        };
+
+        let deadline = Instant::now() + Duration::from_secs(5);
+        loop {
+            match inner.state.try_lock() {
+                Ok(states) if states.committed.contains_key(&PresentationTarget::Store) => break,
+                Ok(_) | Err(TryLockError::WouldBlock) if Instant::now() < deadline => {
+                    thread::yield_now();
+                }
+                Ok(_) | Err(TryLockError::WouldBlock) => {
+                    panic!("completion promotion remained unavailable during backpressure")
+                }
+                Err(TryLockError::Poisoned(_)) => panic!("presentation state poisoned"),
+            }
+        }
+
+        let content = drain_content(
+            session
+                .fetch_content(content_request(36, handle))
+                .expect("content while complete delivery waits"),
+        );
+        assert!(matches!(
+            content.get(1),
+            Some(PresentationContentEvent::Loaded { .. })
+        ));
+        assert!(matches!(
+            receiver.recv().expect("terminal event"),
+            PresentationEvent::Complete { generation: 36, .. }
+        ));
+        worker.join().expect("load worker");
     }
 
     #[test]
