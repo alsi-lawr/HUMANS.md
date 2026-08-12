@@ -490,6 +490,15 @@ fn progress_by_scope(
     (result, invalid)
 }
 
+pub(super) fn investigation_progress(scan: &ScanResult) -> BTreeMap<String, DerivedTicketProgress> {
+    let (values, invalid) = progress_by_scope(scan);
+    values
+        .into_iter()
+        .find(|(scope, _)| scope.investigation.is_some() && !invalid.contains(scope))
+        .map(|(_, values)| values)
+        .unwrap_or_default()
+}
+
 fn resolve_binding(
     phase: &str,
     adapter: &str,

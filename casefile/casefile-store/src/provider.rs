@@ -1,8 +1,8 @@
 use crate::layout::checked_path;
 use crate::{
-    ActivationState, DerivedBoard, DerivedIndex, DerivedRecord, DerivedSnapshot,
+    ActivationState, DerivedBoard, DerivedIndex, DerivedSnapshot, DerivedTicketProgress,
     GovernedApplyResult, Indexed, ProgressApplyResult, ProgressChangeRequest, ProgressPreview,
-    RecordScope, RevisionSource, ScanResult, Store, StoreError, StrategyTransitionPreview,
+    RevisionSource, ScanResult, Store, StoreError, StrategyTransitionPreview,
     StrategyTransitionRequest, WriterBindingPreview, WriterBindingRequest,
 };
 use casefile_core::{
@@ -18,18 +18,17 @@ use std::{
 };
 use thiserror::Error;
 
-pub const PROVIDER_PROTOCOL_VERSION: u32 = 1;
+pub const PROVIDER_PROTOCOL_VERSION: u32 = 2;
 const PREVIEW_LIMIT: usize = 256;
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ProviderOperation {
     Snapshot,
-    QueryTickets,
-    QueryEpics,
-    QueryBoards,
-    QueryProgress,
-    QueryStrategyTransitions,
+    RecordIndex,
+    RecordDetail,
+    Boards,
+    StrategyTransitions,
     PreviewRecordDraft,
     ApplyRecordDraft,
     BootstrapProgress,
@@ -67,32 +66,80 @@ pub struct ProviderCapabilities {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-pub struct ProgressProjection {
-    pub record: DerivedRecord,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-pub struct ProviderProjections {
-    pub tickets: Vec<DerivedRecord>,
-    pub epics: Vec<DerivedRecord>,
-    pub boards: Vec<DerivedBoard>,
-    pub progress: Vec<ProgressProjection>,
-    pub strategy_transitions: Vec<StrategyTransitionProjection>,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct StrategyTransitionProjection {
     pub path: String,
-    pub scope: RecordScope,
+    pub scope: InvestigationScope,
     pub record: StrategyTransitionRecord,
+}
+
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct InvestigationScope {
+    pub project: String,
+    pub investigation: String,
+}
+
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct InvestigationScopedIdentity {
+    pub scope: InvestigationScope,
+    pub identity: String,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "state", rename_all = "snake_case")]
 pub enum CacheState {
     NotConfigured,
-    Current { source_revision: Revision },
-    Degraded { message: String },
+    Missing,
+    Stale {
+        indexed_revision: Revision,
+        current_revision: Revision,
+    },
+    Current {
+        source_revision: Revision,
+    },
+    Degraded {
+        message: String,
+    },
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct ProviderDiagnosticCoverage {
+    pub catalogue: ProviderDiagnosticCount,
+    pub records: ProviderRecordDiagnosticCoverage,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct ProviderDiagnosticCount {
+    pub count: usize,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ProviderRecordDiagnosticCoverage {
+    NotLoaded,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct ProviderCatalogue {
+    pub projects: Vec<ProviderProject>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct ProviderProject {
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_root: Option<String>,
+    pub governed: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prefix: Option<String>,
+    pub investigations: Vec<ProviderInvestigation>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct ProviderInvestigation {
+    pub identity: String,
+    pub path: String,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -100,55 +147,104 @@ pub struct ProviderSnapshot {
     pub capabilities: ProviderCapabilities,
     pub activation: ActivationState,
     pub revision: Revision,
-    pub diagnostics: Vec<Diagnostic>,
-    pub projections: ProviderProjections,
+    pub diagnostic_coverage: ProviderDiagnosticCoverage,
+    pub catalogue: ProviderCatalogue,
     pub cache: CacheState,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct ProviderRecordProgressSummary {
+    pub status: casefile_core::ProgressStatus,
+    pub note_count: usize,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct ProviderRecordIndexEntry {
+    pub path: String,
+    pub classification: casefile_core::Classification,
+    pub kind: Option<Kind>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub identity: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub status: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rank: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub progress: Option<ProviderRecordProgressSummary>,
+    pub diagnostic_count: usize,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct ProviderRecordDetail {
+    pub path: String,
+    pub classification: casefile_core::Classification,
+    pub kind: Kind,
+    pub identity: InvestigationScopedIdentity,
+    pub draft: RecordDraft,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub progress: Option<DerivedTicketProgress>,
+    pub diagnostics: Vec<Diagnostic>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "query", rename_all = "snake_case")]
 pub enum ProviderQuery {
-    Tickets {
-        scope: Option<RecordScope>,
-        search: Option<String>,
+    RecordIndex {
+        scope: InvestigationScope,
     },
-    Epics {
-        scope: Option<RecordScope>,
-        search: Option<String>,
+    RecordDetail {
+        identity: InvestigationScopedIdentity,
     },
     Boards {
-        scope: Option<RecordScope>,
-    },
-    Progress {
-        scope: Option<RecordScope>,
+        scope: InvestigationScope,
     },
     StrategyTransitions {
-        scope: Option<RecordScope>,
+        scope: InvestigationScope,
     },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "result", rename_all = "snake_case")]
 pub enum ProviderQueryResult {
-    Records {
+    RecordIndex {
         revision: Revision,
-        records: Vec<DerivedRecord>,
+        scope: InvestigationScope,
+        diagnostic_coverage: ProviderIndexDiagnosticCoverage,
+        records: Vec<ProviderRecordIndexEntry>,
+    },
+    RecordDetail {
+        revision: Revision,
+        identity: InvestigationScopedIdentity,
+        record: Option<Box<ProviderRecordDetail>>,
     },
     Boards {
         revision: Revision,
+        scope: InvestigationScope,
         boards: Vec<DerivedBoard>,
-    },
-    Progress {
-        revision: Revision,
-        progress: Vec<ProgressProjection>,
     },
     StrategyTransitions {
         revision: Revision,
+        scope: InvestigationScope,
         transitions: Vec<StrategyTransitionProjection>,
     },
 }
 
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct ProviderIndexDiagnosticCoverage {
+    pub scope: InvestigationScope,
+    pub kind: ProviderIndexDiagnosticCoverageKind,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ProviderIndexDiagnosticCoverageKind {
+    LocalAndInvestigation,
+}
+
 pub trait ProviderCache {
+    fn observe(&self, revision: &Revision) -> CacheState;
     fn refresh(
         &self,
         snapshot: &DerivedSnapshot,
@@ -164,6 +260,24 @@ where
     T: DerivedIndex,
     T::Error: Display,
 {
+    fn observe(&self, revision: &Revision) -> CacheState {
+        match self.state(revision) {
+            Ok(Indexed::Current {
+                source_revision, ..
+            }) => CacheState::Current { source_revision },
+            Ok(Indexed::Missing) => CacheState::Missing,
+            Ok(Indexed::Stale {
+                indexed_revision,
+                current_revision,
+            }) => CacheState::Stale {
+                indexed_revision,
+                current_revision,
+            },
+            Err(error) => CacheState::Degraded {
+                message: error.to_string(),
+            },
+        }
+    }
     fn refresh(
         &self,
         snapshot: &DerivedSnapshot,
@@ -193,6 +307,9 @@ where
 #[derive(Clone, Copy, Debug, Default)]
 pub struct NoCache;
 impl ProviderCache for NoCache {
+    fn observe(&self, _: &Revision) -> CacheState {
+        CacheState::NotConfigured
+    }
     fn refresh(&self, _: &DerivedSnapshot, _: &dyn RevisionSource) -> Result<(), String> {
         Ok(())
     }
@@ -307,6 +424,8 @@ pub enum ProviderError {
     DefaultBoardMapping(String),
     #[error("unsupported provider protocol version {requested}; supported version is {supported}")]
     UnsupportedProtocol { requested: u32, supported: u32 },
+    #[error("record identity is ambiguous across paths: {paths:?}")]
+    AmbiguousRecordIdentity { paths: Vec<String> },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -348,8 +467,52 @@ impl<C: ProviderCache> Provider<C> {
     }
 
     pub fn snapshot(&self) -> Result<ProviderSnapshot, ProviderError> {
-        let scan = self.store.scan()?;
-        Ok(self.snapshot_from_scan(scan))
+        let baseline = crate::scanning::catalogue_baseline(self.store.observation_root())?;
+        let mut names = baseline
+            .projects
+            .keys()
+            .cloned()
+            .collect::<std::collections::BTreeSet<_>>();
+        names.extend(baseline.active.projects.keys().cloned());
+        let projects = names
+            .into_iter()
+            .map(|name| {
+                let governed = baseline.active.projects.get(&name);
+                ProviderProject {
+                    source_root: baseline.projects.get(&name).cloned(),
+                    prefix: governed.map(|project| project.prefix.clone()),
+                    investigations: governed
+                        .into_iter()
+                        .flat_map(|project| &project.investigations)
+                        .filter_map(|path| {
+                            crate::activation::investigation_identity(&name, path).map(|identity| {
+                                ProviderInvestigation {
+                                    identity: identity.into(),
+                                    path: path.clone(),
+                                }
+                            })
+                        })
+                        .collect(),
+                    governed: governed.is_some(),
+                    name,
+                }
+            })
+            .collect();
+        let diagnostic_count = baseline.diagnostics.len();
+        let cache = self.cache.observe(&baseline.revision);
+        Ok(ProviderSnapshot {
+            capabilities: capabilities(baseline.activation),
+            activation: baseline.activation,
+            revision: baseline.revision,
+            diagnostic_coverage: ProviderDiagnosticCoverage {
+                catalogue: ProviderDiagnosticCount {
+                    count: diagnostic_count,
+                },
+                records: ProviderRecordDiagnosticCoverage::NotLoaded,
+            },
+            catalogue: ProviderCatalogue { projects },
+            cache,
+        })
     }
 
     pub fn snapshot_for_protocol(
@@ -365,79 +528,192 @@ impl<C: ProviderCache> Provider<C> {
         self.snapshot()
     }
 
-    fn snapshot_from_scan(&self, scan: ScanResult) -> ProviderSnapshot {
-        let derived = self.store.derive_snapshot(&scan);
-        let cache = self.refresh_cache(&derived);
-        let projections = projections(&derived, &scan);
-        ProviderSnapshot {
-            capabilities: capabilities(scan.activation),
-            activation: scan.activation,
-            revision: scan.snapshot.revision,
-            diagnostics: scan.diagnostics,
-            projections,
-            cache,
-        }
-    }
-
     pub fn query(&self, query: ProviderQuery) -> Result<ProviderQueryResult, ProviderError> {
         let query = canonical_query(query)?;
-        let baseline = self.snapshot()?;
-        let revision = baseline.revision.clone();
         Ok(match query {
-            ProviderQuery::Tickets { scope, search } => ProviderQueryResult::Records {
-                revision,
-                records: filter_records(
-                    baseline.projections.tickets,
-                    scope.as_ref(),
-                    search.as_deref(),
-                ),
-            },
-            ProviderQuery::Epics { scope, search } => ProviderQueryResult::Records {
-                revision,
-                records: filter_records(
-                    baseline.projections.epics,
-                    scope.as_ref(),
-                    search.as_deref(),
-                ),
-            },
-            ProviderQuery::Boards { scope } => ProviderQueryResult::Boards {
-                revision,
-                boards: baseline
-                    .projections
-                    .boards
-                    .into_iter()
-                    .filter(|board| {
-                        scope
-                            .as_ref()
-                            .is_none_or(|scope| &board.identity.scope == scope)
-                    })
-                    .collect(),
-            },
-            ProviderQuery::Progress { scope } => ProviderQueryResult::Progress {
-                revision,
-                progress: baseline
-                    .projections
-                    .progress
-                    .into_iter()
-                    .filter(|item| {
-                        scope
-                            .as_ref()
-                            .is_none_or(|scope| item.record.scope.as_ref() == Some(scope))
-                    })
-                    .collect(),
-            },
-            ProviderQuery::StrategyTransitions { scope } => {
-                ProviderQueryResult::StrategyTransitions {
-                    revision,
-                    transitions: baseline
-                        .projections
-                        .strategy_transitions
-                        .into_iter()
-                        .filter(|item| scope.as_ref().is_none_or(|scope| &item.scope == scope))
-                        .collect(),
-                }
-            }
+            ProviderQuery::RecordIndex { scope } => self.record_index(scope)?,
+            ProviderQuery::RecordDetail { identity } => self.record_detail(identity)?,
+            ProviderQuery::Boards { scope } => self.boards(scope)?,
+            ProviderQuery::StrategyTransitions { scope } => self.strategy_transitions(scope)?,
         })
+    }
+
+    fn record_index(
+        &self,
+        scope: InvestigationScope,
+    ) -> Result<ProviderQueryResult, ProviderError> {
+        let (revision, _, scan) = crate::scanning::scoped_scan(
+            self.store.observation_root(),
+            &scope.project,
+            &scope.investigation,
+            crate::scanning::ScopedRead::RecordIndex,
+        )?;
+        let progress = crate::derived::investigation_progress(&scan);
+        let diagnostics = diagnostic_counts(&scan);
+        let records = scan
+            .snapshot
+            .entries
+            .iter()
+            .filter(|entry| matches!(entry.kind, Some(Kind::Ticket | Kind::Epic)))
+            .map(|entry| {
+                let summary = match &entry.summary {
+                    Some(RecordSummary::WorkItem {
+                        id,
+                        title,
+                        status,
+                        rank,
+                    }) => Some((id.clone(), title.clone(), status.clone(), *rank)),
+                    _ => None,
+                };
+                ProviderRecordIndexEntry {
+                    path: entry.path.clone(),
+                    classification: entry.classification,
+                    kind: entry.kind,
+                    identity: summary.as_ref().map(|summary| summary.0.clone()),
+                    title: summary.as_ref().map(|summary| summary.1.clone()),
+                    status: summary.as_ref().map(|summary| summary.2.clone()),
+                    rank: summary.as_ref().and_then(|summary| summary.3),
+                    progress: summary
+                        .as_ref()
+                        .filter(|summary| {
+                            summary.2 == "accepted" && entry.kind == Some(Kind::Ticket)
+                        })
+                        .map(|summary| {
+                            progress.get(&summary.0).map_or(
+                                ProviderRecordProgressSummary {
+                                    status: casefile_core::ProgressStatus::Unknown,
+                                    note_count: 0,
+                                },
+                                |progress| ProviderRecordProgressSummary {
+                                    status: progress.status,
+                                    note_count: progress.notes.len(),
+                                },
+                            )
+                        }),
+                    diagnostic_count: diagnostics.get(&entry.path).copied().unwrap_or_default(),
+                }
+            })
+            .collect();
+        Ok(ProviderQueryResult::RecordIndex {
+            revision,
+            diagnostic_coverage: ProviderIndexDiagnosticCoverage {
+                scope: scope.clone(),
+                kind: ProviderIndexDiagnosticCoverageKind::LocalAndInvestigation,
+            },
+            scope,
+            records,
+        })
+    }
+
+    fn record_detail(
+        &self,
+        identity: InvestigationScopedIdentity,
+    ) -> Result<ProviderQueryResult, ProviderError> {
+        let (revision, _, scan) = crate::scanning::scoped_detail_scan(
+            self.store.observation_root(),
+            &identity.scope.project,
+            &identity.scope.investigation,
+            &identity.identity,
+        )?;
+        let matches = scan
+            .snapshot
+            .entries
+            .iter()
+            .filter(|entry| {
+                matches!(entry.kind, Some(Kind::Ticket | Kind::Epic))
+                    && entry.identity.as_deref() == Some(identity.identity.as_str())
+            })
+            .collect::<Vec<_>>();
+        if matches.len() > 1 {
+            return Err(ProviderError::AmbiguousRecordIdentity {
+                paths: matches.iter().map(|entry| entry.path.clone()).collect(),
+            });
+        }
+        let record = matches
+            .first()
+            .map(|entry| {
+                let text = std::str::from_utf8(&entry.original_bytes)
+                    .map_err(|_| StoreError::Invalid("record detail must be UTF-8".into()))?;
+                let kind = entry.kind.expect("filtered work item");
+                let draft = casefile_core::parse_draft(&entry.path, kind, text)
+                    .map_err(|diagnostics| StoreError::Invalid(diagnostics[0].message.clone()))?;
+                let progress =
+                    crate::derived::investigation_progress(&scan).remove(&identity.identity);
+                let diagnostics = scan
+                    .diagnostics
+                    .iter()
+                    .filter(|diagnostic| diagnostic.path == entry.path)
+                    .cloned()
+                    .collect();
+                Ok::<_, StoreError>(Box::new(ProviderRecordDetail {
+                    path: entry.path.clone(),
+                    classification: entry.classification,
+                    kind,
+                    identity: identity.clone(),
+                    draft,
+                    progress,
+                    diagnostics,
+                }))
+            })
+            .transpose()?;
+        Ok(ProviderQueryResult::RecordDetail {
+            revision,
+            identity,
+            record,
+        })
+    }
+
+    fn boards(&self, scope: InvestigationScope) -> Result<ProviderQueryResult, ProviderError> {
+        let (revision, _, scan) = crate::scanning::scoped_scan(
+            self.store.observation_root(),
+            &scope.project,
+            &scope.investigation,
+            crate::scanning::ScopedRead::Boards,
+        )?;
+        let boards = self.store.derive_snapshot(&scan).boards;
+        Ok(ProviderQueryResult::Boards {
+            revision,
+            scope,
+            boards,
+        })
+    }
+
+    fn strategy_transitions(
+        &self,
+        scope: InvestigationScope,
+    ) -> Result<ProviderQueryResult, ProviderError> {
+        let (revision, _, scan) = crate::scanning::scoped_scan(
+            self.store.observation_root(),
+            &scope.project,
+            &scope.investigation,
+            crate::scanning::ScopedRead::StrategyTransitions,
+        )?;
+        let transitions = scan
+            .snapshot
+            .entries
+            .iter()
+            .filter_map(|entry| match &entry.summary {
+                Some(RecordSummary::StrategyTransition { record }) => {
+                    Some(StrategyTransitionProjection {
+                        path: entry.path.clone(),
+                        scope: scope.clone(),
+                        record: record.as_ref().clone(),
+                    })
+                }
+                _ => None,
+            })
+            .collect();
+        Ok(ProviderQueryResult::StrategyTransitions {
+            revision,
+            scope,
+            transitions,
+        })
+    }
+
+    pub fn refresh_full_cache(&self) -> Result<CacheState, ProviderError> {
+        let scan = self.store.scan()?;
+        let derived = self.store.derive_snapshot(&scan);
+        Ok(self.refresh_cache(&derived))
     }
 
     pub fn preview_record(&self, request: ChangeRequest) -> Result<ProviderPreview, ProviderError> {
@@ -872,33 +1148,37 @@ impl<C: ProviderCache> Provider<C> {
 
 fn canonical_query(query: ProviderQuery) -> Result<ProviderQuery, ProviderError> {
     Ok(match query {
-        ProviderQuery::Tickets { scope, search } => ProviderQuery::Tickets {
-            scope: scope.map(canonical_scope).transpose()?,
-            search,
+        ProviderQuery::RecordIndex { scope } => ProviderQuery::RecordIndex {
+            scope: canonical_scope(scope)?,
         },
-        ProviderQuery::Epics { scope, search } => ProviderQuery::Epics {
-            scope: scope.map(canonical_scope).transpose()?,
-            search,
+        ProviderQuery::RecordDetail { identity } => ProviderQuery::RecordDetail {
+            identity: InvestigationScopedIdentity {
+                scope: canonical_scope(identity.scope)?,
+                identity: checked_identity(&identity.identity)?,
+            },
         },
         ProviderQuery::Boards { scope } => ProviderQuery::Boards {
-            scope: scope.map(canonical_scope).transpose()?,
-        },
-        ProviderQuery::Progress { scope } => ProviderQuery::Progress {
-            scope: scope.map(canonical_scope).transpose()?,
+            scope: canonical_scope(scope)?,
         },
         ProviderQuery::StrategyTransitions { scope } => ProviderQuery::StrategyTransitions {
-            scope: scope.map(canonical_scope).transpose()?,
+            scope: canonical_scope(scope)?,
         },
     })
 }
 
-fn canonical_scope(mut scope: RecordScope) -> Result<RecordScope, ProviderError> {
+fn canonical_scope(mut scope: InvestigationScope) -> Result<InvestigationScope, ProviderError> {
     scope.project = checked_path(&scope.project)?;
-    scope.investigation = scope
-        .investigation
-        .map(|investigation| checked_path(&investigation))
-        .transpose()?;
+    scope.investigation = checked_path(&scope.investigation)?;
     Ok(scope)
+}
+
+fn checked_identity(identity: &str) -> Result<String, ProviderError> {
+    if identity.is_empty() || identity.contains(['/', '\\']) {
+        return Err(
+            StoreError::Invalid("record identity must be a non-empty identifier".into()).into(),
+        );
+    }
+    Ok(identity.into())
 }
 
 fn canonical_progress_operation(
@@ -921,11 +1201,10 @@ fn canonical_progress_operation(
 fn capabilities(activation: ActivationState) -> ProviderCapabilities {
     let reads = vec![
         ProviderOperation::Snapshot,
-        ProviderOperation::QueryTickets,
-        ProviderOperation::QueryEpics,
-        ProviderOperation::QueryBoards,
-        ProviderOperation::QueryProgress,
-        ProviderOperation::QueryStrategyTransitions,
+        ProviderOperation::RecordIndex,
+        ProviderOperation::RecordDetail,
+        ProviderOperation::Boards,
+        ProviderOperation::StrategyTransitions,
     ];
     let (mutation, operations) = if activation == ActivationState::Active {
         let mut operations = reads;
@@ -970,68 +1249,12 @@ fn record_approval_required(request: &ChangeRequest) -> bool {
     matches!(request, ChangeRequest::Delete { .. })
 }
 
-fn projections(derived: &DerivedSnapshot, scan: &ScanResult) -> ProviderProjections {
-    let tickets = derived
-        .records
-        .iter()
-        .filter(|record| record.kind == Some(Kind::Ticket))
-        .cloned()
-        .collect::<Vec<_>>();
-    let epics = derived
-        .records
-        .iter()
-        .filter(|record| record.kind == Some(Kind::Epic))
-        .cloned()
-        .collect();
-    let progress = tickets
-        .iter()
-        .filter(|record| record.progress.is_some())
-        .cloned()
-        .map(|record| ProgressProjection { record })
-        .collect();
-    ProviderProjections {
-        tickets,
-        epics,
-        boards: derived.boards.clone(),
-        progress,
-        strategy_transitions: scan
-            .snapshot
-            .entries
-            .iter()
-            .filter_map(|entry| match &entry.summary {
-                Some(RecordSummary::StrategyTransition { record }) => scan
-                    .scope_for_path(&entry.path)
-                    .and_then(|(project, investigation)| {
-                        investigation.map(|investigation| StrategyTransitionProjection {
-                            path: entry.path.clone(),
-                            scope: RecordScope {
-                                project: project.into(),
-                                investigation: Some(investigation.into()),
-                            },
-                            record: record.as_ref().clone(),
-                        })
-                    }),
-                _ => None,
-            })
-            .collect(),
+fn diagnostic_counts(scan: &ScanResult) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for diagnostic in &scan.diagnostics {
+        *counts.entry(diagnostic.path.clone()).or_default() += 1;
     }
-}
-
-fn filter_records(
-    mut records: Vec<DerivedRecord>,
-    scope: Option<&RecordScope>,
-    search: Option<&str>,
-) -> Vec<DerivedRecord> {
-    records.retain(|record| {
-        scope.is_none_or(|scope| record.scope.as_ref() == Some(scope))
-            && search.is_none_or(|text| {
-                record
-                    .search_text
-                    .to_lowercase()
-                    .contains(&text.to_lowercase())
-            })
-    });
-    records
+    counts
 }
 
 fn default_board_identity(scan: &ScanResult, investigation: &str) -> Result<String, ProviderError> {
@@ -1100,4 +1323,84 @@ fn entry_revision(scan: &ScanResult, path: &str) -> Option<Revision> {
         .iter()
         .find(|entry| entry.path == path)
         .map(|entry| entry.content_revision.clone())
+}
+
+#[cfg(test)]
+mod hierarchy_tests {
+    use super::*;
+    use std::{
+        fs,
+        sync::{
+            Arc,
+            atomic::{AtomicUsize, Ordering},
+        },
+    };
+    use tempfile::TempDir;
+
+    struct CountingCache {
+        observes: Arc<AtomicUsize>,
+        refreshes: Arc<AtomicUsize>,
+    }
+    impl ProviderCache for CountingCache {
+        fn observe(&self, _: &Revision) -> CacheState {
+            self.observes.fetch_add(1, Ordering::SeqCst);
+            CacheState::Missing
+        }
+        fn refresh(&self, _: &DerivedSnapshot, _: &dyn RevisionSource) -> Result<(), String> {
+            self.refreshes.fetch_add(1, Ordering::SeqCst);
+            Ok(())
+        }
+    }
+
+    fn root() -> TempDir {
+        let root = TempDir::new().expect("root");
+        fs::create_dir_all(
+            root.path()
+                .join("projects/demo/investigations/sample/tickets/accepted"),
+        )
+        .expect("directories");
+        fs::write(
+            root.path().join("casefile.toml"),
+            "schema_version = 1\n[projects.demo]\nprefix = 'HMD'\ninvestigations = ['projects/demo/investigations/sample']\n",
+        )
+        .expect("activation");
+        fs::write(
+            root.path().join("projects.toml"),
+            "schema_version = 1\n[projects]\ndemo = '/source/demo'\n",
+        )
+        .expect("map");
+        fs::write(
+            root.path().join("projects/demo/investigations/sample/tickets/accepted/HMD-011.md"),
+            include_bytes!("../tests/fixtures/minimum/projects/demo/investigations/sample/tickets/accepted/HMD-011.md"),
+        )
+        .expect("ticket");
+        root
+    }
+
+    #[test]
+    fn snapshot_and_index_observe_cache_without_refreshing_it() {
+        let root = root();
+        let observes = Arc::new(AtomicUsize::new(0));
+        let refreshes = Arc::new(AtomicUsize::new(0));
+        let provider = Provider::new(
+            Store::open(root.path()).expect("store"),
+            CountingCache {
+                observes: observes.clone(),
+                refreshes: refreshes.clone(),
+            },
+        );
+        provider.snapshot().expect("snapshot");
+        provider
+            .query(ProviderQuery::RecordIndex {
+                scope: InvestigationScope {
+                    project: "demo".into(),
+                    investigation: "sample".into(),
+                },
+            })
+            .expect("index");
+        assert_eq!(observes.load(Ordering::SeqCst), 1);
+        assert_eq!(refreshes.load(Ordering::SeqCst), 0);
+        provider.refresh_full_cache().expect("explicit refresh");
+        assert_eq!(refreshes.load(Ordering::SeqCst), 1);
+    }
 }

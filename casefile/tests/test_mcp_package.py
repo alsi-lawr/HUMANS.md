@@ -81,6 +81,10 @@ class McpPackageTests(unittest.TestCase):
                 self.assertFalse((package / "scripts/casefile-mcp-launcher.py").exists())
                 self.assertTrue((package / "runtime/artifacts.json").is_file())
                 self.assertEqual(6, len(list((package / "runtime/bin").glob("*/*"))))
+                guidance = (package / "skills/casefile/SKILL.md").read_text(encoding="ascii")
+                for required in ("casefile_snapshot", "record_index", "record_detail"):
+                    self.assertIn(required, guidance)
+                self.assertIn("Never request unscoped or bulk records", guidance)
                 plugin = next(
                     path
                     for path in (

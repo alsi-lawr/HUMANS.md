@@ -40,13 +40,17 @@ pub use presentation::{
 };
 pub use progress::{ProgressApplyResult, ProgressChangeRequest, ProgressPreview};
 pub use provider::{
-    CacheState, DefaultBoardApplyResult, DefaultBoardPreview, NoCache, PROVIDER_PROTOCOL_VERSION,
-    ProgressOperation, ProgressProjection, Provider, ProviderApplyOutcome, ProviderApprovalPolicy,
-    ProviderBatchPreview, ProviderCache, ProviderCapabilities, ProviderError,
-    ProviderMutationState, ProviderOperation, ProviderPreview, ProviderProgressPreview,
-    ProviderProjections, ProviderQuery, ProviderQueryResult, ProviderRecordApplyResult,
-    ProviderRecordBatchApplyResult, ProviderSnapshot, ProviderStrategyTransitionPreview,
-    ProviderWriterBindingPreview, StrategyTransitionProjection,
+    CacheState, DefaultBoardApplyResult, DefaultBoardPreview, InvestigationScope,
+    InvestigationScopedIdentity, NoCache, PROVIDER_PROTOCOL_VERSION, ProgressOperation, Provider,
+    ProviderApplyOutcome, ProviderApprovalPolicy, ProviderBatchPreview, ProviderCache,
+    ProviderCapabilities, ProviderCatalogue, ProviderDiagnosticCount, ProviderDiagnosticCoverage,
+    ProviderError, ProviderIndexDiagnosticCoverage, ProviderIndexDiagnosticCoverageKind,
+    ProviderInvestigation, ProviderMutationState, ProviderOperation, ProviderPreview,
+    ProviderProgressPreview, ProviderProject, ProviderQuery, ProviderQueryResult,
+    ProviderRecordApplyResult, ProviderRecordBatchApplyResult, ProviderRecordDetail,
+    ProviderRecordDiagnosticCoverage, ProviderRecordIndexEntry, ProviderRecordProgressSummary,
+    ProviderSnapshot, ProviderStrategyTransitionPreview, ProviderWriterBindingPreview,
+    StrategyTransitionProjection,
 };
 pub use scanning::{ScanResult, is_store_path_excluded};
 pub use store::{Store, StoreError};

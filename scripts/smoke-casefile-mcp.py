@@ -56,7 +56,7 @@ def main() -> int:
         raise SystemExit(f"version output does not contain {args.version!r}: {version.stdout!r}")
     compatibility = run_checked([executable, "mcp-compatibility"])
     contract = json.loads(compatibility.stdout)
-    if contract.get("identity") != "casefile" or contract.get("provider_protocol_version") != 1:
+    if contract.get("identity") != "casefile" or contract.get("provider_protocol_version") != 2:
         raise SystemExit("unexpected Casefile compatibility contract")
     with tempfile.TemporaryDirectory(prefix="casefile-mcp-smoke-") as directory:
         root = Path(directory)

@@ -21,8 +21,8 @@ TARGETS = {
 }
 MATRIX = set(TARGETS.values())
 REQUIRED_OPERATIONS = {
-    "snapshot", "query_tickets", "query_epics", "query_boards", "query_progress",
-    "query_strategy_transitions", "preview_record_draft", "apply_record_draft",
+    "snapshot", "record_index", "record_detail", "boards", "strategy_transitions",
+    "preview_record_draft", "apply_record_draft",
     "bootstrap_progress", "preview_progress", "apply_progress",
     "preview_default_delivery_board", "apply_default_delivery_board",
     "preview_strategy_transition", "apply_strategy_transition", "preview_writer_binding",
@@ -168,7 +168,7 @@ def probe(binary: Path, version: str, root: Path) -> None:
         contract = json.loads(compatibility.stdout)
     except json.JSONDecodeError as error:
         raise RuntimeError("Casefile executable returned invalid compatibility JSON") from error
-    if compatibility.returncode or contract.get("identity") != "casefile" or contract.get("provider_protocol_version") != 1:
+    if compatibility.returncode or contract.get("identity") != "casefile" or contract.get("provider_protocol_version") != 2:
         raise RuntimeError("Casefile executable compatibility probe failed")
     if set(contract.get("required_provider_operations", [])) != REQUIRED_OPERATIONS:
         raise RuntimeError("Casefile executable capability contract is incomplete")

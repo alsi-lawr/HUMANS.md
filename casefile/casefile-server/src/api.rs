@@ -1,7 +1,7 @@
 use crate::{assets, workbench::Workbench};
 use anyhow::Result;
 use casefile_core::ChangeRequest;
-use casefile_store::{ProviderError, ProviderPreview, ProviderQuery, RecordScope, ScopedIdentity};
+use casefile_store::{ProviderError, ProviderPreview, RecordScope, ScopedIdentity};
 use serde::{Deserialize, Serialize};
 use tiny_http::{Header, Method, Request, Response, StatusCode};
 
@@ -11,20 +11,6 @@ const CAPABILITY_HEADER: &str = "X-Casefile-Write-Capability";
 #[serde(tag = "query", rename_all = "snake_case", deny_unknown_fields)]
 enum Query {
     Snapshot,
-    Tickets {
-        scope: Option<RecordScope>,
-        search: Option<String>,
-    },
-    Epics {
-        scope: Option<RecordScope>,
-        search: Option<String>,
-    },
-    Progress {
-        scope: Option<RecordScope>,
-    },
-    StrategyTransitions {
-        scope: Option<RecordScope>,
-    },
     Records {
         scope: Option<RecordScope>,
         search: Option<String>,
@@ -233,30 +219,6 @@ impl Host {
             Query::Snapshot => {
                 serde_json::to_vec(&self.workbench.snapshot().map_err(ApiError::internal)?)
             }
-            Query::Tickets { scope, search } => serde_json::to_vec(
-                &self
-                    .workbench
-                    .provider_query(ProviderQuery::Tickets { scope, search })
-                    .map_err(ApiError::internal)?,
-            ),
-            Query::Epics { scope, search } => serde_json::to_vec(
-                &self
-                    .workbench
-                    .provider_query(ProviderQuery::Epics { scope, search })
-                    .map_err(ApiError::internal)?,
-            ),
-            Query::Progress { scope } => serde_json::to_vec(
-                &self
-                    .workbench
-                    .provider_query(ProviderQuery::Progress { scope })
-                    .map_err(ApiError::internal)?,
-            ),
-            Query::StrategyTransitions { scope } => serde_json::to_vec(
-                &self
-                    .workbench
-                    .provider_query(ProviderQuery::StrategyTransitions { scope })
-                    .map_err(ApiError::internal)?,
-            ),
             Query::Records { scope, search } => serde_json::to_vec(
                 &self
                     .workbench

@@ -2,8 +2,9 @@ use std::{fs, path::Path, process::Command};
 
 use casefile_core::{Diagnostic, Kind, ProgressEntry, ProgressLog, ProgressStatus, Revision};
 use casefile_store::{
-    GovernedOperationKind, ProgressChangeRequest, Provider, ProviderError, ProviderOperation,
-    ProviderQuery, ProviderQueryResult, Store, StrategyTransitionRequest, WriterBindingRequest,
+    GovernedOperationKind, InvestigationScope, ProgressChangeRequest, Provider, ProviderError,
+    ProviderOperation, ProviderQuery, ProviderQueryResult, Store, StrategyTransitionRequest,
+    WriterBindingRequest,
 };
 use sha2::{Digest, Sha256};
 use tempfile::TempDir;
@@ -189,16 +190,20 @@ fn strategy_transition_is_strict_store_visible_idempotent_and_creates_no_backup(
     assert_eq!(scan.snapshot.revision, result.resulting_store_revision);
     let provider = Provider::without_cache(store.clone());
     let snapshot = provider.snapshot().expect("provider snapshot");
-    assert_eq!(snapshot.projections.strategy_transitions.len(), 1);
     assert!(
         snapshot
             .capabilities
             .operations
-            .contains(&ProviderOperation::QueryStrategyTransitions)
+            .contains(&ProviderOperation::StrategyTransitions)
     );
     assert!(matches!(
         provider
-            .query(ProviderQuery::StrategyTransitions { scope: None })
+            .query(ProviderQuery::StrategyTransitions {
+                scope: InvestigationScope {
+                    project: "demo".into(),
+                    investigation: "sample".into(),
+                }
+            })
             .expect("transition query"),
         ProviderQueryResult::StrategyTransitions { transitions, .. } if transitions.len() == 1
     ));
