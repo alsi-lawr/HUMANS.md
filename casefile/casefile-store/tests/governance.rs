@@ -339,11 +339,33 @@ fn strategy_replay_equates_only_line_endings_and_keeps_raw_preview_staleness() {
         .preview_strategy_transition(transition_request())
         .expect("stale preview");
     let stale_matrix = stale_preview.changes[0].path.clone();
-    fs::write(
-        stale_root.path().join(&stale_matrix),
-        crlf(&fs::read(stale_root.path().join(&stale_matrix)).expect("matrix before conversion")),
-    )
-    .expect("post-preview EOL conversion");
+    let stale_path = stale_root.path().join(&stale_matrix);
+    let before = fs::read(&stale_path).expect("matrix before conversion");
+    let after = if before.windows(2).any(|window| window == b"\r\n") {
+        String::from_utf8(before.clone())
+            .expect("UTF-8 fixture")
+            .replace("\r\n", "\n")
+            .into_bytes()
+    } else {
+        crlf(&before)
+    };
+    assert_ne!(after, before, "stale mutation must change the raw bytes");
+    fs::write(&stale_path, &after).expect("post-preview EOL conversion");
+    assert_ne!(
+        stale_store
+            .scan()
+            .expect("scan changed matrix")
+            .snapshot
+            .entries
+            .iter()
+            .find(|entry| entry.path == stale_matrix)
+            .expect("changed matrix entry")
+            .content_revision,
+        stale_preview.changes[0]
+            .expected_target_revision
+            .clone()
+            .expect("preview matrix revision")
+    );
     assert!(matches!(
         stale_store.apply_strategy_transition(stale_preview),
         Err(casefile_store::StoreError::StaleTargetRevision)
