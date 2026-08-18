@@ -153,10 +153,21 @@ fn fixed_root_session_negotiates_and_exposes_canonical_snapshot_and_query() {
             .find(|tool| tool["name"] == name)
             .expect("named tool")["inputSchema"]
     };
-    assert_eq!(
-        schema("casefile_query")["oneOf"].as_array().unwrap().len(),
-        4
+    assert!(
+        schema("casefile_query").get("oneOf").is_none(),
+        "a root-level oneOf collapses under MCP client schema flattening when \
+         variants share a discriminant property; keep the query root flat"
     );
+    assert_eq!(
+        schema("casefile_query")["properties"]["query"]["enum"],
+        json!([
+            "record_index",
+            "record_detail",
+            "boards",
+            "strategy_transitions"
+        ])
+    );
+    assert_eq!(schema("casefile_query")["required"], json!(["query"]));
     assert_eq!(
         schema("casefile_preview_record")["oneOf"]
             .as_array()

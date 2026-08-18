@@ -854,43 +854,49 @@ fn one_of_object(variants: Vec<Value>) -> Value {
     json!({"type": "object", "oneOf": variants})
 }
 
+/// The query root is a single flat object, never a root-level `oneOf`: MCP
+/// clients flatten a root `oneOf` into one property map, and variants that
+/// discriminate on different `const` values of the same property collapse into
+/// whichever const comes first - which hid every query kind except
+/// `record_index` from models. Per-variant requirements live on the property
+/// descriptions; the provider still rejects any other shape when it decodes.
 fn query_schema() -> Value {
-    let scope = || {
-        object_schema(
-            json!({
+    let scope = |description: &str| {
+        json!({
+            "type": "object",
+            "description": description,
+            "properties": {
                 "project": non_empty_string(),
                 "investigation": non_empty_string(),
-            }),
-            &["project", "investigation"],
-        )
+            },
+            "required": ["project", "investigation"],
+            "additionalProperties": false,
+        })
     };
-    let scoped = |query: &str| {
-        object_schema(
-            json!({
-                "query": {"const": query},
-                "scope": scope(),
-            }),
-            &["query"],
-        )
-    };
-    one_of_object(vec![
-        scoped("record_index"),
-        object_schema(
-            json!({
-                "query": {"const": "record_detail"},
-                "identity": object_schema(
-                    json!({
-                        "scope": scope(),
-                        "identity": non_empty_string(),
-                    }),
-                    &["scope", "identity"],
-                ),
-            }),
-            &["query", "identity"],
-        ),
-        scoped("boards"),
-        scoped("strategy_transitions"),
-    ])
+    json!({
+        "type": "object",
+        "properties": {
+            "query": {
+                "enum": ["record_index", "record_detail", "boards", "strategy_transitions"],
+                "description": "The read to perform. record_index, boards, and strategy_transitions require scope; record_detail requires identity.",
+            },
+            "scope": scope(
+                "Required for record_index, boards, and strategy_transitions; not used by record_detail.",
+            ),
+            "identity": {
+                "type": "object",
+                "description": "Required for record_detail only: one exact record identity carrying its own scope.",
+                "properties": {
+                    "scope": scope("The project and investigation that own the record."),
+                    "identity": non_empty_string(),
+                },
+                "required": ["scope", "identity"],
+                "additionalProperties": false,
+            },
+        },
+        "required": ["query"],
+        "additionalProperties": false,
+    })
 }
 
 fn change_request_schema() -> Value {
