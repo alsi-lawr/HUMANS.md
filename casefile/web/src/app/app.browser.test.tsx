@@ -17,9 +17,12 @@ const casefileRoot = resolve(import.meta.dir, "../../..");
 const sharedFixture = join(casefileRoot, "casefile-store/tests/fixtures/minimum");
 const ticketPath = "projects/demo/investigations/sample/tickets/accepted/HMD-011.md";
 const networkFetch = globalThis.fetch.bind(globalThis);
+const networkAbort = { AbortController, AbortSignal };
 
 beforeAll(() => {
   GlobalRegistrator.register({ url: "http://casefile.test" });
+  // The real host transport needs signals from the same runtime as native fetch.
+  Object.assign(globalThis, networkAbort);
   Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
 });
 
@@ -416,7 +419,8 @@ const settle = async (milliseconds = 100): Promise<void> => {
 const waitFor = async (condition: () => boolean): Promise<void> => {
   const deadline = Date.now() + 5_000;
   while (!condition()) {
-    if (Date.now() >= deadline) throw new Error("Timed out waiting for the workbench");
+    if (Date.now() >= deadline)
+      throw new Error(`Timed out waiting for the workbench: ${document.body.textContent}`);
     await act(async () => settle(50));
   }
 };
