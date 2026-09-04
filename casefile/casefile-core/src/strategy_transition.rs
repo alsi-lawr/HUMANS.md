@@ -307,13 +307,16 @@ fn toml_array(values: &[String]) -> String {
 }
 
 fn safe_path(value: &str) -> bool {
-    !value.trim().is_empty()
-        && !value.starts_with('/')
-        && !value.contains('\\')
-        && !(value.as_bytes().get(1) == Some(&b':') && value.as_bytes()[0].is_ascii_alphabetic())
-        && value
-            .split('/')
-            .all(|component| !component.is_empty() && !matches!(component, "." | ".."))
+    if value.trim().is_empty()
+        || value.starts_with('/')
+        || value.contains('\\')
+        || (value.as_bytes().get(1) == Some(&b':') && value.as_bytes()[0].is_ascii_alphabetic())
+    {
+        return false;
+    }
+    value
+        .split('/')
+        .all(|component| !component.is_empty() && !matches!(component, "." | ".."))
 }
 
 fn paths_overlap(left: &str, right: &str) -> bool {
