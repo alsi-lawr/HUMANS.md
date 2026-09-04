@@ -218,15 +218,30 @@ class CodexModelMigrationTests(unittest.TestCase):
             args = ["setup-codex.py", "migrate-models", "--plugin-root", str(plugin),
                     "--codex-home", str(home), "--codex-executable", "codex"]
             original = files(home)
-            with mock.patch.dict(sys.modules, {setup.__name__: setup}), contextlib.redirect_stdout(io.StringIO()):
+            with mock.patch.dict(sys.modules, {setup.__name__: setup}), contextlib.redirect_stdout(io.StringIO()) as output:
                 with mock.patch.object(sys, "argv", args):
                     self.assertEqual(0, setup.main())
+                digest = json.JSONDecoder().raw_decode(output.getvalue())[0]["approval_digest"]
                 with mock.patch.object(sys, "argv", [*args, "--apply"]):
                     self.assertEqual(1, setup.main())
                 self.assertEqual(original, files(home))
-                digest = migration.prepare(setup, plugin, home, "codex")["approval_digest"]
                 with mock.patch.object(sys, "argv", [*args, "--apply", "--expect-digest", digest]):
                     self.assertEqual(0, setup.main())
+
+    def test_catalog_alias_resolves_to_owned_file_without_rewriting_the_selected_path(self):
+        with self.installed_legacy() as (plugin, home, fake):
+            alias = home.with_name("codex-home-alias")
+            try:
+                alias.symlink_to(home, target_is_directory=True)
+            except OSError:
+                self.skipTest("directory symlinks are unavailable")
+            config, catalog = setup.managed(home)
+            selected = str(alias / catalog.name)
+            current = config.read_text().replace(json.dumps(str(catalog)), json.dumps(selected))
+            config.write_text(current)
+            plan = migration.prepare(setup, plugin, home, "codex")
+            migration.apply(setup, plan, plan["approval_digest"])
+            self.assertEqual(selected, tomllib.loads(config.read_text())["model_catalog_json"])
 
     def test_setup_discovery_ignores_old_selected_catalog_without_copying_credentials(self):
         homes = []

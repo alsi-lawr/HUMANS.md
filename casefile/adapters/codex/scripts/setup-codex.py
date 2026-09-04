@@ -485,7 +485,11 @@ def verify_config(
     document = tomllib.loads(data.decode("utf-8"))
     version = multi_agent_version(version)
     profiles = tomllib.loads((root / "config/profiles.toml").read_text(encoding="ascii"))
-    if document.get("model_catalog_json") != str(catalog):
+    configured_catalog = document.get("model_catalog_json")
+    if (
+        not isinstance(configured_catalog, str)
+        or Path(configured_catalog).expanduser().resolve() != catalog.resolve()
+    ):
         raise SetupError("catalog path is incorrect")
     features = document.get("features", {})
     expected_features = {"multi_agent": version == "v1", "multi_agent_v2": version == "v2"}

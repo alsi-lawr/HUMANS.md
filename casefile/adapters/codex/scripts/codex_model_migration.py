@@ -63,7 +63,7 @@ def prepare(setup, root: Path, home: Path, executable: str) -> dict:
         )
     catalog_path = home / f"models-casefile-{version}.json"
     configured = document.get("model_catalog_json")
-    if not isinstance(configured, str) or Path(configured).expanduser().resolve() != catalog_path:
+    if not isinstance(configured, str) or Path(configured).expanduser().resolve() != catalog_path.resolve():
         raise setup.SetupError("migration requires the selected Casefile-owned catalog")
     if catalog_path.name not in {entry["path"] for entry in receipt["before"]}:
         raise setup.SetupError("receipt lacks catalog recovery state; use codex-setup to reconcile")
