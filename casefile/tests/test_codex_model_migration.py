@@ -70,7 +70,7 @@ class CodexModelMigrationTests(unittest.TestCase):
         for version in ("v1", "v2"):
             with self.subTest(runtime=version), self.installed_legacy(version) as (plugin, home, fake):
                 config, catalog = setup.managed(home, version)
-                config.write_bytes(config.read_bytes().replace(b"max_threads = 6", b"max_threads = 17"))
+                config.write_bytes(config.read_bytes().replace(b"max_threads = 12", b"max_threads = 17"))
                 before_config = config.read_bytes()
                 old_config = tomllib.loads(before_config.decode())
                 native = home / "models_cache.json"

@@ -343,12 +343,19 @@ effective runtime facts plus limits, requirements, coordination, and pipeline co
 not edit a strategy or binding.
 
 The Codex adapter owns the selected Casefile model catalog and multi-agent runtime. Setup defaults
-to V1; V2 requires Codex 0.145.0 or newer. Setup and model migration confirm Astra, Sol, Terra,
-Luna, and Spark IDs through app-server `model/list` in a temporary configuration-free home, so an
-older replacement catalog cannot hide a newly shipped model. Spark is carried as a pinned entry. No
-selected-home credentials or configuration are copied; environment authentication remains available.
-The projection confirms advertised IDs, not successful model execution or account entitlement. The
-temporary home is removed after discovery.
+to V1; V2 requires Codex 0.145.0 or newer. `agents.max_threads` is a host-owned capacity setting.
+Casefile treats it as a minimum requirement, not a value it owns. Setup requires at least six
+threads, preserves a sufficient existing value, and initializes the setting to the minimum only when
+absent. An insufficient explicit value stops setup without changing the host configuration.
+Reinstall and uninstall retain the current host value, including values inside older Casefile setup
+markers.
+
+Setup and model migration confirm Astra, Sol, Terra, Luna, and Spark IDs through app-server
+`model/list` in a temporary configuration-free home, so an older replacement catalog cannot hide a
+newly shipped model. Spark is carried as a pinned entry. No selected-home credentials or
+configuration are copied; environment authentication remains available. The projection confirms
+advertised IDs, not successful model execution or account entitlement. The temporary home is removed
+after discovery.
 
 The complete replacement catalog comes from `casefile/adapters/codex/catalog/models.json`, not
 Codex's cache or the reduced app-server projection. Setup sets its runtime selectors to null for V1

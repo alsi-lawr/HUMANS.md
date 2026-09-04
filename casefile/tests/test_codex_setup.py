@@ -212,7 +212,7 @@ class CodexSetupTests(unittest.TestCase):
                 receipt_path, receipt = setup.receipt(home, None)
                 setup.uninstall(home, "codex", receipt_path, receipt)
                 self.assertEqual(
-                    original.replace(b"pragmatic", b"friendly").replace(b"max_threads = 12\n", b"")
+                    original.replace(b"pragmatic", b"friendly")
                     + marketplace.lstrip(b"\n"),
                     config.read_bytes(),
                 )
@@ -257,9 +257,9 @@ class CodexSetupTests(unittest.TestCase):
                     self.assertEqual(version == "v1", document["features"]["multi_agent"])
                     self.assertEqual(version == "v2", document["features"]["multi_agent_v2"])
                     self.assertEqual(2, document["agents"]["max_depth"])
-                    self.assertEqual(6, document["agents"]["max_threads"])
+                    self.assertEqual(12, document["agents"]["max_threads"])
                     setup.uninstall(home, "codex", receipt_path, receipt)
-                self.assertEqual(original.replace(b"max_threads = 12\n", b""), (home / "config.toml").read_bytes())
+                self.assertEqual(original, (home / "config.toml").read_bytes())
                 self.assertEqual(b'{"unowned": true}\n', other.read_bytes())
                 self.assertFalse((home / f"models-casefile-{version}.json").exists())
 
@@ -306,7 +306,7 @@ class CodexSetupTests(unittest.TestCase):
                 checked_path, receipt = setup.receipt(home, receipt_path)
                 self.assertEqual("v1", setup.receipt_multi_agent_version(receipt))
                 setup.uninstall(home, "codex", checked_path, receipt)
-            self.assertEqual(original.replace(b"max_threads = 12\n", b""), (home / "config.toml").read_bytes())
+            self.assertEqual(original, (home / "config.toml").read_bytes())
 
     def test_legacy_receipt_upgrades_side_by_side_and_uninstalls_to_original(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -337,7 +337,7 @@ class CodexSetupTests(unittest.TestCase):
                 self.assertEqual(6, receipt["schema_version"])
                 self.assertTrue((home / receipt["casefile_binary"]).is_file())
                 setup.uninstall(home, "codex", receipt_path, receipt)
-            self.assertEqual(original.replace(b"max_threads = 12\n", b""), (home / "config.toml").read_bytes())
+            self.assertEqual(original, (home / "config.toml").read_bytes())
 
 
     def test_missing_each_required_model_is_rejected_before_v1_or_v2_mutation(self):
@@ -413,14 +413,14 @@ class CodexSetupTests(unittest.TestCase):
             self.assertEqual(setup.carried_models(plugin / "config/profiles.toml"), slugs)
 
 
-    def test_config_clobbers_owned_keys_and_preserves_unowned(self):
+    def test_config_replaces_owned_keys_but_preserves_host_thread_count(self):
         prior = (
             b'model_catalog_json = "other.json"\n'
             b'keep = "me"\n'
             b'\n[mcp_servers.casefile]\ncommand = "/unowned"\n'
             b'\n[mcp_servers.unrelated]\ncommand = "/unrelated/server"\n'
             b'\n[features]\nmulti_agent = false\nother_feature = true\n'
-            b'\n[agents]\nmax_threads = 1\n'
+            b'\n[agents]\nmax_threads = 12\n'
         )
         with tempfile.TemporaryDirectory() as temporary:
             plugin, home, _, catalog, _ = self.fixture(Path(temporary))
@@ -433,10 +433,85 @@ class CodexSetupTests(unittest.TestCase):
             self.assertTrue(document["features"]["multi_agent"])
             self.assertFalse(document["features"]["multi_agent_v2"])
             self.assertEqual(2, document["agents"]["max_depth"])
-            self.assertEqual(6, document["agents"]["max_threads"])
+            self.assertEqual(12, document["agents"]["max_threads"])
             self.assertEqual("me", document["keep"])
             self.assertTrue(document["features"]["other_feature"])
             self.assertEqual("/unrelated/server", document["mcp_servers"]["unrelated"]["command"])
+
+    def test_thread_capacity_changes_after_preview_cannot_be_overwritten_by_install(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            plugin, home, _, catalog, _ = self.fixture(Path(temporary))
+            config = home / "config.toml"
+            with self.fake_command(FakeCodex(catalog)):
+                setup.install(setup.prepare(plugin, home, "codex"))
+                plan = setup.prepare(plugin, home, "codex")
+                insufficient = setup.MINIMUM_AGENT_THREADS - 1
+                config.write_bytes(config.read_bytes().replace(
+                    b"max_threads = 12", f"max_threads = {insufficient}".encode("ascii")
+                ))
+                before = {path: path.read_bytes() for path in home.rglob("*") if path.is_file()}
+                with self.assertRaisesRegex(setup.SetupError, "agents.max_threads.*at least"):
+                    setup.install(plan)
+                self.assertEqual(before, {
+                    path: path.read_bytes() for path in home.rglob("*") if path.is_file()
+                })
+                receipt_path, receipt = setup.receipt(home, None)
+                setup.uninstall(home, "codex", receipt_path, receipt)
+                self.assertEqual(insufficient, tomllib.loads(config.read_text())["agents"]["max_threads"])
+
+    def test_missing_thread_count_is_initialized_but_remains_host_owned(self):
+        for config_source in (b"", b"[agents]\n"):
+            with self.subTest(config=config_source), tempfile.TemporaryDirectory() as temporary:
+                plugin, home, _, catalog, _ = self.fixture(Path(temporary))
+                config = home / "config.toml"
+                config.write_bytes(config_source)
+                with self.fake_command(FakeCodex(catalog)):
+                    setup.install(setup.prepare(plugin, home, "codex"))
+                    threads = tomllib.loads(config.read_text())["agents"]["max_threads"]
+                    self.assertGreaterEqual(threads, setup.MINIMUM_AGENT_THREADS)
+                    setup.install(setup.prepare(plugin, home, "codex"))
+                    config.write_bytes(config.read_bytes().replace(
+                        f"max_threads = {threads}".encode("ascii"), b"max_threads = 24"
+                    ))
+                    setup.install(setup.prepare(plugin, home, "codex", version="v2"))
+                    self.assertEqual(24, tomllib.loads(config.read_text())["agents"]["max_threads"])
+                    receipt_path, receipt = setup.receipt(home, None)
+                    setup.uninstall(home, "codex", receipt_path, receipt)
+                self.assertEqual(24, tomllib.loads(config.read_text())["agents"]["max_threads"])
+
+    def test_thread_count_inside_old_owned_markers_survives_reinstall_and_uninstall(self):
+        for reinstall in (False, True):
+            with self.subTest(reinstall=reinstall), tempfile.TemporaryDirectory() as temporary:
+                plugin, home, original, catalog, _ = self.fixture(Path(temporary))
+                config = home / "config.toml"
+                with self.fake_command(FakeCodex(catalog)):
+                    setup.install(setup.prepare(plugin, home, "codex"))
+                    installed = config.read_bytes().replace(b"max_threads = 12\n", b"")
+                    config.write_bytes(installed.replace(
+                        setup.AGENT_END, b"max_threads = 24\n" + setup.AGENT_END
+                    ))
+                    if reinstall:
+                        setup.install(setup.prepare(plugin, home, "codex", version="v2"))
+                        self.assertEqual(24, tomllib.loads(config.read_text())["agents"]["max_threads"])
+                    receipt_path, receipt = setup.receipt(home, None)
+                    setup.uninstall(home, "codex", receipt_path, receipt)
+                self.assertEqual(original.replace(b"max_threads = 12", b"max_threads = 24"), config.read_bytes())
+
+    def test_dotted_host_thread_count_survives_the_complete_setup_lifecycle(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            plugin, home, original, catalog, _ = self.fixture(Path(temporary))
+            original = b"agents.max_threads = 12 # host capacity\n" + original.replace(
+                b"\n[agents]\nmax_threads = 12\n", b""
+            )
+            config = home / "config.toml"
+            config.write_bytes(original)
+            with self.fake_command(FakeCodex(catalog)):
+                setup.install(setup.prepare(plugin, home, "codex"))
+                setup.install(setup.prepare(plugin, home, "codex", version="v2"))
+                self.assertEqual(12, tomllib.loads(config.read_text())["agents"]["max_threads"])
+                receipt_path, receipt = setup.receipt(home, None)
+                setup.uninstall(home, "codex", receipt_path, receipt)
+            self.assertEqual(original, config.read_bytes())
 
     def test_writer_profile_and_runtime_override_drift_reject_before_model_export(self):
         for route in ("named", "runtime"):

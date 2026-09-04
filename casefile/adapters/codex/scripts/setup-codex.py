@@ -51,6 +51,7 @@ REQUIRED_MODELS = {
 }
 V1_SELECTOR_MODELS = {"gpt-6-astra", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"}
 MULTI_AGENT_VERSIONS = {"v1", "v2"}
+MINIMUM_AGENT_THREADS = 6
 REQUIRED_CATALOG_FIELDS = {
     "additional_speed_tiers",
     "apply_patch_tool_type",
@@ -99,10 +100,9 @@ OWNED_KEYS = {
         "features.multi_agent",
         "features.multi_agent_v2",
         "agents.max_depth",
-        "agents.max_threads",
     ),
     "features": ("multi_agent", "multi_agent_v2"),
-    "agents": ("max_depth", "max_threads"),
+    "agents": ("max_depth",),
 }
 
 
@@ -357,9 +357,8 @@ def insert_after_line(current: bytes, index: int, payload: bytes) -> bytes:
     return prefix + payload + b"".join(lines[index + 1 :])
 
 
-def drop_owned_lines(data: bytes) -> bytes:
+def drop_owned_lines(data: bytes, table: str = "") -> bytes:
     output = []
-    table = ""
     for line in data.splitlines(keepends=True):
         header = re.fullmatch(rb"\s*\[\[?([^\]\r\n]+)\]\]?\s*(?:#.*)?\r?\n?", line)
         if header:
@@ -369,6 +368,22 @@ def drop_owned_lines(data: bytes) -> bytes:
             continue
         output.append(line)
     return b"".join(output)
+
+
+def ensure_thread_capacity(current: bytes) -> bytes:
+    document = tomllib.loads(current.decode("utf-8"))
+    threads = document.get("agents", {}).get("max_threads")
+    if threads is not None:
+        if isinstance(threads, bool) or not isinstance(threads, int) or threads < MINIMUM_AGENT_THREADS:
+            raise SetupError(
+                f"agents.max_threads must be an integer of at least {MINIMUM_AGENT_THREADS}; "
+                "change the host configuration before installing Casefile"
+            )
+        return current
+    index = table_header_index(current, "agents")
+    if index is not None:
+        return insert_after_line(current, index, f"max_threads = {MINIMUM_AGENT_THREADS}\n".encode("ascii"))
+    return f"agents.max_threads = {MINIMUM_AGENT_THREADS}\n".encode("ascii") + current
 
 
 def config_candidate(
@@ -391,6 +406,7 @@ def config_candidate(
     owned = tomllib.loads(fragment)
     # Installing authorises setup to set the exact keys it owns; prior values give way.
     current = drop_owned_lines(remove_owned_tables(current))
+    current = ensure_thread_capacity(current)
 
     index = table_header_index(current, "features")
     if index is not None:
@@ -405,18 +421,19 @@ def config_candidate(
         fragment = "[mcp_servers.casefile]\n" + fragment
 
     index = table_header_index(current, "agents")
+    agent_scalars = b""
     if index is not None:
-        payload = "".join(
-            f"{name} = {owned['agents'][name]}\n" for name in ("max_depth", "max_threads")
-        )
+        payload = f"max_depth = {owned['agents']['max_depth']}\n"
         current = insert_after_line(
             current, index, marked(AGENT_BEGIN, payload.encode("ascii"), AGENT_END)
         )
-        fragment = fragment.replace("\n[agents]\nmax_depth = 2\nmax_threads = 6\n", "\n", 1)
+    else:
+        agent_scalars = f"agents.max_depth = {owned['agents']['max_depth']}\n".encode("ascii")
+    fragment = fragment.replace("\n[agents]\nmax_depth = 2\n", "\n", 1)
 
     scalar_block = marked(
         SCALAR_BEGIN,
-        f"model_catalog_json = {json.dumps(str(catalog))}\n".encode("utf-8"),
+        f"model_catalog_json = {json.dumps(str(catalog))}\n".encode("utf-8") + agent_scalars,
         SCALAR_END,
     )
     table_block = marked(TABLE_BEGIN, fragment.encode("ascii"), TABLE_END)
@@ -426,17 +443,18 @@ def config_candidate(
 
 
 def unowned_config(data: bytes) -> bytes:
-    for begin, end in (
-        (SCALAR_BEGIN, SCALAR_END),
-        (FEATURE_BEGIN, FEATURE_END),
-        (AGENT_BEGIN, AGENT_END),
+    for begin, end, table in (
+        (SCALAR_BEGIN, SCALAR_END, ""),
+        (FEATURE_BEGIN, FEATURE_END, "features"),
+        (AGENT_BEGIN, AGENT_END, "agents"),
     ):
         while begin in data:
             start = data.index(begin)
             stop = data.find(end, start)
             if stop < 0:
                 raise SetupError("managed config marker is unbalanced")
-            data = data[:start] + data[stop + len(end) :]
+            payload = drop_owned_lines(data[start + len(begin) : stop], table)
+            data = data[:start] + payload + data[stop + len(end) :]
     result = remove_owned_tables(data)
     if result:
         tomllib.loads(result.decode("utf-8"))
@@ -787,6 +805,8 @@ def preview(plan: dict) -> dict:
         "multi_agent_version": plan["multi_agent_version"],
         "receipt_root": str(home / "backups/casefile"),
         "catalog_models": plan["catalog_models"],
+        "minimum_agent_threads": MINIMUM_AGENT_THREADS,
+        "agent_threads": tomllib.loads(plan["config"].decode("utf-8"))["agents"]["max_threads"],
         "config_ownership": "marked key and table blocks",
         "restart_required": True,
         "planning_root": str(plan["planning_root"]),

@@ -8,7 +8,6 @@ args = ["mcp-package", "--planning-root", __CASEFILE_PLANNING_ROOT__]
 
 [agents]
 max_depth = 2
-max_threads = 6
 
 [agents.casefile-implement-ticket-batch-implementation-writer]
 description = "Casefile casefile-implement-ticket-batch implementation-writer."
