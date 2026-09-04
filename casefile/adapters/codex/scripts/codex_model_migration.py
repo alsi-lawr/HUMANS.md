@@ -12,7 +12,7 @@ from pathlib import Path
 
 
 def profile_config(setup, current: bytes, root: Path) -> bytes:
-    fragment = (root / "config/config-fragment.toml.in").read_bytes()
+    fragment = (root / "config/config-fragment.toml.in").read_text(encoding="ascii").encode("ascii")
     profiles = setup.split_owned_tables(fragment, only_agents=True)[1]
     profiles = profiles.replace(
         b"__HUMANS_MD_PLUGIN_ROOT__",

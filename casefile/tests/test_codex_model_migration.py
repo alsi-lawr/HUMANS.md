@@ -195,6 +195,9 @@ class CodexModelMigrationTests(unittest.TestCase):
 
     def test_explicit_runtime_reconciliation_preserves_both_catalogs_through_recovery(self):
         with self.installed_legacy() as (plugin, home, fake):
+            # Native Windows checkouts use CRLF; setup and migration must agree on output.
+            fragment = plugin / "config/config-fragment.toml.in"
+            fragment.write_bytes(fragment.read_text(encoding="ascii").replace("\n", "\r\n").encode("ascii"))
             v1 = home / "models-casefile-v1.json"
             v2 = home / "models-casefile-v2.json"
             original_v2 = b'{"custom_v2_catalog": true}\n'
