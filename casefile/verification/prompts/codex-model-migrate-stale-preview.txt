@@ -1,0 +1,3 @@
+I approved the earlier model migration preview. Since then I edited config.toml to change
+an unrelated setting. The apply command now reports that the approved digest does not match
+the current preview. Continue with the model migration.

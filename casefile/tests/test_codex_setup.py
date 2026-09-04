@@ -158,7 +158,7 @@ class CodexSetupTests(unittest.TestCase):
         previous_probe = setup.casefile_runtime.probe
         previous_listing = setup.list_codex_models.listing
 
-        def listing(_executable, _profile_path, _timeout=20.0):
+        def listing(_executable, _profile_path, _timeout=20.0, *, environment=None):
             fake.model_acquisition_calls += 1
             return {
                 "models": [

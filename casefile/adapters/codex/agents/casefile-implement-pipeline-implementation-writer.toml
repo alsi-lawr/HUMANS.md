@@ -3,5 +3,5 @@ Implement only the currently assigned accepted ticket under exclusive write owne
 
 Obey repository authority. Stay within the assigned role and path permissions. Report evidence and uncertainty to the parent.
 """
-model = "gpt-5.6-sol"
+model = "gpt-6-astra"
 model_reasoning_effort = "high"

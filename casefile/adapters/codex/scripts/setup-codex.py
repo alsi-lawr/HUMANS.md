@@ -11,6 +11,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import tomllib
 from pathlib import Path, PurePosixPath
@@ -42,12 +43,13 @@ PLUGIN_ID = "casefile@humans-md"
 MARKETPLACE = "humans-md"
 RECEIPT_SCHEMA = 6
 REQUIRED_MODELS = {
+    "gpt-6-astra",
     "gpt-5.6-sol",
     "gpt-5.6-terra",
     "gpt-5.6-luna",
     "gpt-5.3-codex-spark",
 }
-V1_SELECTOR_MODELS = {"gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"}
+V1_SELECTOR_MODELS = {"gpt-6-astra", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"}
 MULTI_AGENT_VERSIONS = {"v1", "v2"}
 REQUIRED_CATALOG_FIELDS = {
     "additional_speed_tiers",
@@ -441,28 +443,35 @@ def unowned_config(data: bytes) -> bytes:
     return result
 
 
-def remove_owned_tables(data: bytes) -> bytes:
+def split_owned_tables(data: bytes, *, only_agents: bool = False) -> tuple[bytes, bytes]:
     output = []
+    removed = []
     owned = False
     for line in data.splitlines(keepends=True):
         stripped = line.strip()
-        if stripped == TABLE_BEGIN.strip():
+        if stripped == TABLE_BEGIN.strip() and not only_agents:
             if output and not output[-1].strip():
                 output.pop()
             continue
         if stripped == TABLE_END.strip():
+            if only_agents:
+                output.append(line)
             continue
         match = re.fullmatch(rb"\s*\[\[?([^\]\r\n]+)\]\]?\s*(?:#.*)?\r?\n?", line)
         if match:
             name = match.group(1).decode("utf-8")
             owned = (
-                name == "mcp_servers.casefile"
-                or name.startswith("mcp_servers.casefile.")
+                (not only_agents and (
+                    name == "mcp_servers.casefile" or name.startswith("mcp_servers.casefile.")
+                ))
                 or name.startswith("agents.casefile-")
             )
-        if not owned:
-            output.append(line)
-    return b"".join(output)
+        (removed if owned else output).append(line)
+    return b"".join(output), b"".join(removed)
+
+
+def remove_owned_tables(data: bytes) -> bytes:
+    return split_owned_tables(data)[0]
 
 
 def verify_config(
@@ -640,7 +649,12 @@ def pointer(home: Path) -> Path:
 
 def acquire_models(executable: str, profile_path: Path) -> dict:
     try:
-        return list_codex_models.listing(executable, profile_path)
+        # An old replacement catalog must not hide a newly shipped model during upgrade.
+        with tempfile.TemporaryDirectory(prefix="casefile-model-discovery-") as temporary:
+            return list_codex_models.listing(
+                executable, profile_path,
+                environment={**os.environ, "CODEX_HOME": temporary},
+            )
     except list_codex_models.ProjectionError as error:
         raise SetupError(f"Codex model availability failed: {error}") from error
 
@@ -825,8 +839,10 @@ def install(plan: dict) -> dict:
     else:
         previous_path, previous_value = plan["previous"]
         before = copy.deepcopy(previous_value["before"])
-        before.append({"path": plan["binary"].relative_to(home).as_posix(), "existed": False})
         copy_path(previous_path.parent / "before", receipt_dir / "before")
+        recorded = {entry["path"] for entry in before}
+        newly_owned = [path for path in paths if path.relative_to(home).as_posix() not in recorded]
+        before.extend(snapshot(home, newly_owned, receipt_dir / "before"))
     try:
         config, catalog = paths[:2]
         casefile_runtime.atomic_copy(plan["runtime"]["source"], plan["binary"])
@@ -963,7 +979,13 @@ def uninstall(home: Path, executable: str, path: Path, value: dict) -> dict:
         home / Path(*PurePosixPath(relative.replace("\\", "/")).parts)
         for relative in value.get("owned_binaries", [])
     ]
-    current = [*managed(home, receipt_multi_agent_version(value)), *binaries]
+    recovery_paths = [
+        home / Path(*PurePosixPath(entry["path"].replace("\\", "/")).parts)
+        for entry in value["before"]
+    ]
+    current = list(dict.fromkeys([
+        *managed(home, receipt_multi_agent_version(value)), *binaries, *recovery_paths,
+    ]))
     config = current[0]
     rollback_dir = home / "backups/casefile" / (
         "uninstall-" + datetime.datetime.now(datetime.UTC).strftime("%Y%m%dT%H%M%SZ")
@@ -1017,6 +1039,12 @@ def main() -> int:
     install_parser.add_argument("--codex-executable", default=shutil.which("codex"))
     install_parser.add_argument("--multi-agent-version", choices=("v1", "v2"), action="append")
     install_parser.add_argument("--apply", action="store_true")
+    migration_parser = subparsers.add_parser("migrate-models")
+    migration_parser.add_argument("--plugin-root", type=Path, required=True)
+    migration_parser.add_argument("--codex-home", type=Path, default=default_home)
+    migration_parser.add_argument("--codex-executable", default=shutil.which("codex"))
+    migration_parser.add_argument("--expect-digest")
+    migration_parser.add_argument("--apply", action="store_true")
     uninstall_parser = subparsers.add_parser("uninstall")
     uninstall_parser.add_argument("--codex-home", type=Path, default=default_home)
     uninstall_parser.add_argument("--codex-executable", default=shutil.which("codex"))
@@ -1027,6 +1055,20 @@ def main() -> int:
         home = arguments.codex_home.expanduser().resolve(strict=True)
         if not arguments.codex_executable:
             raise SetupError("Codex executable was not found")  # kept: nothing can run without it
+        if arguments.operation == "migrate-models":
+            spec = importlib.util.spec_from_file_location(
+                "codex_model_migration", Path(__file__).with_name("codex_model_migration.py")
+            )
+            migration = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(migration)
+            api = sys.modules[__name__]
+            plan = migration.prepare(api, arguments.plugin_root, home, arguments.codex_executable)
+            print(json.dumps(migration.preview(api, plan), indent=2, sort_keys=True))
+            if arguments.apply:
+                print(json.dumps(migration.apply(api, plan, arguments.expect_digest), indent=2))
+            else:
+                print("preview only; no integration files changed")
+            return 0
         if arguments.operation == "install":
             selections = arguments.multi_agent_version or []
             selected_version = selections[-1] if selections else "v1"

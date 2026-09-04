@@ -156,7 +156,8 @@ class WriterBindingTests(unittest.TestCase):
                 binding.list_codex_models, "listing", return_value=projection
             ) as model_list:
                 active = binding.active_catalog("codex", home)
-            model_list.assert_called_once_with("codex", packaged_profiles)
+            self.assertEqual(("codex", packaged_profiles), model_list.call_args.args)
+            self.assertEqual(str(home), model_list.call_args.kwargs["environment"]["CODEX_HOME"])
             self.assertEqual(["gpt-5.6-sol"], [model["slug"] for model in active["models"]])
             self.assertEqual("hide", active["models"][0]["visibility"])
             self.assertEqual(
@@ -182,7 +183,7 @@ class WriterBindingTests(unittest.TestCase):
     def test_v2_offers_visible_optional_models_and_required_spark_but_not_hidden_models(self):
         catalog = {
             "models": [
-                model("gpt-5.6-sol", ("high",)),
+                model("gpt-6-astra", ("high",)),
                 model("gpt-5.5", ("low", "xhigh")),
                 model("gpt-5.3-codex-spark", ("low",)),
                 model("codex-auto-review", ("low",), visibility="hide"),
@@ -191,7 +192,7 @@ class WriterBindingTests(unittest.TestCase):
         offered = binding.offered_pairs(catalog, self.profiles, "v2")
         self.assertEqual(
             {
-                ("gpt-5.6-sol", "high"),
+                ("gpt-6-astra", "high"),
                 ("gpt-5.5", "low"),
                 ("gpt-5.5", "xhigh"),
                 ("gpt-5.3-codex-spark", "low"),
@@ -200,7 +201,7 @@ class WriterBindingTests(unittest.TestCase):
         )
         recommendation = next(pair for pair in offered if pair["recommended"])
         self.assertEqual(
-            ("gpt-5.6-sol", "high"),
+            ("gpt-6-astra", "high"),
             (recommendation["model"], recommendation["reasoning_effort"]),
         )
 
@@ -212,7 +213,7 @@ class WriterBindingTests(unittest.TestCase):
             result = binding.offer("codex", Path("/home"), PROFILES_PATH)
         self.assertEqual(
             {
-                "model": "gpt-5.6-sol",
+                "model": "gpt-6-astra",
                 "reasoning_effort": "high",
                 "available": False,
             },
@@ -357,14 +358,14 @@ class WriterBindingTests(unittest.TestCase):
         catalogs = {
             "v1": {
                 "models": [
+                    model("gpt-6-astra", ("high",), selector=None),
                     model("gpt-5.6-sol", ("high",), selector=None),
-                    model("gpt-5.6-terra", ("high",), selector=None),
                 ]
             },
             "v2": {
                 "models": [
+                    model("gpt-6-astra", ("high",)),
                     model("gpt-5.6-sol", ("high",)),
-                    model("gpt-5.6-terra", ("high",)),
                 ]
             },
         }
@@ -377,7 +378,7 @@ class WriterBindingTests(unittest.TestCase):
                 binding,
                 "binding_projection",
                 return_value=projection(
-                    "absent", "gpt-5.6-terra", "high", "matrix"
+                    "absent", "gpt-5.6-sol", "high", "matrix"
                 ),
             ):
                 first = binding.resolve_spawn(
@@ -404,7 +405,7 @@ class WriterBindingTests(unittest.TestCase):
             self.assertEqual(2, active_catalog.call_count)
             self.assertEqual("matrix", first["binding_source"])
             self.assertEqual(
-                ("gpt-5.6-terra", "high"),
+                ("gpt-5.6-sol", "high"),
                 (first["model"], first["reasoning_effort"]),
             )
 

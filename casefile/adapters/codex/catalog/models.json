@@ -7,9 +7,7 @@
       "apply_patch_tool_type": "freeform",
       "auto_compact_token_limit": null,
       "auto_review_model_override": null,
-      "availability_nux": {
-        "message": "Our most capable model yet. GPT-5.6 Sol can tackle complex code changes, dig into research, produce polished documents, and take on your most ambitious work. Sol is highly capable at lower reasoning efforts\u2014try starting lower, then turn it up for harder jobs."
-      },
+      "availability_nux": null,
       "available_in_plans": [
         "business",
         "edu",
@@ -40,7 +38,119 @@
       "default_reasoning_summary": "none",
       "default_service_tier": null,
       "default_verbosity": "low",
-      "description": "Latest frontier agentic coding model.",
+      "description": "Our most capable model for complex, demanding work.",
+      "display_name": "GPT-6-Astra",
+      "experimental_supported_tools": [],
+      "include_skills_usage_instructions": false,
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "max_context_window": 372000,
+      "minimal_client_version": "0.144.0",
+      "model_messages": {
+        "approvals": null,
+        "instructions_template": "You are Codex, a coding agent sharing the user's workspace.\n\n# Developer Contract\n\n- The user's request is the boundary of authority. Completion is not consent to adjacent work; read-only or diagnostic requests do not authorize mutation.\n- When present, the closest applicable `AGENTS.md` is the workspace's canonical conduct contract. Read and apply it; do not restate it as process theatre.\n- Do not invent intent. Surface material assumptions or choices before they harden into work.\n- Preserve the user's work. Do not discard unrelated changes or use destructive workspace or version-control actions without explicit authorization.\n- Keep claims reviewable. Distinguish evidence from inference and state what was actually verified.\n\n# Runtime\n\nUse `commentary` for concise, material progress during substantial tool work and `final` for a self-contained handoff. When skills are available, load a user-named or clearly applicable skill before acting, then read only the resources it routes to.\n\n# Operating Profile\n\nFor large, separable work, delegate bounded investigation or implementation slices before absorbing all detail. Inspect delegated evidence and remain accountable for synthesis, scope, and risk.\n",
+        "instructions_variables": {
+          "personality_default": "",
+          "personality_friendly": "",
+          "personality_pragmatic": ""
+        }
+      },
+      "multi_agent_version": null,
+      "prefer_websockets": true,
+      "priority": 0,
+      "reasoning_summary_format": "experimental",
+      "service_tiers": [
+        {
+          "description": "1.5x speed, increased usage",
+          "id": "priority",
+          "name": "Fast"
+        }
+      ],
+      "shell_type": "shell_command",
+      "slug": "gpt-6-astra",
+      "support_verbosity": true,
+      "supported_in_api": true,
+      "supported_reasoning_levels": [
+        {
+          "description": "Fast responses with lighter reasoning",
+          "effort": "low"
+        },
+        {
+          "description": "Balances speed and reasoning depth for everyday tasks",
+          "effort": "medium"
+        },
+        {
+          "description": "Greater reasoning depth for complex problems",
+          "effort": "high"
+        },
+        {
+          "description": "Extra high reasoning depth for complex problems",
+          "effort": "xhigh"
+        },
+        {
+          "description": "Maximum reasoning depth for the hardest problems",
+          "effort": "max"
+        },
+        {
+          "description": "Maximum reasoning with automatic task delegation",
+          "effort": "ultra"
+        }
+      ],
+      "supports_image_detail_original": true,
+      "supports_parallel_tool_calls": true,
+      "supports_reasoning_summaries": true,
+      "supports_search_tool": true,
+      "tool_mode": "code_mode_only",
+      "truncation_policy": {
+        "limit": 10000,
+        "mode": "tokens"
+      },
+      "upgrade": null,
+      "use_responses_lite": true,
+      "visibility": "list",
+      "web_search_tool_type": "text_and_image"
+    },
+    {
+      "additional_speed_tiers": [
+        "fast"
+      ],
+      "apply_patch_tool_type": "freeform",
+      "auto_compact_token_limit": null,
+      "auto_review_model_override": null,
+      "availability_nux": null,
+      "available_in_plans": [
+        "business",
+        "edu",
+        "edu_plus",
+        "edu_pro",
+        "education",
+        "enterprise",
+        "enterprise_cbp_automation",
+        "enterprise_cbp_usage_based",
+        "finserv",
+        "free",
+        "free_workspace",
+        "go",
+        "hc",
+        "k12",
+        "plus",
+        "pro",
+        "prolite",
+        "quorum",
+        "sci",
+        "self_serve_business_usage_based",
+        "team"
+      ],
+      "base_instructions": "You are Codex, a coding agent sharing the user's workspace.\n\n# Developer Contract\n\n- The user's request is the boundary of authority. Completion is not consent to adjacent work;\n  read-only or diagnostic requests do not authorize mutation.\n- When present, the closest applicable `AGENTS.md` is the workspace's canonical conduct contract.\n  Read and apply it; do not restate it as process theatre.\n- Do not invent intent. Surface material assumptions or choices before they harden into work.\n- Preserve the user's work. Do not discard unrelated changes or use destructive workspace or\n  version-control actions without explicit authorization.\n- Keep claims reviewable. Distinguish evidence from inference and state what was actually verified.\n\n# Runtime\n\nUse `commentary` for concise, material progress during substantial tool work and `final` for a\nself-contained handoff. When skills are available, load a user-named or clearly applicable skill\nbefore acting, then read only the resources it routes to.\n\n# Operating Profile\n\nFor large, separable work, delegate bounded investigation or implementation slices before absorbing\nall detail. Inspect delegated evidence and remain accountable for synthesis, scope, and risk.\n",
+      "comp_hash": "3000",
+      "context_window": 372000,
+      "default_reasoning_level": "low",
+      "default_reasoning_summary": "none",
+      "default_service_tier": null,
+      "default_verbosity": "low",
+      "description": "Frontier agentic coding model.",
       "display_name": "GPT-5.6-Sol",
       "experimental_supported_tools": [],
       "include_skills_usage_instructions": false,

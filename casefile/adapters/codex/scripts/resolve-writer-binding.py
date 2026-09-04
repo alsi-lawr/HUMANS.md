@@ -25,7 +25,7 @@ except ModuleNotFoundError:
     _lister_spec.loader.exec_module(list_codex_models)
 
 
-RECOMMENDED_MODEL = "gpt-5.6-sol"
+RECOMMENDED_MODEL = "gpt-6-astra"
 RECOMMENDED_EFFORT = "high"
 STRATEGIES = (
     "casefile-implement-ticket-batch",
@@ -130,7 +130,9 @@ def owned_catalog(home: Path, runtime: str) -> dict:
 def active_catalog(executable: str, home: Path) -> dict:
     profile_path = default_profiles_path()
     try:
-        projection = list_codex_models.listing(executable, profile_path)
+        projection = list_codex_models.listing(
+            executable, profile_path, environment={**os.environ, "CODEX_HOME": str(home)}
+        )
     except list_codex_models.ProjectionError as error:
         raise BindingError(f"Codex model availability failed: {error}") from error
     projected = catalog_models(projection, "Codex model projection")

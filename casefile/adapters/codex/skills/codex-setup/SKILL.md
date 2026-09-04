@@ -14,3 +14,7 @@ the V1 default, or pass `--multi-agent-version v2`. This lifecycle owns only Cas
 selected multi-agent feature, profile, and role configuration; it never installs or replaces
 `AGENTS.md`. Codex discovery only confirms required-model availability. It never supplies or alters
 the Casefile-owned replacement catalog, and projected IDs outside that catalog do not block setup.
+
+For an existing integration that only needs the current catalog and profile registrations, use
+`casefile-codex-model-migrate`. It preserves the selected runtime and MCP binding rather than
+reinstalling them.

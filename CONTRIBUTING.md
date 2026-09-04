@@ -248,19 +248,20 @@ Rust-owned typed projection and diagnostics; do not add another TOML parser to a
 `casefile/adapters/codex/scripts/resolve-writer-binding.py` reads visible models and reasoning
 efforts through Codex app-server's stable `model/list` method, then validates runtime selectors from
 the configured receipt-owned Casefile catalog. It offers only pairs that match the selected
-multi-agent runtime and have a verified packaged resolution for both implementation strategies. V1
-requires an exact generated named profile for the pair. V2 requires each strategy's runtime wrapper,
-a positive fork context, and explicit model and effort overrides at spawn.
+multi-agent runtime and have a verified packaged resolution for all three implementation strategies.
+V1 requires an exact generated named profile for the pair. V2 requires each strategy's runtime
+wrapper, a positive fork context, and explicit model and effort overrides at spawn.
 
-Sol/high is a recommendation, not a default. For a newly selected implementation strategy, offer
-writer bindings only after the dependency-safe plan is accepted and the exact implementation matrix
-is persisted and valid. Never pre-create a matrix or binding during startup, investigation, or
-review. The offer reports whether Sol/high is available and always requires an explicit exact
-selection. If it is unavailable, present the remaining offered pairs without recommending a
-substitute. Before ticket-batch, pipeline, resumed, or correction work, resolve the canonical
-projection and revalidate the pair against a fresh offer. Stop before delegation for pending,
-unresolved, invalid, or newly unavailable state; obtain explicit reselection while implementation is
-inactive.
+The shipped implementation matrices default to Astra/high. For a new explicit writer binding,
+Astra/high is a recommendation, not an automatic selection. For a newly selected implementation
+strategy, offer writer bindings only after the dependency-safe plan is accepted and the exact
+implementation matrix is persisted and valid. Never pre-create a matrix or binding during startup,
+investigation, or review. The offer reports whether Astra/high is available and always requires an
+explicit exact selection. If it is unavailable, present the remaining offered pairs without
+recommending a substitute. Before ticket-batch, pipeline, resumed, or correction work, resolve the
+canonical projection and revalidate the pair against a fresh offer. Stop before delegation for
+pending, unresolved, invalid, or newly unavailable state; obtain explicit reselection while
+implementation is inactive.
 
 Binding replacement remains a root-authorized decision. Use the resolver's `select` command only to
 materialize the confirmed typed request, pass that request to the Provider's writer-binding preview,
@@ -342,18 +343,33 @@ effective runtime facts plus limits, requirements, coordination, and pipeline co
 not edit a strategy or binding.
 
 The Codex adapter owns the selected Casefile model catalog and multi-agent runtime. Setup defaults
-to V1; V2 requires Codex 0.145.0 or newer. Codex setup confirms Sol, Terra, Luna, and Spark through
-app-server `model/list` in a private configuration-free home. Fresh setup and upgrade both use the
-new Codex-owned cache from that request to construct the Casefile catalog; upgrades use the active
-receipt-owned catalog only to validate selectors before replacement. File-auth homes are refreshed
-by Codex itself before a temporary credential copy is made, while environment API-key auth can be
-used directly. Keyring-only homes fail closed because Codex keyring identity is home-derived and is
-not assumed to cross into the private home. The temporary home is removed and selected configuration
-must remain unchanged. Casefile never invokes a debug model command or directly writes, configures,
-packages, or distributes Codex's selected-home cache; Codex may refresh its own cache while
-refreshing authentication. The Claude adapter supplies workflow skills, matrices, role agents, and a
-separate Casefile MCP binding transaction without owning the standing contract. Neither adapter
-removes the shared marketplace or sibling plugins.
+to V1; V2 requires Codex 0.145.0 or newer. Setup and model migration confirm Astra, Sol, Terra,
+Luna, and Spark IDs through app-server `model/list` in a temporary configuration-free home, so an
+older replacement catalog cannot hide a newly shipped model. Spark is carried as a pinned entry. No
+selected-home credentials or configuration are copied; environment authentication remains available.
+The projection confirms advertised IDs, not successful model execution or account entitlement. The
+temporary home is removed after discovery.
+
+The complete replacement catalog comes from `casefile/adapters/codex/catalog/models.json`, not
+Codex's cache or the reduced app-server projection. Setup sets its runtime selectors to null for V1
+or `v2` for V2. The `models-casefile-v1.json` and `models-casefile-v2.json` names identify runtimes,
+not model releases. Casefile never directly edits or distributes Codex's `models_cache.json`.
+
+The Codex-only `casefile-codex-model-migrate` skill previews and applies a catalog/profile refresh
+through `setup-codex.py migrate-models`. Use the installed target package, and pass `--codex-home`
+when selecting a non-default home. Preview first, then explicitly approve its `approval_digest` and
+repeat with `--apply --expect-digest <approved-digest>`. Changed inputs require another preview. The
+operation replaces the selected owned catalog and Casefile profile registrations, preserving
+unrelated configuration, the root model, runtime flags, other catalog variant, MCP binding and
+binary, investigation selections, and original pre-install recovery state. Matching state is a
+no-op; failed apply restores the prior integration and receipt pointer. Runtime/receipt disagreement
+or missing catalog recovery state requires explicit setup reconciliation. Migration never switches
+runtimes or claims ownership of a foreign catalog. Restart Codex after a changed migration, then
+check the resolver's current offer without automatically selecting a binding.
+
+The Claude adapter supplies workflow skills, matrices, role agents, and a separate Casefile MCP
+binding transaction without owning the standing contract. Neither adapter removes the shared
+marketplace or sibling plugins.
 
 The source CLI is optional infrastructure, not part of installed plugin setup:
 

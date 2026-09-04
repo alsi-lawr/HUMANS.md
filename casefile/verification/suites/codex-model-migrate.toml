@@ -1,0 +1,52 @@
+schema_version = 1
+suite_id = "casefile-codex-model-migrate-v1"
+description = "Isolated model migration triggers, ownership boundaries, and approval behavior."
+
+[[cases]]
+id = "codex-model-migrate-positive"
+skill = "casefile-codex-model-migrate"
+partition = "positive_trigger"
+prompt = "prompts/codex-model-migrate-positive.txt"
+rubric = "rubrics/trigger.md"
+
+[[cases]]
+id = "codex-model-migrate-native-cache"
+skill = "casefile-codex-model-migrate"
+partition = "hard_non_trigger"
+prompt = "prompts/codex-model-migrate-native-cache.txt"
+rubric = "rubrics/trigger.md"
+
+[[cases]]
+id = "codex-model-migrate-writer-selection"
+skill = "casefile-codex-model-migrate"
+partition = "hard_non_trigger"
+prompt = "prompts/codex-model-migrate-writer-selection.txt"
+rubric = "rubrics/trigger.md"
+
+[[cases]]
+id = "codex-model-migrate-runtime-switch"
+skill = "casefile-codex-model-migrate"
+partition = "hard_non_trigger"
+prompt = "prompts/codex-model-migrate-runtime-switch.txt"
+rubric = "rubrics/trigger.md"
+
+[[cases]]
+id = "codex-model-migrate-stale-preview"
+skill = "casefile-codex-model-migrate"
+partition = "task_behavior"
+prompt = "prompts/codex-model-migrate-stale-preview.txt"
+rubric = "rubrics/codex-model-migrate.md"
+
+[[cases]]
+id = "codex-model-migrate-runtime-disagreement"
+skill = "casefile-codex-model-migrate"
+partition = "task_behavior"
+prompt = "prompts/codex-model-migrate-runtime-disagreement.txt"
+rubric = "rubrics/codex-model-migrate.md"
+
+[[cases]]
+id = "codex-model-migrate-failed-apply"
+skill = "casefile-codex-model-migrate"
+partition = "task_behavior"
+prompt = "prompts/codex-model-migrate-failed-apply.txt"
+rubric = "rubrics/codex-model-migrate.md"

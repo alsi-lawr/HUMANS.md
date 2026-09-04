@@ -1,0 +1,2 @@
+I have installed the newer Casefile Codex plugin. Refresh my existing Casefile model catalog
+and profile registrations from it, showing me the changes before applying them.

@@ -444,7 +444,7 @@ fn writer_projection_uses_canonical_matrix_and_binding_states() {
         .join("../adapters/codex/matrices/casefile-implement-ticket-batch.toml");
     let historical = fs::read_to_string(shipped)
         .expect("shipped matrix")
-        .replacen("model = \"gpt-5.6-sol\"", "model = \"gpt-5.6-terra\"", 1);
+        .replacen("model = \"gpt-6-astra\"", "model = \"gpt-5.6-terra\"", 1);
     fs::write(&implementation, historical).expect("historical implementation matrix");
 
     let absent = project_binding(root.path(), "casefile-implement-ticket-batch");

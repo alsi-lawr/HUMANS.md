@@ -1,0 +1,2 @@
+This machine does not have Casefile installed. Diagnose why Codex's models_cache.json is old.
+Do not change any files.

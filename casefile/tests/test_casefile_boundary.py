@@ -115,14 +115,14 @@ class CasefileBoundaryTests(unittest.TestCase):
             self.assertEqual(row["reasoning"], worker["reasoning"])
             self.assertEqual(row["model"], agent["model"])
             self.assertEqual(row["reasoning"], agent["model_reasoning_effort"])
-            self.assertEqual(("gpt-5.6-sol", "high"), (row["model"], row["reasoning"]))
+            self.assertEqual(("gpt-6-astra", "high"), (row["model"], row["reasoning"]))
 
         targets = {
             target["id"]: target for target in profiles["catalog"]["targets"]
         }
         expected_v1 = {
             (model, effort)
-            for model in ("gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna")
+            for model in ("gpt-6-astra", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna")
             for effort in targets[model]["required_reasoning"]
         }
         actual_v1 = {

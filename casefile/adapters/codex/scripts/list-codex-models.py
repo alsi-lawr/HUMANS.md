@@ -14,7 +14,7 @@ class ProjectionError(RuntimeError):
     pass
 
 
-def project(executable: str, timeout: float) -> list[dict]:
+def project(executable: str, timeout: float, environment: dict[str, str] | None = None) -> list[dict]:
     process = subprocess.Popen(
         [executable, "app-server"],
         stdin=subprocess.PIPE,
@@ -22,6 +22,7 @@ def project(executable: str, timeout: float) -> list[dict]:
         stderr=subprocess.DEVNULL,
         text=True,
         bufsize=1,
+        env=environment,
     )
     try:
         return _exchange(process)
@@ -126,8 +127,14 @@ def pinned_entries(profile_path: Path) -> list[dict]:
     return entries
 
 
-def listing(executable: str, profile_path: Path, timeout: float = 20.0) -> dict:
-    models = normalize(project(executable, timeout))
+def listing(
+    executable: str,
+    profile_path: Path,
+    timeout: float = 20.0,
+    *,
+    environment: dict[str, str] | None = None,
+) -> dict:
+    models = normalize(project(executable, timeout, environment))
     listed = {model["slug"] for model in models}
     models.extend(entry for entry in pinned_entries(profile_path) if entry["slug"] not in listed)
     return {"models": sorted(models, key=lambda model: model["slug"])}

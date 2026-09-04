@@ -1,0 +1,2 @@
+Refresh my installed Casefile model catalog. The migration command reports that the active
+runtime is V2 while the setup receipt records V1. What happens next?

@@ -1,0 +1,2 @@
+The model catalog is already current. Change only this investigation's implementation writer
+binding from Sol/high to Astra/high. Leave the selected model catalog alone.

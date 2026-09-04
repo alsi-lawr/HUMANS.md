@@ -38,8 +38,8 @@ ticket only after the recorded flow accepts it. See the brief
 
 For Codex, when this implementation entry first persists its selected implementation matrix and no
 writer binding exists, run the installed `scripts/resolve-writer-binding.py offer` against the
-active Codex home. Present every returned model/effort pair, identify Sol/high as the
-recommendation, and require an explicit exact choice. If the offer marks Sol/high unavailable, say
+active Codex home. Present every returned model/effort pair, identify Astra/high as the
+recommendation, and require an explicit exact choice. If the offer marks Astra/high unavailable, say
 so and present every remaining valid pair without recommending an unselectable pair. Do not infer a
 recommendation as consent. Run the resolver's `select` command only to materialize the confirmed
 typed binding request. Pass that request to `casefile_preview_writer_binding`, review its envelope,
@@ -60,9 +60,9 @@ and bounded history override. Never reuse an earlier resolution without revalida
 
 If resolution says the persisted or matrix-derived pair is invalid or unavailable, stop before
 delegation and before any planning/source mutation. Run `offer`, present its complete current list,
-state when Sol/high is unavailable, and request a new explicit selection. Replace the binding with
+state when Astra/high is unavailable, and request a new explicit selection. Replace the binding with
 `select`; canonical Store progress derives whether implementation or correction work is inactive and
-fails closed rather than accepting a caller assertion. Never substitute Sol/high or another pair
+fails closed rather than accepting a caller assertion. Never substitute Astra/high or another pair
 silently. A missing binding in a historical Casefile is not an error: the resolver returns the
 selected matrix writer default after checking its current availability.
 
