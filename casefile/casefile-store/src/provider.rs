@@ -2,8 +2,8 @@ use crate::layout::checked_path;
 use crate::{
     ActivationState, DerivedBoard, DerivedIndex, DerivedSnapshot, DerivedTicketProgress,
     GovernedApplyResult, Indexed, ProgressApplyResult, ProgressChangeRequest, ProgressPreview,
-    RevisionSource, ScanResult, Store, StoreError, StrategyTransitionPreview,
-    StrategyTransitionRequest, WriterBindingPreview, WriterBindingRequest,
+    RevisionSource, Store, StoreError, StrategyTransitionPreview, StrategyTransitionRequest,
+    WriterBindingPreview, WriterBindingRequest,
 };
 use casefile_core::{
     ApplyResult, BoardColumn, BoardDraft, BoardStatusSource, ChangeBatchApplyResult,
@@ -18,7 +18,7 @@ use std::{
 };
 use thiserror::Error;
 
-pub const PROVIDER_PROTOCOL_VERSION: u32 = 2;
+pub const PROVIDER_PROTOCOL_VERSION: u32 = 3;
 const PREVIEW_LIMIT: usize = 256;
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
@@ -766,22 +766,7 @@ impl<C: ProviderCache> Provider<C> {
                 preview.approval_required,
             ),
         )?;
-        let result = if preview.no_op {
-            let current = self.store.scan()?;
-            let path = preview.canonical.request.path();
-            let revision = entry_revision(&current, path);
-            if revision.as_ref() != preview.canonical.expected_target_revision.as_ref() {
-                return Err(StoreError::StaleTargetRevision.into());
-            }
-            ApplyResult {
-                path: path.into(),
-                resulting_target_revision: revision,
-                resulting_store_revision: current.snapshot.revision,
-                diff: String::new(),
-            }
-        } else {
-            self.store.apply(preview.canonical)?
-        };
+        let result = self.store.apply(preview.canonical)?;
         self.outcome(ProviderRecordApplyResult {
             result,
             no_op: preview.no_op,
@@ -832,27 +817,7 @@ impl<C: ProviderCache> Provider<C> {
                 preview.approval_required,
             ),
         )?;
-        let result = if preview.no_op {
-            let current = self.store.scan()?;
-            for (path, expected) in &preview.canonical.expected_target_revisions {
-                if entry_revision(&current, path).as_ref() != expected.as_ref() {
-                    return Err(StoreError::StaleTargetRevision.into());
-                }
-            }
-            ChangeBatchApplyResult {
-                paths: preview
-                    .canonical
-                    .requests
-                    .iter()
-                    .map(|request| request.path().to_owned())
-                    .collect(),
-                resulting_target_revisions: preview.canonical.expected_target_revisions,
-                resulting_store_revision: current.snapshot.revision,
-                diff: String::new(),
-            }
-        } else {
-            self.store.apply_batch(preview.canonical)?
-        };
+        let result = self.store.apply_batch(preview.canonical)?;
         self.outcome(ProviderRecordBatchApplyResult {
             result,
             no_op: preview.no_op,
@@ -925,9 +890,17 @@ impl<C: ProviderCache> Provider<C> {
         investigation: impl Into<String>,
     ) -> Result<DefaultBoardPreview, ProviderError> {
         let investigation = checked_path(&investigation.into())?;
-        let scan = self.require_mutation()?;
-        let identity = default_board_identity(&scan, &investigation)?;
+        self.require_mutation()?;
+        let (_, active, _) = crate::activation::activation(self.store.observation_root())?;
+        let identity = default_board_identity(&active, &investigation)?;
         let path = format!("{investigation}/boards/delivery.toml");
+        let context = crate::mutation::MutationContext::capture(
+            self.store.observation_root(),
+            &BTreeMap::from([(path.clone(), None)]),
+            &[],
+            false,
+        )?;
+        let scan = &context.before;
         let draft = RecordDraft::Board(default_board(identity));
         let existing = scan
             .snapshot
@@ -958,6 +931,7 @@ impl<C: ProviderCache> Provider<C> {
             Preview {
                 request,
                 expected_target_revision: existing.map(|entry| entry.content_revision.clone()),
+                expected_input_revisions: context.revisions(),
                 diagnostics: scoped_diagnostics,
                 diff: String::new(),
             }
@@ -1015,22 +989,7 @@ impl<C: ProviderCache> Provider<C> {
             )
             .into());
         }
-        let result = if preview.no_op {
-            let current = self.store.scan()?;
-            let path = preview.canonical.request.path();
-            let revision = entry_revision(&current, path);
-            if revision.as_ref() != preview.canonical.expected_target_revision.as_ref() {
-                return Err(StoreError::StaleTargetRevision.into());
-            }
-            ApplyResult {
-                path: path.into(),
-                resulting_target_revision: revision,
-                resulting_store_revision: current.snapshot.revision,
-                diff: String::new(),
-            }
-        } else {
-            self.store.apply(preview.canonical)?
-        };
+        let result = self.store.apply(preview.canonical)?;
         self.outcome(DefaultBoardApplyResult {
             result,
             no_op: preview.no_op,
@@ -1094,13 +1053,13 @@ impl<C: ProviderCache> Provider<C> {
         self.outcome(result)
     }
 
-    fn require_mutation(&self) -> Result<ScanResult, ProviderError> {
-        let scan = self.store.scan()?;
-        if scan.activation == ActivationState::Active {
-            Ok(scan)
+    fn require_mutation(&self) -> Result<(), ProviderError> {
+        let (activation, _, _) = crate::activation::activation(self.store.observation_root())?;
+        if activation == ActivationState::Active {
+            Ok(())
         } else {
             Err(ProviderError::ReadOnly(
-                match scan.activation {
+                match activation {
                     ActivationState::Unactivated => "planning Store is not activated",
                     ActivationState::Invalid => {
                         "planning Store activation is invalid or unsupported"
@@ -1271,8 +1230,10 @@ fn diagnostic_counts(diagnostics: &[Diagnostic]) -> BTreeMap<String, usize> {
     counts
 }
 
-fn default_board_identity(scan: &ScanResult, investigation: &str) -> Result<String, ProviderError> {
-    let activation = crate::activation::activation_from_scan(scan)?;
+fn default_board_identity(
+    activation: &crate::activation::Activation,
+    investigation: &str,
+) -> Result<String, ProviderError> {
     let mut matches = Vec::new();
     let mut counts = BTreeMap::new();
     for project in activation.projects.values() {
@@ -1329,14 +1290,6 @@ fn default_board(id: String) -> BoardDraft {
         })
         .collect(),
     }
-}
-
-fn entry_revision(scan: &ScanResult, path: &str) -> Option<Revision> {
-    scan.snapshot
-        .entries
-        .iter()
-        .find(|entry| entry.path == path)
-        .map(|entry| entry.content_revision.clone())
 }
 
 #[cfg(test)]

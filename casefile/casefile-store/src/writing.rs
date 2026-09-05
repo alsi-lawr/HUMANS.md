@@ -1,8 +1,7 @@
 use crate::{
-    activation::activation,
     layout::{checked_path, kind_for_path},
+    mutation::{MutationContext, Overlay},
     revision::require_target_revision,
-    scanning::scan,
     store::StoreError,
 };
 use casefile_core::{
@@ -19,94 +18,18 @@ use std::{
 use tempfile::NamedTempFile;
 
 pub(super) fn preview(root: &Path, request: ChangeRequest) -> Result<Preview, StoreError> {
-    let request = canonical_request(request)?;
-    ensure_worktree(root)?;
-    let before = scan(root, &BTreeMap::new())?;
-    let path = checked_path(request.path())?;
-    let existing = before
-        .snapshot
-        .entries
-        .iter()
-        .find(|entry| entry.path == path);
-    let proposed_bytes = match request.rendered() {
-        Some(Ok(bytes)) => bytes,
-        Some(Err(diagnostic)) => {
-            return Ok(rejected(request, diagnostic));
-        }
-        None => Vec::new(),
-    };
-    let writable = match &request {
-        ChangeRequest::Create { draft, .. } | ChangeRequest::Replace { draft, .. } => {
-            Some(draft.kind())
-        }
-        ChangeRequest::Delete { .. } => existing.and_then(|entry| entry.kind),
-    };
-    let path_kind = kind_for_path(&path, &activation(root)?.1);
-    if !writable.is_some_and(Kind::is_writable) || path_kind != writable {
-        return Ok(rejected(
-            request,
-            Diagnostic::new(
-                &path,
-                "read_only_or_wrong_path",
-                "only complete ticket, epic, and board drafts may target their canonical path",
-            ),
-        ));
-    }
-    match &request {
-        ChangeRequest::Create { .. } if existing.is_some() => {
-            return Ok(rejected(
-                request,
-                Diagnostic::new(&path, "target_exists", "create requires an absent target"),
-            ));
-        }
-        ChangeRequest::Replace { .. } if existing.is_none() => {
-            return Ok(rejected(
-                request,
-                Diagnostic::new(
-                    &path,
-                    "target_missing",
-                    "replace requires an existing target",
-                ),
-            ));
-        }
-        ChangeRequest::Delete { .. } if existing.is_none() => {
-            return Ok(rejected(
-                request,
-                Diagnostic::new(
-                    &path,
-                    "target_missing",
-                    "delete requires an existing target",
-                ),
-            ));
-        }
-        _ => {}
-    }
-    let mut overlay = BTreeMap::new();
-    overlay.insert(
-        path.clone(),
-        if matches!(request, ChangeRequest::Delete { .. }) {
-            None
-        } else {
-            Some(proposed_bytes.clone())
-        },
-    );
-    let proposed = scan(root, &overlay)?;
-    let diagnostics = introduced_diagnostics(&before.diagnostics, &proposed.diagnostics);
-    let diff = git_diff(
-        root,
-        &path,
-        existing.map(|entry| entry.original_bytes.as_slice()),
-        if matches!(request, ChangeRequest::Delete { .. }) {
-            None
-        } else {
-            Some(proposed_bytes.as_slice())
-        },
-    )?;
+    let batch = preview_batch(root, vec![request])?;
+    let request = batch.requests.into_iter().next().expect("one request");
     Ok(Preview {
+        expected_target_revision: batch
+            .expected_target_revisions
+            .get(request.path())
+            .cloned()
+            .flatten(),
+        expected_input_revisions: batch.expected_input_revisions,
         request,
-        expected_target_revision: existing.map(|entry| entry.content_revision.clone()),
-        diagnostics: stable(diagnostics),
-        diff,
+        diagnostics: batch.diagnostics,
+        diff: batch.diff,
     })
 }
 
@@ -121,11 +44,21 @@ pub(super) fn preview_batch(
     }
     let requests = requests
         .into_iter()
-        .map(canonical_request)
+        .map(|request| canonical_request(root, request))
         .collect::<Result<Vec<_>, _>>()?;
     ensure_worktree(root)?;
-    let before = scan(root, &BTreeMap::new())?;
-    let active = activation(root)?.1;
+    let overlay = request_overlay(&requests);
+    let context = MutationContext::capture(root, &overlay, &[], false)?;
+    prepare_batch(root, requests, &context)
+}
+
+fn prepare_batch(
+    root: &Path,
+    requests: Vec<ChangeRequest>,
+    context: &MutationContext,
+) -> Result<ChangeBatchPreview, StoreError> {
+    let before = &context.before;
+    let active = &context.active;
     let mut paths = BTreeSet::new();
     let mut overlay = BTreeMap::new();
     let mut expected_target_revisions = BTreeMap::new();
@@ -163,7 +96,7 @@ pub(super) fn preview_batch(
             }
             ChangeRequest::Delete { .. } => existing.and_then(|entry| entry.kind),
         };
-        if !writable.is_some_and(Kind::is_writable) || kind_for_path(&path, &active) != writable {
+        if !writable.is_some_and(Kind::is_writable) || kind_for_path(&path, active) != writable {
             diagnostics.push(Diagnostic::new(
                 &path,
                 "read_only_or_wrong_path",
@@ -199,11 +132,12 @@ pub(super) fn preview_batch(
         return Ok(ChangeBatchPreview {
             requests,
             expected_target_revisions,
+            expected_input_revisions: context.revisions(),
             diagnostics: stable(diagnostics),
             diff: String::new(),
         });
     }
-    let proposed = scan(root, &overlay)?;
+    let proposed = context.overlay(&overlay);
     let diagnostics = introduced_diagnostics(&before.diagnostics, &proposed.diagnostics);
     let mut diff = String::new();
     for request in &requests {
@@ -223,6 +157,7 @@ pub(super) fn preview_batch(
     Ok(ChangeBatchPreview {
         requests,
         expected_target_revisions,
+        expected_input_revisions: context.revisions(),
         diagnostics: stable(diagnostics),
         diff,
     })
@@ -268,54 +203,29 @@ fn diagnostic_key(
 }
 
 pub(super) fn apply(root: &Path, mut preview: Preview) -> Result<ApplyResult, StoreError> {
-    preview.request = canonical_request(preview.request)?;
-    ensure_worktree(root)?;
-    if !preview.diagnostics.is_empty() {
-        return Err(StoreError::Invalid(
-            "preview contains validation diagnostics".into(),
-        ));
-    }
-    let path = checked_path(preview.request.path())?;
-    require_target_revision(&root.join(&path), preview.expected_target_revision.as_ref())?;
-    let target = root.join(&path);
-    match &preview.request {
-        ChangeRequest::Create { draft, .. } | ChangeRequest::Replace { draft, .. } => {
-            let bytes = casefile_core::render_draft(&path, draft)
-                .map_err(|diagnostic| StoreError::Invalid(diagnostic.message))?;
-            if let Some(parent) = target.parent() {
-                fs::create_dir_all(parent)?;
-            }
-            if target.exists() && fs::symlink_metadata(&target)?.file_type().is_symlink() {
-                return Err(StoreError::Invalid("target must not be a symlink".into()));
-            }
-            atomic_write(
-                &target,
-                &bytes,
-                matches!(preview.request, ChangeRequest::Create { .. }),
-            )?;
-        }
-        ChangeRequest::Delete { .. } => {
-            let metadata = fs::symlink_metadata(&target)?;
-            if !metadata.file_type().is_file() || metadata.file_type().is_symlink() {
-                return Err(StoreError::Invalid(
-                    "delete requires a regular non-symlink target".into(),
-                ));
-            }
-            fs::remove_file(&target)?;
-        }
-    }
-    let resulting = scan(root, &BTreeMap::new())?;
-    let target_revision = resulting
-        .snapshot
-        .entries
-        .iter()
-        .find(|entry| entry.path == path)
-        .map(|entry| entry.content_revision.clone());
+    preview.request = canonical_request(root, preview.request)?;
+    let path = preview.request.path().to_owned();
+    let result = apply_batch(
+        root,
+        ChangeBatchPreview {
+            requests: vec![preview.request],
+            expected_target_revisions: BTreeMap::from([(
+                path.clone(),
+                preview.expected_target_revision,
+            )]),
+            expected_input_revisions: preview.expected_input_revisions,
+            diagnostics: preview.diagnostics,
+            diff: preview.diff,
+        },
+    )?;
     Ok(ApplyResult {
+        resulting_target_revision: result
+            .resulting_target_revisions
+            .get(&path)
+            .cloned()
+            .flatten(),
         path,
-        resulting_target_revision: target_revision,
-        resulting_store_revision: resulting.snapshot.revision,
-        diff: preview.diff,
+        diff: result.diff,
     })
 }
 
@@ -338,7 +248,7 @@ pub(super) fn apply_batch(
     preview.requests = preview
         .requests
         .into_iter()
-        .map(canonical_request)
+        .map(|request| canonical_request(root, request))
         .collect::<Result<Vec<_>, _>>()?;
     let mut expected_target_revisions = BTreeMap::new();
     for (path, revision) in preview.expected_target_revisions {
@@ -359,7 +269,16 @@ pub(super) fn apply_batch(
             "preview contains validation diagnostics".into(),
         ));
     }
-    let current = scan(root, &BTreeMap::new())?;
+    let overlay = request_overlay(&preview.requests);
+    let context = MutationContext::capture(root, &overlay, &[], true)?;
+    context.require_revisions(&preview.expected_input_revisions)?;
+    let checked = prepare_batch(root, preview.requests.clone(), &context)?;
+    if !checked.diagnostics.is_empty() || checked.diff != preview.diff {
+        return Err(StoreError::Invalid(
+            "record batch validation changed after preview".into(),
+        ));
+    }
+    let current = &context.before;
     if preview.expected_target_revisions.len() != preview.requests.len() {
         return Err(StoreError::Invalid(
             "record batch target revisions are incomplete".into(),
@@ -420,12 +339,13 @@ pub(super) fn apply_batch(
             original: current_entry.map(|entry| entry.original_bytes.clone()),
         });
     }
+    context.require_unchanged()?;
     let mut applied = Vec::new();
     for (index, mutation) in mutations.iter().enumerate() {
-        let result = match &mutation.proposed {
-            Some(bytes) => atomic_write(&mutation.target, bytes, mutation.original.is_none()),
-            None => fs::remove_file(&mutation.target).map_err(StoreError::from),
-        };
+        if mutation.proposed == mutation.original {
+            continue;
+        }
+        let result = apply_mutation(root, mutation);
         if let Err(error) = result {
             rollback_batch(&mutations, &applied).map_err(|rollback| {
                 StoreError::Invalid(format!(
@@ -436,7 +356,7 @@ pub(super) fn apply_batch(
         }
         applied.push(index);
     }
-    let resulting = match scan(root, &BTreeMap::new()) {
+    let resulting = match context.resulting(&overlay) {
         Ok(resulting) => resulting,
         Err(error) => {
             rollback_batch(&mutations, &applied).map_err(|rollback| {
@@ -467,23 +387,32 @@ pub(super) fn apply_batch(
             .map(|mutation| mutation.path)
             .collect(),
         resulting_target_revisions,
-        resulting_store_revision: resulting.snapshot.revision,
         diff: preview.diff,
     })
 }
 
-fn canonical_request(request: ChangeRequest) -> Result<ChangeRequest, StoreError> {
+fn apply_mutation(root: &Path, mutation: &BatchMutation) -> Result<(), StoreError> {
+    #[cfg(test)]
+    crate::mutation_hooks::writing(root, &mutation.path)?;
+    let _ = root;
+    match &mutation.proposed {
+        Some(bytes) => atomic_write(&mutation.target, bytes, mutation.original.is_none()),
+        None => fs::remove_file(&mutation.target).map_err(StoreError::from),
+    }
+}
+
+fn canonical_request(root: &Path, request: ChangeRequest) -> Result<ChangeRequest, StoreError> {
     Ok(match request {
         ChangeRequest::Create { path, draft } => ChangeRequest::Create {
-            path: checked_path(&path)?,
+            path: super::mutation_locks::canonical_target(root, &checked_path(&path)?)?,
             draft,
         },
         ChangeRequest::Replace { path, draft } => ChangeRequest::Replace {
-            path: checked_path(&path)?,
+            path: super::mutation_locks::canonical_target(root, &checked_path(&path)?)?,
             draft,
         },
         ChangeRequest::Delete { path } => ChangeRequest::Delete {
-            path: checked_path(&path)?,
+            path: super::mutation_locks::canonical_target(root, &checked_path(&path)?)?,
         },
     })
 }
@@ -512,13 +441,16 @@ fn rollback_batch(mutations: &[BatchMutation], applied: &[usize]) -> Result<(), 
     Ok(())
 }
 
-fn rejected(request: ChangeRequest, diagnostic: Diagnostic) -> Preview {
-    Preview {
-        request,
-        expected_target_revision: None,
-        diagnostics: vec![diagnostic],
-        diff: String::new(),
-    }
+fn request_overlay(requests: &[ChangeRequest]) -> Overlay {
+    requests
+        .iter()
+        .map(|request| {
+            (
+                request.path().to_owned(),
+                request.rendered().and_then(Result::ok),
+            )
+        })
+        .collect()
 }
 
 pub(super) fn ensure_worktree(root: &Path) -> Result<(), StoreError> {

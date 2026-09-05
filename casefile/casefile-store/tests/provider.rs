@@ -66,7 +66,7 @@ fn new_ticket(root: &Path) -> (String, RecordDraft) {
 }
 
 #[test]
-fn snapshot_and_exact_scoped_reads_are_bounded_protocol_v2() {
+fn snapshot_and_exact_scoped_reads_are_bounded_protocol_v3() {
     let root = fixture();
     let store = Store::open(root.path()).expect("store");
     let provider = Provider::without_cache(store.clone());
@@ -94,9 +94,9 @@ fn snapshot_and_exact_scoped_reads_are_bounded_protocol_v2() {
                 .expect("progress preview"),
         )
         .expect("progress apply");
-    let snapshot = provider.snapshot_for_protocol(2).expect("snapshot");
+    let snapshot = provider.snapshot_for_protocol(3).expect("snapshot");
     assert_eq!(snapshot.activation, ActivationState::Active);
-    assert_eq!(snapshot.capabilities.protocol_version, 2);
+    assert_eq!(snapshot.capabilities.protocol_version, 3);
     assert_eq!(snapshot.capabilities.planning_format_versions, [1]);
     assert_eq!(
         snapshot.capabilities.mutation,
@@ -133,7 +133,7 @@ fn snapshot_and_exact_scoped_reads_are_bounded_protocol_v2() {
             .contains(&ProviderOperation::ApplyProgress)
     );
     assert!(matches!(
-        provider.snapshot_for_protocol(1),
+        provider.snapshot_for_protocol(2),
         Err(ProviderError::UnsupportedProtocol { .. })
     ));
 
@@ -986,7 +986,7 @@ fn default_board_refuses_missing_and_ambiguous_activation_mappings_before_previe
 }
 
 #[test]
-fn default_board_scopes_baseline_diagnostics_to_its_investigation() {
+fn default_board_ignores_unrelated_diagnostics_within_and_across_investigations() {
     let unrelated = fixture();
     let other_investigation = "projects/demo/investigations/other";
     fs::write(
@@ -1031,21 +1031,12 @@ fn default_board_scopes_baseline_diagnostics_to_its_investigation() {
     let preview = scoped_provider
         .preview_default_delivery_board(INVESTIGATION)
         .expect("scoped diagnostic preview");
-    assert!(!preview.canonical.diagnostics.is_empty());
+    assert!(preview.canonical.diagnostics.is_empty());
+    scoped_provider
+        .apply_default_delivery_board(preview)
+        .expect("unrelated request does not block board");
     assert!(
-        preview
-            .canonical
-            .diagnostics
-            .iter()
-            .all(|diagnostic| diagnostic.path.starts_with(&format!("{INVESTIGATION}/")))
-    );
-    assert!(
-        scoped_provider
-            .apply_default_delivery_board(preview)
-            .is_err()
-    );
-    assert!(
-        !scoped
+        scoped
             .path()
             .join(INVESTIGATION)
             .join("boards/delivery.toml")

@@ -6,6 +6,14 @@ mod derived;
 mod governance;
 mod index;
 mod layout;
+mod mutation;
+mod mutation_dependencies;
+#[cfg(test)]
+mod mutation_hooks;
+mod mutation_locks;
+mod mutation_metadata;
+#[cfg(test)]
+mod mutation_tests;
 mod presentation;
 mod progress;
 mod provider;

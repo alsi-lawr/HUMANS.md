@@ -168,7 +168,7 @@ def probe(binary: Path, version: str, root: Path) -> None:
         contract = json.loads(compatibility.stdout)
     except json.JSONDecodeError as error:
         raise RuntimeError("Casefile executable returned invalid compatibility JSON") from error
-    if compatibility.returncode or contract.get("identity") != "casefile" or contract.get("provider_protocol_version") != 2:
+    if compatibility.returncode or contract.get("identity") != "casefile" or contract.get("provider_protocol_version") != 3:
         raise RuntimeError("Casefile executable compatibility probe failed")
     if set(contract.get("required_provider_operations", [])) != REQUIRED_OPERATIONS:
         raise RuntimeError("Casefile executable capability contract is incomplete")

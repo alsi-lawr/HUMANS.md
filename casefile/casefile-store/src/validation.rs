@@ -13,6 +13,28 @@ pub(super) fn cross_validate(entries: &[EntrySnapshot], active: &Activation) -> 
     let mut identities: BTreeMap<&str, &EntrySnapshot> = BTreeMap::new();
     let paths: BTreeSet<&str> = entries.iter().map(|entry| entry.path.as_str()).collect();
     let mut supersedes = BTreeMap::new();
+    let scopes = entries
+        .iter()
+        .map(|entry| (entry.path.as_str(), scope_for(&entry.path, active)))
+        .collect::<BTreeMap<_, _>>();
+    let projects = entries
+        .iter()
+        .map(|entry| (entry.path.as_str(), project_for(&entry.path, active)))
+        .collect::<BTreeMap<_, _>>();
+    let accepted = entries
+        .iter()
+        .filter_map(|entry| {
+            if entry.kind == Some(Kind::Ticket) && entry.classification == Classification::Governed
+            {
+                if let Some(RecordSummary::WorkItem { id, status, .. }) = &entry.summary {
+                    if status == "accepted" {
+                        return Some((scopes[entry.path.as_str()], id.as_str()));
+                    }
+                }
+            }
+            None
+        })
+        .collect::<BTreeSet<_>>();
     for entry in entries
         .iter()
         .filter(|entry| entry.classification == Classification::Governed)
@@ -56,14 +78,9 @@ pub(super) fn cross_validate(entries: &[EntrySnapshot], active: &Activation) -> 
         let Ok(log) = parse_progress_log(&entry.path, text) else {
             continue;
         };
-        let scope = scope_for(&entry.path, active);
+        let scope = scopes[entry.path.as_str()];
         for progress in log.entries {
-            let accepted_ticket = entries.iter().any(|candidate| {
-                candidate.kind == Some(Kind::Ticket)
-                    && candidate.classification == Classification::Governed
-                    && scope_for(&candidate.path, active) == scope
-                    && matches!(&candidate.summary, Some(RecordSummary::WorkItem { id, status, .. }) if id == progress.ticket_id() && status == "accepted")
-            });
+            let accepted_ticket = accepted.contains(&(scope, progress.ticket_id()));
             if !accepted_ticket {
                 diagnostics.push(Diagnostic::new(
                     &entry.path,
@@ -90,11 +107,10 @@ pub(super) fn cross_validate(entries: &[EntrySnapshot], active: &Activation) -> 
                 RecordDraft::Ticket(item) | RecordDraft::Epic(item) => item,
                 _ => unreachable!(),
             };
-            let project = project_for(&entry.path, active);
+            let project = projects[entry.path.as_str()];
             for reference in &item.decision_refs {
                 let resolves = identities.get(reference.as_str()).is_some_and(|target| {
-                    target.kind == Some(Kind::Decision)
-                        && project_for(&target.path, active) == project
+                    target.kind == Some(Kind::Decision) && projects[target.path.as_str()] == project
                 });
                 if reference == id || !resolves {
                     diagnostics.push(Diagnostic::new(
@@ -113,7 +129,7 @@ pub(super) fn cross_validate(entries: &[EntrySnapshot], active: &Activation) -> 
                 if reference == id
                     || identities.get(reference.as_str()).is_none_or(|target| {
                         !matches!(target.kind, Some(Kind::Ticket | Kind::Epic))
-                            || project_for(&target.path, active) != project
+                            || projects[target.path.as_str()] != project
                     })
                 {
                     diagnostics.push(Diagnostic::new(
@@ -132,11 +148,11 @@ pub(super) fn cross_validate(entries: &[EntrySnapshot], active: &Activation) -> 
     {
         if let Ok(text) = std::str::from_utf8(&entry.original_bytes) {
             if let Ok((refs, attachments)) = parse_metadata_arrays(&entry.path, text) {
-                let scope = scope_for(&entry.path, active);
+                let scope = scopes[entry.path.as_str()];
                 for reference in refs {
                     if identities
                         .get(reference.as_str())
-                        .is_none_or(|target| scope_for(&target.path, active) != scope)
+                        .is_none_or(|target| scopes[target.path.as_str()] != scope)
                     {
                         diagnostics.push(Diagnostic::new(&entry.path, "unresolved_reference", "references must resolve within the governed project/investigation scope"));
                     }

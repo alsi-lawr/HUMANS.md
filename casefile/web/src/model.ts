@@ -172,6 +172,7 @@ export type Preview = Readonly<{
   no_op: boolean;
   request: ChangeRequest;
   expected_target_revision: string | null;
+  readonly expected_input_revisions: Readonly<{ [path: string]: string | null }>;
   diagnostics: ReadonlyArray<Diagnostic>;
   diff: string;
 }>;
@@ -179,7 +180,6 @@ export type ApplyResponse = Readonly<{
   result: Readonly<{
     path: string;
     resulting_target_revision: string | null;
-    resulting_store_revision: string;
     diff: string;
     no_op: boolean;
   }>;

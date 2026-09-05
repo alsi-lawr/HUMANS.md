@@ -206,6 +206,7 @@ name = "casefile-store"
 version = "0.1.0"
 dependencies = [
  "casefile-core",
+ "libc",
  "regex",
  "serde",
  "serde-saphyr",

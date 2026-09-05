@@ -14,7 +14,7 @@ use std::{
     fs,
     io::{self, BufRead, Write},
     path::{Path, PathBuf},
-    sync::{Arc, Mutex, RwLock, mpsc},
+    sync::{Arc, Mutex, mpsc},
     thread,
 };
 
@@ -214,7 +214,6 @@ struct Session {
 #[derive(Clone)]
 struct ToolService {
     provider: Arc<Provider>,
-    access: Arc<RwLock<()>>,
     previews: Arc<Mutex<PreviewVault>>,
 }
 
@@ -244,7 +243,6 @@ impl Session {
         Self {
             tools: ToolService {
                 provider: Arc::new(provider),
-                access: Arc::new(RwLock::new(())),
                 previews: Arc::new(Mutex::new(PreviewVault::default())),
             },
             initialized: false,
@@ -411,13 +409,7 @@ impl ToolService {
             .and_then(|value| value.get("arguments"))
             .cloned()
             .unwrap_or_else(|| json!({}));
-        let result = if is_apply_tool(name) {
-            let _exclusive = self.access.write().expect("MCP tool access");
-            self.dispatch(name, arguments)
-        } else {
-            let _shared = self.access.read().expect("MCP tool access");
-            self.dispatch(name, arguments)
-        };
+        let result = self.dispatch(name, arguments);
         match result {
             Ok(value) => success_response(request_id, tool_result(value, false)),
             Err(error) => success_response(request_id, tool_error(&format!("{error:#}"))),
@@ -425,6 +417,8 @@ impl ToolService {
     }
 
     fn dispatch(&self, name: &str, arguments: Value) -> Result<Value> {
+        #[cfg(test)]
+        tests::dispatch_boundary();
         match name {
             "casefile_snapshot" => serialize(self.provider.snapshot()?),
             "casefile_query" => serialize(self.provider.query(parse(arguments)?)?),
@@ -715,17 +709,6 @@ fn is_tool_call(request: &Value) -> bool {
             && object.get("method") == Some(&Value::String("tools/call".into()))
             && object.contains_key("id")
     })
-}
-
-fn is_apply_tool(name: &str) -> bool {
-    matches!(
-        name,
-        "casefile_apply_record"
-            | "casefile_apply_progress"
-            | "casefile_apply_default_delivery_board"
-            | "casefile_apply_strategy_transition"
-            | "casefile_apply_writer_binding"
-    )
 }
 
 fn tool_definitions() -> Vec<Value> {
@@ -1197,7 +1180,7 @@ fn capabilities_schema() -> Value {
     ];
     object_schema(
         json!({
-            "protocol_version": {"const": 2},
+            "protocol_version": {"const": PROVIDER_PROTOCOL_VERSION},
             "planning_format_versions": {"type": "array", "items": {"type": "integer"}},
             "mutation": one_of_object(vec![
                 object_schema(json!({"state": {"const": "read_write"}}), &["state"]),
@@ -1485,7 +1468,6 @@ fn transition_output_schema() -> Value {
             "selected_strategy_id",
             "selected_matrix_origin",
             "selected_matrix_sha256",
-            "expected_store_revision",
             "expected_matrix_revision",
             "proposed_matrix_revision",
             "root_binding",
@@ -1559,39 +1541,24 @@ fn apply_output_schema(name: &str) -> Value {
         json!({
             "path": non_empty_string(),
             "resulting_target_revision": nullable(non_empty_string()),
-            "resulting_store_revision": non_empty_string(),
             "diff": {"type": "string"},
             "no_op": {"type": "boolean"},
         }),
-        &[
-            "path",
-            "resulting_target_revision",
-            "resulting_store_revision",
-            "diff",
-            "no_op",
-        ],
+        &["path", "resulting_target_revision", "diff", "no_op"],
     );
     let batch = object_schema(
         json!({
             "paths": {"type": "array", "items": {"type": "string"}},
             "resulting_target_revisions": revision_map_schema(),
-            "resulting_store_revision": non_empty_string(),
             "diff": {"type": "string"},
             "no_op": {"type": "boolean"},
         }),
-        &[
-            "paths",
-            "resulting_target_revisions",
-            "resulting_store_revision",
-            "diff",
-            "no_op",
-        ],
+        &["paths", "resulting_target_revisions", "diff", "no_op"],
     );
     let governed = object_schema(
         json!({
             "operation": {"type": "string", "enum": ["strategy_transition", "writer_binding"]},
             "paths": {"type": "array", "items": {"type": "string"}},
-            "resulting_store_revision": non_empty_string(),
             "resulting_target_revisions": revision_map_schema(),
             "diffs": {"type": "object", "additionalProperties": {"type": "string"}},
             "no_op": {"type": "boolean"},
@@ -1599,7 +1566,6 @@ fn apply_output_schema(name: &str) -> Value {
         &[
             "operation",
             "paths",
-            "resulting_store_revision",
             "resulting_target_revisions",
             "diffs",
             "no_op",
@@ -1712,3 +1678,7 @@ fn write_message(output: &mut impl Write, value: Value) -> Result<()> {
         .context("terminate MCP stdio response")?;
     output.flush().context("flush MCP stdio response")
 }
+
+#[cfg(test)]
+#[path = "mcp_tests.rs"]
+mod tests;

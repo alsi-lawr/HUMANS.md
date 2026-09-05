@@ -422,7 +422,10 @@ fn bootstrap_creates_only_an_absent_empty_log_and_existing_valid_log_is_byte_pre
         fs::read_to_string(&log_path).expect("preserved log"),
         noncanonical
     );
-    assert_eq!(applied.resulting_store_revision, before);
+    assert_eq!(
+        store.scan().expect("unchanged Store").snapshot.revision,
+        before
+    );
 }
 
 #[test]

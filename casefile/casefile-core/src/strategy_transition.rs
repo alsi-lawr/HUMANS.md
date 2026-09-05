@@ -4,7 +4,7 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
-use crate::{Diagnostic, Revision, SCHEMA_VERSION};
+use crate::{Diagnostic, Revision};
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -23,7 +23,8 @@ pub struct StrategyTransitionRecord {
     pub selected_strategy_id: String,
     pub selected_matrix_origin: String,
     pub selected_matrix_sha256: String,
-    pub expected_store_revision: Revision,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expected_store_revision: Option<Revision>,
     pub expected_matrix_revision: Revision,
     pub proposed_matrix_revision: Revision,
     pub root_binding: String,
@@ -45,7 +46,7 @@ struct TransitionWire {
     selected_strategy_id: String,
     selected_matrix_origin: String,
     selected_matrix_sha256: String,
-    expected_store_revision: Revision,
+    expected_store_revision: Option<Revision>,
     expected_matrix_revision: Revision,
     proposed_matrix_revision: Revision,
     root_binding: String,
@@ -68,11 +69,13 @@ pub fn parse_strategy_transition(
             error.to_string(),
         )]
     })?;
-    if wire.schema_version != i64::from(SCHEMA_VERSION) {
+    if !matches!(wire.schema_version, 1 | 2)
+        || (wire.schema_version == 1 && wire.expected_store_revision.is_none())
+    {
         return Err(vec![Diagnostic::new(
             path,
             "invalid_schema_version",
-            "schema_version must be 1",
+            "strategy history requires schema 1 with a Store revision or schema 2",
         )]);
     }
     let record = StrategyTransitionRecord {
@@ -150,7 +153,10 @@ pub fn validate_strategy_transition(
     }
     if record.selected_matrix_origin.trim().is_empty()
         || record.rationale.trim().is_empty()
-        || record.expected_store_revision.0.trim().is_empty()
+        || record
+            .expected_store_revision
+            .as_ref()
+            .is_some_and(|revision| revision.0.trim().is_empty())
         || record.expected_matrix_revision.0.trim().is_empty()
         || record.proposed_matrix_revision.0.trim().is_empty()
     {
@@ -237,7 +243,14 @@ pub fn validate_strategy_transition(
 }
 
 pub fn render_strategy_transition(record: &StrategyTransitionRecord) -> String {
-    let mut output = String::from("schema_version = 1\n");
+    let mut output = format!(
+        "schema_version = {}\n",
+        if record.expected_store_revision.is_some() {
+            1
+        } else {
+            2
+        }
+    );
     for (name, value) in [
         ("operation_id", record.operation_id.as_str()),
         ("recorded_at", record.recorded_at.as_str()),
@@ -254,7 +267,11 @@ pub fn render_strategy_transition(record: &StrategyTransitionRecord) -> String {
         ),
         (
             "expected_store_revision",
-            record.expected_store_revision.0.as_str(),
+            record
+                .expected_store_revision
+                .as_ref()
+                .map(|revision| revision.0.as_str())
+                .unwrap_or(""),
         ),
         (
             "expected_matrix_revision",
@@ -266,6 +283,9 @@ pub fn render_strategy_transition(record: &StrategyTransitionRecord) -> String {
         ),
         ("root_binding", record.root_binding.as_str()),
     ] {
+        if name == "expected_store_revision" && record.expected_store_revision.is_none() {
+            continue;
+        }
         output.push_str(&format!("{name} = {}\n", toml::Value::String(value.into())));
     }
     output.push_str(&format!(
@@ -344,7 +364,7 @@ mod tests {
             selected_strategy_id: "new".into(),
             selected_matrix_origin: "adapter/matrix.toml".into(),
             selected_matrix_sha256: "a".repeat(64),
-            expected_store_revision: Revision("sha256:before".into()),
+            expected_store_revision: Some(Revision("sha256:before".into())),
             expected_matrix_revision: Revision("sha256:old".into()),
             proposed_matrix_revision: Revision("sha256:new".into()),
             root_binding: "root".into(),

@@ -15,8 +15,8 @@ use tempfile::NamedTempFile;
 use crate::{
     activation::{ActivationState, activation},
     layout::checked_path,
+    mutation::{MutationContext, Overlay},
     revision::require_target_revision,
-    scanning::scan,
     store::{StoreError, require_safe_target_parent},
     writing::git_diff,
 };
@@ -39,6 +39,8 @@ pub struct ProgressPreview {
     pub request: ProgressChangeRequest,
     pub path: String,
     pub expected_target_revision: Option<Revision>,
+    #[serde(default)]
+    pub expected_input_revisions: BTreeMap<String, Option<Revision>>,
     pub diagnostics: Vec<Diagnostic>,
     pub diff: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -52,7 +54,6 @@ pub struct ProgressPreview {
 pub struct ProgressApplyResult {
     pub path: String,
     pub resulting_target_revision: Option<Revision>,
-    pub resulting_store_revision: Revision,
     pub diff: String,
     pub no_op: bool,
 }
@@ -64,7 +65,18 @@ pub(super) fn preview(
     request.investigation = checked_path(&request.investigation)?;
     ensure_worktree(root)?;
     let (path, scope_prefix) = progress_path(root, &request.investigation)?;
-    let before = scan(root, &BTreeMap::new())?;
+    let context = capture(root, &request, false)?;
+    prepare(root, request, &context, path, scope_prefix)
+}
+
+fn prepare(
+    root: &Path,
+    request: ProgressChangeRequest,
+    context: &MutationContext,
+    path: String,
+    scope_prefix: String,
+) -> Result<ProgressPreview, StoreError> {
+    let before = &context.before;
     let existing = before
         .snapshot
         .entries
@@ -113,11 +125,12 @@ pub(super) fn preview(
                     .map_err(|_| StoreError::Invalid("progress log must be UTF-8".into()))?,
             )
             .map_err(diagnostics_error)?;
-            let diagnostics = scoped_diagnostics(&before.diagnostics, &scope_prefix);
+            let diagnostics = scoped_diagnostics(&before.diagnostics, &path);
             return Ok(ProgressPreview {
                 request,
                 path,
                 expected_target_revision: Some(existing.content_revision.clone()),
+                expected_input_revisions: context.revisions(),
                 no_op: diagnostics.is_empty(),
                 diagnostics,
                 diff: String::new(),
@@ -189,10 +202,10 @@ pub(super) fn preview(
     let same = existing.is_some_and(|entry| entry.original_bytes == bytes);
     let mut overlay = BTreeMap::new();
     overlay.insert(path.clone(), Some(bytes.clone()));
-    let proposed = scan(root, &overlay)?;
-    let diagnostics = scoped_diagnostics(&proposed.diagnostics, &scope_prefix);
+    let proposed = context.overlay(&overlay);
+    let diagnostics = scoped_diagnostics(&proposed.diagnostics, &path);
     let bootstrap_ticket_ids = if request.bootstrap {
-        accepted_ticket_ids(&before, &scope_prefix)
+        accepted_ticket_ids(before, &scope_prefix)
     } else {
         Vec::new()
     };
@@ -201,6 +214,7 @@ pub(super) fn preview(
             request,
             path,
             expected_target_revision: existing.map(|entry| entry.content_revision.clone()),
+            expected_input_revisions: context.revisions(),
             diagnostics,
             diff: String::new(),
             proposed_bytes: Some(bytes),
@@ -222,6 +236,7 @@ pub(super) fn preview(
         request,
         path,
         expected_target_revision: existing.map(|entry| entry.content_revision.clone()),
+        expected_input_revisions: context.revisions(),
         diagnostics,
         diff,
         proposed_bytes: Some(bytes),
@@ -247,7 +262,8 @@ pub(super) fn apply(
             "progress preview target does not match request".into(),
         ));
     }
-    let current = scan(root, &BTreeMap::new())?;
+    let context = capture(root, &preview.request, true)?;
+    let current = &context.before;
     let current_entry = current
         .snapshot
         .entries
@@ -266,18 +282,33 @@ pub(super) fn apply(
                 path,
                 resulting_target_revision: current_entry
                     .map(|entry| entry.content_revision.clone()),
-                resulting_store_revision: current.snapshot.revision,
                 diff: preview.diff,
                 no_op: true,
             });
         }
         return Err(StoreError::StaleTargetRevision);
     }
+    context.require_revisions(&preview.expected_input_revisions)?;
+    let checked = prepare(
+        root,
+        preview.request.clone(),
+        &context,
+        path.clone(),
+        scope_prefix.clone(),
+    )?;
+    if !checked.diagnostics.is_empty()
+        || checked.proposed_bytes != preview.proposed_bytes
+        || checked.no_op != preview.no_op
+    {
+        return Err(StoreError::Invalid(
+            "progress validation changed after preview".into(),
+        ));
+    }
+    context.require_unchanged()?;
     if preview.no_op {
         return Ok(ProgressApplyResult {
             path,
             resulting_target_revision: current_entry.map(|entry| entry.content_revision.clone()),
-            resulting_store_revision: current.snapshot.revision,
             diff: preview.diff,
             no_op: true,
         });
@@ -287,8 +318,8 @@ pub(super) fn apply(
         .map_err(|diagnostic| StoreError::Invalid(diagnostic.message))?;
     let bytes = render_progress_log(&log).into_bytes();
     atomic_write(root, &path, &bytes)?;
-    let resulting = scan(root, &BTreeMap::new())?;
-    let diagnostics = scoped_diagnostics(&resulting.diagnostics, &scope_prefix);
+    let resulting = context.resulting(&Overlay::from([(path.clone(), Some(bytes))]))?;
+    let diagnostics = scoped_diagnostics(&resulting.diagnostics, &path);
     if !diagnostics.is_empty() {
         return Err(StoreError::Invalid(
             "post-write progress validation failed".into(),
@@ -302,7 +333,6 @@ pub(super) fn apply(
             .iter()
             .find(|entry| entry.path == path)
             .map(|entry| entry.content_revision.clone()),
-        resulting_store_revision: resulting.snapshot.revision,
         diff: preview.diff,
         no_op: false,
     })
@@ -458,6 +488,7 @@ fn rejected(
         request,
         path,
         expected_target_revision: None,
+        expected_input_revisions: BTreeMap::new(),
         diagnostics: vec![diagnostic],
         diff: String::new(),
         proposed_bytes: None,
@@ -530,4 +561,31 @@ fn atomic_write(root: &Path, relative: &str, bytes: &[u8]) -> Result<(), StoreEr
         .persist(&target)
         .map_err(|error| StoreError::Io(error.error))?;
     Ok(())
+}
+
+fn capture(
+    root: &Path,
+    request: &ProgressChangeRequest,
+    applying: bool,
+) -> Result<MutationContext, StoreError> {
+    let (path, _) = progress_path(root, &request.investigation)?;
+    let log = request.replacement.clone().unwrap_or_else(|| ProgressLog {
+        entries: request.entries.clone(),
+    });
+    let bytes = request
+        .replacement_source
+        .clone()
+        .unwrap_or_else(|| render_progress_log(&log))
+        .into_bytes();
+    let extra = if request.bootstrap {
+        super::mutation_dependencies::accepted_paths(root, &request.investigation)?
+    } else {
+        Vec::new()
+    };
+    MutationContext::capture(
+        root,
+        &Overlay::from([(path, Some(bytes))]),
+        &extra,
+        applying,
+    )
 }
