@@ -1148,12 +1148,15 @@ impl<C: ProviderCache> Provider<C> {
     }
 
     fn outcome<T>(&self, result: T) -> Result<ProviderApplyOutcome<T>, ProviderError> {
-        let scan = self.store.scan()?;
-        let derived = self.store.derive_snapshot(&scan);
-        Ok(ProviderApplyOutcome {
-            result,
-            cache: self.refresh_cache(&derived),
-        })
+        let cache = if self.cache.configured() {
+            self.refresh_full_cache()
+                .unwrap_or_else(|error| CacheState::Degraded {
+                    message: error.to_string(),
+                })
+        } else {
+            CacheState::NotConfigured
+        };
+        Ok(ProviderApplyOutcome { result, cache })
     }
 }
 
@@ -1335,6 +1338,10 @@ fn entry_revision(scan: &ScanResult, path: &str) -> Option<Revision> {
         .find(|entry| entry.path == path)
         .map(|entry| entry.content_revision.clone())
 }
+
+#[cfg(test)]
+#[path = "provider/outcome_tests.rs"]
+mod outcome_tests;
 
 #[cfg(test)]
 mod hierarchy_tests {
