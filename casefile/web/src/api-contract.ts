@@ -445,6 +445,11 @@ export const decodePreview = (value: unknown): Preview => {
     expected_target_revision: nullable(input.expected_target_revision, (item) =>
       string(item, "target revision"),
     ),
+    expected_input_revisions: Object.fromEntries(
+      Object.entries(object(input.expected_input_revisions, "preview input revisions")).map(
+        ([path, revision]) => [path, nullable(revision, (item) => string(item, "input revision"))],
+      ),
+    ),
     diagnostics: decodeDiagnostics(input.diagnostics),
     diff: string(input.diff, "preview diff"),
   };
@@ -462,7 +467,6 @@ export const decodeApplyResponse = (value: unknown): ApplyResponse => {
       resulting_target_revision: nullable(result.resulting_target_revision, (item) =>
         string(item, "resulting target revision"),
       ),
-      resulting_store_revision: string(result.resulting_store_revision, "resulting revision"),
       diff: string(result.diff, "applied diff"),
       no_op: boolean(result.no_op, "applied no-op state"),
     },

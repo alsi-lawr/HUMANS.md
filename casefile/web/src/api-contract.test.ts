@@ -1,5 +1,11 @@
 import { expect, test } from "bun:test";
-import { decodeBoards, decodeCurrent, decodeHostFailure, decodeRecords } from "./api-contract";
+import {
+  decodeApplyResponse,
+  decodeBoards,
+  decodeCurrent,
+  decodeHostFailure,
+  decodeRecords,
+} from "./api-contract";
 
 const projectDecision = {
   path: "projects/demo/decision-log/HMD-D-002-project.md",
@@ -240,4 +246,29 @@ test("rejects malformed strategy runtime pairs and impossible effective sources"
       },
     ]),
   ).toThrow("invalid worker minimum count");
+});
+
+test("accepts target-only mutation receipts but rejects a missing target result", () => {
+  const response = {
+    result: {
+      path: "projects/demo/boards/main.toml",
+      resulting_target_revision: "target-revision",
+      diff: "",
+      no_op: false,
+    },
+    cache: { state: "not_configured" },
+  };
+  expect(decodeApplyResponse(response).result.resulting_target_revision).toBe("target-revision");
+  expect(
+    decodeApplyResponse({
+      ...response,
+      result: { ...response.result, resulting_target_revision: null },
+    }).result.resulting_target_revision,
+  ).toBeNull();
+  expect(() =>
+    decodeApplyResponse({
+      ...response,
+      result: { ...response.result, resulting_target_revision: undefined },
+    }),
+  ).toThrow();
 });

@@ -19,8 +19,9 @@ use crate::{
     activation::{ActivationState, activation},
     derived::{StrategyBindingState, derive_snapshot},
     layout::{checked_path, kind_for_path},
+    mutation::{MutationContext, Overlay},
     revision::{require_target_revision, synthetic_revision},
-    scanning::{ScanResult, scan},
+    scanning::ScanResult,
     store::{StoreError, require_safe_target_parent},
     writing::{ensure_worktree, git_diff, introduced_diagnostics},
 };
@@ -77,6 +78,8 @@ pub struct StrategyTransitionPreview {
     pub request: StrategyTransitionRequest,
     pub changes: Vec<GovernedChange>,
     pub transition_record: StrategyTransitionRecord,
+    #[serde(default)]
+    pub expected_input_revisions: BTreeMap<String, Option<Revision>>,
     pub diagnostics: Vec<Diagnostic>,
     pub no_op: bool,
 }
@@ -87,6 +90,8 @@ pub struct WriterBindingPreview {
     pub operation: GovernedOperationKind,
     pub request: WriterBindingRequest,
     pub changes: Vec<GovernedChange>,
+    #[serde(default)]
+    pub expected_input_revisions: BTreeMap<String, Option<Revision>>,
     pub diagnostics: Vec<Diagnostic>,
     pub no_op: bool,
 }
@@ -96,7 +101,6 @@ pub struct WriterBindingPreview {
 pub struct GovernedApplyResult {
     pub operation: GovernedOperationKind,
     pub paths: Vec<String>,
-    pub resulting_store_revision: Revision,
     pub resulting_target_revisions: BTreeMap<String, Option<Revision>>,
     pub diffs: BTreeMap<String, String>,
     pub no_op: bool,
@@ -108,9 +112,19 @@ pub(super) fn preview_strategy_transition(
 ) -> Result<StrategyTransitionPreview, StoreError> {
     let request = canonical_strategy_request(request)?;
     ensure_worktree(root)?;
-    let investigation = activated_investigation(root, &request.investigation)?;
+    activated_investigation(root, &request.investigation)?;
     validate_strategy_matrix(&request.selected_matrix_source).map_err(diagnostics_error)?;
-    let before = scan(root, &BTreeMap::new())?;
+    let context = capture_strategy(root, &request, false)?;
+    prepare_strategy(root, request, &context)
+}
+
+fn prepare_strategy(
+    root: &Path,
+    request: StrategyTransitionRequest,
+    context: &MutationContext,
+) -> Result<StrategyTransitionPreview, StoreError> {
+    let investigation = activated_investigation(root, &request.investigation)?;
+    let before = &context.before;
     let selected_value: toml::Value = toml::from_str(&request.selected_matrix_source)
         .map_err(|error| StoreError::Invalid(error.to_string()))?;
     let phase = selected_value
@@ -257,7 +271,7 @@ pub(super) fn preview_strategy_transition(
         selected_strategy_id: selected_strategy_id.into(),
         selected_matrix_origin: request.selected_matrix_origin.clone(),
         selected_matrix_sha256: raw_sha256(&normalized_selected_bytes),
-        expected_store_revision: before.snapshot.revision.clone(),
+        expected_store_revision: None,
         expected_matrix_revision,
         proposed_matrix_revision: proposed_matrix_revision.clone(),
         root_binding: "root".into(),
@@ -317,8 +331,8 @@ pub(super) fn preview_strategy_transition(
     let mut overlay = BTreeMap::new();
     overlay.insert(matrix_path.clone(), Some(selected_bytes.clone()));
     overlay.insert(transition_path.clone(), Some(record_bytes.clone()));
-    let proposed = scan(root, &overlay)?;
-    let diagnostics = scoped_introduced(&before, &proposed, &investigation);
+    let proposed = context.overlay(&overlay);
+    let diagnostics = scoped_introduced(before, &proposed, &investigation);
     let matrix_change = change(root, matrix_path, current, selected_bytes)?;
     let record_change = change(root, transition_path, existing_transition, record_bytes)?;
     let no_op = matrix_change.no_op && record_change.no_op && diagnostics.is_empty();
@@ -327,6 +341,7 @@ pub(super) fn preview_strategy_transition(
         request,
         changes: vec![matrix_change, record_change],
         transition_record,
+        expected_input_revisions: context.revisions(),
         diagnostics,
         no_op,
     })
@@ -347,7 +362,19 @@ pub(super) fn apply_strategy_transition(
         ));
     }
     validate_strategy_preview(&preview)?;
-    let current = scan(root, &BTreeMap::new())?;
+    let context = capture_strategy(root, &preview.request, true)?;
+    context.require_revisions(&preview.expected_input_revisions)?;
+    let checked = prepare_strategy(root, preview.request.clone(), &context)?;
+    if !checked.diagnostics.is_empty()
+        || checked.changes != preview.changes
+        || checked.transition_record != preview.transition_record
+    {
+        return Err(StoreError::Invalid(
+            "strategy validation changed after preview".into(),
+        ));
+    }
+    context.require_unchanged()?;
+    let current = &context.before;
     for change in &preview.changes {
         require_target_revision(
             &root.join(&change.path),
@@ -358,12 +385,12 @@ pub(super) fn apply_strategy_transition(
         return result_from_scan(
             GovernedOperationKind::StrategyTransition,
             &preview.changes,
-            &current,
+            current,
             true,
         );
     }
     let prior = apply_multi_file_transaction(root, &preview.changes)?;
-    let resulting = match scan(root, &BTreeMap::new()) {
+    let resulting = match context.resulting(&changes_overlay(&preview.changes)) {
         Ok(resulting) => resulting,
         Err(error) => {
             restore_all(root, &prior)?;
@@ -404,13 +431,24 @@ pub(super) fn preview_writer_binding(
             "binding target is outside the activated investigation".into(),
         ));
     }
+    require_regular_target(root, &path, false)?;
+    let context = capture_binding(root, &request, false)?;
+    prepare_binding(root, request, &context)
+}
+
+fn prepare_binding(
+    root: &Path,
+    request: WriterBindingRequest,
+    context: &MutationContext,
+) -> Result<WriterBindingPreview, StoreError> {
+    let investigation = activated_investigation(root, &request.investigation)?;
+    let path = format!("{investigation}/strategy/bindings.toml");
     let binding =
         match parse_strategy_binding(&path, &request.binding_source).map_err(diagnostics_error)? {
             RecordSummary::StrategyBinding { binding } => binding,
             _ => unreachable!("binding parser returns a binding summary"),
         };
-    require_regular_target(root, &path, false)?;
-    let before = scan(root, &BTreeMap::new())?;
+    let before = &context.before;
     let implementation_path = format!("{investigation}/strategy/implementation.toml");
     let implementation = before
         .snapshot
@@ -449,7 +487,7 @@ pub(super) fn preview_writer_binding(
             "binding does not match the selected implementation strategy".into(),
         ));
     }
-    ensure_binding_inactive(&before, &investigation)?;
+    ensure_binding_inactive(before, &investigation)?;
     let existing = before
         .snapshot
         .entries
@@ -458,14 +496,15 @@ pub(super) fn preview_writer_binding(
     let bytes = request.binding_source.as_bytes().to_vec();
     let mut overlay = BTreeMap::new();
     overlay.insert(path.clone(), Some(bytes.clone()));
-    let proposed = scan(root, &overlay)?;
-    let diagnostics = scoped_introduced(&before, &proposed, &investigation);
+    let proposed = context.overlay(&overlay);
+    let diagnostics = scoped_introduced(before, &proposed, &investigation);
     let change = change(root, path, existing, bytes)?;
     let no_op = change.no_op && diagnostics.is_empty();
     Ok(WriterBindingPreview {
         operation: GovernedOperationKind::WriterBinding,
         request,
         changes: vec![change],
+        expected_input_revisions: context.revisions(),
         diagnostics,
         no_op,
     })
@@ -486,7 +525,16 @@ pub(super) fn apply_writer_binding(
         ));
     }
     validate_binding_preview(&preview)?;
-    let current = scan(root, &BTreeMap::new())?;
+    let context = capture_binding(root, &preview.request, true)?;
+    context.require_revisions(&preview.expected_input_revisions)?;
+    let checked = prepare_binding(root, preview.request.clone(), &context)?;
+    if !checked.diagnostics.is_empty() || checked.changes != preview.changes {
+        return Err(StoreError::Invalid(
+            "binding validation changed after preview".into(),
+        ));
+    }
+    context.require_unchanged()?;
+    let current = &context.before;
     let change = preview
         .changes
         .first()
@@ -504,13 +552,13 @@ pub(super) fn apply_writer_binding(
         return result_from_scan(
             GovernedOperationKind::WriterBinding,
             &preview.changes,
-            &current,
+            current,
             true,
         );
     }
     let before_bytes = entry.map(|entry| entry.original_bytes.clone());
     atomic_write(root, &change.path, &change.rendered_bytes)?;
-    let resulting = match scan(root, &BTreeMap::new()) {
+    let resulting = match context.resulting(&changes_overlay(&preview.changes)) {
         Ok(resulting) => resulting,
         Err(error) => {
             restore(root, &change.path, before_bytes.as_deref())?;
@@ -550,7 +598,16 @@ pub(super) fn require_writer_progress(
     ticket_id: &str,
 ) -> Result<(), StoreError> {
     let investigation = activated_investigation(root, investigation)?;
-    let scan = scan(root, &BTreeMap::new())?;
+    let context = MutationContext::capture(
+        root,
+        &Overlay::new(),
+        &[
+            format!("{investigation}/progress/log.toml"),
+            format!("{investigation}/tickets/accepted/{ticket_id}.md"),
+        ],
+        false,
+    )?;
+    let scan = &context.before;
     let ticket_prefix = format!("{investigation}/tickets/accepted/");
     let tickets = scan
         .snapshot
@@ -573,7 +630,7 @@ pub(super) fn require_writer_progress(
             "writer spawn requires one valid accepted ticket in the activated investigation".into(),
         ));
     }
-    let log = canonical_progress(&scan, &investigation)?;
+    let log = canonical_progress(scan, &investigation)?;
     let mut status = ProgressStatus::Unknown;
     let mut seen = false;
     for entry in log.entries {
@@ -947,7 +1004,6 @@ fn result_from_scan(
     Ok(GovernedApplyResult {
         operation,
         paths: changes.iter().map(|change| change.path.clone()).collect(),
-        resulting_store_revision: scan.snapshot.revision.clone(),
         resulting_target_revisions: changes
             .iter()
             .map(|change| {
@@ -1025,6 +1081,8 @@ fn restore(root: &Path, path: &str, bytes: Option<&[u8]>) -> Result<(), StoreErr
 }
 
 fn atomic_write(root: &Path, relative: &str, bytes: &[u8]) -> Result<(), StoreError> {
+    #[cfg(test)]
+    crate::mutation_hooks::writing(root, relative)?;
     require_regular_target(root, relative, false)?;
     let target = root.join(relative);
     let parent = target
@@ -1085,5 +1143,64 @@ fn raw_sha256(bytes: &[u8]) -> String {
         .finalize()
         .iter()
         .map(|byte| format!("{byte:02x}"))
+        .collect()
+}
+
+fn capture_strategy(
+    root: &Path,
+    request: &StrategyTransitionRequest,
+    applying: bool,
+) -> Result<MutationContext, StoreError> {
+    let selected: toml::Value = toml::from_str(&request.selected_matrix_source)
+        .map_err(|error| StoreError::Invalid(error.to_string()))?;
+    let phase = selected
+        .get("phase")
+        .and_then(toml::Value::as_str)
+        .ok_or_else(|| StoreError::Invalid("selected matrix phase is missing".into()))?;
+    let timestamp = request
+        .recorded_at
+        .chars()
+        .filter(|c| c.is_ascii_digit() || *c == 'T' || *c == 'Z')
+        .collect::<String>();
+    MutationContext::capture(
+        root,
+        &Overlay::from([
+            (
+                format!("{}/strategy/{phase}.toml", request.investigation),
+                Some(request.selected_matrix_source.as_bytes().to_vec()),
+            ),
+            (
+                format!(
+                    "{}/strategy/transitions/{timestamp}-{}.toml",
+                    request.investigation, request.operation_id
+                ),
+                None,
+            ),
+        ]),
+        &[],
+        applying,
+    )
+}
+
+fn capture_binding(
+    root: &Path,
+    request: &WriterBindingRequest,
+    applying: bool,
+) -> Result<MutationContext, StoreError> {
+    MutationContext::capture(
+        root,
+        &Overlay::from([(
+            format!("{}/strategy/bindings.toml", request.investigation),
+            Some(request.binding_source.as_bytes().to_vec()),
+        )]),
+        &[],
+        applying,
+    )
+}
+
+fn changes_overlay(changes: &[GovernedChange]) -> Overlay {
+    changes
+        .iter()
+        .map(|change| (change.path.clone(), Some(change.rendered_bytes.clone())))
         .collect()
 }

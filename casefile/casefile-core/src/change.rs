@@ -32,6 +32,8 @@ impl ChangeRequest {
 pub struct Preview {
     pub request: ChangeRequest,
     pub expected_target_revision: Option<Revision>,
+    #[serde(default)]
+    pub expected_input_revisions: BTreeMap<String, Option<Revision>>,
     pub diagnostics: Vec<Diagnostic>,
     pub diff: String,
 }
@@ -40,7 +42,6 @@ pub struct Preview {
 pub struct ApplyResult {
     pub path: String,
     pub resulting_target_revision: Option<Revision>,
-    pub resulting_store_revision: Revision,
     pub diff: String,
 }
 
@@ -48,6 +49,8 @@ pub struct ApplyResult {
 pub struct ChangeBatchPreview {
     pub requests: Vec<ChangeRequest>,
     pub expected_target_revisions: BTreeMap<String, Option<Revision>>,
+    #[serde(default)]
+    pub expected_input_revisions: BTreeMap<String, Option<Revision>>,
     pub diagnostics: Vec<Diagnostic>,
     pub diff: String,
 }
@@ -56,6 +59,5 @@ pub struct ChangeBatchPreview {
 pub struct ChangeBatchApplyResult {
     pub paths: Vec<String>,
     pub resulting_target_revisions: BTreeMap<String, Option<Revision>>,
-    pub resulting_store_revision: Revision,
     pub diff: String,
 }

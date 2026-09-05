@@ -171,10 +171,11 @@ fn strategy_transition_is_strict_store_visible_idempotent_and_creates_no_backup(
     let result = store
         .apply_strategy_transition(preview)
         .expect("transition apply");
-    assert_eq!(
-        result.resulting_store_revision,
-        store.scan().expect("result scan").snapshot.revision
-    );
+    for entry in store.scan().expect("result scan").snapshot.entries {
+        if let Some(revision) = result.resulting_target_revisions.get(&entry.path) {
+            assert_eq!(revision.as_ref(), Some(&entry.content_revision));
+        }
+    }
     assert_eq!(result.paths.len(), 2);
     let scan = store.scan().expect("scan");
     let transition = scan
@@ -187,7 +188,13 @@ fn strategy_transition_is_strict_store_visible_idempotent_and_creates_no_backup(
         transition.classification,
         casefile_core::Classification::Governed
     );
-    assert_eq!(scan.snapshot.revision, result.resulting_store_revision);
+    assert_eq!(
+        result
+            .resulting_target_revisions
+            .get(&transition.path)
+            .and_then(Option::as_ref),
+        Some(&transition.content_revision)
+    );
     let provider = Provider::without_cache(store.clone());
     let snapshot = provider.snapshot().expect("provider snapshot");
     assert!(

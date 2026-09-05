@@ -15,7 +15,7 @@ never clone or mirror the planning store in task scratch. Use the session's `.ag
 for disposable, non-authoritative previews, content-hash backups, isolated output, and command logs.
 Never infer a source path or replace the root.
 
-Establish read context hierarchically through Provider protocol v2: call `casefile_snapshot`, use
+Establish read context hierarchically through Provider protocol v3: call `casefile_snapshot`, use
 its catalogue to resolve the exact project and complete investigation scope, then request that
 scope's `record_index`. Request `record_detail` only for the exact identities necessary for the
 current step. Never request unscoped or bulk records, infer an investigation path by concatenation,

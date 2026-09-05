@@ -41,6 +41,11 @@ pub(super) fn metadata_revision(
     Ok(revision_from_stamp(&platform::stamp(path, metadata)?))
 }
 
+pub(super) fn filesystem_identity(path: &Path) -> Result<String, StoreError> {
+    let stamp = platform::stamp(path, &fs::symlink_metadata(path)?)?;
+    Ok(format!("{}:{}", stamp.identity_a, hex(&stamp.identity_b)))
+}
+
 pub(super) fn open_file_revision(
     file: &fs::File,
     metadata: &fs::Metadata,

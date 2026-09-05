@@ -100,8 +100,11 @@ stronger stale admission. Overlay revisions are synthetic and non-authoritative.
 scope coverage, progress, entry batches, lazy content handles, and per-fact availability are
 presentation state only: they expose no canonical Store revision and never authorize Provider or
 writer operations. Presentation completion means the advertised catalogue and availability state
-finished loading. Only `Store::scan` and derivation from that complete scan provide canonical
-validation, revisions, original bytes, and write-admission inputs.
+finished loading. `Store::scan` and derivation from that complete scan provide whole-Store
+validation and read revisions. Store mutations instead capture their target files and actual
+validation dependencies, coordinate those file/identity keys, and return exact target revisions.
+Presentation state remains non-authoritative for both paths. See the wiki
+[mutation and format contract](https://github.com/alsi-lawr/HUMANS.md/wiki/Casefile-Mutation-and-Format-Compatibility).
 
 ### Native MCP package boundary
 
