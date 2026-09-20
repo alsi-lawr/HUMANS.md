@@ -360,7 +360,7 @@ fn derive_snapshot_with_display(
             }
         })
         .collect::<Vec<_>>();
-    let relationships = derive_relationships(&records);
+    let relationships = derive_relationships(records.iter());
     let boards = derive_boards(&records, scan);
     DerivedSnapshot {
         source_revision: scan.snapshot.revision.clone(),
@@ -746,10 +746,14 @@ fn record_scope(path: &str, scan: &ScanResult) -> Option<RecordScope> {
     })
 }
 
-fn derive_relationships(records: &[DerivedRecord]) -> Vec<DerivedRelationship> {
+/// Resolves references from already-derived records using project-wide target uniqueness.
+pub fn derive_relationships<'a>(
+    records: impl IntoIterator<Item = &'a DerivedRecord>,
+) -> Vec<DerivedRelationship> {
+    let records = records.into_iter().collect::<Vec<_>>();
     let mut decisions: BTreeMap<(&str, &str), Vec<&ScopedIdentity>> = BTreeMap::new();
     let mut work_items: BTreeMap<(&str, &str), Vec<&ScopedIdentity>> = BTreeMap::new();
-    for record in records {
+    for record in &records {
         let Some(identity) = record.identity.as_ref() else {
             continue;
         };
@@ -761,7 +765,7 @@ fn derive_relationships(records: &[DerivedRecord]) -> Vec<DerivedRelationship> {
         }
     }
     let mut result = Vec::new();
-    for record in records {
+    for record in &records {
         let (Some(source), Some(item)) = (&record.identity, &record.work_item) else {
             continue;
         };

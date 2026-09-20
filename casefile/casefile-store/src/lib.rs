@@ -28,7 +28,7 @@ pub use derived::{
     DerivedBoard, DerivedBoardColumn, DerivedCard, DerivedProgressNote, DerivedProgressTransition,
     DerivedRecord, DerivedRelationship, DerivedSnapshot, DerivedStrategy, DerivedStrategyBinding,
     DerivedTicketProgress, EffectiveWriterBinding, RecordScope, RelationshipKind, ScopedIdentity,
-    StrategyBindingState, WriterBindingSource,
+    StrategyBindingState, WriterBindingSource, derive_relationships,
 };
 pub use governance::{
     GovernedApplyResult, GovernedChange, GovernedOperationKind, StrategyTransitionPreview,
@@ -37,14 +37,13 @@ pub use governance::{
 pub use index::{DerivedIndex, Indexed, RevisionSource};
 pub use layout::normalize_planning_relative;
 pub use presentation::{
-    FactAvailability, PRESENTATION_BATCH_LIMIT, PRESENTATION_CHANNEL_CAPACITY, PresentationCache,
+    FactAvailability, PRESENTATION_BATCH_LIMIT, PRESENTATION_CHANNEL_CAPACITY,
     PresentationCatalogue, PresentationContentEvent, PresentationContentHandle,
     PresentationContentRequest, PresentationContentSelector, PresentationContentStream,
     PresentationCoverage, PresentationCoverageState, PresentationEntry, PresentationEvent,
     PresentationFact, PresentationFileKind, PresentationFileMetadata, PresentationInvestigation,
     PresentationLoadRequest, PresentationProgress, PresentationProject, PresentationScope,
     PresentationSession, PresentationStream, PresentationSummary, PresentationTarget,
-    presentation_revision,
 };
 pub use progress::{ProgressApplyResult, ProgressChangeRequest, ProgressPreview};
 pub use provider::{

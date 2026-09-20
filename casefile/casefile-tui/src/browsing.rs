@@ -11,7 +11,6 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Block, Borders, List, ListItem, ListState, Paragraph, StatefulWidget, Widget, Wrap},
 };
-use std::collections::BTreeSet;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum View {
@@ -392,12 +391,15 @@ impl Browser {
     }
 
     pub(crate) fn entries<'a>(&self, scan: &'a ScanResult) -> Vec<&'a EntrySnapshot> {
-        scan.snapshot
+        let mut entries = scan
+            .snapshot
             .entries
             .iter()
-            .filter(|entry| self.matches_scope(scan, entry))
+            .filter(|entry| self.matches_scope(scan, entry, self.view))
             .filter(|entry| self.matches_view(entry) && self.matches_entry_filter(entry))
-            .collect()
+            .collect::<Vec<_>>();
+        entries.sort_by(|left, right| left.path.cmp(&right.path));
+        entries
     }
 
     pub(crate) fn selected<'a>(&self, scan: &'a ScanResult) -> Option<&'a EntrySnapshot> {
@@ -714,7 +716,7 @@ impl Browser {
     fn ticket_count(&self, scan: &ScanResult) -> usize {
         work_entries(scan)
             .into_iter()
-            .filter(|entry| self.matches_scope(scan, entry))
+            .filter(|entry| self.matches_scope(scan, entry, View::Tickets))
             .count()
     }
 
@@ -722,7 +724,7 @@ impl Browser {
         scan.snapshot
             .entries
             .iter()
-            .filter(|entry| self.matches_scope(scan, entry) && !is_work(entry))
+            .filter(|entry| self.matches_scope(scan, entry, View::Files) && !is_work(entry))
             .count()
     }
 
@@ -730,16 +732,16 @@ impl Browser {
         scan.snapshot
             .entries
             .iter()
-            .filter(|entry| self.matches_scope(scan, entry) && is_strategy(entry))
+            .filter(|entry| self.matches_scope(scan, entry, View::Strategies) && is_strategy(entry))
             .count()
     }
 
-    fn matches_scope(&self, scan: &ScanResult, entry: &EntrySnapshot) -> bool {
+    fn matches_scope(&self, scan: &ScanResult, entry: &EntrySnapshot, view: View) -> bool {
         let Some((project, investigation)) = entry_scope(scan, entry) else {
             return false;
         };
         self.selected_project.as_deref() == Some(project)
-            && match self.view {
+            && match view {
                 View::Projects | View::Investigations => true,
                 View::Tickets => self.selected_investigation.as_deref() == investigation,
                 View::Strategies => self
@@ -826,38 +828,14 @@ fn governed_matches<'a>(scan: &'a ScanResult, governed: &GovernedAnchor) -> Vec<
 }
 
 fn all_projects(scan: &ScanResult) -> Vec<String> {
-    scan.investigation_roots
-        .keys()
-        .cloned()
-        .chain(
-            scan.snapshot
-                .entries
-                .iter()
-                .filter_map(|entry| entry_scope(scan, entry))
-                .map(|scope| scope.0.to_owned()),
-        )
-        .collect::<BTreeSet<_>>()
-        .into_iter()
-        .collect()
+    scan.investigation_roots.keys().cloned().collect()
 }
 
 fn all_investigations(scan: &ScanResult, project: &str) -> Vec<String> {
     scan.investigation_roots
         .get(project)
-        .into_iter()
-        .flatten()
         .cloned()
-        .chain(
-            scan.snapshot
-                .entries
-                .iter()
-                .filter_map(|entry| entry_scope(scan, entry))
-                .filter(|scope| scope.0 == project)
-                .filter_map(|scope| scope.1.map(str::to_owned)),
-        )
-        .collect::<BTreeSet<_>>()
-        .into_iter()
-        .collect()
+        .unwrap_or_default()
 }
 
 fn resolve_exact_or_nearest(

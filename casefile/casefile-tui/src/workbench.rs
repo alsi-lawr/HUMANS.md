@@ -1,3 +1,5 @@
+mod projection;
+
 use crate::{
     Interaction, PAGE_SIZE,
     browsing::{Browser, BrowserState, PromotionNotice, SelectionAnchor, View},
@@ -64,6 +66,8 @@ impl Focus {
 
 pub(crate) struct App {
     scan: ScanResult,
+    entry_indices: BTreeMap<String, usize>,
+    record_indices: BTreeMap<String, usize>,
     derived: DerivedSnapshot,
     browser: Browser,
     detail: RecordDetail,
@@ -80,9 +84,26 @@ pub(crate) struct App {
 }
 
 impl App {
-    pub(crate) fn new(scan: ScanResult, derived: DerivedSnapshot) -> Self {
+    pub(crate) fn new(mut scan: ScanResult, derived: DerivedSnapshot) -> Self {
+        for roots in scan.investigation_roots.values_mut() {
+            roots.sort();
+            roots.dedup();
+        }
         let browser = Browser::new(&scan);
         Self {
+            entry_indices: scan
+                .snapshot
+                .entries
+                .iter()
+                .enumerate()
+                .map(|(i, entry)| (entry.path.clone(), i))
+                .collect(),
+            record_indices: derived
+                .records
+                .iter()
+                .enumerate()
+                .map(|(i, record)| (record.path.clone(), i))
+                .collect(),
             scan,
             derived,
             browser,
@@ -164,7 +185,7 @@ impl App {
         while self.interaction.is_none() {
             let update = coordinator.drain();
             if update.projection != ProjectionChange::None {
-                self.apply_projection(coordinator.projection(), update.projection);
+                self.apply_projection(coordinator.take_projection(), update.projection);
             }
             if update.dirty {
                 self.status = Some(coordinator.status().into());
@@ -178,7 +199,11 @@ impl App {
                 terminal.draw(|frame| self.render(frame.area(), frame.buffer_mut()))?;
                 dirty = false;
             }
-            if event::poll(EVENT_POLL_INTERVAL)? {
+            if event::poll(if coordinator.loading() {
+                Duration::from_millis(1)
+            } else {
+                EVENT_POLL_INTERVAL
+            })? {
                 match event::read()? {
                     Event::Key(key) if key.kind == KeyEventKind::Press => {
                         self.handle(key.code);
@@ -211,7 +236,7 @@ impl App {
             dirty |= watcher.drain();
             let update = coordinator.drain();
             if update.projection != ProjectionChange::None {
-                self.apply_projection(coordinator.projection(), update.projection);
+                self.apply_projection(coordinator.take_projection(), update.projection);
                 if (update.projection == ProjectionChange::Complete || !watcher.has_catalogue())
                     && let Some(catalogue) = coordinator.catalogue()
                 {
@@ -231,7 +256,11 @@ impl App {
                 terminal.draw(|frame| self.render(frame.area(), frame.buffer_mut()))?;
                 dirty = false;
             }
-            if event::poll(EVENT_POLL_INTERVAL)? {
+            if event::poll(if coordinator.loading() {
+                Duration::from_millis(1)
+            } else {
+                EVENT_POLL_INTERVAL
+            })? {
                 match event::read()? {
                     Event::Key(key) if key.kind == KeyEventKind::Press => {
                         self.handle(key.code);
@@ -292,10 +321,15 @@ impl App {
             .browser
             .selected(&self.scan)
             .map(|entry| entry.content_revision.clone());
-        self.scan = projection.scan;
-        self.derived = projection.derived;
         self.provisional = projection.provisional;
-        self.unavailable = projection.unavailable;
+        if projection.incremental {
+            self.merge_projection(projection);
+        } else {
+            self.scan = projection.scan;
+            self.derived = projection.derived;
+            self.unavailable = projection.unavailable;
+            self.reindex();
+        }
         match change {
             ProjectionChange::Complete => {
                 self.resume_anchor = None;
@@ -483,8 +517,7 @@ impl App {
 
     fn request_edit(&mut self) {
         if self.browser.view() == View::Boards {
-            self.feedback =
-                Some("Read-only: Boards do not change ticket progress or placement.".into());
+            self.feedback = Some("Read-only".into());
             return;
         }
         match edit_selection(self.browser.selected(&self.scan)) {
@@ -505,16 +538,13 @@ impl App {
             .areas(area);
         self.browser
             .render_header(&self.scan, self.board_count(), header, buffer);
-        let mut status_text = if self.provisional {
-            format!(
-                " PROVISIONAL - {}",
-                self.status
-                    .as_deref()
-                    .unwrap_or("facts or payload are not yet complete")
-            )
-        } else {
-            self.status.clone().unwrap_or_default()
-        };
+        let mut status_text = self.status.clone().unwrap_or_else(|| {
+            if self.provisional {
+                "Loading…".into()
+            } else {
+                String::new()
+            }
+        });
         if self.provisional
             && self.browser.selected_path().is_some()
             && self.browser.selected(&self.scan).is_none()
@@ -645,13 +675,11 @@ impl App {
     fn render_boards(&self, area: Rect, buffer: &mut Buffer) {
         let block = crate::ui::panel(" Boards ", self.focus == Focus::List);
         if self.derived.source_revision != self.scan.snapshot.revision {
-            return Paragraph::new(
-                "Board projection is stale. Refresh to load the current investigation.",
-            )
-            .style(Style::default().fg(WARN))
-            .block(block)
-            .wrap(Wrap { trim: false })
-            .render(area, buffer);
+            return Paragraph::new("Boards are out of date. Press r to refresh.")
+                .style(Style::default().fg(WARN))
+                .block(block)
+                .wrap(Wrap { trim: false })
+                .render(area, buffer);
         }
         let Some((project, investigation)) = self.browser.scope() else {
             return Paragraph::new("Select an investigation to inspect its boards.")
@@ -664,8 +692,6 @@ impl App {
             let mut lines = vec![
                 Line::from("Board definitions or the progress log are invalid.")
                     .style(Style::default().fg(WARN).bold()),
-                Line::from("Inspect Files or Diagnostics for the canonical validation details.")
-                    .style(Style::default().fg(MUTED)),
             ];
             for diagnostic in invalid_diagnostics {
                 lines.push(
@@ -695,13 +721,12 @@ impl App {
                 .wrap(Wrap { trim: false })
                 .render(area, buffer);
         }
-        let mut lines = vec![
-            Line::from("Read-only; record filter does not alter cards.")
-                .style(Style::default().fg(MUTED)),
-        ];
+        let mut lines = Vec::new();
         let mut selected_line = None;
         for board in boards {
-            lines.push(Line::from(""));
+            if !lines.is_empty() {
+                lines.push(Line::from(""));
+            }
             lines.push(
                 Line::from(format!(
                     "{}  [{:?}]",
@@ -804,7 +829,7 @@ fn board_lines(
             let resolution = canonical_card_path(scan, card);
             let selected = matches!(&resolution, CardPathResolution::Resolved(path) if Some(path.as_str()) == selected_path);
             let (marker, suffix) = match &resolution {
-                CardPathResolution::Resolved(_) if selected => (">", "  [selected]"),
+                CardPathResolution::Resolved(_) if selected => (">", ""),
                 CardPathResolution::Resolved(_) => (" ", ""),
                 CardPathResolution::Missing => ("!", "  [detail unavailable: missing identity]"),
                 CardPathResolution::Ambiguous => {
@@ -945,3 +970,9 @@ fn layout_mode(area: Rect) -> LayoutMode {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod progressive_tests;
+
+#[cfg(test)]
+mod relationship_tests;

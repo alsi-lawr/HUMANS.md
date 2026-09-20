@@ -21,20 +21,6 @@ pub(super) fn cross_validate(entries: &[EntrySnapshot], active: &Activation) -> 
         .iter()
         .map(|entry| (entry.path.as_str(), project_for(&entry.path, active)))
         .collect::<BTreeMap<_, _>>();
-    let accepted = entries
-        .iter()
-        .filter_map(|entry| {
-            if entry.kind == Some(Kind::Ticket) && entry.classification == Classification::Governed
-            {
-                if let Some(RecordSummary::WorkItem { id, status, .. }) = &entry.summary {
-                    if status == "accepted" {
-                        return Some((scopes[entry.path.as_str()], id.as_str()));
-                    }
-                }
-            }
-            None
-        })
-        .collect::<BTreeSet<_>>();
     for entry in entries
         .iter()
         .filter(|entry| entry.classification == Classification::Governed)
@@ -69,27 +55,7 @@ pub(super) fn cross_validate(entries: &[EntrySnapshot], active: &Activation) -> 
             }
         }
     }
-    for entry in entries.iter().filter(|entry| {
-        entry.kind == Some(Kind::Progress) && entry.classification == Classification::Governed
-    }) {
-        let Ok(text) = std::str::from_utf8(&entry.original_bytes) else {
-            continue;
-        };
-        let Ok(log) = parse_progress_log(&entry.path, text) else {
-            continue;
-        };
-        let scope = scopes[entry.path.as_str()];
-        for progress in log.entries {
-            let accepted_ticket = accepted.contains(&(scope, progress.ticket_id()));
-            if !accepted_ticket {
-                diagnostics.push(Diagnostic::new(
-                    &entry.path,
-                    "invalid_progress_ticket",
-                    "progress entries must target accepted tickets in the same investigation",
-                ));
-            }
-        }
-    }
+    diagnostics.extend(progress_diagnostics(entries, active));
     for entry in entries
         .iter()
         .filter(|entry| matches!(entry.summary, Some(RecordSummary::WorkItem { .. })))
@@ -185,6 +151,53 @@ pub(super) fn cross_validate(entries: &[EntrySnapshot], active: &Activation) -> 
                 "supersession_cycle",
                 "supersession references must not form a cycle",
             ));
+        }
+    }
+    diagnostics
+}
+
+pub(super) fn progress_diagnostics(
+    entries: &[EntrySnapshot],
+    active: &Activation,
+) -> Vec<Diagnostic> {
+    let mut diagnostics = Vec::new();
+    let scopes = entries
+        .iter()
+        .map(|entry| (entry.path.as_str(), scope_for(&entry.path, active)))
+        .collect::<BTreeMap<_, _>>();
+    let accepted = entries
+        .iter()
+        .filter_map(|entry| {
+            if entry.kind == Some(Kind::Ticket) && entry.classification == Classification::Governed
+            {
+                if let Some(RecordSummary::WorkItem { id, status, .. }) = &entry.summary {
+                    if status == "accepted" {
+                        return Some((scopes[entry.path.as_str()], id.as_str()));
+                    }
+                }
+            }
+            None
+        })
+        .collect::<BTreeSet<_>>();
+    for entry in entries.iter().filter(|entry| {
+        entry.kind == Some(Kind::Progress) && entry.classification == Classification::Governed
+    }) {
+        let Ok(text) = std::str::from_utf8(&entry.original_bytes) else {
+            continue;
+        };
+        let Ok(log) = parse_progress_log(&entry.path, text) else {
+            continue;
+        };
+        let scope = scopes[entry.path.as_str()];
+        for progress in log.entries {
+            let accepted_ticket = accepted.contains(&(scope, progress.ticket_id()));
+            if !accepted_ticket {
+                diagnostics.push(Diagnostic::new(
+                    &entry.path,
+                    "invalid_progress_ticket",
+                    "progress entries must target accepted tickets in the same investigation",
+                ));
+            }
         }
     }
     diagnostics

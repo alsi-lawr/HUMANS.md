@@ -204,19 +204,29 @@ pub(super) fn scope_for<'a>(path: &str, active: &'a Activation) -> Option<&'a st
         .projects
         .values()
         .flat_map(|project| &project.investigations)
-        .filter(|base| path.strip_prefix(&format!("{base}/")).is_some())
+        .filter(|base| {
+            path.strip_prefix(base.as_str())
+                .is_some_and(|rest| rest.starts_with('/'))
+        })
         .max_by_key(|base| base.len())
         .map(String::as_str)
 }
 
 pub(super) fn investigation_identity<'a>(project: &str, investigation: &'a str) -> Option<&'a str> {
-    investigation.strip_prefix(&format!("projects/{project}/investigations/"))
+    investigation
+        .strip_prefix("projects/")?
+        .strip_prefix(project)?
+        .strip_prefix("/investigations/")
 }
 
 pub(super) fn project_for<'a>(path: &str, active: &'a Activation) -> Option<&'a str> {
     active
         .projects
         .keys()
-        .find(|slug| path.starts_with(&format!("projects/{slug}/")))
+        .find(|slug| {
+            path.strip_prefix("projects/")
+                .and_then(|rest| rest.strip_prefix(slug.as_str()))
+                .is_some_and(|rest| rest.starts_with('/'))
+        })
         .map(String::as_str)
 }

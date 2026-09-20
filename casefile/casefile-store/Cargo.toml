@@ -7,7 +7,7 @@ license.workspace = true
 [dependencies]
 casefile-core = { path = "../casefile-core" }
 regex.workspace = true
-serde.workspace = true
+serde = { workspace = true, features = ["rc"] }
 serde-saphyr.workspace = true
 sha2.workspace = true
 tempfile.workspace = true
@@ -18,7 +18,7 @@ toml.workspace = true
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Storage_FileSystem", "Win32_System_SystemServices"] }
 
-[target.'cfg(target_os = "macos")'.dependencies]
+[target.'cfg(unix)'.dependencies]
 libc = "0.2.186"
 
 [dev-dependencies]

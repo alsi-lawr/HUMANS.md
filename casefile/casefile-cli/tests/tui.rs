@@ -171,6 +171,12 @@ fn editor_args(editor: &Path, values: &[&str]) -> Vec<OsString> {
     args
 }
 
+fn open_tickets(pty: &mut Pty) {
+    pty.wait_for("\x1b[?1049h");
+    pty.send(b"3");
+    pty.wait_for("Minimum epic");
+}
+
 fn begin_edit(pty: &mut Pty) {
     pty.wait_for("q quit");
     thread::sleep(Duration::from_millis(200));
@@ -251,8 +257,6 @@ fn default_opener_ignores_editor_prompts_for_enter_and_cancels() {
             .contains("Minimum epic")
     );
     assert!(!draft.exists());
-    assert!(String::from_utf8_lossy(&transcript).contains("PROVISIONAL"));
-    assert!(String::from_utf8_lossy(&transcript).contains("Store presentation complete"));
     assert!(String::from_utf8_lossy(&transcript).contains("Keyboard help"));
     assert!(String::from_utf8_lossy(&transcript).contains("Verification"));
     assert!(restored(&transcript));
@@ -263,12 +267,17 @@ fn progressive_updates_and_manual_refresh_render_without_an_extra_keypress() {
     let fixture = fixture();
     let mut pty = Pty::start(&fixture, &[], &[]);
 
-    pty.wait_for("PROVISIONAL");
-    pty.wait_for("Store presentation complete");
+    open_tickets(&mut pty);
+    let epic = fixture.root.join(EPIC);
+    let content = fs::read_to_string(&epic).expect("epic");
+    fs::write(&epic, content.replace("Minimum epic", "UPDATED"))
+        .expect("change before scoped refresh");
     pty.send(b"r");
-    pty.wait_for("demo refr");
+    pty.wait_for("UPDATED");
+    fs::write(&epic, content.replace("Minimum epic", "RELOADED"))
+        .expect("change before Store refresh");
     pty.send(b"R");
-    thread::sleep(Duration::from_millis(300));
+    pty.wait_for("RELOADED");
     pty.send(b"q");
 
     let transcript = pty.finish(true);
@@ -280,8 +289,8 @@ fn disk_change_warns_without_input_retains_selection_and_manual_refresh_remains_
     let fixture = fixture();
     let mut pty = Pty::start(&fixture, &[], &[]);
 
-    pty.wait_for("Store presentation complete");
-    pty.send(b"\r\r/HMD-E-001\r");
+    open_tickets(&mut pty);
+    pty.send(b"/HMD-E-001\r");
     pty.wait_for("Minimum epic");
     let epic = fixture.root.join(EPIC);
     let content = fs::read_to_string(&epic).expect("epic");
@@ -328,7 +337,7 @@ fn default_dot_root_reports_external_disk_change_without_input() {
     let fixture = fixture();
     let mut pty = Pty::start_default_root(&fixture);
 
-    pty.wait_for("Store presentation complete");
+    open_tickets(&mut pty);
     let epic = fixture.root.join(EPIC);
     let content = fs::read_to_string(&epic).expect("epic");
     fs::write(
@@ -336,7 +345,7 @@ fn default_dot_root_reports_external_disk_change_without_input() {
         content.replace("Minimum epic", "Changed through dot root"),
     )
     .expect("external disk change");
-    pty.wait_for("STALE SCOPE (project demo)");
+    pty.wait_for("STALE DIRECT");
     pty.send(b"q");
 
     let transcript = pty.finish(true);
@@ -348,12 +357,12 @@ fn watch_degradation_keeps_store_refresh_and_quit_usable() {
     let fixture = fixture();
     let mut pty = Pty::start(&fixture, &[], &[]);
 
-    pty.wait_for("Store presentation complete");
+    open_tickets(&mut pty);
     let moved = fixture.temporary.path().join("planning-moved");
     fs::rename(&fixture.root, &moved).expect("rename watched Store root");
     pty.wait_for("DEGRADED");
     pty.send(b"R");
-    pty.wait_for("refresh failed;");
+    pty.wait_for("refresh failed:");
     pty.send(b"q");
 
     let transcript = pty.finish(true);
@@ -361,10 +370,10 @@ fn watch_degradation_keeps_store_refresh_and_quit_usable() {
 }
 
 #[test]
-fn quit_during_progressive_load_restores_terminal_promptly() {
+fn quit_after_terminal_opens_restores_terminal_promptly() {
     let fixture = fixture();
     let mut pty = Pty::start(&fixture, &[], &[]);
-    pty.wait_for("PROVISIONAL");
+    pty.wait_for("\x1b[?1049h");
     let started = Instant::now();
     pty.send(b"q");
     let transcript = pty.finish(true);

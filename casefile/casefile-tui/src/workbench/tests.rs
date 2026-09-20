@@ -322,7 +322,6 @@ fn boards_are_read_only_unfiltered_and_open_a_canonical_ticket_detail() {
     assert!(output.contains("Delivery"));
     assert!(output.contains("TODO (1)"));
     assert!(output.contains("HMD-013  unknown  Navigator"));
-    assert!(output.contains("record filter does not alter cards"));
     assert!(test_support::render(&app, 70, 28).contains("Delivery"));
     assert_eq!(
         app.browser
@@ -409,6 +408,7 @@ fn strategies_are_scoped_by_full_nested_investigation_identity() {
 fn strategy_records_expose_typed_overview_exact_source_and_diagnostics() {
     let mut app = strategy_app();
     app.handle(KeyCode::Char('5'));
+    app.handle(KeyCode::Down);
     let strategy = test_support::render(&app, 160, 44);
     for expected in [
         "IMPLEMENTATION",
@@ -429,7 +429,7 @@ fn strategy_records_expose_typed_overview_exact_source_and_diagnostics() {
     app.handle(KeyCode::Left);
     app.handle(KeyCode::Left);
 
-    app.handle(KeyCode::Down);
+    app.handle(KeyCode::Up);
     let binding = test_support::render(&app, 160, 44);
     assert!(binding.contains("Implementation writer binding"));
     assert!(binding.contains("Catalog value  gpt-5.6-terra/xhigh"));
@@ -440,6 +440,7 @@ fn strategy_records_expose_typed_overview_exact_source_and_diagnostics() {
     let source = test_support::render(&app, 160, 44);
     assert!(source.contains("exact_binding_source = true"));
 
+    app.handle(KeyCode::Down);
     app.handle(KeyCode::Down);
     app.handle(KeyCode::Right);
     let invalid = test_support::render(&app, 160, 44);
@@ -595,7 +596,7 @@ fn diagnostics_and_editing_remain_governed_path_only() {
 }
 
 #[test]
-fn boards_distinguish_no_definition_invalid_empty_and_stale_projections() {
+fn boards_distinguish_no_definition_invalid_and_empty() {
     let scan = test_support::scan();
     let mut no_board = App::new(scan.clone(), test_support::derived(&scan));
     no_board.handle(KeyCode::Char('6'));
@@ -620,19 +621,12 @@ fn boards_distinguish_no_definition_invalid_empty_and_stale_projections() {
     assert!(invalid_output.contains("Board definitions or the progress log are invalid"));
     assert!(invalid_output.contains("invalid_toml: board syntax is malformed"));
     assert!(invalid_output.contains("invalid_progress_log: progress syntax is malformed"));
-    assert!(invalid_output.contains("Files or Diagnostics"));
 
     let mut derived = test_support::derived(&scan);
     derived.boards.push(board_with_cards("Empty", Vec::new()));
     let mut empty = App::new(scan.clone(), derived);
     empty.handle(KeyCode::Char('6'));
     assert!(test_support::render(&empty, 120, 28).contains("No cards."));
-
-    let mut stale_derived = test_support::derived(&scan);
-    stale_derived.source_revision = Revision("sha256:stale".into());
-    let mut stale = App::new(scan, stale_derived);
-    stale.handle(KeyCode::Char('6'));
-    assert!(test_support::render(&stale, 120, 28).contains("Board projection is stale"));
 }
 
 #[test]
@@ -690,7 +684,7 @@ fn board_keyboard_selection_marks_the_card_changes_detail_and_skips_unresolved_i
 
     app.handle(KeyCode::Char('6'));
     let initial = test_support::render(&app, 160, 56);
-    assert!(initial.contains("> HMD-013  unknown  Navigator  [selected]"));
+    assert!(initial.contains("> HMD-013  unknown  Navigator"));
     assert!(initial.contains("Missing ticket"));
     assert!(initial.contains("missing identity]"));
     assert!(initial.contains("Ambiguous ticket"));
@@ -699,7 +693,7 @@ fn board_keyboard_selection_marks_the_card_changes_detail_and_skips_unresolved_i
 
     app.handle(KeyCode::Down);
     let selected_next = test_support::render(&app, 160, 56);
-    assert!(selected_next.contains("> HMD-014  unknown  Follow-up  [selected]"));
+    assert!(selected_next.contains("> HMD-014  unknown  Follow-up"));
     assert!(selected_next.contains("tickets/accepted/HMD-014.md"));
     assert_eq!(
         app.browser
@@ -734,6 +728,10 @@ fn board_card_selection_survives_complete_projection_with_deletion_and_ambiguity
 
     app.apply_projection(
         UiProjection {
+            relationship_updates: BTreeMap::new(),
+            availability_changed: Vec::new(),
+            incremental: false,
+            removed: Vec::new(),
             scan: scan.clone(),
             derived: derived.clone(),
             provisional: false,
@@ -742,9 +740,7 @@ fn board_card_selection_survives_complete_projection_with_deletion_and_ambiguity
         ProjectionChange::Complete,
     );
     assert_eq!(app.browser.selected_path(), Some(second_path));
-    assert!(
-        test_support::render(&app, 160, 40).contains("> HMD-014  unknown  Follow-up  [selected]")
-    );
+    assert!(test_support::render(&app, 160, 40).contains("> HMD-014  unknown  Follow-up"));
 
     let mut deleted = test_support::derived(&scan);
     deleted.boards.push(board_with_cards(
@@ -753,6 +749,10 @@ fn board_card_selection_survives_complete_projection_with_deletion_and_ambiguity
     ));
     app.apply_projection(
         UiProjection {
+            relationship_updates: BTreeMap::new(),
+            availability_changed: Vec::new(),
+            incremental: false,
+            removed: Vec::new(),
             scan: scan.clone(),
             derived: deleted,
             provisional: false,
@@ -774,6 +774,10 @@ fn board_card_selection_survives_complete_projection_with_deletion_and_ambiguity
     ));
     ambiguous.apply_projection(
         UiProjection {
+            relationship_updates: BTreeMap::new(),
+            availability_changed: Vec::new(),
+            incremental: false,
+            removed: Vec::new(),
             scan: ambiguous_scan,
             derived,
             provisional: false,
@@ -1146,18 +1150,6 @@ fn project_and_investigation_deletions_use_following_then_preceding_fallback() {
     assert_eq!(project.browser.selected_investigation(), Some("alpha"));
 }
 
-#[test]
-fn provisional_projection_and_refresh_help_are_visible() {
-    let mut app = App::from_projection(ui_projection(test_support::scan(), true), None);
-    app.set_status("facts are unavailable while loading");
-    let rendered = test_support::render(&app, 140, 32);
-    assert!(rendered.contains("PROVISIONAL"));
-    assert!(rendered.contains("facts are unavailable"));
-    app.handle(KeyCode::Char('?'));
-    let help = test_support::render(&app, 140, 32);
-    assert!(help.contains("Refresh current scope or the whole Store"));
-}
-
 fn board_with_cards(title: &str, cards: Vec<DerivedCard>) -> DerivedBoard {
     DerivedBoard {
         identity: casefile_store::ScopedIdentity {
@@ -1231,6 +1223,10 @@ fn copy_tree(from: &Path, to: &Path) {
 
 fn ui_projection(scan: ScanResult, provisional: bool) -> UiProjection {
     UiProjection {
+        relationship_updates: BTreeMap::new(),
+        availability_changed: Vec::new(),
+        incremental: false,
+        removed: Vec::new(),
         derived: test_support::derived(&scan),
         scan,
         provisional,

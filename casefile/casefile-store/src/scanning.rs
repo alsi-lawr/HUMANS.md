@@ -32,18 +32,21 @@ pub struct ScanResult {
 
 impl ScanResult {
     pub fn scope_for_path<'a>(&'a self, path: &'a str) -> Option<(&'a str, Option<&'a str>)> {
-        let (project, _) = path.strip_prefix("projects/")?.split_once('/')?;
-        let investigation = self
-            .investigation_roots
-            .get(project)?
-            .iter()
-            .filter(|investigation| {
-                path.starts_with(&format!(
-                    "projects/{project}/investigations/{investigation}/"
-                ))
-            })
-            .max_by_key(|investigation| investigation.len())
-            .map(String::as_str);
+        let (project, relative) = path.strip_prefix("projects/")?.split_once('/')?;
+        let roots = self.investigation_roots.get(project)?;
+        let investigation = relative
+            .strip_prefix("investigations/")
+            .and_then(|relative| {
+                roots
+                    .iter()
+                    .filter(|investigation| {
+                        relative
+                            .strip_prefix(investigation.as_str())
+                            .is_some_and(|rest| rest.starts_with('/'))
+                    })
+                    .max_by_key(|investigation| investigation.len())
+                    .map(String::as_str)
+            });
         Some((project, investigation))
     }
 }
