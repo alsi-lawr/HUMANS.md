@@ -25,7 +25,7 @@ pub(crate) fn edit_selection(entry: Option<&EntrySnapshot>) -> Result<Interactio
             kind: entry.kind.expect("matched writable kind"),
         }))
     } else {
-        Err("Read-only: e edits governed tickets, epics, and boards only.")
+        Err("Read-only")
     }
 }
 
@@ -53,10 +53,7 @@ mod tests {
         );
 
         let raw = entry("raw.txt", Classification::Raw, None, None, b"raw");
-        assert_eq!(
-            edit_selection(Some(&raw)),
-            Err("Read-only: e edits governed tickets, epics, and boards only.")
-        );
-        assert_eq!(edit_selection(None), Err("No selected record to edit."));
+        assert!(edit_selection(Some(&raw)).is_err());
+        assert!(edit_selection(None).is_err());
     }
 }

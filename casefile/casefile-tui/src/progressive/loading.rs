@@ -19,10 +19,7 @@ impl Coordinator {
                 active.catalogue = Some(catalogue.clone());
                 active.coverage = Some(coverage.clone());
                 active.progress = progress.clone();
-                self.status = format!(
-                    "{} catalogue ready; records are loading...",
-                    target_name(&active.target)
-                );
+                self.status = progress_message(&active.target, progress);
                 if self.has_complete {
                     ProjectionChange::None
                 } else {
@@ -47,7 +44,7 @@ impl Coordinator {
                 }
                 active.coverage = Some(coverage.clone());
                 active.progress = progress.clone();
-                self.status = progress_message(&active.target, progress, coverage);
+                self.status = progress_message(&active.target, progress);
                 if self.has_complete {
                     ProjectionChange::None
                 } else {
@@ -104,13 +101,11 @@ impl Coordinator {
                     self.observation.generation > active.started_observation_generation;
                 self.status = if later_observation {
                     format!(
-                        "{} refresh complete; a newer observation remains uncovered.",
+                        "{} changed during refresh. Refresh again.",
                         target_name(&active.target)
                     )
-                } else if active.initial {
-                    "Store presentation complete.".into()
                 } else {
-                    format!("{} refresh complete.", target_name(&active.target))
+                    String::new()
                 };
                 self.report(RefreshReport::Succeeded {
                     generation: active.generation,
@@ -130,12 +125,9 @@ impl Coordinator {
 
     pub(super) fn finish_failure(&mut self, active: ActiveLoad, message: String) {
         self.status = if self.has_complete {
-            format!(
-                "{} refresh failed; last complete data retained: {message}",
-                target_name(&active.target)
-            )
+            format!("{} refresh failed: {message}", target_name(&active.target))
         } else {
-            format!("Initial presentation failed: {message}")
+            format!("Loading failed: {message}")
         };
         self.report(RefreshReport::Failed {
             generation: active.generation,

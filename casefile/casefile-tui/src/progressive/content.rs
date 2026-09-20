@@ -60,7 +60,7 @@ impl Coordinator {
             path: path.into(),
             stream,
         });
-        self.content_status = Some(format!("Loading selected content: {path}"));
+        self.content_status = Some(format!("Loading {path}…"));
         true
     }
 
@@ -118,10 +118,10 @@ impl Coordinator {
         }
         match &event {
             PresentationContentEvent::Pending { path, .. } => {
-                self.content_status = Some(format!("Loading selected content: {path}"));
+                self.content_status = Some(format!("Loading {path}…"));
             }
-            PresentationContentEvent::Loaded { entry, .. } => {
-                self.content_status = Some(format!("Selected content loaded: {}", entry.path));
+            PresentationContentEvent::Loaded { .. } => {
+                self.content_status = None;
                 self.content = None;
             }
             PresentationContentEvent::Failure { path, message, .. } => {

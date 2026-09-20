@@ -475,8 +475,6 @@ fn diagnostic_lines(entry: &EntrySnapshot, diagnostics: &[Diagnostic]) -> Vec<Li
     if matching.is_empty() {
         return vec![
             Line::from("No diagnostics for this record.").style(Style::default().fg(GOOD)),
-            Line::from("Cross-record findings remain in the scanner channel.")
-                .style(Style::default().fg(MUTED)),
         ];
     }
     let mut lines = Vec::new();

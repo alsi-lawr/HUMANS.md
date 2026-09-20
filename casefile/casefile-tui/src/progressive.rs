@@ -100,7 +100,6 @@ struct ActiveLoad {
     started_observation_generation: u64,
     progress: PresentationProgress,
     coverage: Option<PresentationCoverage>,
-    initial: bool,
 }
 
 struct ActiveContent {
@@ -216,12 +215,11 @@ impl Coordinator {
                 total: None,
             },
             coverage: None,
-            initial,
         });
         self.status = if initial {
-            "Loading Store catalogue...".into()
+            "Loading…".into()
         } else {
-            format!("Refreshing {} from disk...", target_name(&target))
+            format!("Refreshing {}…", target_name(&target))
         };
         self.content = None;
         self.attempted_content = None;
@@ -410,22 +408,16 @@ impl Coordinator {
     }
 }
 
-fn progress_message(
-    target: &PresentationTarget,
-    progress: &PresentationProgress,
-    coverage: &PresentationCoverage,
-) -> String {
+fn progress_message(target: &PresentationTarget, progress: &PresentationProgress) -> String {
     let total = progress
         .total
         .map(|total| total.to_string())
         .unwrap_or_else(|| "?".into());
     format!(
-        "Loading {}: {}/{} entries; payload {:?}, facts {:?} (provisional).",
+        "Loading {}: {}/{}",
         target_name(target),
         progress.completed,
         total,
-        coverage.payload,
-        coverage.facts,
     )
 }
 

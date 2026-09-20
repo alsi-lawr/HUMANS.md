@@ -87,13 +87,10 @@ impl ReviewApp {
                 Constraint::Length(1),
             ])
             .areas(area);
-        Paragraph::new(Line::from(vec![
-            Span::styled(" REVIEW CHANGES ", Style::default().fg(ACCENT).bold()),
-            Span::styled(
-                "Store preview; canonical files are unchanged",
-                Style::default().fg(MUTED),
-            ),
-        ]))
+        Paragraph::new(Line::from(Span::styled(
+            " REVIEW CHANGES ",
+            Style::default().fg(ACCENT).bold(),
+        )))
         .block(
             Block::default()
                 .borders(Borders::BOTTOM)
@@ -129,7 +126,7 @@ fn diff_lines(diff: &str) -> Vec<Line<'static>> {
         .map(|line| Line::from(Span::styled(safe_inline(line), diff_style(line))))
         .collect();
     if lines.is_empty() {
-        lines.push(Line::from("No Store diff was produced.").style(Style::default().fg(MUTED)));
+        lines.push(Line::from("No changes.").style(Style::default().fg(MUTED)));
     }
     lines
 }

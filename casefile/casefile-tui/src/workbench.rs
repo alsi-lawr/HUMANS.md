@@ -517,8 +517,7 @@ impl App {
 
     fn request_edit(&mut self) {
         if self.browser.view() == View::Boards {
-            self.feedback =
-                Some("Read-only: Boards do not change ticket progress or placement.".into());
+            self.feedback = Some("Read-only".into());
             return;
         }
         match edit_selection(self.browser.selected(&self.scan)) {
@@ -539,16 +538,13 @@ impl App {
             .areas(area);
         self.browser
             .render_header(&self.scan, self.board_count(), header, buffer);
-        let mut status_text = if self.provisional {
-            format!(
-                " PROVISIONAL - {}",
-                self.status
-                    .as_deref()
-                    .unwrap_or("facts or payload are not yet complete")
-            )
-        } else {
-            self.status.clone().unwrap_or_default()
-        };
+        let mut status_text = self.status.clone().unwrap_or_else(|| {
+            if self.provisional {
+                "Loading…".into()
+            } else {
+                String::new()
+            }
+        });
         if self.provisional
             && self.browser.selected_path().is_some()
             && self.browser.selected(&self.scan).is_none()
@@ -679,13 +675,11 @@ impl App {
     fn render_boards(&self, area: Rect, buffer: &mut Buffer) {
         let block = crate::ui::panel(" Boards ", self.focus == Focus::List);
         if self.derived.source_revision != self.scan.snapshot.revision {
-            return Paragraph::new(
-                "Board projection is stale. Refresh to load the current investigation.",
-            )
-            .style(Style::default().fg(WARN))
-            .block(block)
-            .wrap(Wrap { trim: false })
-            .render(area, buffer);
+            return Paragraph::new("Boards are out of date. Press r to refresh.")
+                .style(Style::default().fg(WARN))
+                .block(block)
+                .wrap(Wrap { trim: false })
+                .render(area, buffer);
         }
         let Some((project, investigation)) = self.browser.scope() else {
             return Paragraph::new("Select an investigation to inspect its boards.")
@@ -698,8 +692,6 @@ impl App {
             let mut lines = vec![
                 Line::from("Board definitions or the progress log are invalid.")
                     .style(Style::default().fg(WARN).bold()),
-                Line::from("Inspect Files or Diagnostics for the canonical validation details.")
-                    .style(Style::default().fg(MUTED)),
             ];
             for diagnostic in invalid_diagnostics {
                 lines.push(
@@ -729,13 +721,12 @@ impl App {
                 .wrap(Wrap { trim: false })
                 .render(area, buffer);
         }
-        let mut lines = vec![
-            Line::from("Read-only; record filter does not alter cards.")
-                .style(Style::default().fg(MUTED)),
-        ];
+        let mut lines = Vec::new();
         let mut selected_line = None;
         for board in boards {
-            lines.push(Line::from(""));
+            if !lines.is_empty() {
+                lines.push(Line::from(""));
+            }
             lines.push(
                 Line::from(format!(
                     "{}  [{:?}]",
@@ -838,7 +829,7 @@ fn board_lines(
             let resolution = canonical_card_path(scan, card);
             let selected = matches!(&resolution, CardPathResolution::Resolved(path) if Some(path.as_str()) == selected_path);
             let (marker, suffix) = match &resolution {
-                CardPathResolution::Resolved(_) if selected => (">", "  [selected]"),
+                CardPathResolution::Resolved(_) if selected => (">", ""),
                 CardPathResolution::Resolved(_) => (" ", ""),
                 CardPathResolution::Missing => ("!", "  [detail unavailable: missing identity]"),
                 CardPathResolution::Ambiguous => {

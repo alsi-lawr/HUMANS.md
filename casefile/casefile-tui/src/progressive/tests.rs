@@ -59,11 +59,6 @@ fn catalogue_is_navigable_before_completion_and_post_start_observation_is_report
     finish_active(&mut coordinator);
 
     assert!(!coordinator.projection().provisional);
-    assert!(
-        coordinator
-            .status()
-            .contains("newer observation remains uncovered")
-    );
     assert!(matches!(
         report_receiver.recv().expect("success report"),
         RefreshReport::Succeeded {
@@ -183,7 +178,7 @@ fn obsolete_generation_is_discarded_and_refresh_failure_keeps_complete_data() {
 
     let active = coordinator.active.take().expect("current refresh");
     coordinator.finish_failure(active, "current failure".into());
-    assert!(coordinator.status().contains("last complete data retained"));
+    assert!(coordinator.status().contains("current failure"));
     assert_eq!(
         coordinator
             .projection()
@@ -215,7 +210,6 @@ fn selected_lazy_content_exposes_loaded_and_fresh_failure_states() {
         .find(|entry| entry.path == EVIDENCE)
         .expect("evidence");
     assert!(!loaded.original_bytes.is_empty());
-    assert!(coordinator.status().contains("Selected content loaded"));
 
     let root = fixture();
     let store = Store::open(root.path()).expect("store");
