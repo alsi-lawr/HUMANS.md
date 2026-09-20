@@ -1,3 +1,5 @@
+mod projection;
+
 use crate::{
     Interaction, PAGE_SIZE,
     browsing::{Browser, BrowserState, PromotionNotice, SelectionAnchor, View},
@@ -64,6 +66,8 @@ impl Focus {
 
 pub(crate) struct App {
     scan: ScanResult,
+    entry_indices: BTreeMap<String, usize>,
+    record_indices: BTreeMap<String, usize>,
     derived: DerivedSnapshot,
     browser: Browser,
     detail: RecordDetail,
@@ -80,9 +84,26 @@ pub(crate) struct App {
 }
 
 impl App {
-    pub(crate) fn new(scan: ScanResult, derived: DerivedSnapshot) -> Self {
+    pub(crate) fn new(mut scan: ScanResult, derived: DerivedSnapshot) -> Self {
+        for roots in scan.investigation_roots.values_mut() {
+            roots.sort();
+            roots.dedup();
+        }
         let browser = Browser::new(&scan);
         Self {
+            entry_indices: scan
+                .snapshot
+                .entries
+                .iter()
+                .enumerate()
+                .map(|(i, entry)| (entry.path.clone(), i))
+                .collect(),
+            record_indices: derived
+                .records
+                .iter()
+                .enumerate()
+                .map(|(i, record)| (record.path.clone(), i))
+                .collect(),
             scan,
             derived,
             browser,
@@ -164,7 +185,7 @@ impl App {
         while self.interaction.is_none() {
             let update = coordinator.drain();
             if update.projection != ProjectionChange::None {
-                self.apply_projection(coordinator.projection(), update.projection);
+                self.apply_projection(coordinator.take_projection(), update.projection);
             }
             if update.dirty {
                 self.status = Some(coordinator.status().into());
@@ -178,7 +199,11 @@ impl App {
                 terminal.draw(|frame| self.render(frame.area(), frame.buffer_mut()))?;
                 dirty = false;
             }
-            if event::poll(EVENT_POLL_INTERVAL)? {
+            if event::poll(if coordinator.loading() {
+                Duration::from_millis(1)
+            } else {
+                EVENT_POLL_INTERVAL
+            })? {
                 match event::read()? {
                     Event::Key(key) if key.kind == KeyEventKind::Press => {
                         self.handle(key.code);
@@ -211,7 +236,7 @@ impl App {
             dirty |= watcher.drain();
             let update = coordinator.drain();
             if update.projection != ProjectionChange::None {
-                self.apply_projection(coordinator.projection(), update.projection);
+                self.apply_projection(coordinator.take_projection(), update.projection);
                 if (update.projection == ProjectionChange::Complete || !watcher.has_catalogue())
                     && let Some(catalogue) = coordinator.catalogue()
                 {
@@ -231,7 +256,11 @@ impl App {
                 terminal.draw(|frame| self.render(frame.area(), frame.buffer_mut()))?;
                 dirty = false;
             }
-            if event::poll(EVENT_POLL_INTERVAL)? {
+            if event::poll(if coordinator.loading() {
+                Duration::from_millis(1)
+            } else {
+                EVENT_POLL_INTERVAL
+            })? {
                 match event::read()? {
                     Event::Key(key) if key.kind == KeyEventKind::Press => {
                         self.handle(key.code);
@@ -292,10 +321,15 @@ impl App {
             .browser
             .selected(&self.scan)
             .map(|entry| entry.content_revision.clone());
-        self.scan = projection.scan;
-        self.derived = projection.derived;
         self.provisional = projection.provisional;
-        self.unavailable = projection.unavailable;
+        if projection.incremental {
+            self.merge_projection(projection);
+        } else {
+            self.scan = projection.scan;
+            self.derived = projection.derived;
+            self.unavailable = projection.unavailable;
+            self.reindex();
+        }
         match change {
             ProjectionChange::Complete => {
                 self.resume_anchor = None;
@@ -945,3 +979,9 @@ fn layout_mode(area: Rect) -> LayoutMode {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod progressive_tests;
+
+#[cfg(test)]
+mod relationship_tests;

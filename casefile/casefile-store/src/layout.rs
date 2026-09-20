@@ -76,7 +76,9 @@ fn portable_segment(segment: &str) -> bool {
 
 pub(super) fn kind_for_path(path: &str, active: &Activation) -> Option<Kind> {
     if active.projects.keys().any(|slug| {
-        path.strip_prefix(&format!("projects/{slug}/decision-log/"))
+        path.strip_prefix("projects/")
+            .and_then(|rest| rest.strip_prefix(slug.as_str()))
+            .and_then(|rest| rest.strip_prefix("/decision-log/"))
             .is_some_and(|name| name.ends_with(".md") && name.contains('-'))
     }) {
         return Some(Kind::Decision);
@@ -91,7 +93,8 @@ pub(super) fn kind_for_path(path: &str, active: &Activation) -> Option<Kind> {
                 .map(move |base| (project, base))
         })
         .filter_map(|(project, base)| {
-            path.strip_prefix(&format!("{base}/"))
+            path.strip_prefix(base.as_str())
+                .and_then(|rest| rest.strip_prefix('/'))
                 .map(|rest| (project, base, rest))
         })
         .max_by_key(|(_, base, _)| base.len())

@@ -409,6 +409,7 @@ fn strategies_are_scoped_by_full_nested_investigation_identity() {
 fn strategy_records_expose_typed_overview_exact_source_and_diagnostics() {
     let mut app = strategy_app();
     app.handle(KeyCode::Char('5'));
+    app.handle(KeyCode::Down);
     let strategy = test_support::render(&app, 160, 44);
     for expected in [
         "IMPLEMENTATION",
@@ -429,7 +430,7 @@ fn strategy_records_expose_typed_overview_exact_source_and_diagnostics() {
     app.handle(KeyCode::Left);
     app.handle(KeyCode::Left);
 
-    app.handle(KeyCode::Down);
+    app.handle(KeyCode::Up);
     let binding = test_support::render(&app, 160, 44);
     assert!(binding.contains("Implementation writer binding"));
     assert!(binding.contains("Catalog value  gpt-5.6-terra/xhigh"));
@@ -440,6 +441,7 @@ fn strategy_records_expose_typed_overview_exact_source_and_diagnostics() {
     let source = test_support::render(&app, 160, 44);
     assert!(source.contains("exact_binding_source = true"));
 
+    app.handle(KeyCode::Down);
     app.handle(KeyCode::Down);
     app.handle(KeyCode::Right);
     let invalid = test_support::render(&app, 160, 44);
@@ -734,6 +736,10 @@ fn board_card_selection_survives_complete_projection_with_deletion_and_ambiguity
 
     app.apply_projection(
         UiProjection {
+            relationship_updates: BTreeMap::new(),
+            availability_changed: Vec::new(),
+            incremental: false,
+            removed: Vec::new(),
             scan: scan.clone(),
             derived: derived.clone(),
             provisional: false,
@@ -753,6 +759,10 @@ fn board_card_selection_survives_complete_projection_with_deletion_and_ambiguity
     ));
     app.apply_projection(
         UiProjection {
+            relationship_updates: BTreeMap::new(),
+            availability_changed: Vec::new(),
+            incremental: false,
+            removed: Vec::new(),
             scan: scan.clone(),
             derived: deleted,
             provisional: false,
@@ -774,6 +784,10 @@ fn board_card_selection_survives_complete_projection_with_deletion_and_ambiguity
     ));
     ambiguous.apply_projection(
         UiProjection {
+            relationship_updates: BTreeMap::new(),
+            availability_changed: Vec::new(),
+            incremental: false,
+            removed: Vec::new(),
             scan: ambiguous_scan,
             derived,
             provisional: false,
@@ -1231,6 +1245,10 @@ fn copy_tree(from: &Path, to: &Path) {
 
 fn ui_projection(scan: ScanResult, provisional: bool) -> UiProjection {
     UiProjection {
+        relationship_updates: BTreeMap::new(),
+        availability_changed: Vec::new(),
+        incremental: false,
+        removed: Vec::new(),
         derived: test_support::derived(&scan),
         scan,
         provisional,

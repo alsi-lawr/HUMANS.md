@@ -1,6 +1,7 @@
 use pulldown_cmark::{Event, HeadingLevel, Options, Parser, Tag};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
+use std::sync::LazyLock;
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
 use crate::{
@@ -122,12 +123,16 @@ pub(crate) fn parse(path: &str, kind: Kind, text: &str) -> Result<RecordDraft, V
 
 #[allow(clippy::result_large_err)]
 pub(crate) fn validate(path: &str, kind: Kind, item: &WorkItemDraft) -> Result<(), Diagnostic> {
+    static TICKET_ID: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"^[A-Z][A-Z0-9_]*-[0-9]{3,}$").expect("fixed regex"));
+    static EPIC_ID: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"^[A-Z][A-Z0-9_]*-E-[0-9]{3,}$").expect("fixed regex"));
     let pattern = if kind == Kind::Ticket {
-        r"^[A-Z][A-Z0-9_]*-[0-9]{3,}$"
+        &*TICKET_ID
     } else {
-        r"^[A-Z][A-Z0-9_]*-E-[0-9]{3,}$"
+        &*EPIC_ID
     };
-    if !Regex::new(pattern).expect("fixed regex").is_match(&item.id) {
+    if !pattern.is_match(&item.id) {
         return Err(Diagnostic::new(
             path,
             "invalid_identity",
