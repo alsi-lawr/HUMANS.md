@@ -111,7 +111,6 @@ fn check_scope(
             .expect("validated investigation")
             .0
     });
-    let prefix = scope.map(|scope| format!("{scope}/"));
     let mut entries = Vec::new();
     let mut facts = ValidationFacts::default();
     let mut diagnostics = Vec::new();
@@ -123,9 +122,7 @@ fn check_scope(
         } else {
             kind_for_path(path, active)
         };
-        let selected = prefix
-            .as_ref()
-            .is_none_or(|prefix| path.starts_with(prefix));
+        let selected = scope.is_none_or(|scope| scope_for(path, active) == Some(scope));
         let support = project_prefix
             .is_some_and(|project| path.starts_with(&format!("{project}/")))
             && matches!(
@@ -204,9 +201,7 @@ fn check_scope(
         cross_validate_facts(&entries, active, &facts)
             .into_iter()
             .filter(|diagnostic| {
-                prefix
-                    .as_ref()
-                    .is_none_or(|prefix| diagnostic.path.starts_with(prefix))
+                scope.is_none_or(|scope| scope_for(&diagnostic.path, active) == Some(scope))
             }),
     );
     diagnostics.extend(binding_diagnostics(&strategies));
@@ -383,5 +378,113 @@ mod tests {
                 .all(|path| opened.iter().filter(|opened| *opened == path).count() == 1)
         );
         assert!(BODY_PEAK.with(|peak| peak.get()) < 2 * 1024 * 1024);
+    }
+    #[test]
+    fn parent_checks_and_provider_diagnostics_exclude_activated_nested_scope_bodies() {
+        use crate::{InvestigationScope, Provider, ProviderQuery, ProviderQueryResult};
+
+        let root = tempfile::tempdir().unwrap();
+        copy_tree(
+            &Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/minimum"),
+            root.path(),
+        );
+        let parent = "projects/demo/investigations/sample";
+        let nested = "projects/demo/investigations/sample/nested";
+        let config = fs::read_to_string(root.path().join("casefile.toml"))
+            .unwrap()
+            .replace(
+                &format!("investigations = [\"{parent}\"]"),
+                &format!("investigations = [\"{parent}\", \"{nested}\"]"),
+            );
+        fs::write(root.path().join("casefile.toml"), config).unwrap();
+        let evidence = root.path().join(format!("{nested}/evidence/sentinel.md"));
+        let progress = root.path().join(format!("{nested}/progress/log.toml"));
+        let ticket = root
+            .path()
+            .join(format!("{nested}/tickets/accepted/HMD-012.md"));
+        for path in [&evidence, &progress, &ticket] {
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+        }
+        fs::write(
+            &evidence,
+            format!(
+                "# Nested evidence\n{}",
+                "nested sentinel ".repeat(128 * 1024)
+            ),
+        )
+        .unwrap();
+        fs::write(
+            &progress,
+            "schema_version = 1\n[[entries]]\nid = 'malformed'\n",
+        )
+        .unwrap();
+        let source = fs::read_to_string(
+            root.path()
+                .join(format!("{parent}/tickets/accepted/HMD-011.md")),
+        )
+        .unwrap();
+        fs::write(
+            &ticket,
+            source
+                .replace("HMD-011", "HMD-012")
+                .replace(
+                    "investigation: \"sample\"",
+                    "investigation: \"sample/nested\"",
+                )
+                .replace("related_tickets: []", "related_tickets: [HMD-404]"),
+        )
+        .unwrap();
+        let store = Store::open(root.path()).unwrap();
+        let provider = Provider::without_cache(Store::open(root.path()).unwrap());
+        for (path, identity, is_parent) in
+            [(parent, "sample", true), (nested, "sample/nested", false)]
+        {
+            for through_provider in [false, true] {
+                OPENED.with(|paths| *paths.borrow_mut() = Some(Vec::new()));
+                let diagnostics = if through_provider {
+                    let result = provider
+                        .query(ProviderQuery::Diagnostics {
+                            scope: InvestigationScope {
+                                project: "demo".into(),
+                                investigation: identity.into(),
+                            },
+                        })
+                        .unwrap();
+                    let ProviderQueryResult::Diagnostics {
+                        scope,
+                        diagnostics,
+                        total_count,
+                        ..
+                    } = result
+                    else {
+                        panic!("diagnostics")
+                    };
+                    assert_eq!(scope.investigation, identity);
+                    assert_eq!(total_count, diagnostics.len());
+                    diagnostics
+                } else {
+                    let result = store.check(Some(path)).unwrap();
+                    assert_eq!(result.valid, Some(is_parent));
+                    result.diagnostics
+                };
+                let opened = OPENED.with(|paths| paths.borrow_mut().take().unwrap());
+                assert!(
+                    opened.contains(&ticket),
+                    "canonical same-project support remains available"
+                );
+                assert_eq!(opened.contains(&evidence), !is_parent);
+                assert_eq!(opened.contains(&progress), !is_parent);
+                if is_parent {
+                    assert!(diagnostics.is_empty(), "{diagnostics:?}");
+                } else {
+                    assert!(diagnostics.iter().any(|diagnostic| diagnostic.path
+                        == format!("{nested}/progress/log.toml")
+                        && diagnostic.code == "invalid_progress_log"));
+                    assert!(diagnostics.iter().any(|diagnostic| diagnostic.path
+                        == format!("{nested}/tickets/accepted/HMD-012.md")
+                        && diagnostic.code == "unresolved_reference"));
+                }
+            }
+        }
     }
 }
