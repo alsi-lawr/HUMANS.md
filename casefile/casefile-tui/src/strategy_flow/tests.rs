@@ -43,22 +43,22 @@ fn selected_membership_not_declaration_order_controls_optional_review_and_correc
         &selected,
     )
     .unwrap();
-    assert_eq!(original.edges, reordered.edges);
-    assert!(reordered.edges.contains(&(Stage::Primary, Stage::Root)));
-    assert!(reordered.edges.contains(&(Stage::Correct, Stage::Writer)));
-    assert!(
-        !reordered
-            .edges
-            .iter()
-            .any(|(from, to)| *from == Stage::Verifier || *to == Stage::Verifier)
+    assert_eq!(original, reordered);
+    assert!(!reordered.main.contains(&Stage::Verify));
+    let verified = contracts::build(
+        "casefile-implement-ticket-batch",
+        "implementation",
+        &strategy(BATCH),
+    )
+    .unwrap();
+    assert_eq!(
+        reordered.main,
+        verified
+            .main
+            .into_iter()
+            .filter(|stage| *stage != Stage::Verify)
+            .collect::<Vec<_>>()
     );
-    let writer = reordered
-        .rows
-        .iter()
-        .flatten()
-        .find(|node| node.stage == Stage::Writer)
-        .unwrap();
-    assert!(writer.label.contains("effective-model"));
     assert_eq!(
         layout::render(&original, 54),
         layout::render(&reordered, 54)
@@ -66,34 +66,21 @@ fn selected_membership_not_declaration_order_controls_optional_review_and_correc
 }
 
 #[test]
-fn adaptive_layout_preserves_unicode_labels_and_stays_inside_the_selected_pane() {
-    let mut selected = strategy(LOOKAHEAD);
-    selected
-        .matrix
-        .workers
-        .iter_mut()
-        .find(|worker| worker.role == "look-ahead-investigator")
-        .unwrap()
-        .model = Some("模型-e\u{301}-a-long-runtime-name-with-no-spaces".into());
+fn resize_keeps_every_chart_cell_inside_the_pane_and_recovers_after_too_narrow() {
+    let pipeline =
+        include_str!("../../../adapters/codex/matrices/casefile-implement-pipeline.toml");
     let flow = contracts::build(
-        "casefile-implement-ticket-batch-look-ahead",
+        "casefile-implement-pipeline",
         "implementation",
-        &selected,
+        &strategy(pipeline),
     )
     .unwrap();
-    for width in [1, 15, 16, 20, 30, 54, 78] {
+    let normal = layout::render(&flow, 54);
+    for width in [0, 1, 15, 16, 20, 30, 46, 54, 78] {
         let lines = layout::render(&flow, width);
         assert!(lines.iter().all(|line| line.width() <= usize::from(width)));
-        let text = lines
-            .iter()
-            .map(ToString::to_string)
-            .collect::<Vec<_>>()
-            .join("\n");
-        if width >= 30 {
-            assert!(text.contains("模型"));
-            assert!(text.contains("e\u{301}"));
-        }
     }
+    assert_eq!(normal, layout::render(&flow, 54));
 }
 
 #[test]
@@ -118,7 +105,7 @@ fn selected_cache_refreshes_on_binding_only_change_scope_change_and_resize() {
             },
         });
     let replaced = cache.lines(&entry, Some(&record), 54);
-    assert_ne!(initial, replaced);
+    assert_eq!(initial, replaced);
     assert_eq!(replaced, cache.lines(&entry, Some(&record), 54));
     assert_ne!(replaced, cache.lines(&entry, Some(&record), 30));
     let mut other = entry.clone();
@@ -129,46 +116,20 @@ fn selected_cache_refreshes_on_binding_only_change_scope_change_and_resize() {
     assert_ne!(replaced, cache.lines(&entry, Some(&record), 54));
 }
 
-fn reachable(flow: &Flow, start: Stage) -> Vec<Stage> {
-    let mut reached = vec![start];
-    let mut index = 0;
-    while index < reached.len() {
-        let stage = reached[index];
-        for (_, to) in flow.edges.iter().filter(|(from, _)| *from == stage) {
-            if !reached.contains(to) {
-                reached.push(*to);
-            }
-        }
-        index += 1;
-    }
-    reached
-}
-
 #[test]
-fn optional_advice_cannot_become_a_dependency_of_current_review_or_forward_writing() {
+fn optional_preflight_does_not_change_the_execution_diagram() {
     let pipeline =
         include_str!("../../../adapters/codex/matrices/casefile-implement-pipeline.toml");
     for (id, source) in [
         ("casefile-implement-ticket-batch-look-ahead", LOOKAHEAD),
         ("casefile-implement-pipeline", pipeline),
     ] {
-        let selected = strategy(source);
-        let flow = contracts::build(id, "implementation", &selected).unwrap();
-        let advice = reachable(&flow, Stage::LookAhead);
-        let execution = reachable(&flow, Stage::Writer);
-        assert!(advice.contains(&Stage::AdvisoryReceipt));
-        assert!(execution.contains(&Stage::Root));
-        assert!(advice.iter().all(|stage| !execution.contains(stage)));
-        let without_advice = Flow {
-            rows: Vec::new(),
-            edges: flow
-                .edges
-                .iter()
-                .copied()
-                .filter(|(from, to)| !advice.contains(from) && !advice.contains(to))
-                .collect(),
-        };
-        assert_eq!(execution, reachable(&without_advice, Stage::Writer));
+        let mut flow = contracts::build(id, "implementation", &strategy(source)).unwrap();
+        let advisory = layout::render(&flow, 54);
+        flow.preflight = false;
+        let execution = layout::render(&flow, 54);
+        assert_eq!(&advisory[..execution.len()], &execution);
+        assert!(advisory.len() > execution.len());
     }
 }
 
@@ -237,5 +198,5 @@ fn batching_compatibility_tracks_the_work_group_that_the_chart_will_actually_ren
     record.strategy.as_mut().unwrap().matrix.workers[0].maximum_count = 1;
     let single = cache.lines(&entry, Some(&record), 54);
     assert_ne!(single, unavailable);
-    assert_ne!(single, grouped);
+    assert_eq!(single, grouped);
 }

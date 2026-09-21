@@ -157,7 +157,7 @@ impl RecordDetail {
             |entry| {
                 let name = match (&entry.summary, self.tab) {
                     (Some(RecordSummary::Strategy { phase, .. }), DetailTab::Rendered) => {
-                        phase.as_str()
+                        self.flow.borrow().title().unwrap_or(phase.as_str())
                     }
                     _ => entry.identity.as_deref().unwrap_or(&entry.path),
                 };

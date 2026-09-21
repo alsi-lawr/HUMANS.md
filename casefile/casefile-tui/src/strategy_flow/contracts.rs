@@ -1,12 +1,10 @@
-use super::{Flow, Node, Stage, node};
-use crate::ui::safe_inline;
+use super::{Flow, Stage, Treatment};
 use casefile_core::StrategyProjection;
-use casefile_store::{DerivedStrategy, StrategyBindingState};
+use casefile_store::DerivedStrategy;
 
-// Execution edges belong to the shipped skill references, not to workers-array order.
+// The shipped skill contracts supply sequencing; worker-array order never does.
 pub(super) fn build(id: &str, phase: &str, strategy: &DerivedStrategy) -> Option<Flow> {
-    let suffix = id.strip_prefix("casefile-")?;
-    let (family, name) = suffix.split_once('-')?;
+    let (family, name) = id.strip_prefix("casefile-")?.split_once('-')?;
     if !matches!(
         (family, phase),
         ("investigate", "investigation") | ("review", "review") | ("implement", "implementation")
@@ -43,94 +41,66 @@ pub(super) fn build(id: &str, phase: &str, strategy: &DerivedStrategy) -> Option
     {
         return None;
     }
-    let mut flow = Flow::default();
-    match (family, name) {
-        ("investigate", "solo") => flow.chain(vec![node(
-            Stage::Root,
-            format!(
-                "{}\nRead-only investigation\nEvidence · duplicates · ticket disposition",
-                safe_inline(&matrix.root_binding)
-            ),
-        )]),
-        ("investigate", "atomic" | "inspector-tree") => {
-            flow.row(vec![node(Stage::Assign, "Root · assign disjoint domains")]);
-            let mut previous = Stage::Assign;
-            if name == "inspector-tree" {
-                flow.row(vec![worker(
-                    strategy,
-                    Stage::Inspector,
-                    "inspector",
-                    "Decompose domains",
-                )]);
-                flow.edge(previous, Stage::Inspector);
-                previous = Stage::Inspector;
-            }
-            flow.row(vec![worker(
-                strategy,
-                Stage::Detective,
-                "detective",
-                "Independent questions · return evidence",
-            )]);
-            flow.edge(previous, Stage::Detective);
-            if name == "inspector-tree" {
-                flow.row(vec![node(
-                    Stage::Reconcile,
-                    "Inspectors · verify and recommend",
-                )]);
-                flow.edge(Stage::Detective, Stage::Reconcile);
-                previous = Stage::Reconcile;
-            } else {
-                previous = Stage::Detective;
-            }
-            flow.row(vec![node(
-                Stage::Root,
-                "Root · verify evidence\nDuplicates · final ticket disposition",
-            )]);
-            flow.edge(previous, Stage::Root);
+    let verified = matrix
+        .workers
+        .iter()
+        .any(|worker| worker.role == "verification-reviewer");
+    let (title, mut main, treatment) = match (family, name) {
+        ("investigate", "solo") => ("Solo", vec![Stage::Investigate], Treatment::Linear),
+        ("investigate", "atomic") => (
+            "Atomic investigation",
+            vec![Stage::Detectives, Stage::Assess, Stage::Tickets],
+            Treatment::Linear,
+        ),
+        ("investigate", "inspector-tree") => (
+            "Inspector tree",
+            vec![
+                Stage::Inspectors,
+                Stage::Detectives,
+                Stage::Assess,
+                Stage::Tickets,
+            ],
+            Treatment::Linear,
+        ),
+        ("review", "atomic") => ("Atomic review", vec![Stage::Review], Treatment::Review),
+        ("review", "two-stage") => ("Two-stage review", vec![Stage::Review], Treatment::Review),
+        ("review", "dialogue") => (
+            "Dialogue review",
+            vec![Stage::Chair, Stage::Reconcile, Stage::Done],
+            Treatment::Dialogue,
+        ),
+        ("implement", "ticket-batch") => (
+            "Ticket batch",
+            vec![Stage::Implement, Stage::Review],
+            Treatment::Correction,
+        ),
+        ("implement", "ticket-batch-look-ahead") => (
+            "Look-ahead",
+            vec![Stage::Implement, Stage::Review],
+            Treatment::Correction,
+        ),
+        ("implement", "pipeline") => (
+            "Pipeline",
+            vec![Stage::Implement, Stage::Review],
+            Treatment::Pipeline,
+        ),
+        _ => unreachable!("recognized contract"),
+    };
+    if matches!(
+        treatment,
+        Treatment::Review | Treatment::Correction | Treatment::Pipeline
+    ) {
+        if verified {
+            main.push(Stage::Verify);
         }
-        ("review", "dialogue") => {
-            flow.chain(vec![
-                node(Stage::Assign, "Root · assign ticket batch"),
-                worker(
-                    strategy,
-                    Stage::Chair,
-                    "dialogue-review-chair",
-                    "Inspect independently · spawn challenger",
-                ),
-                worker(
-                    strategy,
-                    Stage::Challenger,
-                    "dialogue-review-challenger",
-                    "Inspect independently",
-                ),
-            ]);
-            flow.row(vec![node(
-                Stage::Reconcile,
-                "Chair + challenger\nReconcile · at most two rounds\nJoint verdict",
-            )]);
-            flow.edge(Stage::Chair, Stage::Reconcile);
-            flow.edge(Stage::Challenger, Stage::Reconcile);
-            flow.row(vec![node(Stage::Root, "Root · reconcile findings")]);
-            flow.edge(Stage::Reconcile, Stage::Root);
-            review_routes(&mut flow);
-        }
-        ("review", "atomic" | "two-stage") => {
-            flow.chain(vec![
-                node(Stage::Assign, "Root · assign ticket groups"),
-                worker(
-                    strategy,
-                    Stage::Primary,
-                    "atomic-ticket-reviewer",
-                    "Independent review · evidence only",
-                ),
-            ]);
-            review(&mut flow, strategy);
-            review_routes(&mut flow);
-        }
-        ("implement", _) => implementation(&mut flow, strategy, name),
-        _ => unreachable!("recognized contracts were checked above"),
+        main.push(Stage::Done);
     }
-    Some(flow)
+    Some(Flow {
+        title,
+        main,
+        treatment,
+        preflight: family == "implement" && name != "ticket-batch",
+    })
 }
 
 fn compatible(
@@ -211,150 +181,4 @@ fn compatible_guarantees(matrix: &StrategyProjection, family: &str) -> bool {
         "review" => true,
         _ => unreachable!("recognized strategy family"),
     }
-}
-
-fn worker(strategy: &DerivedStrategy, stage: Stage, role: &str, task: &str) -> Node {
-    let worker = strategy
-        .matrix
-        .workers
-        .iter()
-        .find(|worker| worker.role == role)
-        .expect("compatible role");
-    let mut label = format!("{}\n{task}", safe_inline(&role.replace('-', " ")));
-    if worker.maximum_count > 1 {
-        label.push_str(&format!(
-            "\n{}..{} workers · capacity batches",
-            worker.minimum_count, worker.maximum_count
-        ));
-    }
-    let runtime = if role == "implementation-writer" {
-        match &strategy.binding {
-            Some(
-                StrategyBindingState::Absent { effective }
-                | StrategyBindingState::Resolved { effective },
-            ) => Some(format!(
-                "{} / {}",
-                effective.model, effective.reasoning_effort
-            )),
-            Some(StrategyBindingState::Pending) => Some("Binding pending".into()),
-            Some(StrategyBindingState::Unresolved) => Some("Binding unresolved".into()),
-            Some(StrategyBindingState::Invalid) => Some("Binding invalid".into()),
-            None => None,
-        }
-    } else {
-        worker
-            .model
-            .as_ref()
-            .zip(worker.reasoning_effort.as_ref())
-            .map(|(model, effort)| format!("{model} / {effort}"))
-    };
-    if let Some(runtime) = runtime {
-        label.push('\n');
-        label.push_str(&safe_inline(&runtime));
-    }
-    node(stage, label)
-}
-
-fn review(flow: &mut Flow, strategy: &DerivedStrategy) {
-    let mut previous = Stage::Primary;
-    if strategy
-        .matrix
-        .workers
-        .iter()
-        .any(|worker| worker.role == "verification-reviewer")
-    {
-        flow.row(vec![worker(
-            strategy,
-            Stage::Verifier,
-            "verification-reviewer",
-            "Check primary findings",
-        )]);
-        flow.edge(previous, Stage::Verifier);
-        previous = Stage::Verifier;
-    }
-    flow.row(vec![node(Stage::Root, "Root · classify findings")]);
-    flow.edge(previous, Stage::Root);
-}
-
-fn review_routes(flow: &mut Flow) {
-    flow.row(vec![
-        node(Stage::Correct, "Corrections\nRoot routes to ticket author"),
-        node(Stage::Accepted, "Accepted\nRoot records disposition"),
-    ]);
-    flow.row(vec![node(
-        Stage::Human,
-        "Contention\nHuman · resolve scope",
-    )]);
-    for to in [Stage::Correct, Stage::Accepted, Stage::Human] {
-        flow.edge(Stage::Root, to);
-    }
-}
-
-fn implementation(flow: &mut Flow, strategy: &DerivedStrategy, name: &str) {
-    let lookahead = name != "ticket-batch";
-    let pipeline = name == "pipeline";
-    flow.row(vec![node(Stage::Assign, "Root · assign accepted batch")]);
-    let mut writers = vec![worker(
-        strategy,
-        Stage::Writer,
-        "implementation-writer",
-        "Batch N · exclusive writes",
-    )];
-    if lookahead {
-        writers.push(worker(
-            strategy,
-            Stage::LookAhead,
-            "look-ahead-investigator",
-            "Optional N+1 preflight\nRead-only",
-        ));
-        flow.edge(Stage::Assign, Stage::LookAhead);
-    }
-    flow.row(writers);
-    flow.edge(Stage::Assign, Stage::Writer);
-    flow.row(vec![worker(
-        strategy,
-        Stage::Primary,
-        "atomic-ticket-reviewer",
-        "Review immutable commit N",
-    )]);
-    flow.edge(Stage::Writer, Stage::Primary);
-    if pipeline {
-        flow.rows.last_mut().expect("review row").push(node(
-            Stage::Independence,
-            "Root · overlap gate\nAfter immutable commit N\nIndependent tickets + disjoint paths",
-        ));
-        flow.edge(Stage::Writer, Stage::Independence);
-        flow.row(vec![node(Stage::NextWriter, "If safe: same writer · N+1\nDuring exact-commit review N\nOtherwise: serial\nNo N+2 before N accepted")]);
-        flow.edge(Stage::Independence, Stage::NextWriter);
-    }
-    if lookahead {
-        flow.rows
-            .last_mut()
-            .expect("review or next-writer row")
-            .push(node(
-                Stage::AdvisoryReceipt,
-                "Root · advisory receipt\nMay discard or repeat",
-            ));
-        flow.edge(Stage::LookAhead, Stage::AdvisoryReceipt);
-    }
-    review(flow, strategy);
-    flow.row(vec![
-        node(
-            Stage::Correct,
-            if pipeline {
-                "Correction\nPreempt N+1 · same writer"
-            } else {
-                "Correction\nSame writer"
-            },
-        ),
-        node(Stage::Accepted, "Accepted\nComplete N · next batch"),
-    ]);
-    flow.row(vec![node(
-        Stage::Human,
-        "Contention / repeated concern\nHuman · resolve scope\nMutation stopped",
-    )]);
-    for to in [Stage::Correct, Stage::Accepted, Stage::Human] {
-        flow.edge(Stage::Root, to);
-    }
-    flow.edge(Stage::Correct, Stage::Writer);
 }

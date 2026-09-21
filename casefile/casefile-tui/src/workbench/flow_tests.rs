@@ -67,7 +67,7 @@ fn chart_navigation_reaches_tail_resizes_and_files_preserves_selected_source() {
 }
 
 #[test]
-fn binding_only_projection_refresh_replaces_cached_chart_without_changing_selection() {
+fn binding_refresh_changes_overview_while_preserving_chart_and_selection() {
     let mut app = app();
     let before = test_support::render(&app, 120, 60);
     let selected = app.browser.selected(&app.scan).unwrap().path.clone();
@@ -94,8 +94,10 @@ fn binding_only_projection_refresh_replaces_cached_chart_without_changing_select
     });
     app.apply_projection(projection, ProjectionChange::Content);
     let after = test_support::render(&app, 120, 60);
-    assert_ne!(before, after);
-    assert!(after.contains("new-effective-model"));
+    assert_eq!(before, after);
+    app.handle(KeyCode::Left);
+    let overview = test_support::render(&app, 120, 60);
+    assert!(overview.contains("new-effective-model"));
     assert_eq!(app.browser.selected(&app.scan).unwrap().path, selected);
 }
 
@@ -119,14 +121,34 @@ fn changing_investigation_replaces_the_chart_even_when_source_revisions_match() 
         .unwrap()
         .push("sample-two".into());
     app.scan.snapshot.entries.push(other);
+    record
+        .strategy
+        .as_mut()
+        .unwrap()
+        .matrix
+        .workers
+        .retain(|worker| worker.role != "verification-reviewer");
     app.derived.records.push(record);
-    let first = test_support::render(&app, 120, 60);
-    assert!(first.contains("selected-effective-model"));
+    test_support::render(&app, 120, 60);
+    app.handle(KeyCode::End);
+    let original_end = app.detail.scroll_position();
+    app.handle(KeyCode::Home);
     app.handle(KeyCode::Tab);
     app.handle(KeyCode::Backspace);
     app.handle(KeyCode::Down);
     app.handle(KeyCode::Char('5'));
-    let second = test_support::render(&app, 120, 60);
-    assert!(second.contains("other-scope-model"));
-    assert!(!second.contains("selected-effective-model"));
+    test_support::render(&app, 120, 60);
+    app.handle(KeyCode::Tab);
+    app.handle(KeyCode::End);
+    assert!(app.detail.scroll_position() < original_end);
+    app.handle(KeyCode::Home);
+    assert!(
+        app.browser
+            .selected(&app.scan)
+            .unwrap()
+            .path
+            .contains("/sample-two/")
+    );
+    app.handle(KeyCode::Left);
+    assert!(test_support::render(&app, 120, 60).contains("other-scope-model"));
 }
