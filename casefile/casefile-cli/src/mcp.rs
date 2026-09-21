@@ -25,6 +25,7 @@ const PREVIEW_LIMIT: usize = 256;
 const REQUIRED_PROVIDER_OPERATIONS: &[&str] = &[
     "snapshot",
     "record_index",
+    "diagnostics",
     "record_detail",
     "boards",
     "strategy_transitions",
@@ -61,8 +62,7 @@ fn compatibility() -> Compatibility<'static> {
 }
 
 pub(super) fn print_compatibility() -> Result<()> {
-    println!("{}", serde_json::to_string_pretty(&compatibility())?);
-    Ok(())
+    crate::json_output::write_json(&mut io::stdout().lock(), &compatibility())
 }
 
 pub(super) fn serve_package(planning_root: &Path) -> Result<()> {
@@ -189,6 +189,7 @@ fn operation_name(operation: &ProviderOperation) -> &'static str {
     match operation {
         ProviderOperation::Snapshot => "snapshot",
         ProviderOperation::RecordIndex => "record_index",
+        ProviderOperation::Diagnostics => "diagnostics",
         ProviderOperation::RecordDetail => "record_detail",
         ProviderOperation::Boards => "boards",
         ProviderOperation::StrategyTransitions => "strategy_transitions",
@@ -391,7 +392,7 @@ impl Session {
                 "protocolVersion": protocol,
                 "capabilities": {"tools": {"listChanged": false}},
                 "serverInfo": {"name": "casefile", "version": env!("CARGO_PKG_VERSION")},
-                "instructions": "Casefile tools operate only on the explicit planning root. Read in order: snapshot catalogue, select one exact project and investigation, request its record_index, then request only necessary exact record_detail identities. Never request unscoped or bulk record bodies and never mix revisions. Every preview states approval_required. Request external approval only when true; apply an exact live-session preview with preview_id."
+                "instructions": "Casefile tools operate only on the explicit planning root. Read in order: snapshot catalogue, select one exact project and investigation, request its record_index, then request only necessary exact record_detail identities. Never request unscoped or bulk record bodies and never mix revisions. Never run casefile scan, raw/full scans or whole-document parsing on live Stores. For validation failures use the exact scope diagnostics query and its safe next query. Legacy check --investigation read the full Store; current check reads only exact scope and project support summaries. JSON responses are limited to 8 MiB before stdout. Every preview states approval_required. Request external approval only when true; apply an exact live-session preview with preview_id."
             }),
         )
     }
@@ -860,11 +861,11 @@ fn query_schema() -> Value {
         "type": "object",
         "properties": {
             "query": {
-                "enum": ["record_index", "record_detail", "boards", "strategy_transitions"],
-                "description": "The read to perform. record_index, boards, and strategy_transitions require scope; record_detail requires identity.",
+                "enum": ["record_index", "record_detail", "boards", "strategy_transitions", "diagnostics"],
+                "description": "The read to perform. record_index, boards, strategy_transitions and diagnostics require scope; record_detail requires identity.",
             },
             "scope": scope(
-                "Required for record_index, boards, and strategy_transitions; not used by record_detail.",
+                "Required for record_index, boards, strategy_transitions and diagnostics; not used by record_detail.",
             ),
             "identity": {
                 "type": "object",
@@ -1163,6 +1164,7 @@ fn capabilities_schema() -> Value {
     let operations = [
         "snapshot",
         "record_index",
+        "diagnostics",
         "record_detail",
         "boards",
         "strategy_transitions",
@@ -1242,6 +1244,14 @@ fn scoped_identity_schema() -> Value {
 
 fn query_output_schema() -> Value {
     one_of_object(vec![
+        object_schema(
+            json!({
+                "result": {"const": "diagnostics"}, "revision": non_empty_string(),
+                "scope": scope_schema(), "diagnostics": {"type": "array", "maxItems": 128, "items": diagnostic_schema()},
+                "total_count": {"type": "integer", "minimum": 0},
+            }),
+            &["result", "revision", "scope", "diagnostics", "total_count"],
+        ),
         object_schema(
             json!({
                 "result": {"const": "record_index"},
@@ -1602,6 +1612,14 @@ fn diagnostic_schema() -> Value {
             "field": {"type": "string"},
             "section": {"type": "string"},
             "message": non_empty_string(),
+            "progress_ticket": object_schema(json!({
+                "ticket_id": non_empty_string(), "operation_id": non_empty_string(),
+                "reason": {"enum": ["missing_in_investigation", "invalid_ticket", "non_accepted_ticket"]},
+                "investigation": non_empty_string(),
+                "classification": nullable(json!({"enum": ["governed", "ungoverned", "invalid", "raw"]})),
+                "status": nullable(non_empty_string()),
+                "next_query": object_schema(json!({"query": {"const": "record_index"}, "scope": scope_schema()}), &["query", "scope"]),
+            }), &["ticket_id", "operation_id", "reason", "investigation", "classification", "status", "next_query"]),
         }),
         &["schema_version", "code", "path", "message"],
     )
@@ -1645,8 +1663,12 @@ fn serialize(value: impl Serialize) -> Result<Value> {
 }
 
 fn tool_result(value: Value, is_error: bool) -> Value {
+    let encoded = match crate::json_output::encode(&value) {
+        Ok(bytes) => String::from_utf8(bytes).expect("JSON is UTF-8"),
+        Err(error) => return tool_error(&error.to_string()),
+    };
     json!({
-        "content": [{"type": "text", "text": serde_json::to_string_pretty(&value).unwrap_or_else(|_| "provider result encoding failed".into())}],
+        "content": [{"type": "text", "text": encoded}],
         "structuredContent": value,
         "isError": is_error,
     })
@@ -1672,11 +1694,7 @@ fn error_response(id: Value, code: i32, message: &str) -> Value {
 }
 
 fn write_message(output: &mut impl Write, value: Value) -> Result<()> {
-    serde_json::to_writer(&mut *output, &value).context("write MCP stdio response")?;
-    output
-        .write_all(b"\n")
-        .context("terminate MCP stdio response")?;
-    output.flush().context("flush MCP stdio response")
+    crate::json_output::write_message(output, &value)
 }
 
 #[cfg(test)]

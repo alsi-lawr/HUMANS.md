@@ -1137,3 +1137,72 @@ fn every_provider_apply_family_accepts_unrelated_store_changes() {
             .exists()
     );
 }
+
+#[test]
+fn scoped_diagnostics_report_exact_progress_target_and_bounded_follow_up() {
+    let root = fixture();
+    let scope = InvestigationScope {
+        project: "demo".into(),
+        investigation: "sample".into(),
+    };
+    let base = "projects/demo/investigations/sample";
+    fs::create_dir_all(root.path().join(format!("{base}/progress"))).unwrap();
+    let entries = (0..140)
+        .map(|index| casefile_core::ProgressEntry::Note {
+            id: format!("missing-{index}"),
+            ticket_id: "HMD-404".into(),
+            recorded_at: "2026-07-26T10:00:00Z".into(),
+            recorded_by: "root".into(),
+            category: casefile_core::ProgressNoteCategory::Quirk,
+            message: "bounded".into(),
+        })
+        .collect();
+    fs::write(
+        root.path().join(format!("{base}/progress/log.toml")),
+        casefile_core::render_progress_log(&casefile_core::ProgressLog { entries }),
+    )
+    .unwrap();
+    let provider = Provider::without_cache(Store::open(root.path()).unwrap());
+    let before = provider.snapshot().unwrap().revision;
+    let result = provider
+        .query(ProviderQuery::Diagnostics {
+            scope: scope.clone(),
+        })
+        .unwrap();
+    let ProviderQueryResult::Diagnostics {
+        revision,
+        scope: found,
+        diagnostics,
+        total_count,
+    } = &result
+    else {
+        panic!("diagnostics")
+    };
+    assert_eq!(&before, revision);
+    assert_eq!(&scope, found);
+    assert_eq!(*total_count, 140);
+    assert_eq!(diagnostics.len(), 128);
+    for diagnostic in diagnostics {
+        let detail = diagnostic.progress_ticket.as_ref().unwrap();
+        assert_eq!(detail.ticket_id, "HMD-404");
+        assert!(detail.operation_id.starts_with("missing-"));
+        assert!(detail.classification.is_none());
+        let query: ProviderQuery =
+            serde_json::from_value(serde_json::to_value(&detail.next_query).unwrap()).unwrap();
+        assert!(matches!(
+            provider.query(query).unwrap(),
+            ProviderQueryResult::RecordIndex { .. }
+        ));
+    }
+    assert!(serde_json::to_vec(&result).unwrap().len() < 128 * 1024);
+    assert!(
+        provider
+            .query(ProviderQuery::Diagnostics {
+                scope: InvestigationScope {
+                    project: "demo".into(),
+                    investigation: "missing".into()
+                }
+            })
+            .is_err()
+    );
+}

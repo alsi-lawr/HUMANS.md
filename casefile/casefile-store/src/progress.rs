@@ -569,9 +569,30 @@ fn capture(
     applying: bool,
 ) -> Result<MutationContext, StoreError> {
     let (path, _) = progress_path(root, &request.investigation)?;
-    let log = request.replacement.clone().unwrap_or_else(|| ProgressLog {
-        entries: request.entries.clone(),
-    });
+    let existing = super::mutation::read_entry(root, &path)?;
+    let mut log = if request.replacement.is_some() || request.replacement_source.is_some() {
+        ProgressLog {
+            entries: Vec::new(),
+        }
+    } else {
+        existing
+            .as_ref()
+            .map(|entry| {
+                let text = std::str::from_utf8(&entry.original_bytes)
+                    .map_err(|_| StoreError::Invalid("progress log must be UTF-8".into()))?;
+                parse_progress_log(&path, text).map_err(diagnostics_error)
+            })
+            .transpose()?
+            .unwrap_or(ProgressLog {
+                entries: Vec::new(),
+            })
+    };
+    for entry in &request.entries {
+        if !log.entries.iter().any(|current| current.id() == entry.id()) {
+            log.entries.push(entry.clone());
+        }
+    }
+    let log = request.replacement.clone().unwrap_or(log);
     let bytes = request
         .replacement_source
         .clone()
@@ -582,10 +603,16 @@ fn capture(
     } else {
         Vec::new()
     };
-    MutationContext::capture(
+    let context = MutationContext::capture(
         root,
-        &Overlay::from([(path, Some(bytes))]),
+        &Overlay::from([(path.clone(), Some(bytes))]),
         &extra,
         applying,
-    )
+    )?;
+    if context.revisions().get(&path).and_then(Option::as_ref)
+        != existing.as_ref().map(|entry| &entry.content_revision)
+    {
+        return Err(StoreError::StaleTargetRevision);
+    }
+    Ok(context)
 }

@@ -7,7 +7,7 @@ use std::{
 };
 use tempfile::TempDir;
 
-const OPERATIONS: &str = "snapshot,record_index,record_detail,boards,strategy_transitions,preview_record_draft,apply_record_draft,bootstrap_progress,preview_progress,apply_progress,preview_default_delivery_board,apply_default_delivery_board,preview_strategy_transition,apply_strategy_transition,preview_writer_binding,apply_writer_binding";
+const OPERATIONS: &str = "snapshot,record_index,diagnostics,record_detail,boards,strategy_transitions,preview_record_draft,apply_record_draft,bootstrap_progress,preview_progress,apply_progress,preview_default_delivery_board,apply_default_delivery_board,preview_strategy_transition,apply_strategy_transition,preview_writer_binding,apply_writer_binding";
 
 fn copy_tree(from: &Path, to: &Path) {
     for entry in fs::read_dir(from).expect("fixture entries") {
@@ -87,7 +87,7 @@ fn compatibility_contract_is_machine_readable_and_complete() {
             .as_array()
             .expect("operations")
             .len(),
-        16
+        17
     );
 }
 
@@ -105,6 +105,7 @@ fn fixed_root_session_negotiates_and_exposes_canonical_snapshot_and_query() {
             json!({"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"casefile_query","arguments":{"query":"record_index","scope":{"project":"demo","investigation":"sample"}}}}),
             json!({"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"casefile_query","arguments":{"query":"record_detail","identity":{"scope":{"project":"demo///","investigation":"sample\\\\"},"identity":"HMD-011"}}}}),
             json!({"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"casefile_query","arguments":{"query":"record_index","scope":{"project":"C:demo","investigation":"sample"}}}}),
+            json!({"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"casefile_query","arguments":{"query":"diagnostics","scope":{"project":"demo","investigation":"sample"}}}}),
         ],
     );
     assert!(
@@ -123,7 +124,7 @@ fn fixed_root_session_negotiates_and_exposes_canonical_snapshot_and_query() {
         .filter(|line| !line.is_empty())
         .map(|line| serde_json::from_slice::<Value>(line).expect("response"))
         .collect::<Vec<_>>();
-    assert_eq!(responses.len(), 6);
+    assert_eq!(responses.len(), 7);
     assert_eq!(responses[0]["result"]["protocolVersion"], "2025-11-25");
     let tools = responses[1]["result"]["tools"].as_array().expect("tools");
     assert_eq!(tools.len(), 12);
@@ -164,7 +165,8 @@ fn fixed_root_session_negotiates_and_exposes_canonical_snapshot_and_query() {
             "record_index",
             "record_detail",
             "boards",
-            "strategy_transitions"
+            "strategy_transitions",
+            "diagnostics"
         ])
     );
     assert_eq!(schema("casefile_query")["required"], json!(["query"]));
@@ -225,6 +227,15 @@ fn fixed_root_session_negotiates_and_exposes_canonical_snapshot_and_query() {
         response(5)["result"]["structuredContent"]["record"]["identity"]["identity"],
         "HMD-011"
     );
+    let diagnostics = &response(7)["result"]["structuredContent"];
+    assert_eq!(diagnostics["result"], "diagnostics");
+    assert_eq!(diagnostics["revision"], snapshot["revision"]);
+    assert_eq!(
+        diagnostics["scope"],
+        json!({"project":"demo", "investigation":"sample"})
+    );
+    assert_eq!(diagnostics["total_count"], 0);
+    assert_eq!(diagnostics["diagnostics"], json!([]));
     assert_eq!(response(6)["result"]["isError"], true);
     assert!(response(6)["result"].get("structuredContent").is_none());
     assert_eq!(

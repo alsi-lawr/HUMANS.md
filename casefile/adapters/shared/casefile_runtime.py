@@ -21,7 +21,7 @@ TARGETS = {
 }
 MATRIX = set(TARGETS.values())
 REQUIRED_OPERATIONS = {
-    "snapshot", "record_index", "record_detail", "boards", "strategy_transitions",
+    "snapshot", "record_index", "record_detail", "boards", "strategy_transitions", "diagnostics",
     "preview_record_draft", "apply_record_draft",
     "bootstrap_progress", "preview_progress", "apply_progress",
     "preview_default_delivery_board", "apply_default_delivery_board",

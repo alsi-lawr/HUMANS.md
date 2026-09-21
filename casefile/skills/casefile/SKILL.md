@@ -18,8 +18,18 @@ Never infer a source path or replace the root.
 Establish read context hierarchically through Provider protocol v3: call `casefile_snapshot`, use
 its catalogue to resolve the exact project and complete investigation scope, then request that
 scope's `record_index`. Request `record_detail` only for the exact identities necessary for the
-current step. Never request unscoped or bulk records, infer an investigation path by concatenation,
-or combine snapshot, index, detail, board, or transition results carrying different revisions.
+current step. For validation failures use the exact scope's `diagnostics` query, then the returned
+safe follow-up query. Diagnostics return at most 128 entries (compare `total_count`), messages of at
+most 1024 bytes, and a 256 KiB aggregate field budget. Never run `casefile scan`, raw/full Store
+scans, or whole-document JSON parsing against live Stores. Before this fix, legacy
+`check --investigation` filtered a full Store read and was not resource-scoped; do not assume older
+installed binaries have the fixed behavior. Current `check --investigation` validates the exact
+scope plus project support summaries, and root check discards record bodies incrementally. CLI JSON
+responses have a hard 8 MiB limit including the final newline; overflow fails before any JSON is
+written. Use scoped reads instead of raising the limit or redirecting bulk output.
+
+Never request unscoped or bulk records, infer an investigation path by concatenation, or combine
+snapshot, index, detail, board, or transition results carrying different revisions.
 
 Route the current phase to `casefile-investigate`, `casefile-review`, `casefile-implement`, or
 `casefile-close`. Every governed phase requires an explicit compatible strategy. Present compatible

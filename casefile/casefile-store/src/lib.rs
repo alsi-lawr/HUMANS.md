@@ -2,6 +2,7 @@
 #![allow(clippy::collapsible_if)] // Nested validation keeps individual rules readable.
 
 mod activation;
+mod checking;
 mod derived;
 mod governance;
 mod index;
@@ -24,6 +25,7 @@ mod validation;
 mod writing;
 
 pub use activation::ActivationState;
+pub use checking::{CheckResult, ScanSummary};
 pub use derived::{
     DerivedBoard, DerivedBoardColumn, DerivedCard, DerivedProgressNote, DerivedProgressTransition,
     DerivedRecord, DerivedRelationship, DerivedSnapshot, DerivedStrategy, DerivedStrategyBinding,

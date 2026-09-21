@@ -26,6 +26,7 @@ const PREVIEW_LIMIT: usize = 256;
 pub enum ProviderOperation {
     Snapshot,
     RecordIndex,
+    Diagnostics,
     RecordDetail,
     Boards,
     StrategyTransitions,
@@ -191,6 +192,9 @@ pub struct ProviderRecordDetail {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "query", rename_all = "snake_case")]
 pub enum ProviderQuery {
+    Diagnostics {
+        scope: InvestigationScope,
+    },
     RecordIndex {
         scope: InvestigationScope,
     },
@@ -208,6 +212,12 @@ pub enum ProviderQuery {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "result", rename_all = "snake_case")]
 pub enum ProviderQueryResult {
+    Diagnostics {
+        revision: Revision,
+        scope: InvestigationScope,
+        diagnostics: Vec<Diagnostic>,
+        total_count: usize,
+    },
     RecordIndex {
         revision: Revision,
         scope: InvestigationScope,
@@ -532,6 +542,36 @@ impl<C: ProviderCache> Provider<C> {
         let query = canonical_query(query)?;
         Ok(match query {
             ProviderQuery::RecordIndex { scope } => self.record_index(scope)?,
+            ProviderQuery::Diagnostics { scope } => {
+                let path = format!(
+                    "projects/{}/investigations/{}",
+                    scope.project, scope.investigation
+                );
+                let result = self.store.check(Some(&path))?;
+                let total_count = result.diagnostics.len();
+                let diagnostics = result
+                    .diagnostics
+                    .into_iter()
+                    .take(128)
+                    .map(|mut diagnostic| {
+                        if diagnostic.message.len() > 1024 {
+                            let end = diagnostic.message.floor_char_boundary(1024);
+                            diagnostic.message.truncate(end);
+                        }
+                        diagnostic
+                    })
+                    .collect::<Vec<_>>();
+                let size = diagnostics.iter().map(diagnostic_text_bytes).sum::<usize>();
+                if size > 256 * 1024 {
+                    return Err(StoreError::Invalid("scoped diagnostics exceed the 256 KiB field budget; query exact record_detail identities".into()).into());
+                }
+                ProviderQueryResult::Diagnostics {
+                    revision: result.revision,
+                    scope,
+                    diagnostics,
+                    total_count,
+                }
+            }
             ProviderQuery::RecordDetail { identity } => self.record_detail(identity)?,
             ProviderQuery::Boards { scope } => self.boards(scope)?,
             ProviderQuery::StrategyTransitions { scope } => self.strategy_transitions(scope)?,
@@ -1121,6 +1161,9 @@ impl<C: ProviderCache> Provider<C> {
 
 fn canonical_query(query: ProviderQuery) -> Result<ProviderQuery, ProviderError> {
     Ok(match query {
+        ProviderQuery::Diagnostics { scope } => ProviderQuery::Diagnostics {
+            scope: canonical_scope(scope)?,
+        },
         ProviderQuery::RecordIndex { scope } => ProviderQuery::RecordIndex {
             scope: canonical_scope(scope)?,
         },
@@ -1175,6 +1218,7 @@ fn capabilities(activation: ActivationState) -> ProviderCapabilities {
     let reads = vec![
         ProviderOperation::Snapshot,
         ProviderOperation::RecordIndex,
+        ProviderOperation::Diagnostics,
         ProviderOperation::RecordDetail,
         ProviderOperation::Boards,
         ProviderOperation::StrategyTransitions,
@@ -1290,6 +1334,24 @@ fn default_board(id: String) -> BoardDraft {
         })
         .collect(),
     }
+}
+
+fn diagnostic_text_bytes(diagnostic: &Diagnostic) -> usize {
+    diagnostic.path.len()
+        + diagnostic.code.len()
+        + diagnostic.message.len()
+        + diagnostic.field.as_ref().map_or(0, String::len)
+        + diagnostic.section.as_ref().map_or(0, String::len)
+        + diagnostic.progress_ticket.as_ref().map_or(0, |ticket| {
+            ticket.ticket_id.len()
+                + ticket.reason.len()
+                + ticket.operation_id.len()
+                + ticket.investigation.len()
+                + ticket.status.as_ref().map_or(0, String::len)
+                + ticket.next_query.query.len()
+                + ticket.next_query.scope.project.len()
+                + ticket.next_query.scope.investigation.len()
+        })
 }
 
 #[cfg(test)]

@@ -1,10 +1,8 @@
 use crate::{Command, editor::EditorConfig, mcp, tui};
 use anyhow::{Context, Result};
-use casefile_core::{
-    ChangeRequest, Classification, Diagnostic, Kind, RecordSummary, Revision, parse_strategy,
-};
+use casefile_core::{ChangeRequest, Classification, Kind, RecordSummary, parse_strategy};
 use casefile_store::{
-    ActivationState, ProgressChangeRequest, ProgressOperation, ProgressPreview, Provider, Store,
+    ProgressChangeRequest, ProgressOperation, ProgressPreview, Provider, Store,
     StrategyBindingState, StrategyTransitionRequest, WriterBindingRequest,
     normalize_planning_relative,
 };
@@ -15,14 +13,6 @@ use std::{
     path::{Component, Path, PathBuf},
     process::ExitCode,
 };
-
-#[derive(Serialize)]
-struct CheckResult {
-    activation: ActivationState,
-    valid: Option<bool>,
-    revision: Revision,
-    diagnostics: Vec<Diagnostic>,
-}
 
 #[derive(Serialize)]
 struct WriterBindingProjection {
@@ -92,7 +82,21 @@ pub(super) fn execute(root: PathBuf, command: Command) -> Result<ExitCode> {
     let store = Store::open(&root)?;
     match command {
         Command::Scan => {
-            print_json(&store.scan()?)?;
+            print_json(&store.scan_summary()?)?;
+            Ok(ExitCode::SUCCESS)
+        }
+        Command::Diagnostics {
+            project,
+            investigation,
+        } => {
+            print_json(&Provider::without_cache(store).query(
+                casefile_store::ProviderQuery::Diagnostics {
+                    scope: casefile_store::InvestigationScope {
+                        project,
+                        investigation,
+                    },
+                },
+            )?)?;
             Ok(ExitCode::SUCCESS)
         }
         Command::Check {
@@ -102,32 +106,9 @@ pub(super) fn execute(root: PathBuf, command: Command) -> Result<ExitCode> {
             let investigation = investigation
                 .map(|value| canonical_investigation(&value))
                 .transpose()?;
-            if let Some(investigation) = &investigation {
-                store.validate_investigation(investigation)?;
-            }
-            let scan = store.scan()?;
-            let diagnostics = investigation.as_ref().map_or_else(
-                || scan.diagnostics.clone(),
-                |investigation| {
-                    let prefix = format!("{investigation}/");
-                    scan.diagnostics
-                        .iter()
-                        .filter(|diagnostic| diagnostic.path.starts_with(&prefix))
-                        .cloned()
-                        .collect()
-                },
-            );
-            let valid = match scan.activation {
-                ActivationState::Unactivated => None,
-                ActivationState::Active => Some(diagnostics.is_empty()),
-                ActivationState::Invalid => Some(false),
-            };
-            print_json(&CheckResult {
-                activation: scan.activation,
-                valid,
-                revision: scan.snapshot.revision,
-                diagnostics,
-            })?;
+            let result = store.check(investigation.as_deref())?;
+            let valid = result.valid;
+            print_json(&result)?;
             Ok(
                 if valid == Some(false) || (require_activation && valid.is_none()) {
                     ExitCode::FAILURE
@@ -438,6 +419,5 @@ fn read_json<T: serde::de::DeserializeOwned>(path: &PathBuf) -> Result<T> {
 }
 
 fn print_json(value: &impl serde::Serialize) -> Result<()> {
-    println!("{}", serde_json::to_string_pretty(value)?);
-    Ok(())
+    crate::json_output::write_json(&mut io::stdout().lock(), value)
 }

@@ -13,7 +13,6 @@ use casefile_core::{
     parse_project_map, parse_project_map_values, parse_request, parse_strategy,
     parse_strategy_binding, parse_strategy_projection, parse_strategy_transition, stable,
 };
-use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeMap,
     ffi::OsStr,
@@ -22,7 +21,7 @@ use std::{
     path::{Component, Path, PathBuf},
 };
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ScanResult {
     pub activation: ActivationState,
     pub investigation_roots: BTreeMap<String, Vec<String>>,
@@ -287,6 +286,8 @@ fn collect_inventory(
 }
 
 pub(super) fn read_inventory_entry(entry: &InventoryEntry) -> Result<Vec<u8>, StoreError> {
+    #[cfg(test)]
+    crate::checking::observe_open(&entry.path);
     let mut file = File::open(&entry.path)?;
     let opened_metadata = file.metadata()?;
     if !opened_metadata.is_file() {
