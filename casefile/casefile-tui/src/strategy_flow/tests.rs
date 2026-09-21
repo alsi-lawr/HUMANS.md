@@ -105,7 +105,7 @@ fn selected_cache_refreshes_on_binding_only_change_scope_change_and_resize() {
             },
         });
     let replaced = cache.lines(&entry, Some(&record), 54);
-    assert_eq!(initial, replaced);
+    assert_ne!(initial, replaced);
     assert_eq!(replaced, cache.lines(&entry, Some(&record), 54));
     assert_ne!(replaced, cache.lines(&entry, Some(&record), 30));
     let mut other = entry.clone();
@@ -199,4 +199,33 @@ fn batching_compatibility_tracks_the_work_group_that_the_chart_will_actually_ren
     let single = cache.lines(&entry, Some(&record), 54);
     assert_ne!(single, unavailable);
     assert_eq!(single, grouped);
+}
+
+#[test]
+fn a_lost_writer_binding_clears_the_cached_identifier_without_rebinding_other_roles() {
+    let entry = crate::test_support::entry(
+        "implementation.toml",
+        Classification::Governed,
+        Some(Kind::Strategy),
+        Some(parse_strategy("implementation.toml", BATCH).unwrap()),
+        BATCH.as_bytes(),
+    );
+    let mut record = crate::test_support::strategy_record(&entry, strategy(BATCH));
+    let mut cache = Cache::default();
+    let known = cache.lines(&entry, Some(&record), 54);
+    let before = selected_flow(&entry, record.strategy.as_ref()).unwrap();
+    assert_eq!(
+        before.model(Stage::Implement),
+        Some(&Runtime::Model("effective-model".into()))
+    );
+    let reviewer = before.model(Stage::Review).cloned();
+    record.strategy.as_mut().unwrap().binding =
+        Some(casefile_store::StrategyBindingState::Unresolved);
+    let unavailable = cache.lines(&entry, Some(&record), 54);
+    assert_ne!(known, unavailable);
+    let after = selected_flow(&entry, record.strategy.as_ref()).unwrap();
+    assert_eq!(after.model(Stage::Implement), Some(&Runtime::Unavailable));
+    assert_eq!(after.model(Stage::Review), reviewer.as_ref());
+    record.strategy = Some(strategy(BATCH));
+    assert_eq!(known, cache.lines(&entry, Some(&record), 54));
 }

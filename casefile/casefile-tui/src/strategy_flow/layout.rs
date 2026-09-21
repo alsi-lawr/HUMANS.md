@@ -1,186 +1,207 @@
-use super::{Flow, Stage, Treatment};
-use crate::ui::MUTED;
-use ratatui::{
-    style::Style,
-    text::{Line, Span},
-};
-
-const CANVAS_WIDTH: usize = 54;
+use super::{Flow, Stage, Treatment, canvas::Chart};
+use ratatui::{layout::Rect, text::Line};
 
 pub(super) fn render(flow: &Flow, width: u16) -> Vec<Line<'static>> {
-    let mut canvas = match flow.treatment {
+    prepare(flow).lines(width)
+}
+
+fn prepare(flow: &Flow) -> Chart {
+    let mut chart = match flow.treatment {
         Treatment::Pipeline => pipeline(flow),
         Treatment::Dialogue => dialogue(flow),
         Treatment::Linear | Treatment::Review | Treatment::Correction => sequence(flow),
     };
     if flow.preflight {
-        canvas.blank();
-        canvas.push(
-            10,
+        let x = if flow.treatment == Treatment::Pipeline {
+            4
+        } else {
+            10
+        };
+        let y = chart.height + 1;
+        chart.text(
+            x,
+            y,
             if flow.treatment == Treatment::Pipeline {
                 "During Implement N · optional"
             } else {
                 "During Implement · optional"
             },
-            ratatui::style::Color::White,
         );
-        canvas.push(10, "Preflight N+1", ratatui::style::Color::White);
+        chart.node(
+            x,
+            y + 1,
+            Stage::Preflight.label(),
+            flow.model(Stage::Preflight),
+        );
     }
-    canvas.lines(width)
+    chart
 }
 
-fn sequence(flow: &Flow) -> Canvas {
-    let mut canvas = Canvas::new(flow.main.len() * 2 - 1);
+fn sequence(flow: &Flow) -> Chart {
+    let mut chart = Chart::new();
+    let x = if flow.treatment == Treatment::Review {
+        4
+    } else {
+        10
+    };
+    let mut path = Vec::new();
+    let mut y = 0;
     for (index, stage) in flow.main.iter().enumerate() {
-        canvas.label(14, index * 2, stage.label());
-        if index > 0 {
-            canvas.put(14, index * 2 - 1, "▼");
+        let area = chart.node(x, y, stage.label(), flow.model(*stage));
+        if index + 1 < flow.main.len() {
+            chart.down(area);
         }
+        y = area.bottom() + 1;
+        path.push(area);
     }
     match flow.treatment {
         Treatment::Correction => {
-            let from = (flow.main.len() - 2) * 2;
-            canvas.put(20, 0, "◀──────────┐");
-            for y in 1..from {
-                canvas.put(31, y, "│");
-            }
-            canvas.put(18, from, "─────────────┘");
-            canvas.colored(33, from / 2, "Fix", ratatui::style::Color::White);
+            let source = path[path.len() - 2].y + 1;
+            chart.put(32, 1, "◀─────────────┐");
+            chart.vertical(46, 2, source);
+            chart.put(32, source, "──────────────┘");
+            chart.text(48, source.div_ceil(2), "Fix");
         }
-        Treatment::Review => revision(&mut canvas, (flow.main.len() - 2) * 2, 14),
+        Treatment::Review => revision(&mut chart, path[path.len() - 2]),
         Treatment::Linear => {}
         Treatment::Pipeline | Treatment::Dialogue => {
-            unreachable!("branched treatments have their own compact layout")
+            unreachable!("branched treatments have dedicated layouts")
         }
     }
-    canvas
+    chart
 }
 
-fn pipeline(flow: &Flow) -> Canvas {
-    let mut canvas = Canvas::new((flow.main.len() - 1) * 2 + 3);
-    canvas.label(27, 0, "Implement N");
-    canvas.put(14, 1, "┌────────────┴────────────┐");
-    canvas.put(14, 2, "│");
-    canvas.colored(33, 2, "if independent", ratatui::style::Color::White);
-    canvas.put(14, 3, "▼");
-    canvas.put(40, 3, "▼");
-    canvas.label(40, 4, "Implement N+1");
+fn pipeline(flow: &Flow) -> Chart {
+    let mut chart = Chart::new();
+    let writer = chart.node(17, 0, "Implement N", flow.model(Stage::Implement));
+    let fork = writer.bottom();
+    chart.put(28, fork - 1, "┬");
+    chart.put(15, fork, "┌────────────┴────────────┐");
+    chart.put(15, fork + 1, "│");
+    chart.text(34, fork + 1, "if independent");
+    chart.put(15, fork + 2, "▼");
+    chart.put(41, fork + 2, "▼");
+    chart.node(30, fork + 3, "Implement N+1", flow.model(Stage::Implement));
+    let mut current = fork + 3;
+    let mut review = 0;
     for (index, stage) in flow.main.iter().skip(1).enumerate() {
-        let y = index * 2 + 4;
-        canvas.label(14, y, &format!("{} N", stage.label()));
-        if index > 0 {
-            canvas.put(14, y - 1, "▼");
-        }
-    }
-    let correction = (flow.main.len() - 3) * 2 + 4;
-    canvas.put(2, 0, "┌─────────────────▶");
-    for y in 1..correction {
-        canvas.put(2, y, "│");
-    }
-    canvas.colored(4, 2, "Fix", ratatui::style::Color::White);
-    canvas.put(2, correction, "└──────");
-    canvas
-}
-
-fn dialogue(flow: &Flow) -> Canvas {
-    let mut canvas = Canvas::new(9);
-    canvas.label(14, 0, flow.main[0].label());
-    canvas.put(18, 0, "──────────────┐");
-    canvas.put(14, 1, "│");
-    canvas.colored(34, 1, "spawn", ratatui::style::Color::White);
-    canvas.put(32, 1, "▼");
-    canvas.label(32, 2, "Challenger");
-    canvas.put(14, 2, "│");
-    canvas.put(14, 3, "└────────┬────────┘");
-    canvas.put(23, 4, "▼");
-    canvas.label(23, 5, Stage::Reconcile.label());
-    canvas.put(23, 6, "▼");
-    canvas.label(23, 7, Stage::Done.label());
-    revision(&mut canvas, 5, 23);
-    canvas.rows.pop();
-    canvas
-}
-
-fn revision(canvas: &mut Canvas, y: usize, center: usize) {
-    let start = center + 6;
-    canvas.put(start, y, "── Fix ──▶");
-    canvas.label(start + 14, y, "Revise");
-}
-
-struct Canvas {
-    rows: Vec<Vec<(char, ratatui::style::Color)>>,
-}
-
-impl Canvas {
-    fn new(height: usize) -> Self {
-        Self {
-            rows: vec![vec![(' ', MUTED); CANVAS_WIDTH]; height],
-        }
-    }
-    fn blank(&mut self) {
-        self.rows.push(vec![(' ', MUTED); CANVAS_WIDTH]);
-    }
-    fn push(&mut self, x: usize, text: &str, color: ratatui::style::Color) {
-        self.blank();
-        self.colored(x, self.rows.len() - 1, text, color);
-    }
-    fn put(&mut self, x: usize, y: usize, text: &str) {
-        self.colored(x, y, text, MUTED);
-    }
-    fn label(&mut self, center: usize, y: usize, text: &str) {
-        self.colored(
-            center - text.len() / 2,
-            y,
-            text,
-            ratatui::style::Color::White,
+        let area = chart.node(
+            4,
+            current,
+            &format!("{} N", stage.label()),
+            flow.model(*stage),
         );
-    }
-    fn colored(&mut self, x: usize, y: usize, text: &str, color: ratatui::style::Color) {
-        for (offset, character) in text.chars().enumerate() {
-            self.rows[y][x + offset] = (character, color);
+        if index + 2 < flow.main.len() {
+            chart.down(area);
+            review = area.y + 1;
         }
+        current = area.bottom() + 1;
     }
-    fn lines(self, width: u16) -> Vec<Line<'static>> {
-        let first = self
-            .rows
-            .iter()
-            .flat_map(|row| row.iter().position(|(c, _)| *c != ' '))
-            .min()
-            .unwrap_or(0);
-        let last = self
-            .rows
-            .iter()
-            .flat_map(|row| row.iter().rposition(|(c, _)| *c != ' '))
-            .max()
-            .unwrap_or(first);
-        let width = usize::from(width);
-        if width <= last - first {
-            return vec![
-                Line::from("Too narrow".chars().take(width).collect::<String>())
-                    .style(Style::default().fg(MUTED)),
-            ];
-        }
-        let (start, end, padding) = if width >= CANVAS_WIDTH {
-            (0, CANVAS_WIDTH, (width - CANVAS_WIDTH) / 2)
-        } else {
-            (first, last + 1, (width - (last - first + 1)) / 2)
+    chart.put(1, 1, "┌──────────────▶");
+    chart.vertical(1, 2, review);
+    chart.text(3, fork + 1, "Fix");
+    chart.put(1, review, "└──");
+    chart
+}
+
+fn dialogue(flow: &Flow) -> Chart {
+    let mut chart = Chart::new();
+    let chair = chart.node(4, 0, "Chair", flow.model(Stage::Chair));
+    let challenger = chart.node(
+        30,
+        chair.bottom() + 2,
+        "Challenger",
+        flow.model(Stage::Challenger),
+    );
+    chart.put(26, 1, "───────────────┐");
+    chart.vertical(41, 2, challenger.y - 1);
+    chart.text(43, 3, "spawn");
+    chart.put(41, challenger.y - 1, "▼");
+    chart.put(15, chair.bottom() - 1, "┬");
+    chart.vertical(15, chair.bottom(), challenger.bottom());
+    chart.put(41, challenger.bottom() - 1, "┬");
+    chart.put(15, challenger.bottom(), "├─────────────────────────┘");
+    chart.put(15, challenger.bottom() + 1, "▼");
+    let reconcile = chart.node(4, challenger.bottom() + 2, "Reconcile", None);
+    chart.down(reconcile);
+    chart.node(4, reconcile.bottom() + 1, "Done", None);
+    revision(&mut chart, reconcile);
+    chart
+}
+
+fn revision(chart: &mut Chart, source: Rect) {
+    chart.text(26, source.y, "Fix");
+    chart.put(26, source.y + 1, "───▶");
+    chart.node(30, source.y, "Revise", None);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::strategy_flow::{Runtime, contracts};
+    use casefile_core::parse_strategy_projection;
+    use casefile_store::{
+        DerivedStrategy, EffectiveWriterBinding, StrategyBindingState, WriterBindingSource,
+    };
+    use ratatui::text::Span;
+
+    #[test]
+    fn wide_model_identifiers_wrap_inside_closed_nonoverlapping_boxes() {
+        let source =
+            include_str!("../../../adapters/codex/matrices/casefile-implement-pipeline.toml");
+        let identifier = "模型-e\u{301}-runtime-".repeat(12);
+        let mut strategy = DerivedStrategy {
+            matrix: parse_strategy_projection("implementation.toml", source)
+                .unwrap()
+                .unwrap(),
+            binding: Some(StrategyBindingState::Resolved {
+                effective: EffectiveWriterBinding {
+                    model: identifier.clone(),
+                    reasoning_effort: "high".into(),
+                    source: WriterBindingSource::Binding,
+                },
+            }),
         };
-        self.rows
-            .into_iter()
-            .map(|row| {
-                let mut spans = vec![Span::raw(" ".repeat(padding))];
-                for (character, color) in &row[start..end] {
-                    let style = Style::default().fg(*color);
-                    if let Some(previous) = spans.last_mut()
-                        && previous.style == style
-                    {
-                        previous.content.to_mut().push(*character);
-                    } else {
-                        spans.push(Span::styled(character.to_string(), style));
+        for worker in &mut strategy.matrix.workers {
+            worker.model = Some(identifier.clone());
+        }
+        let flow =
+            contracts::build("casefile-implement-pipeline", "implementation", &strategy).unwrap();
+        let chart = prepare(&flow);
+        let buffer = chart.buffer();
+        for (index, node) in chart.nodes.iter().enumerate() {
+            let area = node.area;
+            for other in chart.nodes.iter().skip(index + 1) {
+                assert!(area.intersection(other.area).is_empty());
+            }
+            for y in area.y + 1..area.bottom() - 1 {
+                assert_eq!(buffer[(area.x, y)].symbol(), "│");
+                assert_eq!(buffer[(area.right() - 1, y)].symbol(), "│");
+            }
+            if area.height > 3 {
+                let mut actual = String::new();
+                for y in area.y + 2..area.bottom() - 1 {
+                    let mut x = area.x + 1;
+                    while x < area.right() - 1 {
+                        let value = buffer[(x, y)].symbol();
+                        actual.extend(value.chars().filter(|character| !character.is_whitespace()));
+                        x += Span::raw(value).width().max(1) as u16;
                     }
                 }
-                Line::from(spans)
-            })
-            .collect()
+                assert_eq!(actual, identifier);
+            }
+        }
+        for width in [54, 78] {
+            assert!(
+                chart
+                    .lines(width)
+                    .iter()
+                    .all(|line| line.width() <= usize::from(width))
+            );
+        }
+        assert_eq!(
+            flow.model(Stage::Implement),
+            Some(&Runtime::Model(identifier))
+        );
     }
 }

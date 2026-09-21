@@ -1,12 +1,11 @@
+mod canvas;
 mod contracts;
 mod layout;
 #[cfg(test)]
 mod tests;
 
 use crate::ui::MUTED;
-use casefile_core::{
-    Classification, EntrySnapshot, Kind, RecordSummary, Revision, StrategyProjection,
-};
+use casefile_core::{Classification, EntrySnapshot, Kind, RecordSummary, Revision};
 use casefile_store::{DerivedRecord, DerivedStrategy};
 use ratatui::{style::Style, text::Line};
 
@@ -18,7 +17,7 @@ pub(crate) struct Cache {
 struct Selected {
     path: String,
     revision: Revision,
-    matrix: Option<StrategyProjection>,
+    strategy: Option<DerivedStrategy>,
     width: u16,
     lines: Vec<Line<'static>>,
     title: Option<&'static str>,
@@ -39,7 +38,7 @@ impl Cache {
         if let Some(selected) = &self.selected
             && selected.path == entry.path
             && selected.revision == entry.content_revision
-            && selected.matrix.as_ref() == strategy.map(|value| &value.matrix)
+            && selected.strategy.as_ref() == strategy
             && selected.width == width
         {
             return selected.lines.clone();
@@ -48,7 +47,7 @@ impl Cache {
         self.selected = Some(Selected {
             path: entry.path.clone(),
             revision: entry.content_revision.clone(),
-            matrix: strategy.map(|value| value.matrix.clone()),
+            strategy: strategy.cloned(),
             width,
             lines: lines.clone(),
             title,
@@ -97,6 +96,8 @@ enum Stage {
     Review,
     Verify,
     Chair,
+    Challenger,
+    Preflight,
     Reconcile,
     Done,
 }
@@ -113,6 +114,8 @@ impl Stage {
             Self::Review => "Review",
             Self::Verify => "Verify",
             Self::Chair => "Chair",
+            Self::Challenger => "Challenger",
+            Self::Preflight => "Preflight N+1",
             Self::Reconcile => "Reconcile",
             Self::Done => "Done",
         }
@@ -134,4 +137,31 @@ struct Flow {
     main: Vec<Stage>,
     treatment: Treatment,
     preflight: bool,
+    models: Vec<(Stage, Runtime)>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum Runtime {
+    Model(String),
+    Pending,
+    Unavailable,
+}
+
+impl Runtime {
+    fn text(&self) -> &str {
+        match self {
+            Self::Model(model) => model,
+            Self::Pending => "Pending",
+            Self::Unavailable => "Unavailable",
+        }
+    }
+}
+
+impl Flow {
+    fn model(&self, stage: Stage) -> Option<&Runtime> {
+        self.models
+            .iter()
+            .find(|(owner, _)| *owner == stage)
+            .map(|(_, model)| model)
+    }
 }

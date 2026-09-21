@@ -67,7 +67,7 @@ fn chart_navigation_reaches_tail_resizes_and_files_preserves_selected_source() {
 }
 
 #[test]
-fn binding_refresh_changes_overview_while_preserving_chart_and_selection() {
+fn binding_refresh_updates_chart_and_overview_without_changing_selection() {
     let mut app = app();
     let before = test_support::render(&app, 120, 60);
     let selected = app.browser.selected(&app.scan).unwrap().path.clone();
@@ -94,7 +94,8 @@ fn binding_refresh_changes_overview_while_preserving_chart_and_selection() {
     });
     app.apply_projection(projection, ProjectionChange::Content);
     let after = test_support::render(&app, 120, 60);
-    assert_eq!(before, after);
+    assert_ne!(before, after);
+    assert!(after.contains("new-effective-model"));
     app.handle(KeyCode::Left);
     let overview = test_support::render(&app, 120, 60);
     assert!(overview.contains("new-effective-model"));

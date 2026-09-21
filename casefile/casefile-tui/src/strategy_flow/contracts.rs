@@ -1,6 +1,6 @@
-use super::{Flow, Stage, Treatment};
+use super::{Flow, Runtime, Stage, Treatment};
 use casefile_core::StrategyProjection;
-use casefile_store::DerivedStrategy;
+use casefile_store::{DerivedStrategy, StrategyBindingState};
 
 // The shipped skill contracts supply sequencing; worker-array order never does.
 pub(super) fn build(id: &str, phase: &str, strategy: &DerivedStrategy) -> Option<Flow> {
@@ -95,11 +95,46 @@ pub(super) fn build(id: &str, phase: &str, strategy: &DerivedStrategy) -> Option
         }
         main.push(Stage::Done);
     }
+    let mut models = Vec::new();
+    for (stage, role) in [
+        (Stage::Detectives, "detective"),
+        (Stage::Inspectors, "inspector"),
+        (Stage::Review, "atomic-ticket-reviewer"),
+        (Stage::Verify, "verification-reviewer"),
+        (Stage::Chair, "dialogue-review-chair"),
+        (Stage::Challenger, "dialogue-review-challenger"),
+        (Stage::Preflight, "look-ahead-investigator"),
+    ] {
+        if let Some(worker) = matrix.workers.iter().find(|worker| worker.role == role) {
+            let model = worker
+                .model
+                .as_ref()
+                .map_or(Runtime::Unavailable, |value| Runtime::Model(value.clone()));
+            if stage == Stage::Inspectors {
+                models.push((Stage::Assess, model.clone()));
+            }
+            models.push((stage, model));
+        }
+    }
+    if family == "implement" {
+        let model = match &strategy.binding {
+            Some(
+                StrategyBindingState::Resolved { effective }
+                | StrategyBindingState::Absent { effective },
+            ) => Runtime::Model(effective.model.clone()),
+            Some(StrategyBindingState::Pending) => Runtime::Pending,
+            Some(StrategyBindingState::Invalid | StrategyBindingState::Unresolved) | None => {
+                Runtime::Unavailable
+            }
+        };
+        models.push((Stage::Implement, model));
+    }
     Some(Flow {
         title,
         main,
         treatment,
         preflight: family == "implement" && name != "ticket-batch",
+        models,
     })
 }
 
