@@ -128,3 +128,25 @@ pub(crate) fn render(app: &App, width: u16, height: u16) -> String {
         .collect::<Vec<_>>()
         .join("\n")
 }
+
+pub(crate) fn strategy_record(
+    entry: &EntrySnapshot,
+    strategy: casefile_store::DerivedStrategy,
+) -> casefile_store::DerivedRecord {
+    casefile_store::DerivedRecord {
+        path: entry.path.clone(),
+        scope: None,
+        classification: entry.classification,
+        kind: entry.kind,
+        identity: None,
+        title: entry.path.clone(),
+        content: None,
+        rendered_markdown: None,
+        search_text: String::new(),
+        work_item: None,
+        progress: None,
+        board: None,
+        strategy: Some(strategy),
+        strategy_binding: None,
+    }
+}
