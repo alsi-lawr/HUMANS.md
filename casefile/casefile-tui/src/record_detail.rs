@@ -16,7 +16,7 @@ use ratatui::{
     text::{Line, Span, Text},
     widgets::{Paragraph, Tabs, Widget, Wrap},
 };
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 
 const TEXT_LIMIT: usize = 8_192;
 const BINARY_LIMIT: usize = 256;
@@ -63,6 +63,7 @@ pub(crate) struct RecordDetail {
     tab: DetailTab,
     scroll: u16,
     rows: Cell<u16>,
+    flow: RefCell<crate::strategy_flow::Cache>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -77,6 +78,7 @@ impl RecordDetail {
             tab: DetailTab::Overview,
             scroll: 0,
             rows: Cell::new(1),
+            flow: RefCell::default(),
         }
     }
 
@@ -130,7 +132,15 @@ impl RecordDetail {
         let titles = DetailTab::ALL.map(|tab| Line::from(format!(" {} ", tab.title())));
         let text = entry.map_or_else(
             || Text::from("Select a record to inspect it."),
-            |entry| Text::from(detail_lines(entry, derived, diagnostics, self.tab)),
+            |entry| {
+                if self.tab == DetailTab::Rendered
+                    && entry.kind == Some(casefile_core::Kind::Strategy)
+                {
+                    Text::from(self.flow.borrow_mut().lines(entry, derived, content.width))
+                } else {
+                    Text::from(detail_lines(entry, derived, diagnostics, self.tab))
+                }
+            },
         );
         let paragraph = Paragraph::new(text)
             .style(Style::default().fg(Color::White))
@@ -145,10 +155,13 @@ impl RecordDetail {
         let title = entry.map_or_else(
             || " Detail ".to_owned(),
             |entry| {
-                format!(
-                    " {}  |  line {position}/{line_count} ",
-                    safe_inline(entry.identity.as_deref().unwrap_or(&entry.path))
-                )
+                let name = match (&entry.summary, self.tab) {
+                    (Some(RecordSummary::Strategy { phase, .. }), DetailTab::Rendered) => {
+                        self.flow.borrow().title().unwrap_or(phase.as_str())
+                    }
+                    _ => entry.identity.as_deref().unwrap_or(&entry.path),
+                };
+                format!(" {}  |  line {position}/{line_count} ", safe_inline(name))
             },
         );
         panel(title, focused).render(area, buffer);

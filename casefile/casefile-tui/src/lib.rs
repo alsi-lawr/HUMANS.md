@@ -6,6 +6,7 @@ mod markdown;
 mod progressive;
 mod record_detail;
 mod review;
+mod strategy_flow;
 #[cfg(test)]
 mod test_support;
 mod ui;
