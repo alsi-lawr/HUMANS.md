@@ -1758,3 +1758,233 @@ fn nested_active_investigations_use_the_most_specific_binding_scope() {
                 .ends_with("outer/inner/strategy/bindings.toml")
     }));
 }
+
+#[test]
+fn atomic_multi_ticket_continuations_capture_the_complete_proposal() {
+    for reversed in [false, true] {
+        let root = fixture();
+        let scope = "projects/demo/investigations/sample";
+        let first = format!("{scope}/tickets/accepted/HMD-011.md");
+        let second = format!("{scope}/tickets/accepted/HMD-012.md");
+        let source = fs::read_to_string(root.path().join(&first)).unwrap();
+        fs::write(
+            root.path().join(&second),
+            source.replace("HMD-011", "HMD-012"),
+        )
+        .unwrap();
+        let store = Store::open(root.path()).unwrap();
+        let transition = |id: &str, ticket: &str, from, to| ProgressEntry::Transition {
+            id: id.into(),
+            ticket_id: ticket.into(),
+            from,
+            to,
+            recorded_at: "2026-07-26T10:00:00Z".into(),
+            recorded_by: "root".into(),
+        };
+        let request = |entries| ProgressChangeRequest {
+            investigation: scope.into(),
+            entries,
+            replacement: None,
+            replacement_source: None,
+            bootstrap: false,
+        };
+        let start = transition(
+            "initial",
+            "HMD-011",
+            ProgressStatus::Unknown,
+            ProgressStatus::InProgress,
+        );
+        store
+            .apply_progress(
+                store
+                    .preview_progress(request(vec![start.clone()]))
+                    .unwrap(),
+            )
+            .unwrap();
+        let continuation = vec![
+            transition(
+                "review",
+                "HMD-011",
+                ProgressStatus::InProgress,
+                ProgressStatus::InReview,
+            ),
+            ProgressEntry::Note {
+                id: "note".into(),
+                ticket_id: "HMD-011".into(),
+                recorded_at: "2026-07-26T10:00:00Z".into(),
+                recorded_by: "root".into(),
+                category: casefile_core::ProgressNoteCategory::Quirk,
+                message: "Observed behavior".into(),
+            },
+            transition(
+                "verify",
+                "HMD-011",
+                ProgressStatus::InReview,
+                ProgressStatus::Verifying,
+            ),
+        ];
+        let other = transition(
+            "second",
+            "HMD-012",
+            ProgressStatus::Unknown,
+            ProgressStatus::InProgress,
+        );
+        for entries in [continuation.clone(), vec![other.clone()]] {
+            assert!(
+                store
+                    .preview_progress(request(entries))
+                    .unwrap()
+                    .diagnostics
+                    .is_empty()
+            );
+        }
+        let mut entries = continuation;
+        if reversed {
+            entries.insert(0, other);
+        } else {
+            entries.push(other);
+        }
+        let mut duplicate = entries.clone();
+        duplicate.push(entries[0].clone());
+        let rejected = store.preview_progress(request(duplicate)).unwrap();
+        assert!(
+            rejected
+                .diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.code == "invalid_progress_operation_id")
+        );
+        assert!(store.apply_progress(rejected).is_err());
+        let preview = store.preview_progress(request(entries.clone())).unwrap();
+        assert!(preview.diagnostics.is_empty(), "{:?}", preview.diagnostics);
+        assert!(preview.expected_input_revisions.contains_key(&first));
+        assert!(preview.expected_input_revisions.contains_key(&second));
+        assert!(
+            !preview
+                .expected_input_revisions
+                .keys()
+                .any(|path| path.contains("evidence/"))
+        );
+        // A change to either referenced ticket invalidates the atomic preview.
+        fs::write(
+            root.path().join(&second),
+            format!("{}\n", source.replace("HMD-011", "HMD-012")),
+        )
+        .unwrap();
+        assert!(store.apply_progress(preview).is_err());
+        let log_path = root.path().join(format!("{scope}/progress/log.toml"));
+        assert_eq!(
+            casefile_core::parse_progress_log("log", &fs::read_to_string(&log_path).unwrap())
+                .unwrap()
+                .entries,
+            vec![start.clone()]
+        );
+        store
+            .apply_progress(store.preview_progress(request(entries.clone())).unwrap())
+            .unwrap();
+        let mut expected = vec![start];
+        expected.extend(entries.clone());
+        assert_eq!(
+            casefile_core::parse_progress_log("log", &fs::read_to_string(&log_path).unwrap())
+                .unwrap()
+                .entries,
+            expected
+        );
+        assert!(
+            store
+                .apply_progress(store.preview_progress(request(entries)).unwrap())
+                .unwrap()
+                .no_op
+        );
+        assert!(store.check(Some(scope)).unwrap().diagnostics.is_empty());
+    }
+}
+
+#[test]
+fn progress_rejections_preserve_precise_same_scope_ticket_facts() {
+    for state in [
+        "missing",
+        "wrong_scope",
+        "invalid",
+        "provisional",
+        "rejected",
+    ] {
+        let root = fixture();
+        let scope = "projects/demo/investigations/sample";
+        let accepted = root
+            .path()
+            .join(format!("{scope}/tickets/accepted/HMD-011.md"));
+        let source = fs::read_to_string(&accepted).unwrap();
+        match state {
+            "missing" => fs::remove_file(&accepted).unwrap(),
+            "wrong_scope" => {
+                fs::remove_file(&accepted).unwrap();
+                let other = "projects/demo/investigations/other";
+                let config = fs::read_to_string(root.path().join("casefile.toml"))
+                    .unwrap()
+                    .replace(
+                        &format!("investigations = [\"{scope}\"]"),
+                        &format!("investigations = [\"{scope}\", \"{other}\"]"),
+                    );
+                fs::write(root.path().join("casefile.toml"), config).unwrap();
+                let target = root
+                    .path()
+                    .join(format!("{other}/tickets/accepted/HMD-011.md"));
+                fs::create_dir_all(target.parent().unwrap()).unwrap();
+                fs::write(
+                    target,
+                    source.replace("investigation: \"sample\"", "investigation: \"other\""),
+                )
+                .unwrap();
+            }
+            "invalid" => fs::write(&accepted, "# Invalid ticket\n").unwrap(),
+            status => {
+                fs::remove_file(&accepted).unwrap();
+                let target = root
+                    .path()
+                    .join(format!("{scope}/tickets/{status}/HMD-011.md"));
+                fs::create_dir_all(target.parent().unwrap()).unwrap();
+                fs::write(
+                    target,
+                    source.replace("status: accepted", &format!("status: {status}")),
+                )
+                .unwrap();
+            }
+        }
+        let store = Store::open(root.path()).unwrap();
+        let request = ProgressChangeRequest {
+            investigation: scope.into(),
+            entries: vec![ProgressEntry::Note {
+                id: "diagnose-target".into(),
+                ticket_id: "HMD-011".into(),
+                recorded_at: "2026-07-26T10:00:00Z".into(),
+                recorded_by: "root".into(),
+                category: casefile_core::ProgressNoteCategory::Quirk,
+                message: "diagnose".into(),
+            }],
+            replacement: None,
+            replacement_source: None,
+            bootstrap: false,
+        };
+        let preview = store.preview_progress(request).unwrap();
+        let detail = preview
+            .diagnostics
+            .iter()
+            .find_map(|diagnostic| diagnostic.progress_ticket.as_ref())
+            .unwrap();
+        assert_eq!(detail.ticket_id, "HMD-011");
+        assert_eq!(detail.operation_id, "diagnose-target");
+        assert_eq!(detail.investigation, scope);
+        match state {
+            "missing" | "wrong_scope" => assert_eq!(detail.reason, "missing_in_investigation"),
+            "invalid" => assert_eq!(detail.classification, Some(Classification::Invalid)),
+            status => assert_eq!(detail.status.as_deref(), Some(status)),
+        }
+        assert!(store.apply_progress(preview).is_err());
+        assert!(
+            !root
+                .path()
+                .join(format!("{scope}/progress/log.toml"))
+                .exists()
+        );
+    }
+}

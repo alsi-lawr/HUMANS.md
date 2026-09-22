@@ -8,7 +8,75 @@ use casefile_core::{
 };
 use std::collections::{BTreeMap, BTreeSet};
 
+#[derive(Default)]
+pub(super) struct ValidationFacts {
+    work: BTreeMap<String, WorkReferences>,
+    metadata: BTreeMap<String, (Vec<String>, Vec<String>)>,
+    progress: BTreeMap<String, Vec<(String, String)>>,
+}
+
+struct WorkReferences {
+    decision_refs: Vec<String>,
+    related_tickets: Vec<String>,
+    supersedes: Vec<String>,
+    superseded_by: Vec<String>,
+}
+
+impl ValidationFacts {
+    pub(super) fn insert(&mut self, entry: &EntrySnapshot) {
+        let Ok(text) = std::str::from_utf8(&entry.original_bytes) else {
+            return;
+        };
+        match entry.kind {
+            Some(kind @ (Kind::Ticket | Kind::Epic)) => {
+                if let Ok(RecordDraft::Ticket(item) | RecordDraft::Epic(item)) =
+                    casefile_core::parse_draft(&entry.path, kind, text)
+                {
+                    self.work.insert(
+                        entry.path.clone(),
+                        WorkReferences {
+                            decision_refs: item.decision_refs,
+                            related_tickets: item.related_tickets,
+                            supersedes: item.supersedes,
+                            superseded_by: item.superseded_by,
+                        },
+                    );
+                }
+            }
+            Some(Kind::Evidence | Kind::Review) => {
+                if let Ok(metadata) = parse_metadata_arrays(&entry.path, text) {
+                    self.metadata.insert(entry.path.clone(), metadata);
+                }
+            }
+            Some(Kind::Progress) => {
+                if let Ok(log) = parse_progress_log(&entry.path, text) {
+                    self.progress.insert(
+                        entry.path.clone(),
+                        log.entries
+                            .iter()
+                            .map(|entry| (entry.id().into(), entry.ticket_id().into()))
+                            .collect(),
+                    );
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
 pub(super) fn cross_validate(entries: &[EntrySnapshot], active: &Activation) -> Vec<Diagnostic> {
+    let mut facts = ValidationFacts::default();
+    for entry in entries {
+        facts.insert(entry);
+    }
+    cross_validate_facts(entries, active, &facts)
+}
+
+pub(super) fn cross_validate_facts(
+    entries: &[EntrySnapshot],
+    active: &Activation,
+    facts: &ValidationFacts,
+) -> Vec<Diagnostic> {
     let mut diagnostics = Vec::new();
     let mut identities: BTreeMap<&str, &EntrySnapshot> = BTreeMap::new();
     let paths: BTreeSet<&str> = entries.iter().map(|entry| entry.path.as_str()).collect();
@@ -55,7 +123,7 @@ pub(super) fn cross_validate(entries: &[EntrySnapshot], active: &Activation) -> 
             }
         }
     }
-    diagnostics.extend(progress_diagnostics(entries, active));
+    diagnostics.extend(progress_diagnostics_facts(entries, active, facts));
     for entry in entries
         .iter()
         .filter(|entry| matches!(entry.summary, Some(RecordSummary::WorkItem { .. })))
@@ -65,14 +133,7 @@ pub(super) fn cross_validate(entries: &[EntrySnapshot], active: &Activation) -> 
         else {
             unreachable!()
         };
-        let text = std::str::from_utf8(&entry.original_bytes).unwrap_or_default();
-        if let Ok(draft) =
-            casefile_core::parse_draft(&entry.path, entry.kind.expect("work kind"), text)
-        {
-            let item = match draft {
-                RecordDraft::Ticket(item) | RecordDraft::Epic(item) => item,
-                _ => unreachable!(),
-            };
+        if let Some(item) = facts.work.get(&entry.path) {
             let project = projects[entry.path.as_str()];
             for reference in &item.decision_refs {
                 let resolves = identities.get(reference.as_str()).is_some_and(|target| {
@@ -105,36 +166,38 @@ pub(super) fn cross_validate(entries: &[EntrySnapshot], active: &Activation) -> 
                     ));
                 }
             }
-            supersedes.insert(id.clone(), item.supersedes);
+            supersedes.insert(id.clone(), item.supersedes.clone());
         }
     }
     for entry in entries
         .iter()
         .filter(|entry| matches!(entry.kind, Some(Kind::Evidence | Kind::Review)))
     {
-        if let Ok(text) = std::str::from_utf8(&entry.original_bytes) {
-            if let Ok((refs, attachments)) = parse_metadata_arrays(&entry.path, text) {
-                let scope = scopes[entry.path.as_str()];
-                for reference in refs {
-                    if identities
-                        .get(reference.as_str())
-                        .is_none_or(|target| scopes[target.path.as_str()] != scope)
-                    {
-                        diagnostics.push(Diagnostic::new(&entry.path, "unresolved_reference", "references must resolve within the governed project/investigation scope"));
-                    }
+        if let Some((refs, attachments)) = facts.metadata.get(&entry.path) {
+            let scope = scopes[entry.path.as_str()];
+            for reference in refs {
+                if identities
+                    .get(reference.as_str())
+                    .is_none_or(|target| scopes[target.path.as_str()] != scope)
+                {
+                    diagnostics.push(Diagnostic::new(
+                        &entry.path,
+                        "unresolved_reference",
+                        "references must resolve within the governed project/investigation scope",
+                    ));
                 }
-                for attachment in attachments {
-                    let target = attachment_target(&entry.path, &attachment);
-                    if !target
-                        .as_deref()
-                        .is_some_and(|path| safe_relative(path) && paths.contains(path))
-                    {
-                        diagnostics.push(Diagnostic::new(
-                            &entry.path,
-                            "missing_attachment",
-                            "attachments must be contained regular files",
-                        ));
-                    }
+            }
+            for attachment in attachments {
+                let target = attachment_target(&entry.path, attachment);
+                if !target
+                    .as_deref()
+                    .is_some_and(|path| safe_relative(path) && paths.contains(path))
+                {
+                    diagnostics.push(Diagnostic::new(
+                        &entry.path,
+                        "missing_attachment",
+                        "attachments must be contained regular files",
+                    ));
                 }
             }
         }
@@ -160,6 +223,18 @@ pub(super) fn progress_diagnostics(
     entries: &[EntrySnapshot],
     active: &Activation,
 ) -> Vec<Diagnostic> {
+    let mut facts = ValidationFacts::default();
+    for entry in entries {
+        facts.insert(entry);
+    }
+    progress_diagnostics_facts(entries, active, &facts)
+}
+
+fn progress_diagnostics_facts(
+    entries: &[EntrySnapshot],
+    active: &Activation,
+    facts: &ValidationFacts,
+) -> Vec<Diagnostic> {
     let mut diagnostics = Vec::new();
     let scopes = entries
         .iter()
@@ -182,21 +257,58 @@ pub(super) fn progress_diagnostics(
     for entry in entries.iter().filter(|entry| {
         entry.kind == Some(Kind::Progress) && entry.classification == Classification::Governed
     }) {
-        let Ok(text) = std::str::from_utf8(&entry.original_bytes) else {
-            continue;
-        };
-        let Ok(log) = parse_progress_log(&entry.path, text) else {
+        let Some(log) = facts.progress.get(&entry.path) else {
             continue;
         };
         let scope = scopes[entry.path.as_str()];
-        for progress in log.entries {
-            let accepted_ticket = accepted.contains(&(scope, progress.ticket_id()));
+        for (operation_id, ticket_id) in log {
+            let accepted_ticket = accepted.contains(&(scope, ticket_id.as_str()));
             if !accepted_ticket {
-                diagnostics.push(Diagnostic::new(
+                let observed = entries.iter().find(|candidate| {
+                    scopes[candidate.path.as_str()] == scope
+                        && candidate.kind == Some(Kind::Ticket)
+                        && (candidate.identity.as_ref() == Some(ticket_id)
+                            || candidate.path.ends_with(&format!("/{ticket_id}.md")))
+                });
+                let status = observed.and_then(|entry| match &entry.summary {
+                    Some(RecordSummary::WorkItem { status, .. }) => Some(status.clone()),
+                    _ => None,
+                });
+                let mut diagnostic = Diagnostic::new(
                     &entry.path,
                     "invalid_progress_ticket",
-                    "progress entries must target accepted tickets in the same investigation",
-                ));
+                    "progress entry must target a governed accepted ticket in this investigation",
+                );
+                diagnostic.progress_ticket = Some(casefile_core::ProgressTicketDiagnostic {
+                    ticket_id: ticket_id.clone(),
+                    operation_id: operation_id.clone(),
+                    reason: match observed {
+                        None => "missing_in_investigation".into(),
+                        Some(entry) if entry.classification != Classification::Governed => {
+                            "invalid_ticket".into()
+                        }
+                        Some(_) => "non_accepted_ticket".into(),
+                    },
+                    investigation: scope.unwrap_or_default().into(),
+                    classification: observed.map(|entry| entry.classification),
+                    status,
+                    next_query: casefile_core::ProgressTicketQuery {
+                        query: "record_index".into(),
+                        scope: casefile_core::ProgressTicketScope {
+                            project: project_for(&entry.path, active).unwrap_or_default().into(),
+                            investigation: scope
+                                .and_then(|path| {
+                                    crate::activation::investigation_identity(
+                                        project_for(&entry.path, active).unwrap_or_default(),
+                                        path,
+                                    )
+                                })
+                                .unwrap_or_default()
+                                .into(),
+                        },
+                    },
+                });
+                diagnostics.push(diagnostic);
             }
         }
     }

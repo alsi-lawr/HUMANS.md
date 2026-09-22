@@ -20,7 +20,10 @@ pub use board::{BoardColumn, BoardDraft, BoardStatusSource};
 pub use change::{ApplyResult, ChangeBatchApplyResult, ChangeBatchPreview, ChangeRequest, Preview};
 #[doc(hidden)]
 pub use decision::parse as parse_decision;
-pub use diagnostic::{Diagnostic, SCHEMA_VERSION, stable};
+pub use diagnostic::{
+    Diagnostic, ProgressTicketDiagnostic, ProgressTicketQuery, ProgressTicketScope, SCHEMA_VERSION,
+    stable,
+};
 pub use markdown::{markdown_headings, validate_markdown};
 #[doc(hidden)]
 pub use metadata::arrays as parse_metadata_arrays;

@@ -1,6 +1,7 @@
 mod commands;
 mod edit;
 mod editor;
+mod json_output;
 mod mcp;
 mod tui;
 
@@ -12,7 +13,7 @@ use std::{ffi::OsString, path::PathBuf, process::ExitCode};
 #[command(
     name = "casefile",
     version,
-    about = "Compact Casefile v1 scanner and governed writer"
+    about = "Casefile scoped diagnostics and governed writer. JSON responses are limited to 8 MiB; oversized responses fail before stdout."
 )]
 struct Cli {
     #[arg(long, default_value = ".")]
@@ -23,12 +24,21 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
+    /// Metadata counts only; never reads or emits file bodies. JSON limit: 8 MiB, no partial stdout. Do not use scan or whole-document parsing to diagnose live Stores: use snapshot, scoped record_index, exact record_detail and diagnostics.
     Scan,
+    /// Validate one exact investigation plus project support summaries, or all scopes incrementally. Opaque bodies are not opened. JSON limit: 8 MiB, no partial stdout. Never use raw/full scans or whole-document parsing on live Stores; recover through snapshot, scoped record_index, exact record_detail and diagnostics.
     Check {
         #[arg(long)]
         require_activation: bool,
         #[arg(long)]
         investigation: Option<String>,
+    },
+    /// Diagnostics for an exact governed project/investigation identity (not a path). Returns at most 128 diagnostics, 1024-byte messages and 256 KiB of fields; compare total_count. JSON limit: 8 MiB.
+    Diagnostics {
+        #[arg(long)]
+        project: String,
+        #[arg(long)]
+        investigation: String,
     },
     /// Validate a complete candidate strategy matrix through the canonical Rust parser.
     ValidateMatrix {

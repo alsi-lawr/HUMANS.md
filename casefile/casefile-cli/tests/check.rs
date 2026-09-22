@@ -508,3 +508,43 @@ fn writer_projection_uses_canonical_matrix_and_binding_states() {
     assert!(!ungraphable.status.success());
     assert!(String::from_utf8_lossy(&ungraphable.stderr).contains("invalid or ungraphable"));
 }
+
+#[test]
+fn public_scan_is_body_independent_and_oversize_json_leaves_stdout_empty() {
+    let root = fixture();
+    let evidence = root
+        .path()
+        .join("projects/demo/investigations/sample/evidence/opaque.bin");
+    fs::create_dir_all(evidence.parent().unwrap()).unwrap();
+    let scan = || {
+        Command::new(env!("CARGO_BIN_EXE_casefile"))
+            .arg("--root")
+            .arg(root.path())
+            .arg("scan")
+            .output()
+            .unwrap()
+    };
+    fs::write(&evidence, b"sentinel secret body").unwrap();
+    let small = scan();
+    let binary = fs::File::create(&evidence).unwrap();
+    binary.set_len(256 * 1024 * 1024).unwrap();
+    let large = scan();
+    assert!(small.status.success() && large.status.success());
+    assert_eq!(small.stdout.len(), large.stdout.len());
+    let output: Value = serde_json::from_slice(&large.stdout).unwrap();
+    assert!(output.get("snapshot").is_none());
+    assert!(large.stdout.len() < 512);
+    assert!(!String::from_utf8_lossy(&small.stdout).contains("sentinel"));
+    assert!(!String::from_utf8_lossy(&large.stdout).contains("original_bytes"));
+
+    // A canonical parser error can legitimately contain a long offending source line.
+    let board = root
+        .path()
+        .join("projects/demo/investigations/sample/boards/main.toml");
+    fs::write(board, format!("bad = {}", "?".repeat(9 * 1024 * 1024))).unwrap();
+    let failed = scoped_check(root.path(), "projects/demo/investigations/sample");
+    assert!(!failed.status.success());
+    assert!(failed.stdout.is_empty());
+    assert!(failed.stderr.len() < 512);
+    assert!(String::from_utf8_lossy(&failed.stderr).contains("8 MiB"));
+}

@@ -12,6 +12,31 @@ pub struct Diagnostic {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub section: Option<String>,
     pub message: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub progress_ticket: Option<ProgressTicketDiagnostic>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct ProgressTicketDiagnostic {
+    pub ticket_id: String,
+    pub operation_id: String,
+    pub reason: String,
+    pub investigation: String,
+    pub classification: Option<crate::Classification>,
+    pub status: Option<String>,
+    pub next_query: ProgressTicketQuery,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct ProgressTicketQuery {
+    pub query: String,
+    pub scope: ProgressTicketScope,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct ProgressTicketScope {
+    pub project: String,
+    pub investigation: String,
 }
 
 impl Diagnostic {
@@ -23,6 +48,7 @@ impl Diagnostic {
             field: None,
             section: None,
             message: message.into(),
+            progress_ticket: None,
         }
     }
 
