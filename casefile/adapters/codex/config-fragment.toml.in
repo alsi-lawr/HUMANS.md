@@ -134,6 +134,61 @@ description = "Casefile implementation writer (gpt-6-astra/ultra)."
 config_file = "__HUMANS_MD_PLUGIN_ROOT__/agents/casefile-implementation-writer-gpt-6-astra-ultra.toml"
 nickname_candidates = ["Builder", "Implementer"]
 
+[agents.casefile-implementation-writer-gpt-6-sol-low]
+description = "Casefile implementation writer (gpt-6-sol/low)."
+config_file = "__HUMANS_MD_PLUGIN_ROOT__/agents/casefile-implementation-writer-gpt-6-sol-low.toml"
+nickname_candidates = ["Builder", "Implementer"]
+
+[agents.casefile-implementation-writer-gpt-6-sol-medium]
+description = "Casefile implementation writer (gpt-6-sol/medium)."
+config_file = "__HUMANS_MD_PLUGIN_ROOT__/agents/casefile-implementation-writer-gpt-6-sol-medium.toml"
+nickname_candidates = ["Builder", "Implementer"]
+
+[agents.casefile-implementation-writer-gpt-6-sol-high]
+description = "Casefile implementation writer (gpt-6-sol/high)."
+config_file = "__HUMANS_MD_PLUGIN_ROOT__/agents/casefile-implementation-writer-gpt-6-sol-high.toml"
+nickname_candidates = ["Builder", "Implementer"]
+
+[agents.casefile-implementation-writer-gpt-6-sol-xhigh]
+description = "Casefile implementation writer (gpt-6-sol/xhigh)."
+config_file = "__HUMANS_MD_PLUGIN_ROOT__/agents/casefile-implementation-writer-gpt-6-sol-xhigh.toml"
+nickname_candidates = ["Builder", "Implementer"]
+
+[agents.casefile-implementation-writer-gpt-6-sol-max]
+description = "Casefile implementation writer (gpt-6-sol/max)."
+config_file = "__HUMANS_MD_PLUGIN_ROOT__/agents/casefile-implementation-writer-gpt-6-sol-max.toml"
+nickname_candidates = ["Builder", "Implementer"]
+
+[agents.casefile-implementation-writer-gpt-6-sol-ultra]
+description = "Casefile implementation writer (gpt-6-sol/ultra)."
+config_file = "__HUMANS_MD_PLUGIN_ROOT__/agents/casefile-implementation-writer-gpt-6-sol-ultra.toml"
+nickname_candidates = ["Builder", "Implementer"]
+
+[agents.casefile-implementation-writer-gpt-6-luna-low]
+description = "Casefile implementation writer (gpt-6-luna/low)."
+config_file = "__HUMANS_MD_PLUGIN_ROOT__/agents/casefile-implementation-writer-gpt-6-luna-low.toml"
+nickname_candidates = ["Builder", "Implementer"]
+
+[agents.casefile-implementation-writer-gpt-6-luna-medium]
+description = "Casefile implementation writer (gpt-6-luna/medium)."
+config_file = "__HUMANS_MD_PLUGIN_ROOT__/agents/casefile-implementation-writer-gpt-6-luna-medium.toml"
+nickname_candidates = ["Builder", "Implementer"]
+
+[agents.casefile-implementation-writer-gpt-6-luna-high]
+description = "Casefile implementation writer (gpt-6-luna/high)."
+config_file = "__HUMANS_MD_PLUGIN_ROOT__/agents/casefile-implementation-writer-gpt-6-luna-high.toml"
+nickname_candidates = ["Builder", "Implementer"]
+
+[agents.casefile-implementation-writer-gpt-6-luna-xhigh]
+description = "Casefile implementation writer (gpt-6-luna/xhigh)."
+config_file = "__HUMANS_MD_PLUGIN_ROOT__/agents/casefile-implementation-writer-gpt-6-luna-xhigh.toml"
+nickname_candidates = ["Builder", "Implementer"]
+
+[agents.casefile-implementation-writer-gpt-6-luna-max]
+description = "Casefile implementation writer (gpt-6-luna/max)."
+config_file = "__HUMANS_MD_PLUGIN_ROOT__/agents/casefile-implementation-writer-gpt-6-luna-max.toml"
+nickname_candidates = ["Builder", "Implementer"]
+
 [agents.casefile-implementation-writer-gpt-5-6-sol-low]
 description = "Casefile implementation writer (gpt-5.6-sol/low)."
 config_file = "__HUMANS_MD_PLUGIN_ROOT__/agents/casefile-implementation-writer-gpt-5-6-sol-low.toml"

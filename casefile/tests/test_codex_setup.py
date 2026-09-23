@@ -188,7 +188,6 @@ class CodexSetupTests(unittest.TestCase):
             fake = FakeCodex(catalog)
             with self.fake_command(fake):
                 plan = setup.prepare(plugin, home, "codex")
-                self.assertIn("gpt-5.3-codex-spark", plan["catalog_models"])
                 result = setup.install(plan)
 
                 selected = {
@@ -196,7 +195,7 @@ class CodexSetupTests(unittest.TestCase):
                     for model in json.loads((home / "models-casefile-v1.json").read_bytes())["models"]
                 }
                 self.assertIsNone(selected["gpt-5.6-sol"]["multi_agent_version"])
-                self.assertNotEqual("upstream", selected["gpt-5.3-codex-spark"]["base_instructions"])
+                self.assertNotEqual("upstream", selected["gpt-6-sol"]["base_instructions"])
                 self.assertTrue(legacy.exists())
 
                 config = home / "config.toml"
@@ -236,11 +235,14 @@ class CodexSetupTests(unittest.TestCase):
                 plugin, home, original, catalog, _ = self.fixture(Path(temporary))
                 other = home / f"models-casefile-{'v2' if version == 'v1' else 'v1'}.json"
                 other.write_bytes(b'{"unowned": true}\n')
+                catalog["models"] = [
+                    model for model in catalog["models"]
+                    if model["slug"] not in {"gpt-6-sol", "gpt-6-luna"}
+                ]
                 fake = FakeCodex(catalog)
                 with self.fake_command(fake):
                     plan = setup.prepare(plugin, home, "codex", version=version)
                     self.assertEqual(version, setup.preview(plan)["multi_agent_version"])
-                    self.assertIn("gpt-5.3-codex-spark", plan["catalog_models"])
                     result = setup.install(plan)
                     receipt_path, receipt = setup.receipt(home, Path(result["receipt"]))
                     self.assertEqual(version, receipt["multi_agent_version"])
@@ -363,30 +365,6 @@ class CodexSetupTests(unittest.TestCase):
                     self.assertEqual(original, (home / "config.toml").read_bytes())
                     self.assertFalse((home / f"models-casefile-{version}.json").exists())
                     self.assertFalse((home / "backups/casefile").exists())
-
-    def test_complete_maintained_catalog_carries_pinned_model(self):
-        profiles = Path(__file__).resolve().parents[1] / "adapters/codex/profiles.toml"
-        pinned = setup.pinned_models(profiles)
-        self.assertEqual({"gpt-5.3-codex-spark"}, pinned)
-        for version in ("v1", "v2"):
-            with self.subTest(version=version):
-                written, catalog_models = setup.catalog_replacement(profiles, version)
-                document = json.loads(written.decode("ascii"))
-                slugs = {model["slug"] for model in document["models"]}
-                self.assertEqual(setup.carried_models(profiles), slugs)
-                self.assertEqual(slugs, set(catalog_models))
-                entry = next(m for m in document["models"] if m["slug"] == "gpt-5.3-codex-spark")
-                self.assertEqual("GPT-5.3-Codex-Spark", entry["display_name"])
-                self.assertTrue(entry["base_instructions"])
-                self.assertIsInstance(entry["model_messages"], dict)
-                for model in document["models"]:
-                    self.assertLessEqual(setup.REQUIRED_CATALOG_FIELDS, set(model))
-                    self.assertTrue(
-                        all(
-                            level["description"]
-                            for level in model["supported_reasoning_levels"]
-                        )
-                    )
 
     def test_unknown_projected_alias_does_not_change_replacement_catalog(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -545,37 +523,6 @@ class CodexSetupTests(unittest.TestCase):
                     with self.assertRaisesRegex(setup.SetupError, diagnostic):
                         setup.prepare(plugin, home, "codex", version="v2")
                 self.assertEqual(0, fake.model_acquisition_calls)
-
-    def test_effective_v1_and_v2_catalogs_require_spark(self):
-        for version in ("v1", "v2"):
-            with self.subTest(version=version), tempfile.TemporaryDirectory() as temporary:
-                plugin, home, _, catalog, _ = self.fixture(Path(temporary))
-                catalog["models"] = [
-                    model
-                    for model in catalog["models"]
-                    if model["slug"] != "gpt-5.3-codex-spark"
-                ]
-                if version == "v1":
-                    for model in catalog["models"]:
-                        if model["slug"] in setup.V1_SELECTOR_MODELS:
-                            model["multi_agent_version"] = None
-                else:
-                    for model in catalog["models"]:
-                        model["multi_agent_version"] = "v2"
-                (home / f"models-casefile-{version}.json").write_bytes(setup.canonical(catalog))
-                with self.fake_command(FakeCodex(catalog)):
-                    with self.assertRaisesRegex(
-                        setup.SetupError, "missing gpt-5.3-codex-spark"
-                    ):
-                        setup.verify_effective_catalog(
-                            {
-                                "home": home,
-                                "executable": "codex",
-                                "environment": {"CODEX_HOME": str(home)},
-                                "multi_agent_version": version,
-                                "root": plugin,
-                            }
-                        )
 
     def test_portable_bytes_write_and_resource_separator(self):
         with tempfile.TemporaryDirectory() as temporary:

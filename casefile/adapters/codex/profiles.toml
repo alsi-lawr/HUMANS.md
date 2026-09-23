@@ -168,6 +168,22 @@ display_name = "GPT-6-Astra"
 visibility = "list"
 
 [[catalog.targets]]
+id = "gpt-6-sol"
+required_reasoning = ["low", "medium", "high", "xhigh", "max", "ultra"]
+
+[catalog.targets.expected]
+display_name = "GPT-6-Sol"
+visibility = "list"
+
+[[catalog.targets]]
+id = "gpt-6-luna"
+required_reasoning = ["low", "medium", "high", "xhigh", "max"]
+
+[catalog.targets.expected]
+display_name = "GPT-6-Luna"
+visibility = "list"
+
+[[catalog.targets]]
 id = "gpt-5.6-sol"
 required = true
 required_reasoning = ["low", "medium", "high", "xhigh", "max", "ultra"]
@@ -200,43 +216,6 @@ required_reasoning = ["low", "medium", "high", "xhigh"]
 
 [catalog.targets.expected]
 display_name = "GPT-5.5"
-visibility = "list"
-
-[[catalog.targets]]
-id = "gpt-5.4"
-required_reasoning = ["low", "medium", "high", "xhigh"]
-
-[catalog.targets.expected]
-display_name = "GPT-5.4"
-visibility = "list"
-
-[[catalog.targets]]
-id = "gpt-5.4-mini"
-required_reasoning = ["low", "medium", "high", "xhigh"]
-
-[catalog.targets.expected]
-display_name = "GPT-5.4-Mini"
-visibility = "list"
-
-[[catalog.targets]]
-id = "gpt-5.2"
-required = false
-required_reasoning = ["low", "medium", "high", "xhigh"]
-
-[catalog.targets.expected]
-display_name = "GPT-5.2"
-visibility = "list"
-
-[[catalog.targets]]
-id = "gpt-5.3-codex-spark"
-required = true
-# Upstream stopped listing this model while it is still in use. The maintained replacement
-# catalog carries it and the drift report does not treat its absence as a finding.
-pinned = true
-required_reasoning = ["low", "medium", "high", "xhigh"]
-
-[catalog.targets.expected]
-display_name = "GPT-5.3-Codex-Spark"
 visibility = "list"
 
 [[catalog.targets]]
@@ -300,6 +279,105 @@ profile = "casefile-implementation-writer-gpt-6-astra-ultra"
 model = "gpt-6-astra"
 reasoning = "ultra"
 agent_file = "agents/casefile-implementation-writer-gpt-6-astra-ultra.toml"
+
+[[writer_profiles]]
+multi_agent_version = "v1"
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline"]
+role = "implementation-writer"
+profile = "casefile-implementation-writer-gpt-6-sol-low"
+model = "gpt-6-sol"
+reasoning = "low"
+agent_file = "agents/casefile-implementation-writer-gpt-6-sol-low.toml"
+
+[[writer_profiles]]
+multi_agent_version = "v1"
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline"]
+role = "implementation-writer"
+profile = "casefile-implementation-writer-gpt-6-sol-medium"
+model = "gpt-6-sol"
+reasoning = "medium"
+agent_file = "agents/casefile-implementation-writer-gpt-6-sol-medium.toml"
+
+[[writer_profiles]]
+multi_agent_version = "v1"
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline"]
+role = "implementation-writer"
+profile = "casefile-implementation-writer-gpt-6-sol-high"
+model = "gpt-6-sol"
+reasoning = "high"
+agent_file = "agents/casefile-implementation-writer-gpt-6-sol-high.toml"
+
+[[writer_profiles]]
+multi_agent_version = "v1"
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline"]
+role = "implementation-writer"
+profile = "casefile-implementation-writer-gpt-6-sol-xhigh"
+model = "gpt-6-sol"
+reasoning = "xhigh"
+agent_file = "agents/casefile-implementation-writer-gpt-6-sol-xhigh.toml"
+
+[[writer_profiles]]
+multi_agent_version = "v1"
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline"]
+role = "implementation-writer"
+profile = "casefile-implementation-writer-gpt-6-sol-max"
+model = "gpt-6-sol"
+reasoning = "max"
+agent_file = "agents/casefile-implementation-writer-gpt-6-sol-max.toml"
+
+[[writer_profiles]]
+multi_agent_version = "v1"
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline"]
+role = "implementation-writer"
+profile = "casefile-implementation-writer-gpt-6-sol-ultra"
+model = "gpt-6-sol"
+reasoning = "ultra"
+agent_file = "agents/casefile-implementation-writer-gpt-6-sol-ultra.toml"
+
+[[writer_profiles]]
+multi_agent_version = "v1"
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline"]
+role = "implementation-writer"
+profile = "casefile-implementation-writer-gpt-6-luna-low"
+model = "gpt-6-luna"
+reasoning = "low"
+agent_file = "agents/casefile-implementation-writer-gpt-6-luna-low.toml"
+
+[[writer_profiles]]
+multi_agent_version = "v1"
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline"]
+role = "implementation-writer"
+profile = "casefile-implementation-writer-gpt-6-luna-medium"
+model = "gpt-6-luna"
+reasoning = "medium"
+agent_file = "agents/casefile-implementation-writer-gpt-6-luna-medium.toml"
+
+[[writer_profiles]]
+multi_agent_version = "v1"
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline"]
+role = "implementation-writer"
+profile = "casefile-implementation-writer-gpt-6-luna-high"
+model = "gpt-6-luna"
+reasoning = "high"
+agent_file = "agents/casefile-implementation-writer-gpt-6-luna-high.toml"
+
+[[writer_profiles]]
+multi_agent_version = "v1"
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline"]
+role = "implementation-writer"
+profile = "casefile-implementation-writer-gpt-6-luna-xhigh"
+model = "gpt-6-luna"
+reasoning = "xhigh"
+agent_file = "agents/casefile-implementation-writer-gpt-6-luna-xhigh.toml"
+
+[[writer_profiles]]
+multi_agent_version = "v1"
+strategy_ids = ["casefile-implement-ticket-batch", "casefile-implement-ticket-batch-look-ahead", "casefile-implement-pipeline"]
+role = "implementation-writer"
+profile = "casefile-implementation-writer-gpt-6-luna-max"
+model = "gpt-6-luna"
+reasoning = "max"
+agent_file = "agents/casefile-implementation-writer-gpt-6-luna-max.toml"
 
 [[writer_profiles]]
 multi_agent_version = "v1"

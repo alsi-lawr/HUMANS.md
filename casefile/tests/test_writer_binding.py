@@ -180,12 +180,12 @@ class WriterBindingTests(unittest.TestCase):
                 active = binding.active_catalog("codex", home)
             self.assertEqual(["gpt-5.6-sol"], [model["slug"] for model in active["models"]])
 
-    def test_v2_offers_visible_optional_models_and_required_spark_but_not_hidden_models(self):
+    def test_v2_offers_visible_models_but_not_hidden_models(self):
         catalog = {
             "models": [
                 model("gpt-6-astra", ("high",)),
                 model("gpt-5.5", ("low", "xhigh")),
-                model("gpt-5.3-codex-spark", ("low",)),
+                model("gpt-6-luna", ("low",)),
                 model("codex-auto-review", ("low",), visibility="hide"),
             ]
         }
@@ -195,7 +195,7 @@ class WriterBindingTests(unittest.TestCase):
                 ("gpt-6-astra", "high"),
                 ("gpt-5.5", "low"),
                 ("gpt-5.5", "xhigh"),
-                ("gpt-5.3-codex-spark", "low"),
+                ("gpt-6-luna", "low"),
             },
             {(pair["model"], pair["reasoning_effort"]) for pair in offered},
         )
@@ -237,7 +237,7 @@ class WriterBindingTests(unittest.TestCase):
         pair = next(
             pair
             for pair in binding.offered_pairs(
-                {"models": [model("gpt-5.3-codex-spark", ("low",))]},
+                {"models": [model("gpt-6-luna", ("low",))]},
                 self.profiles,
                 "v2",
             )
@@ -247,7 +247,7 @@ class WriterBindingTests(unittest.TestCase):
         self.assertEqual(1, document["schema_version"])
         self.assertEqual("codex", document["adapter"])
         self.assertEqual("implementation-writer", document["role"])
-        self.assertEqual("gpt-5.3-codex-spark", document["model"])
+        self.assertEqual("gpt-6-luna", document["model"])
         self.assertEqual("low", document["reasoning_effort"])
         self.assertEqual("runtime_override", document["resolution"]["mode"])
 
