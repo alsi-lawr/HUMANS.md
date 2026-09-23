@@ -47,9 +47,11 @@ REQUIRED_MODELS = {
     "gpt-5.6-sol",
     "gpt-5.6-terra",
     "gpt-5.6-luna",
-    "gpt-5.3-codex-spark",
 }
-V1_SELECTOR_MODELS = {"gpt-6-astra", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"}
+V1_SELECTOR_MODELS = {
+    "gpt-6-astra", "gpt-6-sol", "gpt-6-luna",
+    "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna",
+}
 MULTI_AGENT_VERSIONS = {"v1", "v2"}
 MINIMUM_AGENT_THREADS = 6
 REQUIRED_CATALOG_FIELDS = {
