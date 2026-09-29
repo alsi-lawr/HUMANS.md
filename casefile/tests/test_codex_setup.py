@@ -237,7 +237,7 @@ class CodexSetupTests(unittest.TestCase):
                 other.write_bytes(b'{"unowned": true}\n')
                 catalog["models"] = [
                     model for model in catalog["models"]
-                    if model["slug"] not in {"gpt-6-sol", "gpt-6-luna"}
+                    if model["slug"] not in {"gpt-6.1-sol", "gpt-6-sol", "gpt-6-luna"}
                 ]
                 fake = FakeCodex(catalog)
                 with self.fake_command(fake):
