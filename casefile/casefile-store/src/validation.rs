@@ -80,13 +80,15 @@ pub(super) fn cross_validate(entries: &[EntrySnapshot], active: &Activation) -> 
         .facts;
         facts.insert(entry, resolved, parsed);
     }
-    cross_validate_facts(entries, active, &facts)
+    // Mutation projections contain only independently checked regular files or regular overlays.
+    cross_validate_facts(entries, active, &facts, |_| true)
 }
 
 pub(super) fn cross_validate_facts(
     entries: &[EntrySnapshot],
     active: &Activation,
     facts: &ValidationFacts,
+    regular_target: impl Fn(&str) -> bool,
 ) -> Vec<Diagnostic> {
     let mut diagnostics = Vec::new();
     let mut identities: BTreeMap<&str, &EntrySnapshot> = BTreeMap::new();
@@ -191,10 +193,9 @@ pub(super) fn cross_validate_facts(
             }
             for attachment in attachments {
                 let target = attachment_target(&entry.path, attachment);
-                if !target
-                    .as_deref()
-                    .is_some_and(|path| safe_relative(path) && paths.contains(path))
-                {
+                if !target.as_deref().is_some_and(|path| {
+                    safe_relative(path) && paths.contains(path) && regular_target(path)
+                }) {
                     diagnostics.push(Diagnostic::new(
                         &entry.path,
                         "missing_attachment",

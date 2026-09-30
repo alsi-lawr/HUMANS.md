@@ -264,16 +264,18 @@ fn check_scope<'a>(
         entries.sort_unstable_by(|left, right| left.path.cmp(&right.path));
     }
     diagnostics.extend(
-        cross_validate_facts(&entries, active, &facts)
-            .into_iter()
-            .filter(|diagnostic| {
-                scope.is_none_or(|scope| {
-                    facts
-                        .resolved
-                        .get(&diagnostic.path)
-                        .is_some_and(|resolved| resolved.scope == Some(scope))
-                })
-            }),
+        cross_validate_facts(&entries, active, &facts, |path| {
+            attachments.get(path) == Some(&crate::AttachmentState::Regular)
+        })
+        .into_iter()
+        .filter(|diagnostic| {
+            scope.is_none_or(|scope| {
+                facts
+                    .resolved
+                    .get(&diagnostic.path)
+                    .is_some_and(|resolved| resolved.scope == Some(scope))
+            })
+        }),
     );
     diagnostics.extend(crate::scanning::binding_diagnostics_facts(&entries, &facts));
     Ok((diagnostics, attachments))

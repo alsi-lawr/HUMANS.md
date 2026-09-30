@@ -1,3 +1,6 @@
+# Historical variant provenance: basis is candidate b8d3edcb99aa77cb2d6c6560db496a652a55594b.
+# Attachment correction round 1 changes checking/scanning/validation later; these hunks and hashes
+# describe the original measured variants, NOT source-identical corrected production code.
 
 # Final production -> initial serial/BTree foundation (pre-container correction)
 # source casefile/casefile-store/src/read_context.rs: sha256 7cdd38a643e1aa1594c12530ac9f6c6f8df11b9171228a3e6ff646da3369caa8

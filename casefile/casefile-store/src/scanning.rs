@@ -121,7 +121,11 @@ pub(super) fn scan(
     let mut entries = Vec::new();
     let scopes = crate::activation::ScopeIndex::new(&active);
     let mut facts = ValidationFacts::default();
+    let mut nonregular_paths = std::collections::BTreeSet::new();
     for (path, file) in files {
+        if file.unsafe_path {
+            nonregular_paths.insert(path.clone());
+        }
         let bytes = file.bytes;
         let resolved = scopes.resolve(&path);
         let parsed = if path == "casefile.toml" {
@@ -186,7 +190,9 @@ pub(super) fn scan(
         facts.insert(&entry, resolved, parsed.facts);
         entries.push(entry);
     }
-    diagnostics.extend(cross_validate_facts(&entries, &active, &facts));
+    diagnostics.extend(cross_validate_facts(&entries, &active, &facts, |path| {
+        !nonregular_paths.contains(path)
+    }));
     diagnostics.extend(binding_diagnostics_facts(&entries, &facts));
     require_inventory_unchanged(root, &inventory)?;
     let revision = if overlay.is_empty() {
@@ -421,6 +427,48 @@ mod tests {
                 "unexpectedly excluded {path:?}"
             );
         }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn attachment_overlay_uses_proposed_regular_presence_not_original_opaque_membership() {
+        let root = TempDir::new().unwrap();
+        let scope = "projects/demo/investigations/sample";
+        let evidence = root.path().join(format!("{scope}/evidence"));
+        fs::create_dir_all(&evidence).unwrap();
+        fs::write(root.path().join("casefile.toml"), format!("schema_version = 1\n[projects.demo]\nprefix = 'HMD'\ninvestigations = ['{scope}']\n")).unwrap();
+        fs::write(
+            evidence.join("ref.md"),
+            "---\nattachments: [payload.bin]\n---\n# Attachment evidence\n",
+        )
+        .unwrap();
+        let outside = TempDir::new().unwrap();
+        fs::write(outside.path().join("secret"), "do not follow").unwrap();
+        std::os::unix::fs::symlink(outside.path().join("secret"), evidence.join("payload.bin"))
+            .unwrap();
+        let path = format!("{scope}/evidence/payload.bin");
+        assert_eq!(
+            scan(root.path(), &BTreeMap::new()).unwrap().diagnostics[0].code,
+            "missing_attachment"
+        );
+        let replacement = BTreeMap::from([(path.clone(), Some(Vec::new()))]);
+        assert!(
+            scan(root.path(), &replacement)
+                .unwrap()
+                .diagnostics
+                .is_empty()
+        );
+        let removal = BTreeMap::from([(path, None)]);
+        assert_eq!(
+            scan(root.path(), &removal).unwrap().diagnostics[0].code,
+            "missing_attachment"
+        );
+        assert!(
+            fs::symlink_metadata(evidence.join("payload.bin"))
+                .unwrap()
+                .file_type()
+                .is_symlink()
+        );
     }
 
     #[test]

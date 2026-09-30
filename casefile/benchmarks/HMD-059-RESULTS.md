@@ -1,10 +1,125 @@
 # HMD-059 scoped acquisition and validation evidence
 
-Candidate against reviewed parent `53a0f17638d817a47b63a80cacb2dcfd1a7b2f2f`.
+Initial candidate `b8d3edcb99aa77cb2d6c6560db496a652a55594b` against reviewed parent
+`53a0f17638d817a47b63a80cacb2dcfd1a7b2f2f`. The initial performance/variant evidence below
+is historical for that candidate; correction-round evidence is separately recorded below.
 All 33 assigned outcomes are implemented below. These are proposed ledger entries, not canonical
 planning mutations or human acceptance of a non-defect disposition. No non-defect rejection is
 proposed. Provider protocol **4** is the deliberately selected source wire change; the installed
 runtime and dated MCP transport negotiation were not changed.
+
+## Correction round 1: consumed attachment facts
+
+Independent review reproduced `Store::scan` accepting a referenced opaque symlink while global
+and scoped checks emitted `missing_attachment`. Membership alone had lost target-type evidence.
+The bounded correction passes a private regular-target predicate into cross-validation: full scan
+uses `CollectedFile.unsafe_path` facts after overlay replacement/removal; checking uses its already
+observed attachment states. No extra body read, traversal, DTO/wire change, recursive attachment
+resolution or link-following was added. The mutation wrapper retains its independent safe-parent,
+regular/non-symlink input validation and synthetic regular-overlay guarantee.
+
+`consumed_attachment_types_agree_across_scan_checks_and_independent_preview` verifies public
+scan/global/scoped-check diagnostic equality for a referenced symlink, missing target, directory
+and symlink ancestor; opaque paths remain byte-complete snapshot members without being followed.
+Removing the reference restores validity, including preview; contained zero-byte regular files
+remain valid. Preview preserves its existing introduced-diagnostic policy for unchanged missing
+attachments and rejects selected unsafe attachment inputs without mutation.
+`attachment_overlay_uses_proposed_regular_presence_not_original_opaque_membership` verifies that
+synthetic zero-byte replacement validates, deletion fails, and overlay evaluation does not change the link.
+The reviewer's minimal public probe was rerun with the corrected equality assertion: all three
+operations now report the same missing attachment, and unreferenced opacity remains valid.
+
+Final correction checks: Store lib **45**, scanning **9**, Provider **14**, governance **11**, v1
+**29**, validation **1** passed. Core/Store/CLI all-target Clippy (`-D warnings`) and workspace Rust
+format check passed. An initial test expected preview to re-report an unchanged missing attachment;
+it was corrected to the existing introduced-diagnostics contract before the final successful run.
+[Actual verification and public-probe output](results/hmd059-correction1-verification.txt).
+Original 42/59 controls, all 236 native057 saved JSONs and earlier059 distributions remain unchanged.
+The historical alternative patch basis is explicitly the original b8 candidate, not this correction.
+
+Source-identical correction command window: **2026-09-30 15:47:53–15:50:55 UTC**.
+Same retained absolute target, synthetic fixtures, warm setup, ten samples, one-second warm-up,
+two-second target, 95% bootstrap CIs and 1% noise threshold as the initial candidate. No concurrent
+builds during measurement; no new collection/parallel variants. Forty existing controls were run:
+the prior36 plus two batch previews and existing single-record preview/apply. Comparisons are native
+against `hmd057-before`, not estimates reconstructed from previous stdout. They include retained058
+and059 improvements and do not isolate this correctness correction's latency or allocation impact.
+These measurements supersede the initial36 only as source-identical corrected production evidence;
+all original candidate/alternative distributions remain historical, not re-labelled.
+
+```sh
+export CARGO_TARGET_DIR=/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target
+nix develop . --command cargo bench --manifest-path casefile/Cargo.toml \
+  -p casefile-store-sqlite --bench baselines -- \
+  '^(inventory|activation_roots|records|supersession|progress|scoped_progress_250_records|mutation_preview_250_records)/' \
+  --noplot --baseline hmd057-before
+nix develop . --command cargo bench --manifest-path casefile/Cargo.toml \
+  -p casefile-store-sqlite --bench priority -- \
+  '^priority_(scope_500_notes|single_record_250_records_500_notes)/' \
+  --noplot --baseline hmd057-before
+```
+
+[Correction samples, estimates, native changes and source hashes](results/hmd059-correction1-after.json),
+[actual Criterion stdout](results/hmd059-correction1-criterion.log).
+Median and median CI are microseconds; percentage is native mean change versus057 with its95% CI.
+No unmeasured TUI/HTTP, cold-init, resource, Windows or allocation claim is made.
+
+| Control | Median µs | Median 95% CI µs | Native mean change (95% CI) |
+| --- | ---: | --- | --- |
+| `activation_roots/scoped_check/1` | 931.738 | 918.916–994.973 | -94.40% (-94.54%–-94.23%) |
+| `activation_roots/scoped_check/100` | 2621.314 | 2605.331–2676.374 | -84.88% (-85.03%–-84.70%) |
+| `inventory/full_scan/2000` | 37255.873 | 36794.966–40569.977 | -8.18% (-11.72%–-4.11%) |
+| `inventory/full_scan/8000` | 151598.824 | 150547.126–152949.990 | -11.68% (-12.82%–-10.57%) |
+| `inventory/metadata_summary/2000` | 6688.340 | 6655.371–6760.723 | -16.71% (-17.31%–-16.00%) |
+| `inventory/metadata_summary/8000` | 27431.048 | 27227.788–28336.245 | -12.59% (-13.82%–-11.25%) |
+| `inventory/scoped_check/2000` | 967.298 | 939.866–981.679 | -94.45% (-94.56%–-94.35%) |
+| `inventory/scoped_check/8000` | 927.701 | 924.765–931.084 | -98.61% (-98.61%–-98.60%) |
+| `mutation_preview_250_records/replace_batch/1` | 24819.323 | 24420.423–25696.611 | -2.04% (-4.26%–+0.11%) |
+| `mutation_preview_250_records/replace_batch/10` | 43998.756 | 43404.664–46295.782 | +0.18% (-2.56%–+4.01%) |
+| `priority_scope_500_notes/existing_detail/1000` | 4650.215 | 4641.971–4798.415 | -66.19% (-66.91%–-65.44%) |
+| `priority_scope_500_notes/existing_detail/250` | 5099.214 | 4861.558–5797.216 | -23.73% (-28.82%–-17.06%) |
+| `priority_scope_500_notes/missing_detail/1000` | 168.258 | 164.464–173.319 | -98.53% (-98.55%–-98.51%) |
+| `priority_scope_500_notes/missing_detail/250` | 174.744 | 163.866–224.281 | -96.04% (-96.45%–-95.54%) |
+| `priority_scope_500_notes/selected_record_index/1000` | 40909.986 | 38659.676–41506.767 | -37.43% (-39.20%–-35.75%) |
+| `priority_scope_500_notes/selected_record_index/250` | 13334.287 | 13052.245–14354.313 | -31.01% (-33.51%–-28.52%) |
+| `priority_single_record_250_records_500_notes/apply` | 30505.832 | 29476.952–31071.404 | -0.61% (-2.50%–+1.27%) |
+| `priority_single_record_250_records_500_notes/preview` | 29465.199 | 28782.259–29777.538 | -5.04% (-7.14%–-3.06%) |
+| `progress/accepted_target/250` | 2143.022 | 2136.230–2149.227 | -81.40% (-81.53%–-81.26%) |
+| `progress/accepted_target/500` | 3244.908 | 3227.717–3349.487 | -75.78% (-76.06%–-75.47%) |
+| `progress/missing_targets/250` | 2319.990 | 2283.452–2363.091 | -91.89% (-92.05%–-91.58%) |
+| `progress/missing_targets/500` | 3538.652 | 3515.637–3587.216 | -92.64% (-92.72%–-92.56%) |
+| `records/boards/1000` | 35838.148 | 34093.333–36727.704 | -41.36% (-43.67%–-38.98%) |
+| `records/boards/250` | 9161.990 | 8974.864–9280.431 | -41.63% (-42.23%–-41.02%) |
+| `records/full_derived/1000` | 100927.409 | 100528.454–103220.173 | -21.75% (-24.28%–-18.38%) |
+| `records/full_derived/250` | 25762.691 | 25634.303–26087.553 | -25.79% (-27.21%–-24.09%) |
+| `records/record_index/1000` | 33542.184 | 32610.422–34095.777 | -45.83% (-47.26%–-44.41%) |
+| `records/record_index/250` | 8932.345 | 8661.411–9229.543 | -44.17% (-46.02%–-42.27%) |
+| `records/scoped_check/1000` | 68665.829 | 68005.753–69468.210 | -30.48% (-32.12%–-28.98%) |
+| `records/scoped_check/250` | 17936.921 | 17835.219–18594.719 | -25.49% (-27.04%–-23.22%) |
+| `scoped_progress_250_records/disposition_boards/0` | 9365.802 | 9293.203–9421.020 | -40.76% (-41.18%–-40.38%) |
+| `scoped_progress_250_records/disposition_boards/500` | 13828.531 | 13756.867–13945.785 | -29.87% (-30.34%–-29.37%) |
+| `scoped_progress_250_records/missing_detail/0` | 165.767 | 165.007–166.404 | -94.36% (-94.40%–-94.32%) |
+| `scoped_progress_250_records/missing_detail/500` | 167.062 | 165.650–171.279 | -96.61% (-96.64%–-96.57%) |
+| `scoped_progress_250_records/record_index/0` | 9164.299 | 9058.612–9247.935 | -43.79% (-44.89%–-42.53%) |
+| `scoped_progress_250_records/record_index/500` | 13561.482 | 13107.420–13695.241 | -32.89% (-33.88%–-32.10%) |
+| `supersession/chain/250` | 18031.358 | 17830.985–18622.654 | -45.55% (-46.73%–-44.34%) |
+| `supersession/chain/500` | 35240.241 | 34878.360–35345.615 | -58.50% (-59.25%–-57.76%) |
+| `supersession/independent/250` | 18206.311 | 17838.476–18311.912 | -27.66% (-28.60%–-26.76%) |
+| `supersession/independent/500` | 35782.891 | 35027.481–36787.252 | -25.82% (-28.45%–-22.11%) |
+
+Correction exact paths:
+
+```text
+casefile/casefile-store/src/checking.rs
+casefile/casefile-store/src/scanning.rs
+casefile/casefile-store/src/validation.rs
+casefile/casefile-store/tests/scanning.rs
+casefile/benchmarks/HMD-059-RESULTS.md
+casefile/benchmarks/results/hmd059-variants.patch
+casefile/benchmarks/results/hmd059-correction1-after.json
+casefile/benchmarks/results/hmd059-correction1-criterion.log
+casefile/benchmarks/results/hmd059-correction1-verification.txt
+```
 
 ## Read boundary and freshness contract
 
@@ -46,12 +161,9 @@ runtime and dated MCP transport negotiation were not changed.
   unrepresentable filenames error explicitly, never collapse through lossy conversion. Ungoverned
   nonregular objects remain opaque and are not followed; governed unsafe inputs are explicit.
   Existing non-directory/symlink fixed containers needed by the current query also error rather
-  than looking empty. Missing containers remain absent; an unrequested strategy container does
-  not become a tickets-only index dependency.
-  Existing non-directory/symlink fixed containers needed by the current query also error rather
   than looking empty. An explicitly activated root itself is a governed directory container,
-  including in global check/scan; it cannot become opaque through ancestor-only lookup. Missing containers remain absent; an unrequested strategy container does
-  not become a tickets-only index dependency.
+  including in global check/scan; it cannot become opaque through ancestor-only lookup. Missing
+  containers remain absent; an unrequested strategy container is not a tickets-only index dependency.
 
 ## Proposed per-finding ledger evidence
 
@@ -70,7 +182,7 @@ runtime and dated MCP transport negotiation were not changed.
 | 011 | Component-boundary `contains_path` avoids per-root concatenated prefix allocation. | Deepest activated scope/unactivated descendant regression. No isolated allocation timing. |
 | 012 | Binding diagnostics use one canonical-scope implementation lookup and retained strategy projections instead of repeated scans/reparses. | `binding_diagnostics_use_canonical_scope_despite_parent_nested_parent_order`. |
 | 013 | Full scan consumes already parsed activation state and emits its diagnostics once; superseded duplicate activation parser removed. | `project_decisions_are_flat_and_invalid_activation_diagnostics_are_not_duplicated`; root check/scan equivalence. |
-| 014 | Ungoverned nonregular objects stay opaque; governed unsafe inputs are explicit instead of globally marking opaque attachments invalid. | Unix opaque/symlink/deep-tree, attachment type/containment, and requested-container missing/unsafe/non-following regressions. |
+| 014 | Ungoverned nonregular objects stay opaque; governed unsafe inputs are explicit instead of globally marking opaque attachments invalid. | Unix opaque/symlink/deep-tree and requested-container regressions; correction-round public scan/global/scoped-check and overlay tests enforce consumed attachment type/containment while preserving zero-byte regular files and unreferenced opacity. |
 | 015 | Supported non-following iterative `walkdir` traversal replaces recursive filesystem walker. | 300-directory public scan fixture; inventory controls. No recursive thread-stack growth from directory traversal. |
 | 016 | Summary/narrow check acquisitions open only needed bodies, retaining minimal facts; full byte-returning scan remains byte-complete. | Existing foreign-evidence/peak-body check tests; full scan versus scoped check controls. No unmeasured heap claim. |
 | 031 | Iterative reverse-edge leaf elimination computes cycle-reachable nodes once rather than restarting recursive DFS per node. | `long_supersession_chains_and_cycle_reachable_ancestors_preserve_diagnostics`, 1200-node chain/cycle plus duplicate; supersession controls. |
@@ -113,7 +225,7 @@ runtime and dated MCP transport negotiation were not changed.
 ## Focused verification
 
 Commands ran through the repository Nix shell, with the retained absolute target below and `set -e`;
-no tail/log command masked a failed status. Final production code checks (after attachment policy,
+no tail/log command masked a failed status. Initial candidate production code checks (after attachment policy,
 parallel stage, and race guards): core **15**, Store lib **44**, governance **11**, Provider **14**,
 scanning **8**, v1 **29**, validation **1**, CLI MCP **6**, Python smoke unit **3**, all passed.
 All-target core/Store/CLI Clippy with `-D warnings`, `cargo fmt --all --check`, source CLI build, and
@@ -121,14 +233,14 @@ an actual built-CLI MCP compatibility/smoke check on a disposable Store also pas
 preview/apply, stale revisions and governance rollback are covered by existing v1/governance/MCP
 checks. The smoke exposed protocol4 and twelve tools; it did not install/run against a live store.
 
-[Command/output evidence](results/hmd059-verification.txt) includes final test outputs and smoke.
+[Command/output evidence](results/hmd059-verification.txt) includes initial candidate test outputs and smoke.
 Tests target scope isolation, requested-data race rejection, ordered parallel failure with complete
 retry, diagnostic equivalence, native identity and graph behavior—not source/copy/tunable assertions.
 Temporary Vec variants required borrowed iterator adapters to compile; checks were rerun
 successfully before measuring. The container fixture initially needed an `Option<Kind>` comparison
 correction; Clippy caught two helpers placed after test modules and they were moved, not suppressed.
 Final checks passed after those corrections. Earlier serial/preliminary checks/numbers are not acceptance
-claims for the final parallel implementation.
+claims for the initial candidate parallel implementation.
 
 ## Criterion configuration and measured boundaries
 
@@ -153,12 +265,12 @@ nix develop . --command cargo bench --manifest-path casefile/Cargo.toml \
   --noplot --baseline hmd057-before
 ```
 
-The final production run compares **36 existing controls** natively with saved `hmd057-before`;
+The initial candidate production run compares **36 existing controls** natively with saved `hmd057-before`;
 there is no baseline reconstruction. Original 42/59 control sources, table, checked-in before
 artifacts and all 236 native saved-before JSON files remain immutable and hash-verified. The retained
 target is active pipeline scratch owned by root for eventual cleanup, not a committed build cache.
 
-Final source-identical matched run: **2026-09-30 15:18:35 UTC–2026-09-30 15:20:58 UTC**. It supersedes earlier serial and
+Initial candidate source-identical matched run: **2026-09-30 15:18:35 UTC–2026-09-30 15:20:58 UTC**. It supersedes earlier serial and
 pre-container-guard/exact-root-correction production runs. The comparison includes retained HMD-058 core improvements
 against the saved pre-fix baseline; changes are not individually attributable to HMD-059.
 Times below are microseconds per operation; median and native relative mean-change intervals
@@ -205,7 +317,7 @@ the minimum fixture's existing two work-items, not literal total work-item count
 | `supersession/independent/500` | 49084.745 | 33569.888 | 33201.438–35314.594 | -30.35% (-31.77%–-28.71%) |
 
 [Final estimates/raw sample vectors/native change estimates](results/hmd059-after.json) and
-[final Criterion stdout](results/hmd059-criterion.log) retain all 36 controls. All36 final controls
+[initial candidate Criterion stdout](results/hmd059-criterion.log) retain all 36 controls. All36 initial candidate controls
 showed lower mean time against the saved pre-fix baseline. Changes are operation-specific, not
 proof of allocation reduction, other file sizes, cold filesystems, or unmeasured front ends.
 
@@ -269,7 +381,7 @@ postguard Rayon/BTree (first −3.64%, repeat −3.41% mean changes). Its252-wor
 equality/within threshold;1002 was first +2.21% slower and repeat −4.66% faster, with the full CIs and
 absolute medians above. Root accepted the bounded interactive tradeoff: retain **sortedVec+Rayon2**,
 not a universal winner claim, adaptive collection framework, or proof of zero larger regression.
-The code-identical final 36-control run separately reports the chosen implementation versus057.
+The code-identical initial candidate 36-control run separately reports the chosen implementation versus057.
 There is no allocation, cold initialization, thread-resource, other-core-count or Windows profile.
 
 [All nine experiment distributions](results/hmd059-alternatives.json),
@@ -278,13 +390,14 @@ There is no allocation, cold initialization, thread-resource, other-core-count o
 retain reviewable evidence. Patch sections name their source basis and direction; apply only the
 selected section sequence to a disposable copy, never the whole concatenated file. Hunks are
 context-free (`git apply --unidiff-zero`) so patch context does not introduce whitespace artifacts. The foundation
-patch starts from this final implementation and covers the timed acquisition/processing files,
+patch starts from initial candidate `b8d3edcb99aa77cb2d6c6560db496a652a55594b`, not the
+attachment-corrected implementation and covers the timed acquisition/processing files,
 canonical activation/layout and dependency manifest/lock; following sections reconstruct each measured alternative. Common classification/core/Provider logic remained unchanged through the collection experiments;
 the patch also records activation/layout before the later exact-root containment correction. Temporary benchmark sections describe the initial added-two and actual minimum-two
-controls; the benchmark source was restored byte-for-byte before final checks/run/commit.
+controls; the benchmark source was restored byte-for-byte before initial candidate checks/run/commit.
 No build caches, binaries, HTML, or archives are committed.
 
-## Actual changed paths
+## Initial candidate actual changed paths
 
 Local-only immutable batch; no planning-store mutation, push, release, install or live migration.
 

@@ -408,6 +408,141 @@ fn scoped_attachment_freshness_tracks_existence_type_and_containment_not_body_ed
     }
 }
 
+#[cfg(unix)]
+#[test]
+fn consumed_attachment_types_agree_across_scan_checks_and_independent_preview() {
+    use casefile_core::ChangeRequest;
+    use std::{os::unix::fs::symlink, process::Command};
+
+    let root = fixture();
+    assert!(
+        Command::new("git")
+            .args(["init", "-q"])
+            .current_dir(root.path())
+            .status()
+            .unwrap()
+            .success()
+    );
+    let evidence_path = format!("{SCOPE}/evidence/ref.md");
+    let evidence = root.path().join(&evidence_path);
+    let referenced =
+        "---\nrefs: [HMD-011]\nattachments: [payload.bin]\n---\n# Attachment evidence\n";
+    fs::write(&evidence, referenced).unwrap();
+    let payload_path = format!("{SCOPE}/evidence/payload.bin");
+    let payload = root.path().join(&payload_path);
+    let outside = tempfile::tempdir().unwrap();
+    fs::write(outside.path().join("secret"), "do not follow").unwrap();
+    symlink(outside.path().join("secret"), &payload).unwrap();
+    let store = Store::open(root.path()).unwrap();
+    let check_diagnostics = || {
+        let scan = store.scan().unwrap();
+        let global = store.check(None).unwrap();
+        let scoped = store.check(Some(SCOPE)).unwrap();
+        assert_eq!(scan.diagnostics, global.diagnostics);
+        assert_eq!(scan.diagnostics, scoped.diagnostics);
+        scan
+    };
+    let invalid = check_diagnostics();
+    assert_eq!(invalid.diagnostics.len(), 1);
+    assert_eq!(invalid.diagnostics[0].code, "missing_attachment");
+    assert_eq!(invalid.diagnostics[0].path, evidence_path);
+    assert!(
+        invalid
+            .snapshot
+            .entries
+            .iter()
+            .any(|entry| entry.path == payload_path)
+    );
+    let ticket_path = format!("{SCOPE}/tickets/accepted/HMD-011.md");
+    let source = fs::read(root.path().join(&ticket_path)).unwrap();
+    let draft = casefile_core::parse_draft(
+        &ticket_path,
+        Kind::Ticket,
+        std::str::from_utf8(&source).unwrap(),
+    )
+    .unwrap();
+    let request = ChangeRequest::Replace {
+        path: ticket_path.clone(),
+        draft,
+    };
+    assert!(matches!(
+        store.preview(request.clone()),
+        Err(casefile_store::StoreError::Invalid(_))
+    ));
+    assert_eq!(fs::read(root.path().join(&ticket_path)).unwrap(), source);
+
+    fs::write(
+        &evidence,
+        "---\nrefs: [HMD-011]\n---\n# Unreferenced evidence\n",
+    )
+    .unwrap();
+    assert!(check_diagnostics().diagnostics.is_empty());
+    assert!(
+        store
+            .preview(request.clone())
+            .unwrap()
+            .diagnostics
+            .is_empty()
+    );
+    fs::write(&evidence, referenced).unwrap();
+    fs::remove_file(&payload).unwrap();
+    assert_eq!(
+        check_diagnostics().diagnostics[0].code,
+        "missing_attachment"
+    );
+    // Preview reports introduced diagnostics, not unchanged pre-existing missing attachments.
+    assert!(
+        store
+            .preview(request.clone())
+            .unwrap()
+            .diagnostics
+            .is_empty()
+    );
+    fs::create_dir(&payload).unwrap();
+    assert_eq!(
+        check_diagnostics().diagnostics[0].code,
+        "missing_attachment"
+    );
+    assert!(matches!(
+        store.preview(request.clone()),
+        Err(casefile_store::StoreError::Invalid(_))
+    ));
+    fs::remove_dir(&payload).unwrap();
+    let ancestor = root.path().join(format!("{SCOPE}/evidence/linked"));
+    symlink(outside.path(), &ancestor).unwrap();
+    fs::write(
+        &evidence,
+        "---\nrefs: [HMD-011]\nattachments: [linked/secret]\n---\n# Attachment evidence\n",
+    )
+    .unwrap();
+    let unsafe_parent = check_diagnostics();
+    assert_eq!(unsafe_parent.diagnostics[0].code, "missing_attachment");
+    assert!(
+        unsafe_parent
+            .snapshot
+            .entries
+            .iter()
+            .all(|entry| !entry.path.ends_with("/linked/secret"))
+    );
+    assert!(matches!(
+        store.preview(request.clone()),
+        Err(casefile_store::StoreError::Invalid(_))
+    ));
+    fs::write(&evidence, referenced).unwrap();
+    fs::write(&payload, []).unwrap();
+    let valid = check_diagnostics();
+    assert!(valid.diagnostics.is_empty());
+    assert!(
+        valid
+            .snapshot
+            .entries
+            .iter()
+            .any(|entry| entry.path == payload_path && entry.original_bytes.is_empty())
+    );
+    assert!(store.preview(request).unwrap().diagnostics.is_empty());
+    assert_eq!(fs::read(root.path().join(ticket_path)).unwrap(), source);
+}
+
 #[test]
 fn binding_diagnostics_use_canonical_scope_despite_parent_nested_parent_order() {
     let root = fixture();
