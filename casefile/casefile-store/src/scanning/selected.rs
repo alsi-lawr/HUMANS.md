@@ -19,27 +19,27 @@ pub struct WriterBindingProjection {
     pub binding: StrategyBindingState,
 }
 
-struct SelectedRead<'a> {
+struct SelectedRead<'a, 'p> {
     root: &'a Path,
     active: Arc<Activation>,
     config: InventoryEntry,
-    files: Vec<(String, Option<InventoryEntry>)>,
+    files: Vec<(&'p str, Option<InventoryEntry>)>,
 }
 
-impl<'a> SelectedRead<'a> {
-    fn begin(root: &'a Path) -> Result<Self, StoreError> {
+impl<'a, 'p> SelectedRead<'a, 'p> {
+    fn begin(root: &'a Path, paths: usize) -> Result<Self, StoreError> {
         let (active, config) = read_activation(root)?;
         Ok(Self {
             root,
             active,
             config,
-            files: Vec::new(),
+            files: Vec::with_capacity(paths),
         })
     }
 
     fn entry(
         &mut self,
-        path: &str,
+        path: &'p str,
         kind: Kind,
     ) -> Result<Option<(EntrySnapshot, ParsedFacts)>, StoreError> {
         let file = inventory_target(self.root, path)?;
@@ -50,7 +50,7 @@ impl<'a> SelectedRead<'a> {
                     .map(|(entry, parsed, _)| (entry, parsed))
             })
             .transpose()?;
-        self.files.push((path.into(), file));
+        self.files.push((path, file));
         Ok(result)
     }
 
@@ -95,7 +95,7 @@ pub(crate) fn read_editable_entry(
     kind: Kind,
 ) -> Result<Option<EntrySnapshot>, StoreError> {
     let path = checked_path(path)?;
-    let mut read = SelectedRead::begin(root)?;
+    let mut read = SelectedRead::begin(root, 1)?;
     if !kind.is_writable() || ScopeIndex::new(&read.active).resolve(&path).kind != Some(kind) {
         return Err(StoreError::Invalid(
             "selected record is not an editable governed ticket, epic, or board".into(),
@@ -120,15 +120,15 @@ pub(crate) fn project_writer_binding(
     strategy_id: &str,
 ) -> Result<WriterBindingProjection, StoreError> {
     let investigation = checked_path(investigation)?;
-    let mut read = SelectedRead::begin(root)?;
+    let implementation_path = format!("{investigation}/strategy/implementation.toml");
+    let binding_path = format!("{investigation}/strategy/bindings.toml");
+    let mut read = SelectedRead::begin(root, 2)?;
     let scopes = ScopeIndex::new(&read.active);
     if scopes.resolve(&investigation).scope != Some(investigation.as_str()) {
         return Err(StoreError::Invalid(
             "investigation must be an exact activated path".into(),
         ));
     }
-    let implementation_path = format!("{investigation}/strategy/implementation.toml");
-    let binding_path = format!("{investigation}/strategy/bindings.toml");
     if scopes.resolve(&implementation_path).scope != Some(investigation.as_str())
         || scopes.resolve(&binding_path).scope != Some(investigation.as_str())
     {

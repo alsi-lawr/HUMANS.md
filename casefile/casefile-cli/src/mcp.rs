@@ -12,7 +12,11 @@ use std::{
     fs,
     io::{self, BufRead, Write},
     path::{Path, PathBuf},
-    sync::{Arc, Mutex, mpsc},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
+        mpsc,
+    },
     thread,
 };
 
@@ -212,6 +216,8 @@ struct Session {
 #[derive(Clone)]
 struct ToolService {
     provider: Arc<Provider>,
+    #[cfg(test)]
+    before_dispatch: Option<tests::DispatchHook>,
 }
 
 struct QueuedToolCall {
@@ -219,20 +225,46 @@ struct QueuedToolCall {
     params: Option<Value>,
 }
 
+enum SessionEvent {
+    Request(std::result::Result<Value, serde_json::Error>),
+    InputFinished(Result<()>),
+    WorkerFailed,
+}
+
 impl Session {
     fn new(provider: Provider) -> Self {
         Self {
             tools: ToolService {
                 provider: Arc::new(provider),
+                #[cfg(test)]
+                before_dispatch: None,
             },
             initialized: false,
         }
     }
 
-    fn run(mut self) -> Result<()> {
-        let stdin = io::stdin();
-        let mut input = stdin.lock();
+    fn run(self) -> Result<()> {
         let output = Arc::new(Mutex::new(io::stdout()));
+        self.run_with_input(
+            |events, stopped| {
+                thread::spawn(move || {
+                    let stdin = io::stdin();
+                    read_session_input(&mut stdin.lock(), events, stopped);
+                });
+            },
+            output,
+        )
+    }
+
+    fn run_with_input<W: Write + Send + 'static>(
+        mut self,
+        start_input: impl FnOnce(mpsc::SyncSender<SessionEvent>, Arc<AtomicBool>),
+        output: Arc<Mutex<W>>,
+    ) -> Result<()> {
+        let (events, incoming) = mpsc::sync_channel(0);
+        let stopped = Arc::new(AtomicBool::new(false));
+        let fatal = Arc::new(Mutex::new(None));
+        start_input(events.clone(), Arc::clone(&stopped));
         let (sender, receiver) = mpsc::channel::<QueuedToolCall>();
         let receiver = Arc::new(Mutex::new(receiver));
         let workers = (0..TOOL_WORKERS)
@@ -240,62 +272,82 @@ impl Session {
                 let receiver = Arc::clone(&receiver);
                 let output = Arc::clone(&output);
                 let tools = self.tools.clone();
-                thread::spawn(move || -> Result<()> {
+                let events = events.clone();
+                let stopped = Arc::clone(&stopped);
+                let fatal = Arc::clone(&fatal);
+                thread::spawn(move || {
                     loop {
                         let call = {
                             let receiver = receiver.lock().expect("MCP tool receiver");
                             receiver.recv()
                         };
                         let Ok(call) = call else {
-                            return Ok(());
+                            return;
                         };
                         let response = tools.call_tool(call.request_id, call.params.as_ref());
-                        let mut output = output.lock().expect("MCP stdout");
-                        write_message(&mut *output, response)?;
+                        let result =
+                            write_message(&mut *output.lock().expect("MCP stdout"), response);
+                        if let Err(error) = result {
+                            fatal.lock().expect("MCP fatal output").get_or_insert(error);
+                            stopped.store(true, Ordering::Release);
+                            let _ = events.send(SessionEvent::WorkerFailed);
+                            return;
+                        }
                     }
                 })
             })
             .collect::<Vec<_>>();
-        let mut line = Vec::new();
-        let read_result = loop {
-            match read_frame(&mut input, &mut line) {
-                Ok(false) => break Ok(()),
-                Ok(true) => {}
-                Err(error) => break Err(error).context("read MCP stdio request"),
-            }
-            let request: Value = match serde_json::from_slice(&line) {
-                Ok(request) => request,
-                Err(error) => {
-                    let mut output = output.lock().expect("MCP stdout");
-                    write_message(
-                        &mut *output,
-                        error_response(Value::Null, -32700, &format!("parse error: {error}")),
-                    )?;
+        drop(events);
+        let read_result = (|| {
+            loop {
+                let parsed = match incoming.recv().context("receive MCP input")? {
+                    SessionEvent::Request(parsed) if !stopped.load(Ordering::Acquire) => parsed,
+                    SessionEvent::Request(_) => continue,
+                    SessionEvent::InputFinished(result) => return result,
+                    SessionEvent::WorkerFailed => return Ok(()),
+                };
+                let request = match parsed {
+                    Ok(request) => request,
+                    Err(error) => {
+                        write_message(
+                            &mut *output.lock().expect("MCP stdout"),
+                            error_response(Value::Null, -32700, &format!("parse error: {error}")),
+                        )?;
+                        continue;
+                    }
+                };
+                if self.initialized && is_tool_call(&request) {
+                    let object = request.as_object().expect("validated tool call");
+                    sender
+                        .send(QueuedToolCall {
+                            request_id: object.get("id").cloned().expect("validated tool call"),
+                            params: object.get("params").cloned(),
+                        })
+                        .context("queue MCP tool call")?;
                     continue;
                 }
-            };
-            if self.initialized && is_tool_call(&request) {
-                let object = request.as_object().expect("validated tool call");
-                sender
-                    .send(QueuedToolCall {
-                        request_id: object.get("id").cloned().expect("validated tool call"),
-                        params: object.get("params").cloned(),
-                    })
-                    .context("queue MCP tool call")?;
-                continue;
+                if let Some(response) = self.handle(request)? {
+                    write_message(&mut *output.lock().expect("MCP stdout"), response)?;
+                }
             }
-            if let Some(response) = self.handle(request)? {
-                let mut output = output.lock().expect("MCP stdout");
-                write_message(&mut *output, response)?;
-            }
-        };
+        })();
+        stopped.store(true, Ordering::Release);
+        drop(incoming);
         drop(sender);
         for worker in workers {
-            worker
-                .join()
-                .map_err(|_| anyhow::anyhow!("MCP tool worker panicked"))??;
+            if worker.join().is_err() {
+                fatal
+                    .lock()
+                    .expect("MCP fatal output")
+                    .get_or_insert_with(|| anyhow::anyhow!("MCP tool worker panicked"));
+            }
         }
-        read_result
+        // The input-only thread can still be blocked on stdin; it owns no Store state and must
+        // not prevent cleanup of the admitted tool workers after a fatal output failure.
+        match fatal.lock().expect("MCP fatal output").take() {
+            Some(error) => Err(error),
+            None => read_result,
+        }
     }
 
     fn handle(&mut self, request: Value) -> Result<Option<Value>> {
@@ -399,7 +451,12 @@ impl ToolService {
 
     fn dispatch(&self, name: &str, arguments: Value) -> Result<Value> {
         #[cfg(test)]
-        tests::dispatch_boundary()?;
+        {
+            if let Some(hook) = &self.before_dispatch {
+                hook(name);
+            }
+            tests::dispatch_boundary()?;
+        }
         match name {
             "casefile_snapshot" => serialize(self.provider.snapshot()?),
             "casefile_query" => serialize(self.provider.query(parse(arguments)?)?),
@@ -1586,6 +1643,25 @@ fn success_response(id: Value, result: Value) -> Value {
 
 fn error_response(id: Value, code: i32, message: &str) -> Value {
     json!({"jsonrpc": "2.0", "id": id, "error": {"code": code, "message": message}})
+}
+
+fn read_session_input(
+    input: &mut impl BufRead,
+    events: mpsc::SyncSender<SessionEvent>,
+    stopped: Arc<AtomicBool>,
+) {
+    let mut frame = Vec::new();
+    while !stopped.load(Ordering::Acquire) {
+        let event = match read_frame(input, &mut frame) {
+            Ok(true) => SessionEvent::Request(serde_json::from_slice(&frame)),
+            Ok(false) => SessionEvent::InputFinished(Ok(())),
+            Err(error) => SessionEvent::InputFinished(Err(error).context("read MCP stdio request")),
+        };
+        let finished = matches!(event, SessionEvent::InputFinished(_));
+        if events.send(event).is_err() || finished {
+            return;
+        }
+    }
 }
 
 fn read_frame(input: &mut impl BufRead, frame: &mut Vec<u8>) -> Result<bool> {

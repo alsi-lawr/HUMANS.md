@@ -675,3 +675,62 @@ fn unfit_correlated_id_closes_without_partial_response_or_truncation() {
     assert!(remainder.is_empty());
     assert!(String::from_utf8_lossy(&result.stderr).contains("cannot fit a bounded response"));
 }
+
+#[test]
+fn unfit_worker_id_closes_with_stdin_open_without_accepting_following_ping() {
+    let root = fixture();
+    let mut child = command(root.path())
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut input = child.stdin.take().unwrap();
+    let mut output = BufReader::new(child.stdout.take().unwrap());
+    serde_json::to_writer(&mut input, &json!({"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25"}})).unwrap();
+    input.write_all(b"\n").unwrap();
+    input.flush().unwrap();
+    let mut line = String::new();
+    output.read_line(&mut line).unwrap();
+    assert_eq!(serde_json::from_str::<Value>(&line).unwrap()["id"], 1);
+    let mut request = json!({"jsonrpc":"2.0","id":"","method":"tools/call","params":{"name":"casefile_snapshot","arguments":{}}});
+    let frame_length = 8 * 1024 * 1024 - 24;
+    let id_length = frame_length - serde_json::to_vec(&request).unwrap().len() - 1;
+    request["id"] = json!("a".repeat(id_length));
+    let mut bytes = serde_json::to_vec(&request).unwrap();
+    bytes.push(b'\n');
+    assert_eq!(bytes.len(), frame_length);
+    input.write_all(&bytes).unwrap();
+    input.flush().unwrap();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    let closed = loop {
+        if child.try_wait().unwrap().is_some() {
+            break true;
+        }
+        if std::time::Instant::now() >= deadline {
+            break false;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    };
+    // Watchdog cleanup is test-only: the session must close itself while stdin stays open.
+    if !closed {
+        child.kill().unwrap();
+    }
+    let following = input.write_all(b"{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"ping\"}\n");
+    drop(input);
+    use std::io::Read;
+    let mut remainder = Vec::new();
+    output.read_to_end(&mut remainder).unwrap();
+    let result = child.wait_with_output().unwrap();
+    assert!(closed, "worker fatal output waited for EOF");
+    assert!(
+        following.is_err(),
+        "closed session accepted another request"
+    );
+    assert!(!result.status.success());
+    assert!(
+        remainder.is_empty(),
+        "partial or unexpected following response"
+    );
+    assert!(String::from_utf8_lossy(&result.stderr).contains("cannot fit a bounded response"));
+}

@@ -1,5 +1,7 @@
 use super::*;
 use std::{cell::RefCell, process::Command, time::Duration};
+pub(super) type DispatchHook = Arc<dyn Fn(&str) + Send + Sync>;
+
 thread_local! { static DISPATCH: RefCell<Option<Box<dyn FnOnce()>>> = RefCell::new(None); }
 thread_local! { static DISPATCH_FAILURE: RefCell<Option<anyhow::Error>> = const { RefCell::new(None) }; }
 pub(super) fn dispatch_boundary() -> Result<()> {
@@ -211,4 +213,110 @@ fn fragmented_framing_preserves_complete_frames_and_refuses_partial_eof() {
     assert_eq!(serde_json::from_slice::<Value>(&frame).unwrap()["id"], 2);
     assert!(read_frame(&mut input, &mut frame).is_err());
     assert!(frame.len() <= MAX_MESSAGE_BYTES);
+}
+
+#[test]
+fn fatal_worker_output_drains_an_already_admitted_canonical_apply() {
+    let root = tempfile::tempdir().unwrap();
+    let base = "projects/demo/investigations/sample";
+    fs::write(
+        root.path().join("casefile.toml"),
+        format!(
+            "schema_version = 1\n[projects.demo]\nprefix = \"HMD\"\ninvestigations = [\"{base}\"]\n"
+        ),
+    )
+    .unwrap();
+    assert!(
+        Command::new("git")
+            .args(["init", "-q"])
+            .current_dir(root.path())
+            .status()
+            .unwrap()
+            .success()
+    );
+    let mut session = Session::new(Provider::without_cache(Store::open(root.path()).unwrap()));
+    session.initialized = true;
+    let path = format!("{base}/boards/drained.toml");
+    let preview = session.tools.dispatch("casefile_preview_record", json!({"request":{
+        "operation":"create", "path":path, "draft":{"kind":"board", "id":"HMD-drained", "title":"Drained original", "status_source":"disposition", "columns":[{"name":"Accepted", "statuses":["accepted"]}]}
+    }})).unwrap();
+    let (entered, waiting) = mpsc::channel();
+    let (release, released) = mpsc::channel();
+    let released = Mutex::new(released);
+    session.tools.before_dispatch = Some(Arc::new(move |name| {
+        if name == "casefile_apply_record" {
+            entered.send(()).unwrap();
+            released
+                .lock()
+                .unwrap()
+                .recv_timeout(Duration::from_secs(20))
+                .unwrap();
+        }
+    }));
+    let output = Arc::new(Mutex::new(Vec::new()));
+    let captured = Arc::clone(&output);
+    let (ready, input) = mpsc::channel();
+    let (finished, completion) = mpsc::channel();
+    let controller = thread::spawn(move || {
+        let result = session.run_with_input(
+            |events, stopped| {
+                ready.send((events, stopped)).unwrap();
+            },
+            output,
+        );
+        finished.send(result).unwrap();
+    });
+    let (events, stopped) = input.recv_timeout(Duration::from_secs(20)).unwrap();
+    let frame = |value: Value| SessionEvent::Request(Ok(value));
+    events.send(frame(json!({"jsonrpc":"2.0", "id":7, "method":"tools/call", "params":{"name":"casefile_apply_record", "arguments":{"preview_id":preview["preview_id"]}}}))).unwrap();
+    waiting.recv_timeout(Duration::from_secs(20)).unwrap();
+    let mut overflowing = json!({"jsonrpc":"2.0", "id":"", "method":"tools/call", "params":{"name":"casefile_snapshot", "arguments":{}}});
+    let id_length = MAX_MESSAGE_BYTES - 24 - serde_json::to_vec(&overflowing).unwrap().len() - 1;
+    overflowing["id"] = json!("a".repeat(id_length));
+    events.send(frame(overflowing)).unwrap();
+    let deadline = std::time::Instant::now() + Duration::from_secs(20);
+    while !stopped.load(Ordering::Acquire) {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "worker failure did not wake controller"
+        );
+        thread::sleep(Duration::from_millis(1));
+    }
+    assert!(matches!(
+        completion.try_recv(),
+        Err(mpsc::TryRecvError::Empty)
+    ));
+    // Wait for controller closure of input, without EOF, before releasing the admitted apply.
+    while events
+        .send(frame(json!({"jsonrpc":"2.0", "id":8, "method":"ping"})))
+        .is_ok()
+    {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "controller kept receiving after fatal output"
+        );
+    }
+    release.send(()).unwrap();
+    let result = completion.recv_timeout(Duration::from_secs(20)).unwrap();
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("cannot fit a bounded response")
+    );
+    controller.join().unwrap();
+    assert!(
+        fs::read_to_string(root.path().join(path))
+            .unwrap()
+            .contains("Drained original")
+    );
+    let bytes = captured.lock().unwrap();
+    let responses = bytes
+        .split(|byte| *byte == b'\n')
+        .filter(|line| !line.is_empty())
+        .map(|line| serde_json::from_slice::<Value>(line).unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(responses.len(), 1);
+    assert_eq!(responses[0]["id"], 7);
+    assert_eq!(responses[0]["result"]["isError"], false);
 }

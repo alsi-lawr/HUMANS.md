@@ -1,0 +1,69 @@
+{
+  "ticket": "HMD-065 correction round1",
+  "parent": "9a3be1ade6f8a6a435bb4c33bc130b2816492429",
+  "recorded_utc": "2026-09-30T23:36:03.611416+00:00",
+  "production_and_test_source_sha256": {
+    "casefile/casefile-cli/src/mcp.rs": "7f57feef2566035eaad9c53e6de0a3c7dc5716fe1dea381a7ec21909a14f9d72",
+    "casefile/casefile-cli/src/mcp_tests.rs": "de2f6bb50677c49c2b39ae6b6568dd925586def153c01dd8831a7f07aee6f5b6",
+    "casefile/casefile-cli/tests/mcp.rs": "dbb3cd32cef9bc448b28ab058cb4cd545a0bf5b5a01ff595fe4e478623423180",
+    "casefile/casefile-store/src/scanning/selected.rs": "16ad229e1cb86147e9905722ada53e9a87baaad2f6ab2840f4b395670487161b"
+  },
+  "binaries_sha256": {
+    ".agent-workspace/20260930-speedup-implementation/writer/target/debug/casefile": "2bc60674daa197017ec887020ba892bb7824a1a9a9a0893fe88b0c33860e0f59",
+    ".agent-workspace/20260930-speedup-implementation/writer/target/release/casefile": "144eb22a61261eb69044bb9332de3a88fb20065e705b3a4dcb010ba571a10798"
+  },
+  "unchanged_manifests_sha256": {
+    "casefile/Cargo.toml": "b8f0a810fc31e948296805e071f847b6701044460ecbf4782588fc3c511bba76",
+    "casefile/Cargo.lock": "745f3413832b204ac259163a084422317f096e3619b585ef52fac10c42a7b67a",
+    "casefile/casefile-cli/Cargo.toml": "715a1af1574d0eaa29561408146c3b302edbdf6649e1c49fce93e9d7d1b42e11",
+    "casefile/casefile-store/Cargo.toml": "8d5ad3f3faa240852535d21849c2cf5c11aab4f3759f753a80d2ab2001d941e1"
+  },
+  "unchanged_original065_artifacts_sha256": {
+    "casefile/benchmarks/results/hmd065-verification.txt": "fe0003fc10e8a67d04182516e23d9b946fe268483c6002c862a419a9585477c0",
+    "casefile/benchmarks/results/hmd065-provenance.json": "7bf436f8ac5e773797573d6b74f43b9d96a4e5dc74c7a0040b029c87a7405b52"
+  },
+  "baseline_checks": {
+    "before-check": {
+      "exit_code": 0,
+      "checked_files": 4,
+      "stdout_sha256": "737ea3419b71a143e23096662dfd94ee7b24ce516a5e1b6c1bec97dd7e5e3bbd"
+    },
+    "native-check": {
+      "exit_code": 0,
+      "checked_files": 236,
+      "stdout_sha256": "4e1e063ea5caa0d3f4e01a4324497b3f88a1cf6deda0b884724c91cb4359ae59"
+    }
+  },
+  "commands": [
+    "cargo fmt --manifest-path casefile/Cargo.toml --all",
+    "cargo test --manifest-path casefile/Cargo.toml -p casefile-cli --bin casefile",
+    "cargo test --manifest-path casefile/Cargo.toml -p casefile-cli --test mcp --test check --test tui",
+    "cargo test --manifest-path casefile/Cargo.toml -p casefile-store --test scanning --test governance",
+    "cargo clippy --manifest-path casefile/Cargo.toml -p casefile-cli -p casefile-store --all-targets -- -D warnings",
+    "cargo fmt --manifest-path casefile/Cargo.toml --all -- --check",
+    "cargo build --manifest-path casefile/Cargo.toml -p casefile-cli --release"
+  ],
+  "actual_final_exit": 0,
+  "focused_distinct_tests": 59,
+  "runtime": "Linux x86_64; Nix repository development shell; native process tests use rebuilt debug CLI, release build checked only",
+  "tooling": "nix develop --command sh -ec; absolute retained CARGO_TARGET_DIR; shell captures exit then tails log then exits same status",
+  "measurements": "No Criterion or transport/editor latency measurement; structural and real process proof only",
+  "native_worker_regression": {
+    "request_bytes_including_lf": 8388584,
+    "stdin": "held open until process self-closure",
+    "test_watchdog_seconds": 5,
+    "production_timeout": "none",
+    "following_ping": "write refused after self-closure",
+    "stdout": "no response fragment after initialize"
+  },
+  "drain_regression": "real retained-ID apply accepted by coordinator and paused at test-only pre-dispatch boundary; fatal second worker wakes controller; input closes; session waits; released apply commits and responds before session returns error; no mid-filesystem-write claim",
+  "scratch_closed_directory": ".agent-workspace/20260930-speedup-implementation/writer/hmd065-correction",
+  "scratch_regular_logs": {
+    "before-check.log": "737ea3419b71a143e23096662dfd94ee7b24ce516a5e1b6c1bec97dd7e5e3bbd",
+    "check.log": "46ee87d0b8dbe59f81aa9694c5bc1382b245b1fb0e982477df8addc1c4359c55",
+    "final.log": "c195493a3f79d14fabd9fc8ebd692d8387e08fb42d6328b7035f5e12d7ccaa64",
+    "native-check.log": "4e1e063ea5caa0d3f4e01a4324497b3f88a1cf6deda0b884724c91cb4359ae59",
+    "regressions.log": "aeebc0b66e8c0660329237a69e8e5032ab509d2b6950ba7bcf9e80b7ef1a6839"
+  },
+  "retained_under_root_cleanup": ".agent-workspace/20260930-speedup-implementation/writer/target and hmd058 baseline manifests"
+}
