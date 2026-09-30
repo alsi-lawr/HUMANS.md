@@ -1,30 +1,25 @@
 use crate::{diagnostic::Diagnostic, record::RecordSummary};
-use std::collections::BTreeMap;
+use serde::Deserialize;
+use std::{collections::BTreeMap, path::Path};
 
 pub type ProjectMap = BTreeMap<String, String>;
 
 pub fn parse_map(path: &str, bytes: &[u8]) -> Result<ProjectMap, Vec<Diagnostic>> {
+    #[derive(Deserialize)]
+    struct MapWire {
+        projects: ProjectMap,
+    }
+
     let projects = std::str::from_utf8(bytes)
         .ok()
-        .and_then(|text| toml::from_str::<toml::Value>(text).ok())
-        .and_then(|value| {
-            value
-                .get("projects")
-                .and_then(toml::Value::as_table)
-                .cloned()
-        })
-        .filter(|projects| projects.values().all(toml::Value::is_str))
-        .map(|projects| {
-            projects
-                .into_iter()
-                .map(|(name, value)| (name, value.as_str().expect("filtered string").into()))
-                .collect()
-        });
+        .and_then(|text| toml::from_str::<MapWire>(text).ok())
+        .map(|wire| wire.projects)
+        .filter(|projects| projects.values().all(|root| Path::new(root).is_absolute()));
     projects.ok_or_else(|| {
         vec![Diagnostic::new(
             path,
             "invalid_project_map",
-            "projects.toml must contain string project source roots",
+            "projects.toml must contain platform-absolute string project source roots",
         )]
     })
 }

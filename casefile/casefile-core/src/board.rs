@@ -85,18 +85,24 @@ pub(crate) fn parse(path: &str, text: &str) -> Result<RecordDraft, Vec<Diagnosti
                 .field("schema_version"),
         ]);
     }
-    for name in ["filter_statuses", "filter_kinds"] {
-        if table.contains_key(name) && strings(table.get(name)).is_none() {
-            return Err(vec![
-                Diagnostic::new(
-                    path,
-                    "invalid_board_filter",
-                    "board filters must be string arrays",
-                )
-                .field(name),
-            ]);
-        }
-    }
+    let filter = |name| {
+        table
+            .get(name)
+            .map(|value| {
+                strings(Some(value)).ok_or_else(|| {
+                    Diagnostic::new(
+                        path,
+                        "invalid_board_filter",
+                        "board filters must be string arrays",
+                    )
+                    .field(name)
+                })
+            })
+            .transpose()
+            .map_err(|diagnostic| vec![diagnostic])
+    };
+    let filter_statuses = filter("filter_statuses")?;
+    let filter_kinds = filter("filter_kinds")?;
     let board = BoardDraft {
         id: table
             .get("id")
@@ -123,8 +129,8 @@ pub(crate) fn parse(path: &str, text: &str) -> Result<RecordDraft, Vec<Diagnosti
                 ]
             })?
             .unwrap_or_default(),
-        filter_statuses: strings(table.get("filter_statuses")),
-        filter_kinds: strings(table.get("filter_kinds")),
+        filter_statuses,
+        filter_kinds,
         columns,
     };
     validate(path, &board).map_err(|diagnostic| vec![diagnostic])?;
@@ -139,6 +145,36 @@ pub(crate) fn validate(path: &str, board: &BoardDraft) -> Result<(), Diagnostic>
             "invalid_board",
             "board ID, title, and at least one column are required",
         ));
+    }
+    if board.filter_kinds.as_ref().is_some_and(|values| {
+        values
+            .iter()
+            .any(|value| !matches!(value.as_str(), "ticket" | "epic"))
+    }) {
+        return Err(Diagnostic::new(
+            path,
+            "invalid_board_filter",
+            "unsupported board kind filter",
+        )
+        .field("filter_kinds"));
+    }
+    if board.filter_statuses.as_ref().is_some_and(|values| {
+        values.iter().any(|value| match board.status_source {
+            BoardStatusSource::Disposition => {
+                !matches!(value.as_str(), "provisional" | "accepted" | "rejected")
+            }
+            BoardStatusSource::Progress => !matches!(
+                value.as_str(),
+                "unknown" | "in_progress" | "in_review" | "verifying" | "blocked" | "complete"
+            ),
+        })
+    }) {
+        return Err(Diagnostic::new(
+            path,
+            "invalid_board_filter",
+            "unsupported board status filter",
+        )
+        .field("filter_statuses"));
     }
     let mut names = BTreeSet::new();
     let mut statuses = BTreeSet::new();

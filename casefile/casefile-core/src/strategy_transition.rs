@@ -1,6 +1,5 @@
 use std::collections::BTreeSet;
 
-use regex::Regex;
 use serde::{Deserialize, Serialize};
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
@@ -105,10 +104,9 @@ pub fn validate_strategy_transition(
     path: &str,
     record: &StrategyTransitionRecord,
 ) -> Result<(), Diagnostic> {
-    let safe_id = Regex::new(r"^[a-z0-9][a-z0-9-]*$").expect("fixed expression");
-    if !safe_id.is_match(&record.operation_id)
-        || !safe_id.is_match(&record.previous_strategy_id)
-        || !safe_id.is_match(&record.selected_strategy_id)
+    if !safe_identity(&record.operation_id)
+        || !safe_identity(&record.previous_strategy_id)
+        || !safe_identity(&record.selected_strategy_id)
     {
         return Err(Diagnostic::new(
             path,
@@ -227,17 +225,23 @@ pub fn validate_strategy_transition(
                 .map(|claimed| (ownership.owner.as_str(), claimed.as_str())),
         );
     }
-    for (index, (owner, claimed)) in claims.iter().enumerate() {
-        if claims[index + 1..]
-            .iter()
-            .any(|(other_owner, other)| owner != other_owner && paths_overlap(claimed, other))
+    claims.sort_unstable_by(|(_, left), (_, right)| left.split('/').cmp(right.split('/')));
+    let mut covering_claim = None;
+    for (owner, claimed) in claims {
+        if let Some((covering_owner, covering_path)) = covering_claim
+            && paths_overlap(covering_path, claimed)
         {
-            return Err(Diagnostic::new(
-                path,
-                "overlapping_strategy_ownership",
-                "active writers may not claim overlapping paths",
-            ));
+            if owner != covering_owner {
+                return Err(Diagnostic::new(
+                    path,
+                    "overlapping_strategy_ownership",
+                    "active writers may not claim overlapping paths",
+                ));
+            }
+            // Component order keeps a subtree contiguous; retain its outer same-owner claim.
+            continue;
         }
+        covering_claim = Some((owner, claimed));
     }
     Ok(())
 }
@@ -326,6 +330,16 @@ fn toml_array(values: &[String]) -> String {
     )
 }
 
+fn safe_identity(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    bytes
+        .first()
+        .is_some_and(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit())
+        && bytes
+            .iter()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || *byte == b'-')
+}
+
 fn safe_path(value: &str) -> bool {
     if value.trim().is_empty()
         || value.starts_with('/')
@@ -353,10 +367,8 @@ fn paths_overlap(left: &str, right: &str) -> bool {
 mod tests {
     use super::*;
 
-    #[test]
-    fn strict_transition_round_trips_and_rejects_unknown_fields() {
-        let path = "strategy/transitions/20260727T120000Z-switch.toml";
-        let record = StrategyTransitionRecord {
+    fn transition() -> StrategyTransitionRecord {
+        StrategyTransitionRecord {
             operation_id: "switch".into(),
             recorded_at: "2026-07-27T12:00:00Z".into(),
             phase: "implementation".into(),
@@ -373,7 +385,13 @@ mod tests {
             available_capabilities: vec!["subagents".into()],
             preserved_work_paths: vec!["tickets/accepted/HMD-001.md".into()],
             active_ownership: Vec::new(),
-        };
+        }
+    }
+
+    #[test]
+    fn strict_transition_round_trips_and_rejects_unknown_fields() {
+        let path = "strategy/transitions/20260727T120000Z-switch.toml";
+        let record = transition();
         let rendered = render_strategy_transition(&record);
         assert_eq!(
             record,
@@ -383,5 +401,62 @@ mod tests {
         let mut drive_relative = record;
         drive_relative.preserved_work_paths = vec!["C:ticket.md".into()];
         assert!(validate_strategy_transition(path, &drive_relative).is_err());
+    }
+
+    fn ownership(owner: &str, paths: &[&str]) -> ActiveOwnership {
+        ActiveOwnership {
+            owner: owner.into(),
+            paths: paths.iter().map(|path| (*path).into()).collect(),
+        }
+    }
+
+    #[test]
+    fn same_owner_descendants_cannot_hide_cross_owner_ancestor_conflicts() {
+        let path = "strategy/transitions/20260727T120000Z-switch.toml";
+        for same_owner_paths in [
+            vec!["a", "a/x"],
+            vec!["a", "a-x"],
+            vec!["a", "a/x", "a/x/z"],
+        ] {
+            let mut record = transition();
+            record.active_ownership = vec![
+                ownership("writer-a", &same_owner_paths),
+                ownership("writer-b", &["a/y"]),
+            ];
+            let errors = parse_strategy_transition(path, &render_strategy_transition(&record))
+                .expect_err("ancestor owner conflict");
+            assert_eq!(errors[0].code, "overlapping_strategy_ownership");
+        }
+    }
+
+    #[test]
+    fn ownership_distinguishes_exact_conflicts_from_same_owner_and_disjoint_subtrees() {
+        let path = "strategy/transitions/20260727T120000Z-switch.toml";
+        let mut record = transition();
+        record.active_ownership = vec![
+            ownership("writer-a", &["src/tree"]),
+            ownership("writer-b", &["src/tree"]),
+        ];
+        assert_eq!(
+            parse_strategy_transition(path, &render_strategy_transition(&record)).unwrap_err()[0]
+                .code,
+            "overlapping_strategy_ownership"
+        );
+        record.active_ownership = vec![
+            ownership("writer-a", &["src/tree", "src/tree/a"]),
+            ownership("writer-a", &["src/tree/b"]),
+        ];
+        assert_eq!(
+            parse_strategy_transition(path, &render_strategy_transition(&record)).unwrap(),
+            record
+        );
+        record.active_ownership = vec![
+            ownership("writer-a", &["src/tree/a"]),
+            ownership("writer-b", &["src/tree/ab", "src/tree/b", "src/tree-other"]),
+        ];
+        assert_eq!(
+            parse_strategy_transition(path, &render_strategy_transition(&record)).unwrap(),
+            record
+        );
     }
 }

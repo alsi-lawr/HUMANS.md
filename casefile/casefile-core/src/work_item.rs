@@ -1,4 +1,3 @@
-use pulldown_cmark::{Event, HeadingLevel, Options, Parser, Tag};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::sync::LazyLock;
@@ -6,7 +5,7 @@ use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
 use crate::{
     diagnostic::Diagnostic,
-    markdown::markdown_headings,
+    markdown::heading_sections,
     metadata::{split_closing, strip_opening},
     record::{Kind, RecordDraft},
 };
@@ -79,7 +78,25 @@ pub(crate) fn parse(path: &str, kind: Kind, text: &str) -> Result<RecordDraft, V
             error.to_string(),
         )]
     })?;
-    let sections = required_sections(path, body)?;
+    let (
+        heading,
+        [
+            requirement_and_evidence,
+            impact,
+            resolution_boundary,
+            acceptance_criteria,
+            verification,
+            relationships_and_duplicate_analysis,
+            review_and_disposition_history,
+        ],
+    ) = required_sections(path, body)?;
+    if heading != wire.id {
+        return Err(vec![Diagnostic::new(
+            path,
+            "identity_heading",
+            "H1 must equal the work-item ID",
+        )]);
+    }
     let item = WorkItemDraft {
         id: wire.id,
         title: wire.title,
@@ -97,22 +114,14 @@ pub(crate) fn parse(path: &str, kind: Kind, text: &str) -> Result<RecordDraft, V
         supersedes: wire.supersedes,
         superseded_by: wire.superseded_by,
         rank: wire.rank,
-        requirement_and_evidence: sections[0].clone(),
-        impact: sections[1].clone(),
-        resolution_boundary: sections[2].clone(),
-        acceptance_criteria: sections[3].clone(),
-        verification: sections[4].clone(),
-        relationships_and_duplicate_analysis: sections[5].clone(),
-        review_and_disposition_history: sections[6].clone(),
+        requirement_and_evidence,
+        impact,
+        resolution_boundary,
+        acceptance_criteria,
+        verification,
+        relationships_and_duplicate_analysis,
+        review_and_disposition_history,
     };
-    let (h1, _) = markdown_headings(path, body).map_err(|diagnostic| vec![diagnostic])?;
-    if h1[0] != item.id {
-        return Err(vec![Diagnostic::new(
-            path,
-            "identity_heading",
-            "H1 must equal the work-item ID",
-        )]);
-    }
     validate(path, kind, &item).map_err(|diagnostic| vec![diagnostic])?;
     Ok(if kind == Kind::Ticket {
         RecordDraft::Ticket(item)
@@ -259,48 +268,33 @@ fn split_frontmatter<'a>(path: &str, text: &'a str) -> Result<(&'a str, &'a str)
     Ok((frontmatter, body))
 }
 
-fn required_sections(path: &str, body: &str) -> Result<Vec<String>, Vec<Diagnostic>> {
-    let (_, headings) = markdown_headings(path, body).map_err(|diagnostic| vec![diagnostic])?;
-    if headings != SECTIONS {
-        return Err(vec![Diagnostic::new(
-            path,
-            "work_item_sections",
-            "required H2 headings must occur exactly once and in order",
-        )]);
-    }
-    let starts = Parser::new_ext(body, Options::all())
-        .into_offset_iter()
-        .filter_map(|(event, range)| {
-            matches!(
-                event,
-                Event::Start(Tag::Heading {
-                    level: HeadingLevel::H2,
-                    ..
-                })
-            )
-            .then_some(range.start)
-        })
-        .collect::<Vec<_>>();
-    if starts.len() != SECTIONS.len() {
-        return Err(vec![Diagnostic::new(
-            path,
-            "work_item_sections",
-            "required H2 headings must occur exactly once and in order",
-        )]);
-    }
-
-    Ok(starts
+fn required_sections(path: &str, body: &str) -> Result<(String, [String; 7]), Vec<Diagnostic>> {
+    let headings = heading_sections(path, body).map_err(|diagnostic| vec![diagnostic])?;
+    if !headings
+        .sections
         .iter()
-        .enumerate()
-        .map(|(index, start)| {
-            let content_start = body[*start..]
-                .find('\n')
-                .map(|offset| start + offset + 1)
-                .unwrap_or(body.len());
-            let content_end = starts.get(index + 1).copied().unwrap_or(body.len());
-            body[content_start..content_end].trim().to_owned()
-        })
-        .collect())
+        .map(|(name, _)| name.as_str())
+        .eq(SECTIONS)
+    {
+        return Err(vec![Diagnostic::new(
+            path,
+            "work_item_sections",
+            "required H2 headings must occur exactly once and in order",
+        )]);
+    }
+    let sections = std::array::from_fn(|index| {
+        let start = headings.sections[index].1;
+        let content_start = body[start..]
+            .find('\n')
+            .map(|offset| start + offset + 1)
+            .unwrap_or(body.len());
+        let content_end = headings
+            .sections
+            .get(index + 1)
+            .map_or(body.len(), |(_, start)| *start);
+        body[content_start..content_end].trim().to_owned()
+    });
+    Ok((headings.title, sections))
 }
 
 fn yaml_string(value: &str) -> String {
@@ -330,7 +324,9 @@ mod tests {
         let body = "# VISET-039\n\n## Requirement and evidence\n\nRequirement.\n\n### Acceptance criteria\n\nNested heading.\n\n## Impact\n\nImpact.\n\n## Resolution boundary\n\nBoundary.\n\n## Acceptance criteria\n\nCriteria.\n\n## Verification\n\nVerification.\n\n## Relationships and duplicate analysis\n\nRelationships.\n\n## Review and disposition history\n\nHistory.\n";
 
         assert_eq!(
-            required_sections("VISET-039.md", body).expect("valid sections"),
+            required_sections("VISET-039.md", body)
+                .expect("valid sections")
+                .1,
             [
                 "Requirement.\n\n### Acceptance criteria\n\nNested heading.",
                 "Impact.",
@@ -340,6 +336,36 @@ mod tests {
                 "Relationships.",
                 "History.",
             ]
+        );
+    }
+
+    #[test]
+    fn fenced_headings_and_inline_heading_markup_preserve_work_item_sections() {
+        let path = "tickets/accepted/HMD-011.md";
+        let source = include_str!(
+            "../../casefile-store/tests/fixtures/minimum/projects/demo/investigations/sample/tickets/accepted/HMD-011.md"
+        );
+        let requirement = "Required.\n\n```markdown\n# Not an identity\n## Impact\n## Acceptance criteria\n```\n\n### Impact\n\nStill requirement.";
+        let text = source
+            .replace("Required.", requirement)
+            .replace("# HMD-011", "# **HMD-011**")
+            .replace("## Impact\n", "## *Impact*\n")
+            .replace("## Verification\n", "## `Verification`\n");
+        let draft = crate::parse_draft(path, Kind::Ticket, &text).expect("Markdown work item");
+        let RecordDraft::Ticket(item) = &draft else {
+            panic!("ticket")
+        };
+        assert_eq!(
+            item.requirement_and_evidence,
+            requirement.replace("## Impact\n", "## *Impact*\n")
+        );
+        assert_eq!(item.impact, "Impact.");
+        assert_eq!(item.verification, "Tests.");
+        let rendered = crate::render_draft(path, &draft).expect("round trip preserves body");
+        assert_eq!(
+            crate::parse_draft(path, Kind::Ticket, std::str::from_utf8(&rendered).unwrap())
+                .unwrap(),
+            draft
         );
     }
 }

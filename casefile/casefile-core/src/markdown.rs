@@ -1,36 +1,63 @@
-use pulldown_cmark::{Event, Options, Parser, Tag, TagEnd};
+use pulldown_cmark::{Event, HeadingLevel, Options, Parser, Tag, TagEnd};
 
 use crate::{diagnostic::Diagnostic, record::RecordSummary};
 
+pub(crate) struct HeadingSections {
+    pub title: String,
+    pub sections: Vec<(String, usize)>,
+}
+
 #[allow(clippy::result_large_err)]
-pub fn markdown_headings(path: &str, text: &str) -> Result<(Vec<String>, Vec<String>), Diagnostic> {
-    let mut h1 = Vec::new();
-    let mut h2 = Vec::new();
+pub(crate) fn heading_sections(path: &str, text: &str) -> Result<HeadingSections, Diagnostic> {
+    let mut title = None;
+    let mut sections = Vec::new();
     let mut level = None;
+    let mut start = 0;
     let mut current = String::new();
-    for event in Parser::new_ext(text, Options::all()) {
+    for (event, range) in Parser::new_ext(text, Options::all()).into_offset_iter() {
         match event {
             Event::Start(Tag::Heading { level: heading, .. }) => {
-                level = Some(heading);
+                level = matches!(heading, HeadingLevel::H1 | HeadingLevel::H2).then_some(heading);
+                start = range.start;
                 current.clear();
             }
             Event::Text(value) | Event::Code(value) if level.is_some() => current.push_str(&value),
             Event::End(TagEnd::Heading(_)) => match level.take() {
-                Some(pulldown_cmark::HeadingLevel::H1) => h1.push(current.trim().into()),
-                Some(pulldown_cmark::HeadingLevel::H2) => h2.push(current.trim().into()),
+                Some(HeadingLevel::H1) if title.is_some() => {
+                    return Err(Diagnostic::new(
+                        path,
+                        "h1_count",
+                        "Markdown record must contain exactly one H1",
+                    ));
+                }
+                Some(HeadingLevel::H1) => title = Some(current.trim().to_owned()),
+                Some(HeadingLevel::H2) => sections.push((current.trim().to_owned(), start)),
                 _ => {}
             },
             _ => {}
         }
     }
-    if h1.len() != 1 {
-        return Err(Diagnostic::new(
+    let title = title.ok_or_else(|| {
+        Diagnostic::new(
             path,
             "h1_count",
             "Markdown record must contain exactly one H1",
-        ));
-    }
-    Ok((h1, h2))
+        )
+    })?;
+    Ok(HeadingSections { title, sections })
+}
+
+#[allow(clippy::result_large_err)]
+pub fn markdown_headings(path: &str, text: &str) -> Result<(Vec<String>, Vec<String>), Diagnostic> {
+    let headings = heading_sections(path, text)?;
+    Ok((
+        vec![headings.title],
+        headings
+            .sections
+            .into_iter()
+            .map(|(name, _)| name)
+            .collect(),
+    ))
 }
 
 pub fn validate_markdown(

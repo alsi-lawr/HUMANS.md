@@ -242,11 +242,10 @@ fn parse_projection_table(
             .map(|(index, value)| parse_worker(path, value, index, max_depth))
             .collect::<Result<Vec<_>, _>>()?,
     };
-    let minimum_total = workers
-        .iter()
-        .map(|worker| worker.minimum_count)
-        .sum::<u64>();
-    if minimum_total > max_concurrent_subagents {
+    let minimum_total = workers.iter().try_fold(0_u64, |total, worker| {
+        total.checked_add(worker.minimum_count)
+    });
+    if minimum_total.is_none_or(|total| total > max_concurrent_subagents) {
         return Err(vec![Diagnostic::new(
             path,
             "strategy_capacity",
@@ -609,5 +608,18 @@ shared_ticket_storage_required = true
             )
             .is_err()
         );
+    }
+
+    #[test]
+    fn worker_minimum_sum_overflow_is_a_capacity_diagnostic() {
+        let mut matrix: toml::Value = toml::from_str(COMPLETE).unwrap();
+        matrix["limits"]["max_concurrent_subagents"] = toml::Value::Integer(i64::MAX);
+        let mut worker = matrix["workers"][0].clone();
+        worker["minimum_count"] = toml::Value::Integer(i64::MAX);
+        worker["maximum_count"] = toml::Value::Integer(i64::MAX);
+        matrix["workers"] = toml::Value::Array(vec![worker.clone(), worker.clone(), worker]);
+        let errors =
+            validate_matrix(&toml::to_string(&matrix).unwrap()).expect_err("impossible capacity");
+        assert_eq!(errors[0].code, "strategy_capacity");
     }
 }
