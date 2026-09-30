@@ -18,7 +18,7 @@ use std::{
 };
 use thiserror::Error;
 
-pub const PROVIDER_PROTOCOL_VERSION: u32 = 3;
+pub const PROVIDER_PROTOCOL_VERSION: u32 = 4;
 const PREVIEW_LIMIT: usize = 256;
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
@@ -147,7 +147,7 @@ pub struct ProviderInvestigation {
 pub struct ProviderSnapshot {
     pub capabilities: ProviderCapabilities,
     pub activation: ActivationState,
-    pub revision: Revision,
+    pub freshness: crate::CatalogueToken,
     pub diagnostic_coverage: ProviderDiagnosticCoverage,
     pub catalogue: ProviderCatalogue,
     pub cache: CacheState,
@@ -213,29 +213,29 @@ pub enum ProviderQuery {
 #[serde(tag = "result", rename_all = "snake_case")]
 pub enum ProviderQueryResult {
     Diagnostics {
-        revision: Revision,
+        freshness: crate::ScopeReadToken,
         scope: InvestigationScope,
         diagnostics: Vec<Diagnostic>,
         total_count: usize,
     },
     RecordIndex {
-        revision: Revision,
+        freshness: crate::ScopeReadToken,
         scope: InvestigationScope,
         diagnostic_coverage: ProviderIndexDiagnosticCoverage,
         records: Vec<ProviderRecordIndexEntry>,
     },
     RecordDetail {
-        revision: Revision,
+        freshness: crate::ScopeReadToken,
         identity: InvestigationScopedIdentity,
         record: Option<Box<ProviderRecordDetail>>,
     },
     Boards {
-        revision: Revision,
+        freshness: crate::ScopeReadToken,
         scope: InvestigationScope,
         boards: Vec<DerivedBoard>,
     },
     StrategyTransitions {
-        revision: Revision,
+        freshness: crate::ScopeReadToken,
         scope: InvestigationScope,
         transitions: Vec<StrategyTransitionProjection>,
     },
@@ -513,7 +513,9 @@ impl<C: ProviderCache> Provider<C> {
         Ok(ProviderSnapshot {
             capabilities: capabilities(baseline.activation),
             activation: baseline.activation,
-            revision: baseline.revision,
+            freshness: crate::CatalogueToken {
+                revision: baseline.revision,
+            },
             diagnostic_coverage: ProviderDiagnosticCoverage {
                 catalogue: ProviderDiagnosticCount {
                     count: diagnostic_count,
@@ -565,8 +567,14 @@ impl<C: ProviderCache> Provider<C> {
                 if size > 256 * 1024 {
                     return Err(StoreError::Invalid("scoped diagnostics exceed the 256 KiB field budget; query exact record_detail identities".into()).into());
                 }
+                let crate::CheckFreshness::ScopeRead { token: freshness } = result.freshness else {
+                    return Err(StoreError::Invalid(
+                        "scoped diagnostics require scoped freshness".into(),
+                    )
+                    .into());
+                };
                 ProviderQueryResult::Diagnostics {
-                    revision: result.revision,
+                    freshness,
                     scope,
                     diagnostics,
                     total_count,
@@ -638,7 +646,7 @@ impl<C: ProviderCache> Provider<C> {
             })
             .collect();
         Ok(ProviderQueryResult::RecordIndex {
-            revision: selected.revision,
+            freshness: selected.freshness,
             diagnostic_coverage: ProviderIndexDiagnosticCoverage {
                 scope: scope.clone(),
                 kind: ProviderIndexDiagnosticCoverageKind::LocalAndInvestigation,
@@ -652,7 +660,7 @@ impl<C: ProviderCache> Provider<C> {
         &self,
         identity: InvestigationScopedIdentity,
     ) -> Result<ProviderQueryResult, ProviderError> {
-        let selected = crate::scanning::scoped_detail_scan(
+        let mut selected = crate::scanning::scoped_detail_scan(
             self.store.observation_root(),
             &identity.scope.project,
             &identity.scope.investigation,
@@ -674,11 +682,13 @@ impl<C: ProviderCache> Provider<C> {
         let record = matches
             .first()
             .map(|entry| {
-                let text = std::str::from_utf8(&entry.original_bytes)
-                    .map_err(|_| StoreError::Invalid("record detail must be UTF-8".into()))?;
                 let kind = entry.kind.expect("filtered work item");
-                let draft = casefile_core::parse_draft(&entry.path, kind, text)
-                    .map_err(|diagnostics| StoreError::Invalid(diagnostics[0].message.clone()))?;
+                let draft = selected.drafts.remove(&entry.path).ok_or_else(|| {
+                    StoreError::Invalid(format!(
+                        "{}: requested record has no valid draft",
+                        entry.path
+                    ))
+                })?;
                 let progress = crate::derived::scoped_progress(
                     &selected.entries,
                     &selected.diagnostics,
@@ -703,7 +713,7 @@ impl<C: ProviderCache> Provider<C> {
             })
             .transpose()?;
         Ok(ProviderQueryResult::RecordDetail {
-            revision: selected.revision,
+            freshness: selected.freshness,
             identity,
             record,
         })
@@ -724,7 +734,7 @@ impl<C: ProviderCache> Provider<C> {
             &selected.path,
         );
         Ok(ProviderQueryResult::Boards {
-            revision: selected.revision,
+            freshness: selected.freshness,
             scope,
             boards,
         })
@@ -755,7 +765,7 @@ impl<C: ProviderCache> Provider<C> {
             })
             .collect();
         Ok(ProviderQueryResult::StrategyTransitions {
-            revision: selected.revision,
+            freshness: selected.freshness,
             scope,
             transitions,
         })

@@ -18,6 +18,7 @@ mod mutation_tests;
 mod presentation;
 mod progress;
 mod provider;
+mod read_context;
 mod revision;
 mod scanning;
 mod store;
@@ -60,6 +61,10 @@ pub use provider::{
     ProviderRecordDiagnosticCoverage, ProviderRecordIndexEntry, ProviderRecordProgressSummary,
     ProviderSnapshot, ProviderStrategyTransitionPreview, ProviderWriterBindingPreview,
     StrategyTransitionProjection,
+};
+pub use read_context::{
+    AttachmentState, CatalogueToken, CheckFreshness, ReadDependency, ScopeReadTarget,
+    ScopeReadToken,
 };
 pub use scanning::{ScanResult, is_store_path_excluded};
 pub use store::{Store, StoreError};

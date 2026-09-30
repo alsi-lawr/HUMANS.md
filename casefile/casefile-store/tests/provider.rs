@@ -66,7 +66,7 @@ fn new_ticket(root: &Path) -> (String, RecordDraft) {
 }
 
 #[test]
-fn snapshot_and_exact_scoped_reads_are_bounded_protocol_v3() {
+fn snapshot_and_exact_scoped_reads_are_bounded_protocol_v4() {
     let root = fixture();
     let store = Store::open(root.path()).expect("store");
     let provider = Provider::without_cache(store.clone());
@@ -94,9 +94,9 @@ fn snapshot_and_exact_scoped_reads_are_bounded_protocol_v3() {
                 .expect("progress preview"),
         )
         .expect("progress apply");
-    let snapshot = provider.snapshot_for_protocol(3).expect("snapshot");
+    let snapshot = provider.snapshot_for_protocol(4).expect("snapshot");
     assert_eq!(snapshot.activation, ActivationState::Active);
-    assert_eq!(snapshot.capabilities.protocol_version, 3);
+    assert_eq!(snapshot.capabilities.protocol_version, 4);
     assert_eq!(snapshot.capabilities.planning_format_versions, [1]);
     assert_eq!(
         snapshot.capabilities.mutation,
@@ -133,7 +133,7 @@ fn snapshot_and_exact_scoped_reads_are_bounded_protocol_v3() {
             .contains(&ProviderOperation::ApplyProgress)
     );
     assert!(matches!(
-        provider.snapshot_for_protocol(2),
+        provider.snapshot_for_protocol(3),
         Err(ProviderError::UnsupportedProtocol { .. })
     ));
 
@@ -195,12 +195,15 @@ fn snapshot_and_exact_scoped_reads_are_bounded_protocol_v3() {
     {
         ProviderQueryResult::RecordIndex {
             records,
-            revision,
+            freshness,
             diagnostic_coverage,
             ..
         } => {
             assert_eq!(records.len(), 2);
-            assert_eq!(revision, snapshot.revision);
+            assert!(matches!(
+                freshness.target,
+                casefile_store::ScopeReadTarget::RecordIndex { .. }
+            ));
             assert_eq!(diagnostic_coverage.scope.project, "demo");
             assert_eq!(
                 diagnostic_coverage.kind,
@@ -224,9 +227,12 @@ fn snapshot_and_exact_scoped_reads_are_bounded_protocol_v3() {
         .expect("purpose-built scoped boards")
     {
         ProviderQueryResult::Boards {
-            revision, boards, ..
+            freshness, boards, ..
         } => {
-            assert_eq!(revision, snapshot.revision);
+            assert!(matches!(
+                freshness.target,
+                casefile_store::ScopeReadTarget::Boards { .. }
+            ));
             let canonical_scan = store.scan().expect("canonical board comparison scan");
             assert_eq!(boards, store.derive_snapshot(&canonical_scan).boards);
             assert_eq!(boards[0].columns[0].cards[0].identity.identity, "HMD-011");
@@ -1163,14 +1169,13 @@ fn scoped_diagnostics_report_exact_progress_target_and_bounded_follow_up() {
     )
     .unwrap();
     let provider = Provider::without_cache(Store::open(root.path()).unwrap());
-    let before = provider.snapshot().unwrap().revision;
     let result = provider
         .query(ProviderQuery::Diagnostics {
             scope: scope.clone(),
         })
         .unwrap();
     let ProviderQueryResult::Diagnostics {
-        revision,
+        freshness,
         scope: found,
         diagnostics,
         total_count,
@@ -1178,7 +1183,12 @@ fn scoped_diagnostics_report_exact_progress_target_and_bounded_follow_up() {
     else {
         panic!("diagnostics")
     };
-    assert_eq!(&before, revision);
+    assert_eq!(
+        freshness.target,
+        casefile_store::ScopeReadTarget::Diagnostics {
+            scope: scope.clone()
+        }
+    );
     assert_eq!(&scope, found);
     assert_eq!(*total_count, 140);
     assert_eq!(diagnostics.len(), 128);

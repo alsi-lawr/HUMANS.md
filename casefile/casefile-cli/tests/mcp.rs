@@ -39,7 +39,7 @@ fn command(root: &Path) -> Command {
         .arg(root)
         .arg("--expected-root")
         .arg(root)
-        .args(["--expected-provider-protocol", "3"])
+        .args(["--expected-provider-protocol", "4"])
         .args(["--required-provider-operations", OPERATIONS]);
     command
 }
@@ -81,7 +81,7 @@ fn compatibility_contract_is_machine_readable_and_complete() {
     );
     let value: Value = serde_json::from_slice(&output.stdout).expect("JSON");
     assert_eq!(value["identity"], "casefile");
-    assert_eq!(value["provider_protocol_version"], 3);
+    assert_eq!(value["provider_protocol_version"], 4);
     assert_eq!(
         value["required_provider_operations"]
             .as_array()
@@ -217,7 +217,7 @@ fn fixed_root_session_negotiates_and_exposes_canonical_snapshot_and_query() {
     };
     let snapshot = &response(3)["result"]["structuredContent"];
     assert_eq!(snapshot["activation"], "active");
-    assert_eq!(snapshot["capabilities"]["protocol_version"], 3);
+    assert_eq!(snapshot["capabilities"]["protocol_version"], 4);
     assert_eq!(snapshot["catalogue"]["projects"][0]["name"], "demo");
     assert!(snapshot.get("projections").is_none());
     let query = &response(4)["result"]["structuredContent"];
@@ -229,7 +229,13 @@ fn fixed_root_session_negotiates_and_exposes_canonical_snapshot_and_query() {
     );
     let diagnostics = &response(7)["result"]["structuredContent"];
     assert_eq!(diagnostics["result"], "diagnostics");
-    assert_eq!(diagnostics["revision"], snapshot["revision"]);
+    assert_eq!(snapshot["freshness"]["kind"], "catalogue");
+    assert_eq!(diagnostics["freshness"]["kind"], "scope_read");
+    assert_eq!(diagnostics["freshness"]["target"]["query"], "diagnostics");
+    assert_eq!(
+        diagnostics["freshness"]["target"]["scope"],
+        diagnostics["scope"]
+    );
     assert_eq!(
         diagnostics["scope"],
         json!({"project":"demo", "investigation":"sample"})
@@ -271,8 +277,8 @@ fn root_protocol_and_capability_refusals_happen_before_tool_service() {
     for (flag, value, diagnostic) in [
         (
             "--expected-provider-protocol",
-            "2",
-            "requires provider protocol 2",
+            "3",
+            "requires provider protocol 3",
         ),
         (
             "--required-provider-operations",

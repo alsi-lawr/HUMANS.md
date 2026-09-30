@@ -224,6 +224,7 @@ version = "0.1.0"
 dependencies = [
  "casefile-core",
  "libc",
+ "rayon",
  "regex",
  "serde",
  "serde-saphyr",
@@ -233,6 +234,7 @@ dependencies = [
  "thiserror",
  "time",
  "toml",
+ "walkdir",
  "windows-sys",
 ]
 

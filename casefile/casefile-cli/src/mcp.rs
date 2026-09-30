@@ -392,7 +392,7 @@ impl Session {
                 "protocolVersion": protocol,
                 "capabilities": {"tools": {"listChanged": false}},
                 "serverInfo": {"name": "casefile", "version": env!("CARGO_PKG_VERSION")},
-                "instructions": "Casefile tools operate only on the explicit planning root. Read in order: snapshot catalogue, select one exact project and investigation, request its record_index, then request only necessary exact record_detail identities. Never request unscoped or bulk record bodies and never mix revisions. Never run casefile scan, raw/full scans or whole-document parsing on live Stores. For validation failures use the exact scope diagnostics query and its safe next query. Legacy check --investigation read the full Store; current check reads only exact scope and project support summaries. JSON responses are limited to 8 MiB before stdout. Every preview states approval_required. Request external approval only when true; apply an exact live-session preview with preview_id."
+                "instructions": "Casefile tools operate only on the explicit planning root. Read in order: snapshot catalogue, select one exact project and investigation, request its record_index, then request only necessary exact record_detail identities. Never request unscoped or bulk record bodies and compare freshness only for the same typed target; catalogue/global revisions and scoped dependencies are different domains. Never run casefile scan, raw/full scans or whole-document parsing on live Stores. For validation failures use the exact scope diagnostics query and its safe next query. Legacy check --investigation read the full Store; current check reads only exact scope and project support summaries. JSON responses are limited to 8 MiB before stdout. Every preview states approval_required. Request external approval only when true; apply an exact live-session preview with preview_id."
             }),
         )
     }
@@ -716,12 +716,12 @@ fn tool_definitions() -> Vec<Value> {
     vec![
         tool(
             "casefile_snapshot",
-            "Read only bounded root capabilities, metadata revision, diagnostic coverage counts, and project/investigation catalogue. Then select one exact investigation before querying records.",
+            "Read only bounded root capabilities, global catalogue freshness, diagnostic coverage counts, and project/investigation catalogue. Then select one exact investigation before querying records.",
             object_schema(json!({}), &[]),
         ),
         tool(
             "casefile_query",
-            "Read one exact investigation-scoped record index, one exact record detail, scoped boards, or scoped strategy transitions. Never mix returned revisions.",
+            "Read one exact investigation-scoped record index, one exact record detail, scoped boards, or scoped strategy transitions. Compare freshness only within the same typed query target and scope; catalogue tokens are not scoped-read authority.",
             query_schema(),
         ),
         tool(
@@ -1122,7 +1122,7 @@ fn tool_output_schema(name: &str) -> Value {
             json!({
                 "capabilities": capabilities_schema(),
                 "activation": {"type": "string", "enum": ["unactivated", "active", "invalid"]},
-                "revision": non_empty_string(),
+                "freshness": object_schema(json!({"kind": {"const": "catalogue"}, "revision": non_empty_string()}), &["kind", "revision"]),
                 "diagnostic_coverage": object_schema(
                     json!({
                         "catalogue": object_schema(
@@ -1144,7 +1144,7 @@ fn tool_output_schema(name: &str) -> Value {
             &[
                 "capabilities",
                 "activation",
-                "revision",
+                "freshness",
                 "diagnostic_coverage",
                 "catalogue",
                 "cache",
@@ -1246,16 +1246,16 @@ fn query_output_schema() -> Value {
     one_of_object(vec![
         object_schema(
             json!({
-                "result": {"const": "diagnostics"}, "revision": non_empty_string(),
+                "result": {"const": "diagnostics"}, "freshness": scope_token_schema("diagnostics"),
                 "scope": scope_schema(), "diagnostics": {"type": "array", "maxItems": 128, "items": diagnostic_schema()},
                 "total_count": {"type": "integer", "minimum": 0},
             }),
-            &["result", "revision", "scope", "diagnostics", "total_count"],
+            &["result", "freshness", "scope", "diagnostics", "total_count"],
         ),
         object_schema(
             json!({
                 "result": {"const": "record_index"},
-                "revision": non_empty_string(),
+                "freshness": scope_token_schema("record_index"),
                 "scope": scope_schema(),
                 "diagnostic_coverage": object_schema(
                     json!({
@@ -1268,7 +1268,7 @@ fn query_output_schema() -> Value {
             }),
             &[
                 "result",
-                "revision",
+                "freshness",
                 "scope",
                 "diagnostic_coverage",
                 "records",
@@ -1277,31 +1277,72 @@ fn query_output_schema() -> Value {
         object_schema(
             json!({
                 "result": {"const": "record_detail"},
-                "revision": non_empty_string(),
+                "freshness": scope_token_schema("record_detail"),
                 "identity": scoped_identity_schema(),
                 "record": nullable(record_detail_schema()),
             }),
-            &["result", "revision", "identity", "record"],
+            &["result", "freshness", "identity", "record"],
         ),
         object_schema(
             json!({
                 "result": {"const": "boards"},
-                "revision": non_empty_string(),
+                "freshness": scope_token_schema("boards"),
                 "scope": scope_schema(),
                 "boards": {"type": "array", "items": board_output_schema()},
             }),
-            &["result", "revision", "scope", "boards"],
+            &["result", "freshness", "scope", "boards"],
         ),
         object_schema(
             json!({
                 "result": {"const": "strategy_transitions"},
-                "revision": non_empty_string(),
+                "freshness": scope_token_schema("strategy_transitions"),
                 "scope": scope_schema(),
                 "transitions": {"type": "array", "items": transition_output_schema()},
             }),
-            &["result", "revision", "scope", "transitions"],
+            &["result", "freshness", "scope", "transitions"],
         ),
     ])
+}
+
+fn scope_token_schema(query: &str) -> Value {
+    let target = if query == "record_detail" {
+        object_schema(
+            json!({"query": {"const": query}, "identity": scoped_identity_schema()}),
+            &["query", "identity"],
+        )
+    } else {
+        object_schema(
+            json!({"query": {"const": query}, "scope": scope_schema()}),
+            &["query", "scope"],
+        )
+    };
+    let stamped = |dependency| {
+        object_schema(
+            json!({"dependency": {"const": dependency}, "revision": non_empty_string()}),
+            &["dependency", "revision"],
+        )
+    };
+    let dependency = one_of_object(vec![
+        stamped("activation_selection"),
+        stamped("selected_records"),
+        stamped("project_support"),
+        object_schema(
+            json!({"dependency": {"const": "attachments"}, "targets": {"type": "object", "additionalProperties": {"type": "string", "enum": ["missing", "regular", "unsafe"]}}}),
+            &["dependency", "targets"],
+        ),
+        object_schema(
+            json!({"dependency": {"const": "progress"}, "path": non_empty_string(), "revision": nullable(non_empty_string())}),
+            &["dependency", "path", "revision"],
+        ),
+        object_schema(
+            json!({"dependency": {"const": "project_mapping"}, "project": non_empty_string(), "revision": non_empty_string()}),
+            &["dependency", "project", "revision"],
+        ),
+    ]);
+    object_schema(
+        json!({"kind": {"const": "scope_read"}, "target": target, "dependencies": {"type": "array", "items": dependency}, "revision": non_empty_string()}),
+        &["kind", "target", "dependencies", "revision"],
+    )
 }
 
 fn record_index_entry_schema() -> Value {

@@ -75,65 +75,97 @@ fn portable_segment(segment: &str) -> bool {
 }
 
 pub(super) fn kind_for_path(path: &str, active: &Activation) -> Option<Kind> {
-    if active.projects.keys().any(|slug| {
-        path.strip_prefix("projects/")
-            .and_then(|rest| rest.strip_prefix(slug.as_str()))
-            .and_then(|rest| rest.strip_prefix("/decision-log/"))
-            .is_some_and(|name| name.ends_with(".md") && name.contains('-'))
-    }) {
+    if let Some(project) = crate::activation::project_for(path, active)
+        && project_decision(path, project)
+    {
         return Some(Kind::Decision);
     }
-    let (_, rest) = active
-        .projects
-        .values()
-        .flat_map(|project| {
-            project
-                .investigations
-                .iter()
-                .map(move |base| (project, base))
-        })
-        .filter_map(|(project, base)| {
-            path.strip_prefix(base.as_str())
-                .and_then(|rest| rest.strip_prefix('/'))
-                .map(|rest| (project, base, rest))
-        })
-        .max_by_key(|(_, base, _)| base.len())
-        .map(|(project, _, rest)| (project, rest))?;
-    let segments: Vec<_> = rest.split('/').collect();
-    match segments.as_slice() {
-        ["request.md"] => Some(Kind::Request),
-        ["final-disposition.md"] => Some(Kind::Closeout),
-        ["implementation-plan", "PLAN.md"] => Some(Kind::Plan),
-        ["strategy", "bindings.toml"] => Some(Kind::StrategyBinding),
-        ["strategy", "transitions", name] if name.ends_with(".toml") && name.contains('-') => {
+    kind_in_scope(path, crate::activation::scope_for(path, active)?)
+}
+
+pub(super) fn project_decision(path: &str, project: &str) -> bool {
+    path.strip_prefix("projects/")
+        .and_then(|rest| rest.strip_prefix(project))
+        .and_then(|rest| rest.strip_prefix("/decision-log/"))
+        .is_some_and(|name| !name.contains('/') && name.ends_with(".md") && name.contains('-'))
+}
+
+pub(super) fn kind_in_scope(path: &str, scope: &str) -> Option<Kind> {
+    let rest = path.strip_prefix(scope)?.strip_prefix('/')?;
+    let mut components = rest.split('/');
+    let first = components.next()?;
+    let second = components.next();
+    let third = components.next();
+    let fourth = components.next();
+    match (first, second, third, fourth) {
+        ("request.md", None, _, _) => Some(Kind::Request),
+        ("final-disposition.md", None, _, _) => Some(Kind::Closeout),
+        ("implementation-plan", Some("PLAN.md"), None, _) => Some(Kind::Plan),
+        ("strategy", Some("bindings.toml"), None, _) => Some(Kind::StrategyBinding),
+        ("strategy", Some("transitions"), Some(name), None)
+            if name.ends_with(".toml") && name.contains('-') =>
+        {
             Some(Kind::StrategyTransition)
         }
-        ["strategy", name]
-            if matches!(
-                *name,
-                "investigation.toml" | "review.toml" | "implementation.toml"
-            ) =>
-        {
-            Some(Kind::Strategy)
-        }
-        ["decision-log", name] if name.ends_with(".md") && name.contains('-') => {
+        (
+            "strategy",
+            Some("investigation.toml" | "review.toml" | "implementation.toml"),
+            None,
+            _,
+        ) => Some(Kind::Strategy),
+        ("decision-log", Some(name), None, _) if name.ends_with(".md") && name.contains('-') => {
             Some(Kind::Decision)
         }
-        ["evidence", name] if name.ends_with(".md") => Some(Kind::Evidence),
-        ["review", .., name] if name.ends_with(".md") => Some(Kind::Review),
-        [
-            "tickets" | "epics",
-            "provisional" | "accepted" | "rejected",
-            name,
-        ] if name.ends_with(".md") => Some(if segments[0] == "tickets" {
-            Kind::Ticket
-        } else {
-            Kind::Epic
-        }),
-        ["boards", name] if name.ends_with(".toml") => Some(Kind::Board),
-        ["progress", "log.toml"] => Some(Kind::Progress),
+        ("evidence", Some(name), None, _) if name.ends_with(".md") => Some(Kind::Evidence),
+        ("review", Some(_), _, _)
+            if rest
+                .rsplit('/')
+                .next()
+                .is_some_and(|name| name.ends_with(".md")) =>
+        {
+            Some(Kind::Review)
+        }
+        ("tickets" | "epics", Some("provisional" | "accepted" | "rejected"), Some(name), None)
+            if name.ends_with(".md") =>
+        {
+            Some(if first == "tickets" {
+                Kind::Ticket
+            } else {
+                Kind::Epic
+            })
+        }
+        ("boards", Some(name), None, _) if name.ends_with(".toml") => Some(Kind::Board),
+        ("progress", Some("log.toml"), None, _) => Some(Kind::Progress),
         _ => None,
     }
+}
+
+pub(super) fn scope_container(path: &str, scope: &str) -> bool {
+    if path == scope {
+        return true;
+    }
+    let Some(local) = path
+        .strip_prefix(scope)
+        .and_then(|path| path.strip_prefix('/'))
+    else {
+        return false;
+    };
+    matches!(
+        local,
+        "implementation-plan"
+            | "strategy"
+            | "strategy/transitions"
+            | "decision-log"
+            | "evidence"
+            | "review"
+            | "tickets"
+            | "epics"
+            | "boards"
+            | "progress"
+    ) || local.split_once('/').is_some_and(|(kind, disposition)| {
+        matches!(kind, "tickets" | "epics")
+            && matches!(disposition, "accepted" | "provisional" | "rejected")
+    })
 }
 
 #[cfg(test)]

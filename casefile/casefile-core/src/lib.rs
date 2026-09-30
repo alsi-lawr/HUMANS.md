@@ -47,11 +47,13 @@ pub use strategy::{
 #[doc(hidden)]
 pub use strategy::{
     parse as parse_strategy, parse_binding as parse_strategy_binding,
-    parse_projection as parse_strategy_projection, validate_matrix as validate_strategy_matrix,
+    parse_projection as parse_strategy_projection,
+    parse_with_projection as parse_strategy_with_projection,
+    validate_matrix as validate_strategy_matrix,
 };
 pub use strategy_transition::{
     ActiveOwnership, StrategyTransitionRecord, parse_strategy_transition,
-    render_strategy_transition, validate_strategy_transition,
+    parse_strategy_transition_value, render_strategy_transition, validate_strategy_transition,
 };
 pub use work_item::WorkItemDraft;
 

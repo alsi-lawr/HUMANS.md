@@ -61,7 +61,21 @@ pub fn parse_strategy_transition(
     path: &str,
     text: &str,
 ) -> Result<StrategyTransitionRecord, Vec<Diagnostic>> {
-    let wire: TransitionWire = toml::from_str(text).map_err(|error| {
+    let value = toml::from_str(text).map_err(|error| {
+        vec![Diagnostic::new(
+            path,
+            "invalid_strategy_transition",
+            error.to_string(),
+        )]
+    })?;
+    parse_strategy_transition_value(path, value)
+}
+
+pub fn parse_strategy_transition_value(
+    path: &str,
+    value: toml::Value,
+) -> Result<StrategyTransitionRecord, Vec<Diagnostic>> {
+    let wire: TransitionWire = value.try_into().map_err(|error: toml::de::Error| {
         vec![Diagnostic::new(
             path,
             "invalid_strategy_transition",

@@ -88,6 +88,13 @@ struct BindingResolutionWire {
 }
 
 pub fn parse(path: &str, text: &str) -> Result<RecordSummary, Vec<Diagnostic>> {
+    parse_with_projection(path, text).map(|(summary, _)| summary)
+}
+
+pub fn parse_with_projection(
+    path: &str,
+    text: &str,
+) -> Result<(RecordSummary, Option<StrategyProjection>), Vec<Diagnostic>> {
     let value: toml::Value = toml::from_str(text)
         .map_err(|error| vec![Diagnostic::new(path, "invalid_toml", error.to_string())])?;
     let table = table(path, &value, "strategy")?;
@@ -103,23 +110,15 @@ pub fn parse(path: &str, text: &str) -> Result<RecordSummary, Vec<Diagnostic>> {
             Diagnostic::new(path, "strategy_phase", "phase must match filename").field("phase"),
         ]);
     }
-    if [
-        "orchestrator",
-        "limits",
-        "requirements",
-        "workers",
-        "coordination",
-    ]
-    .iter()
-    .any(|key| table.contains_key(*key))
-    {
-        parse_projection_table(path, table)?;
-    }
-    Ok(RecordSummary::Strategy {
-        strategy_id: string(path, table, "strategy_id", "invalid_strategy")?,
-        phase: parsed_phase,
-        adapter: string(path, table, "adapter", "invalid_strategy")?,
-    })
+    let projection = projection_table(path, table)?;
+    Ok((
+        RecordSummary::Strategy {
+            strategy_id: string(path, table, "strategy_id", "invalid_strategy")?,
+            phase: parsed_phase,
+            adapter: string(path, table, "adapter", "invalid_strategy")?,
+        },
+        projection,
+    ))
 }
 
 pub fn parse_projection(
@@ -130,6 +129,13 @@ pub fn parse_projection(
         .map_err(|error| vec![Diagnostic::new(path, "invalid_toml", error.to_string())])?;
     let table = table(path, &value, "strategy")?;
     schema(path, table)?;
+    projection_table(path, table)
+}
+
+fn projection_table(
+    path: &str,
+    table: &toml::Table,
+) -> Result<Option<StrategyProjection>, Vec<Diagnostic>> {
     if [
         "orchestrator",
         "limits",

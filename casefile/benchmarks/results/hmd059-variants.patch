@@ -1,0 +1,921 @@
+
+# Final production -> initial serial/BTree foundation (pre-container correction)
+# source casefile/casefile-store/src/read_context.rs: sha256 7cdd38a643e1aa1594c12530ac9f6c6f8df11b9171228a3e6ff646da3369caa8
+--- a/casefile/casefile-store/src/read_context.rs
++++ b/casefile/casefile-store/src/read_context.rs
+@@ -48,2 +48,2 @@
+-    pub entries: Vec<(String, InventoryEntry)>,
+-    pub support: Vec<(String, InventoryEntry)>,
++    pub entries: BTreeMap<String, InventoryEntry>,
++    pub support: BTreeMap<String, InventoryEntry>,
+@@ -116,2 +116,2 @@
+-        let mut entries = Vec::new();
+-        let mut support = Vec::new();
++        let mut entries = BTreeMap::new();
++        let mut support = BTreeMap::new();
+@@ -135 +135 @@
+-                        entries.push((relative, entry));
++                        entries.insert(relative, entry);
+@@ -180,2 +180 @@
+-                            crate::layout::scope_container(relative, &path)
+-                                || crate::layout::kind_in_scope(relative, &path).is_some()
++                            crate::layout::kind_in_scope(relative, &path).is_some()
+@@ -184,2 +183 @@
+-            require_directory_containers(&entries, &path)?;
+-            entries.retain(|(relative, _)| {
++            entries.retain(|relative, _| {
+@@ -208 +205,0 @@
+-        entries.sort_unstable_by(|left, right| left.0.cmp(&right.0));
+@@ -218,8 +215,6 @@
+-                                crate::layout::scope_container(relative, base)
+-                                    || matches!(
+-                                        crate::layout::kind_in_scope(relative, base),
+-                                        Some(
+-                                            casefile_core::Kind::Ticket
+-                                                | casefile_core::Kind::Epic
+-                                                | casefile_core::Kind::Decision
+-                                        )
++                                matches!(
++                                    crate::layout::kind_in_scope(relative, base),
++                                    Some(
++                                        casefile_core::Kind::Ticket
++                                            | casefile_core::Kind::Epic
++                                            | casefile_core::Kind::Decision
+@@ -226,0 +222 @@
++                                )
+@@ -229 +224,0 @@
+-                require_directory_containers(&support, base)?;
+@@ -243,13 +238,2 @@
+-            support.sort_by(|left, right| left.0.cmp(&right.0));
+-            support.dedup_by(|later, previous| {
+-                if later.0 == previous.0 {
+-                    std::mem::swap(later, previous);
+-                    true
+-                } else {
+-                    false
+-                }
+-            });
+-            support.retain(|(relative, _)| {
+-                entries
+-                    .binary_search_by(|entry| entry.0.cmp(relative))
+-                    .is_err()
++            support.retain(|relative, _| {
++                !entries.contains_key(relative)
+@@ -427 +411 @@
+-fn inventory_digest(entries: &[(String, InventoryEntry)]) -> Revision {
++fn inventory_digest(entries: &BTreeMap<String, InventoryEntry>) -> Revision {
+@@ -445,17 +428,0 @@
+-}
+-
+-fn require_directory_containers(
+-    entries: &[(String, InventoryEntry)],
+-    scope: &str,
+-) -> Result<(), StoreError> {
+-    if let Some(path) = entries
+-        .iter()
+-        .map(|(path, _)| path)
+-        .filter(|path| crate::layout::scope_container(path, scope))
+-        .min()
+-    {
+-        return Err(StoreError::Invalid(format!(
+-            "{path}: governed container must be a non-symlink directory"
+-        )));
+-    }
+-    Ok(())
+# source casefile/casefile-store/src/checking.rs: sha256 8f305d13e014d1ca6150e20ff2eb1dc3a303ddf0231179c2c607d7f9e9f9677d
+--- a/casefile/casefile-store/src/checking.rs
++++ b/casefile/casefile-store/src/checking.rs
+@@ -49 +49 @@
+-    /// Scoped checks canonically read project work-item/decision support one record at a time,
++    /// Scoped checks canonically read project work-item/decision/board support one record at a time,
+@@ -72,5 +72 @@
+-                observation
+-                    .entries
+-                    .iter()
+-                    .chain(observation.support.iter())
+-                    .map(|(path, entry)| (path, entry)),
++                observation.entries.iter().chain(observation.support.iter()),
+@@ -190,13 +186 @@
+-        let container = resolved
+-            .scope
+-            .is_some_and(|scope| crate::layout::scope_container(path, scope));
+-        if container {
+-            entry.classification = Classification::Invalid;
+-            if selected {
+-                diagnostics.push(Diagnostic::new(
+-                    path,
+-                    "unsafe_path",
+-                    "governed container must be a non-symlink directory",
+-                ));
+-            }
+-        } else if resolved.kind.is_some() {
++        if resolved.kind.is_some() {
+@@ -342,3 +325,0 @@
+-        fs::create_dir_all(root.path().join(format!("{other}/boards"))).unwrap();
+-        let foreign_board = root.path().join(format!("{other}/boards/broken.toml"));
+-        fs::write(&foreign_board, [0xff, 0xfe]).unwrap();
+@@ -350 +330,0 @@
+-        assert!(!opened.contains(&foreign_board));
+# source casefile/casefile-store/src/scanning/inventory.rs: sha256 c27e339cc7f578f9fd62635075e482763c5c1695d8bfd3cf6fbf2adb6c2473a7
+--- a/casefile/casefile-store/src/scanning/inventory.rs
++++ b/casefile/casefile-store/src/scanning/inventory.rs
+@@ -28,3 +28 @@
+-        &mut |path, entry| {
+-            entries.insert(path, entry);
+-        },
++        &mut entries,
+@@ -53 +51 @@
+-    entries: &mut Vec<(String, InventoryEntry)>,
++    entries: &mut BTreeMap<String, InventoryEntry>,
+@@ -56,7 +54 @@
+-    collect_walk(
+-        root,
+-        directory,
+-        &mut |path, entry| entries.push((path, entry)),
+-        include,
+-        None,
+-    )
++    collect_walk(root, directory, entries, include, None)
+@@ -68 +60 @@
+-    entries: &mut impl FnMut(String, InventoryEntry),
++    entries: &mut BTreeMap<String, InventoryEntry>,
+@@ -129 +121 @@
+-        entries(
++        entries.insert(
+@@ -242,8 +233,0 @@
+-        let relative = directory.strip_prefix(root).expect("contained directory");
+-        crate::store::require_safe_target_parent(root, relative, "Store membership observation")?;
+-        let metadata = fs::symlink_metadata(directory)?;
+-        if !metadata.is_dir() || metadata.file_type().is_symlink() {
+-            return Err(StoreError::Invalid(
+-                "Store directory changed during read".into(),
+-            ));
+-        }
+# source casefile/casefile-store/src/scanning/scoped.rs: sha256 77fbc9cdd18b93bb0552f19d797170301ace66fe145a9f26ce8013be32bcf3ee
+--- a/casefile/casefile-store/src/scanning/scoped.rs
++++ b/casefile/casefile-store/src/scanning/scoped.rs
+@@ -2,4 +1,0 @@
+-use rayon::prelude::*;
+-
+-static READ_POOL: std::sync::LazyLock<Result<rayon::ThreadPool, rayon::ThreadPoolBuildError>> =
+-    std::sync::LazyLock::new(|| rayon::ThreadPoolBuilder::new().num_threads(2).build());
+@@ -118 +114 @@
+-    let process = |(relative, file): (&String, &InventoryEntry)| {
++    for (relative, file) in &observation.entries {
+@@ -120 +116 @@
+-        let (mut entry, draft, found) =
++        let (mut entry, draft, mut found) =
+@@ -126,22 +121,0 @@
+-        Ok((entry, found))
+-    };
+-    let selected: Vec<Result<_, StoreError>> = if observation.entries.len() < 2 {
+-        observation
+-            .entries
+-            .iter()
+-            .map(|(path, entry)| process((path, entry)))
+-            .collect()
+-    } else {
+-        let pool = READ_POOL.as_ref().map_err(|error| {
+-            StoreError::Invalid(format!("read worker initialization failed: {error}"))
+-        })?;
+-        pool.install(|| {
+-            observation
+-                .entries
+-                .par_iter()
+-                .map(|(path, entry)| process((path, entry)))
+-                .collect()
+-        })
+-    };
+-    for result in selected {
+-        let (entry, mut found) = result?;
+@@ -189,4 +163 @@
+-        read_observed_entry(root, path, file).map_err(|error| match error {
+-            StoreError::Invalid(message) => StoreError::Invalid(format!("{path}: {message}")),
+-            error => error,
+-        })?
++        read_observed_entry(root, path, file)?
+@@ -224,58 +194,0 @@
+-
+-#[cfg(test)]
+-mod tests {
+-    use super::*;
+-
+-    #[test]
+-    fn parallel_scope_read_reports_first_path_failure_and_retries_without_partial_results() {
+-        let root = tempfile::tempdir().unwrap();
+-        let path = "projects/demo/investigations/sample";
+-        fs::write(
+-            root.path().join("casefile.toml"),
+-            format!(
+-                "schema_version = 1\n[projects.demo]\nprefix = 'HMD'\ninvestigations = ['{path}']\n"
+-            ),
+-        )
+-        .unwrap();
+-        let tickets = root.path().join(format!("{path}/tickets/accepted"));
+-        fs::create_dir_all(&tickets).unwrap();
+-        for id in ["HMD-001", "HMD-002"] {
+-            fs::write(tickets.join(format!("{id}.md")), "original observation").unwrap();
+-        }
+-        let target = crate::ScopeReadTarget::RecordIndex {
+-            scope: crate::InvestigationScope {
+-                project: "demo".into(),
+-                investigation: "sample".into(),
+-            },
+-        };
+-        let observation =
+-            crate::read_context::ScopeObservation::begin(root.path(), target).unwrap();
+-        for id in ["HMD-002", "HMD-001"] {
+-            fs::write(
+-                tickets.join(format!("{id}.md")),
+-                "changed requested descriptor before guarded read",
+-            )
+-            .unwrap();
+-        }
+-        let error = scoped_entries(root.path(), observation)
+-            .err()
+-            .unwrap()
+-            .to_string();
+-        assert!(error.contains("HMD-001.md"), "{error}");
+-        let retry = scoped_scan(root.path(), "demo", "sample", ScopedRead::RecordIndex).unwrap();
+-        assert_eq!(retry.entries.len(), 2);
+-        assert!(
+-            retry
+-                .entries
+-                .iter()
+-                .all(|entry| entry.classification == Classification::Invalid)
+-        );
+-        assert!(
+-            retry
+-                .entries
+-                .windows(2)
+-                .all(|entries| entries[0].path < entries[1].path)
+-        );
+-        assert_eq!(retry.diagnostics.len(), 2);
+-    }
+-}
+# source casefile/casefile-store/Cargo.toml: sha256 065983528e2f4583dc3dfc6ea0e178b83acf319f5a21625cfb880a063ebcbc6b
+--- a/casefile/casefile-store/Cargo.toml
++++ b/casefile/casefile-store/Cargo.toml
+@@ -18 +17,0 @@
+-rayon = "1.12.0"
+# source casefile/Cargo.lock: sha256 74e3c7d3271a34ee7efee81945f0854b1e7f74670e719fcc74d7ea166c6c6fbb
+--- a/casefile/Cargo.lock
++++ b/casefile/Cargo.lock
+@@ -227 +226,0 @@
+- "rayon",
+# source casefile/casefile-store/src/activation.rs: sha256 4dbc56218cf4efb839d02f3acc99255626f158f1cbd38077479904b7b1bfafbf
+--- a/casefile/casefile-store/src/activation.rs
++++ b/casefile/casefile-store/src/activation.rs
+@@ -237,5 +237,2 @@
+-        let mut scope = self.roots.get_key_value(path).map(|(root, _)| *root);
+-        while scope.is_none() {
+-            let Some((parent, _)) = ancestor.rsplit_once('/') else {
+-                break;
+-            };
++        let mut scope = None;
++        while let Some((parent, _)) = ancestor.rsplit_once('/') {
+# source casefile/casefile-store/src/layout.rs: sha256 3588a6607e76e986595af3e128d971ecef6e6bf6e84e8d1401052b747a486b25
+--- a/casefile/casefile-store/src/layout.rs
++++ b/casefile/casefile-store/src/layout.rs
+@@ -141,28 +140,0 @@
+-}
+-
+-pub(super) fn scope_container(path: &str, scope: &str) -> bool {
+-    if path == scope {
+-        return true;
+-    }
+-    let Some(local) = path
+-        .strip_prefix(scope)
+-        .and_then(|path| path.strip_prefix('/'))
+-    else {
+-        return false;
+-    };
+-    matches!(
+-        local,
+-        "implementation-plan"
+-            | "strategy"
+-            | "strategy/transitions"
+-            | "decision-log"
+-            | "evidence"
+-            | "review"
+-            | "tickets"
+-            | "epics"
+-            | "boards"
+-            | "progress"
+-    ) || local.split_once('/').is_some_and(|(kind, disposition)| {
+-        matches!(kind, "tickets" | "epics")
+-            && matches!(disposition, "accepted" | "provisional" | "rejected")
+-    })
+
+# Initial serial foundation -> genuine sorted-Vec serial experiment
+# source casefile/casefile-store/src/read_context.rs: sha256 3a4d1f67c4f865a4bda2464c89f73460b0abb6d4c2e8f822c03740f620b82133
+--- a/casefile/casefile-store/src/read_context.rs
++++ b/casefile/casefile-store/src/read_context.rs
+@@ -48,2 +48,2 @@
+-    pub entries: BTreeMap<String, InventoryEntry>,
+-    pub support: BTreeMap<String, InventoryEntry>,
++    pub entries: Vec<(String, InventoryEntry)>,
++    pub support: Vec<(String, InventoryEntry)>,
+@@ -116,2 +116,2 @@
+-        let mut entries = BTreeMap::new();
+-        let mut support = BTreeMap::new();
++        let mut entries = Vec::new();
++        let mut support = Vec::new();
+@@ -135 +135 @@
+-                        entries.insert(relative, entry);
++                        entries.push((relative, entry));
+@@ -183 +183 @@
+-            entries.retain(|relative, _| {
++            entries.retain(|(relative, _)| {
+@@ -205,0 +206 @@
++        entries.sort_unstable_by(|left, right| left.0.cmp(&right.0));
+@@ -238,2 +239,6 @@
+-            support.retain(|relative, _| {
+-                !entries.contains_key(relative)
++            support.sort_unstable_by(|left, right| left.0.cmp(&right.0));
++            support.dedup_by(|left, right| left.0 == right.0);
++            support.retain(|(relative, _)| {
++                entries
++                    .binary_search_by(|entry| entry.0.cmp(relative))
++                    .is_err()
+@@ -411 +416 @@
+-fn inventory_digest(entries: &BTreeMap<String, InventoryEntry>) -> Revision {
++fn inventory_digest(entries: &[(String, InventoryEntry)]) -> Revision {
+# source casefile/casefile-store/src/checking.rs: sha256 61d264d28fa9cc622d4eac0a8c9fa32b37362d6fca3e1b2cd708a733dd67d7e8
+--- a/casefile/casefile-store/src/checking.rs
++++ b/casefile/casefile-store/src/checking.rs
+@@ -72 +72,5 @@
+-                observation.entries.iter().chain(observation.support.iter()),
++                observation
++                    .entries
++                    .iter()
++                    .chain(observation.support.iter())
++                    .map(|(path, entry)| (path, entry)),
+# source casefile/casefile-store/src/scanning/inventory.rs: sha256 bff062e8f94c275b68831a14b845e940b3541a18d74d50905e156b568647dd71
+--- a/casefile/casefile-store/src/scanning/inventory.rs
++++ b/casefile/casefile-store/src/scanning/inventory.rs
+@@ -28 +28,3 @@
+-        &mut entries,
++        &mut |path, entry| {
++            entries.insert(path, entry);
++        },
+@@ -51 +53 @@
+-    entries: &mut BTreeMap<String, InventoryEntry>,
++    entries: &mut Vec<(String, InventoryEntry)>,
+@@ -54 +56,7 @@
+-    collect_walk(root, directory, entries, include, None)
++    collect_walk(
++        root,
++        directory,
++        &mut |path, entry| entries.push((path, entry)),
++        include,
++        None,
++    )
+@@ -60 +68 @@
+-    entries: &mut BTreeMap<String, InventoryEntry>,
++    entries: &mut impl FnMut(String, InventoryEntry),
+@@ -121 +129 @@
+-        entries.insert(
++        entries(
+# source casefile/casefile-store/src/scanning/scoped.rs: sha256 77fbc9cdd18b93bb0552f19d797170301ace66fe145a9f26ce8013be32bcf3ee
+# source casefile/casefile-store/Cargo.toml: sha256 065983528e2f4583dc3dfc6ea0e178b83acf319f5a21625cfb880a063ebcbc6b
+# source casefile/Cargo.lock: sha256 74e3c7d3271a34ee7efee81945f0854b1e7f74670e719fcc74d7ea166c6c6fbb
+# source casefile/casefile-store/src/activation.rs: sha256 4dbc56218cf4efb839d02f3acc99255626f158f1cbd38077479904b7b1bfafbf
+# source casefile/casefile-store/src/layout.rs: sha256 3588a6607e76e986595af3e128d971ecef6e6bf6e84e8d1401052b747a486b25
+
+# Initial serial foundation -> bounded Rayon2/BTree experiment
+# source casefile/casefile-store/src/read_context.rs: sha256 7cdd38a643e1aa1594c12530ac9f6c6f8df11b9171228a3e6ff646da3369caa8
+# source casefile/casefile-store/src/checking.rs: sha256 8f305d13e014d1ca6150e20ff2eb1dc3a303ddf0231179c2c607d7f9e9f9677d
+# source casefile/casefile-store/src/scanning/inventory.rs: sha256 c27e339cc7f578f9fd62635075e482763c5c1695d8bfd3cf6fbf2adb6c2473a7
+# source casefile/casefile-store/src/scanning/scoped.rs: sha256 b6226a88656a52b0556ce951736de7ac0d28301ecf5161651279d051e8430ca1
+--- a/casefile/casefile-store/src/scanning/scoped.rs
++++ b/casefile/casefile-store/src/scanning/scoped.rs
+@@ -1,0 +2,4 @@
++use rayon::prelude::*;
++
++static READ_POOL: std::sync::LazyLock<Result<rayon::ThreadPool, rayon::ThreadPoolBuildError>> =
++    std::sync::LazyLock::new(|| rayon::ThreadPoolBuilder::new().num_threads(2).build());
+@@ -114,8 +118,21 @@
+-    for (relative, file) in &observation.entries {
+-        let kind = crate::layout::kind_in_scope(relative, &observation.path);
+-        let (mut entry, draft, mut found) =
+-            selected_entry(root, relative, file, &observation.active, kind)?;
+-        if matches!(entry.kind, Some(Kind::Ticket | Kind::Epic)) {
+-            entry.original_bytes = Vec::new();
+-        }
+-        drop(draft);
++    let pool = READ_POOL.as_ref().map_err(|error| {
++        StoreError::Invalid(format!("read worker initialization failed: {error}"))
++    })?;
++    let selected: Vec<Result<_, StoreError>> = pool.install(|| {
++        observation
++            .entries
++            .par_iter()
++            .map(|(relative, file)| {
++                let kind = crate::layout::kind_in_scope(relative, &observation.path);
++                let (mut entry, draft, found) =
++                    selected_entry(root, relative, file, &observation.active, kind)?;
++                if matches!(entry.kind, Some(Kind::Ticket | Kind::Epic)) {
++                    entry.original_bytes = Vec::new();
++                }
++                drop(draft);
++                Ok((entry, found))
++            })
++            .collect()
++    });
++    for result in selected {
++        let (entry, mut found) = result?;
+# source casefile/casefile-store/Cargo.toml: sha256 7521cd431c94f8ba2f5ca170bcf8dda4e08ca9a57d6823dc95a130ca6c978eeb
+--- a/casefile/casefile-store/Cargo.toml
++++ b/casefile/casefile-store/Cargo.toml
+@@ -17,0 +18 @@
++rayon = "1.12.0"
+# source casefile/Cargo.lock: sha256 8d5888510c2702de614928f4e6a14347837628bade0ee9f0a87dc4bf3c315ed1
+--- a/casefile/Cargo.lock
++++ b/casefile/Cargo.lock
+@@ -226,0 +227 @@
++ "rayon",
+# source casefile/casefile-store/src/activation.rs: sha256 4dbc56218cf4efb839d02f3acc99255626f158f1cbd38077479904b7b1bfafbf
+# source casefile/casefile-store/src/layout.rs: sha256 3588a6607e76e986595af3e128d971ecef6e6bf6e84e8d1401052b747a486b25
+
+# Initial serial foundation -> actual minimum2/no-notes serial foundation
+# source casefile/casefile-store/src/read_context.rs: sha256 7cdd38a643e1aa1594c12530ac9f6c6f8df11b9171228a3e6ff646da3369caa8
+# source casefile/casefile-store/src/checking.rs: sha256 43c42286f3d0da0394f93ebd639f5821e2c7fd3e556c060d51172513e79986b6
+--- a/casefile/casefile-store/src/checking.rs
++++ b/casefile/casefile-store/src/checking.rs
+@@ -49 +49 @@
+-    /// Scoped checks canonically read project work-item/decision/board support one record at a time,
++    /// Scoped checks canonically read project work-item/decision support one record at a time,
+@@ -325,0 +326,3 @@
++        fs::create_dir_all(root.path().join(format!("{other}/boards"))).unwrap();
++        let foreign_board = root.path().join(format!("{other}/boards/broken.toml"));
++        fs::write(&foreign_board, [0xff, 0xfe]).unwrap();
+@@ -330,0 +334 @@
++        assert!(!opened.contains(&foreign_board));
+# source casefile/casefile-store/src/scanning/inventory.rs: sha256 1f1048b53410557f61078709994255e58b854c97887da022667624d65f9e83d3
+--- a/casefile/casefile-store/src/scanning/inventory.rs
++++ b/casefile/casefile-store/src/scanning/inventory.rs
+@@ -233,0 +234,8 @@
++        let relative = directory.strip_prefix(root).expect("contained directory");
++        crate::store::require_safe_target_parent(root, relative, "Store membership observation")?;
++        let metadata = fs::symlink_metadata(directory)?;
++        if !metadata.is_dir() || metadata.file_type().is_symlink() {
++            return Err(StoreError::Invalid(
++                "Store directory changed during read".into(),
++            ));
++        }
+# source casefile/casefile-store/src/scanning/scoped.rs: sha256 e42da2911e99f9112b8fd45f2051366e3f68938b8abd319bb1fa90325f09b8ab
+--- a/casefile/casefile-store/src/scanning/scoped.rs
++++ b/casefile/casefile-store/src/scanning/scoped.rs
+@@ -114 +114 @@
+-    for (relative, file) in &observation.entries {
++    let process = |(relative, file): (&String, &InventoryEntry)| {
+@@ -116 +116 @@
+-        let (mut entry, draft, mut found) =
++        let (mut entry, draft, found) =
+@@ -121,0 +122,5 @@
++        Ok((entry, found))
++    };
++    let selected: Vec<Result<_, StoreError>> = observation.entries.iter().map(process).collect();
++    for result in selected {
++        let (entry, mut found) = result?;
+@@ -163 +168,4 @@
+-        read_observed_entry(root, path, file)?
++        read_observed_entry(root, path, file).map_err(|error| match error {
++            StoreError::Invalid(message) => StoreError::Invalid(format!("{path}: {message}")),
++            error => error,
++        })?
+@@ -194,0 +203,58 @@
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    #[test]
++    fn parallel_scope_read_reports_first_path_failure_and_retries_without_partial_results() {
++        let root = tempfile::tempdir().unwrap();
++        let path = "projects/demo/investigations/sample";
++        fs::write(
++            root.path().join("casefile.toml"),
++            format!(
++                "schema_version = 1\n[projects.demo]\nprefix = 'HMD'\ninvestigations = ['{path}']\n"
++            ),
++        )
++        .unwrap();
++        let tickets = root.path().join(format!("{path}/tickets/accepted"));
++        fs::create_dir_all(&tickets).unwrap();
++        for id in ["HMD-001", "HMD-002"] {
++            fs::write(tickets.join(format!("{id}.md")), "original observation").unwrap();
++        }
++        let target = crate::ScopeReadTarget::RecordIndex {
++            scope: crate::InvestigationScope {
++                project: "demo".into(),
++                investigation: "sample".into(),
++            },
++        };
++        let observation =
++            crate::read_context::ScopeObservation::begin(root.path(), target).unwrap();
++        for id in ["HMD-002", "HMD-001"] {
++            fs::write(
++                tickets.join(format!("{id}.md")),
++                "changed requested descriptor before guarded read",
++            )
++            .unwrap();
++        }
++        let error = scoped_entries(root.path(), observation)
++            .err()
++            .unwrap()
++            .to_string();
++        assert!(error.contains("HMD-001.md"), "{error}");
++        let retry = scoped_scan(root.path(), "demo", "sample", ScopedRead::RecordIndex).unwrap();
++        assert_eq!(retry.entries.len(), 2);
++        assert!(
++            retry
++                .entries
++                .iter()
++                .all(|entry| entry.classification == Classification::Invalid)
++        );
++        assert!(
++            retry
++                .entries
++                .windows(2)
++                .all(|entries| entries[0].path < entries[1].path)
++        );
++        assert_eq!(retry.diagnostics.len(), 2);
++    }
++}
+# source casefile/casefile-store/Cargo.toml: sha256 7521cd431c94f8ba2f5ca170bcf8dda4e08ca9a57d6823dc95a130ca6c978eeb
+--- a/casefile/casefile-store/Cargo.toml
++++ b/casefile/casefile-store/Cargo.toml
+@@ -17,0 +18 @@
++rayon = "1.12.0"
+# source casefile/Cargo.lock: sha256 8d5888510c2702de614928f4e6a14347837628bade0ee9f0a87dc4bf3c315ed1
+--- a/casefile/Cargo.lock
++++ b/casefile/Cargo.lock
+@@ -226,0 +227 @@
++ "rayon",
+# source casefile/casefile-store/src/activation.rs: sha256 4dbc56218cf4efb839d02f3acc99255626f158f1cbd38077479904b7b1bfafbf
+# source casefile/casefile-store/src/layout.rs: sha256 3588a6607e76e986595af3e128d971ecef6e6bf6e84e8d1401052b747a486b25
+
+# Minimum serial foundation -> actual minimum sorted-Vec experiment
+# source casefile/casefile-store/src/read_context.rs: sha256 3a4d1f67c4f865a4bda2464c89f73460b0abb6d4c2e8f822c03740f620b82133
+--- a/casefile/casefile-store/src/read_context.rs
++++ b/casefile/casefile-store/src/read_context.rs
+@@ -48,2 +48,2 @@
+-    pub entries: BTreeMap<String, InventoryEntry>,
+-    pub support: BTreeMap<String, InventoryEntry>,
++    pub entries: Vec<(String, InventoryEntry)>,
++    pub support: Vec<(String, InventoryEntry)>,
+@@ -116,2 +116,2 @@
+-        let mut entries = BTreeMap::new();
+-        let mut support = BTreeMap::new();
++        let mut entries = Vec::new();
++        let mut support = Vec::new();
+@@ -135 +135 @@
+-                        entries.insert(relative, entry);
++                        entries.push((relative, entry));
+@@ -183 +183 @@
+-            entries.retain(|relative, _| {
++            entries.retain(|(relative, _)| {
+@@ -205,0 +206 @@
++        entries.sort_unstable_by(|left, right| left.0.cmp(&right.0));
+@@ -238,2 +239,6 @@
+-            support.retain(|relative, _| {
+-                !entries.contains_key(relative)
++            support.sort_unstable_by(|left, right| left.0.cmp(&right.0));
++            support.dedup_by(|left, right| left.0 == right.0);
++            support.retain(|(relative, _)| {
++                entries
++                    .binary_search_by(|entry| entry.0.cmp(relative))
++                    .is_err()
+@@ -411 +416 @@
+-fn inventory_digest(entries: &BTreeMap<String, InventoryEntry>) -> Revision {
++fn inventory_digest(entries: &[(String, InventoryEntry)]) -> Revision {
+# source casefile/casefile-store/src/checking.rs: sha256 cd6b99edb839060ac6cebfd610f32a2f697730dba00def127e3e3d2c65ccf332
+--- a/casefile/casefile-store/src/checking.rs
++++ b/casefile/casefile-store/src/checking.rs
+@@ -72 +72,5 @@
+-                observation.entries.iter().chain(observation.support.iter()),
++                observation
++                    .entries
++                    .iter()
++                    .chain(observation.support.iter())
++                    .map(|(path, entry)| (path, entry)),
+# source casefile/casefile-store/src/scanning/inventory.rs: sha256 010236bb3974e57852f9d6a6997194cce0a9ddb66307fd57c33737f57eed0bb3
+--- a/casefile/casefile-store/src/scanning/inventory.rs
++++ b/casefile/casefile-store/src/scanning/inventory.rs
+@@ -28 +28,3 @@
+-        &mut entries,
++        &mut |path, entry| {
++            entries.insert(path, entry);
++        },
+@@ -51 +53 @@
+-    entries: &mut BTreeMap<String, InventoryEntry>,
++    entries: &mut Vec<(String, InventoryEntry)>,
+@@ -54 +56,7 @@
+-    collect_walk(root, directory, entries, include, None)
++    collect_walk(
++        root,
++        directory,
++        &mut |path, entry| entries.push((path, entry)),
++        include,
++        None,
++    )
+@@ -60 +68 @@
+-    entries: &mut BTreeMap<String, InventoryEntry>,
++    entries: &mut impl FnMut(String, InventoryEntry),
+@@ -121 +129 @@
+-        entries.insert(
++        entries(
+# source casefile/casefile-store/src/scanning/scoped.rs: sha256 bfccecbd2a0729c7da4f9378e702dd902f4e470c90da2f00bac60d2f9684300b
+--- a/casefile/casefile-store/src/scanning/scoped.rs
++++ b/casefile/casefile-store/src/scanning/scoped.rs
+@@ -124 +124,5 @@
+-    let selected: Vec<Result<_, StoreError>> = observation.entries.iter().map(process).collect();
++    let selected: Vec<Result<_, StoreError>> = observation
++        .entries
++        .iter()
++        .map(|(path, entry)| process((path, entry)))
++        .collect();
+# source casefile/casefile-store/Cargo.toml: sha256 7521cd431c94f8ba2f5ca170bcf8dda4e08ca9a57d6823dc95a130ca6c978eeb
+# source casefile/Cargo.lock: sha256 8d5888510c2702de614928f4e6a14347837628bade0ee9f0a87dc4bf3c315ed1
+# source casefile/casefile-store/src/activation.rs: sha256 4dbc56218cf4efb839d02f3acc99255626f158f1cbd38077479904b7b1bfafbf
+# source casefile/casefile-store/src/layout.rs: sha256 3588a6607e76e986595af3e128d971ecef6e6bf6e84e8d1401052b747a486b25
+
+# Minimum serial foundation -> post-container-correction Rayon2/BTree comparison foundation
+# source casefile/casefile-store/src/read_context.rs: sha256 f67e36851836591d5289763b03a15e29dc49c677eacfbe411ef78851449ee559
+--- a/casefile/casefile-store/src/read_context.rs
++++ b/casefile/casefile-store/src/read_context.rs
+@@ -180 +180,2 @@
+-                            crate::layout::kind_in_scope(relative, &path).is_some()
++                            crate::layout::scope_container(relative, &path)
++                                || crate::layout::kind_in_scope(relative, &path).is_some()
+@@ -182,0 +184 @@
++            require_directory_containers(&entries, &path)?;
+@@ -215,6 +217,8 @@
+-                                matches!(
+-                                    crate::layout::kind_in_scope(relative, base),
+-                                    Some(
+-                                        casefile_core::Kind::Ticket
+-                                            | casefile_core::Kind::Epic
+-                                            | casefile_core::Kind::Decision
++                                crate::layout::scope_container(relative, base)
++                                    || matches!(
++                                        crate::layout::kind_in_scope(relative, base),
++                                        Some(
++                                            casefile_core::Kind::Ticket
++                                                | casefile_core::Kind::Epic
++                                                | casefile_core::Kind::Decision
++                                        )
+@@ -222 +225,0 @@
+-                                )
+@@ -224,0 +228 @@
++                require_directory_containers(&support, base)?;
+@@ -430,0 +435,15 @@
++fn require_directory_containers(
++    entries: &BTreeMap<String, InventoryEntry>,
++    scope: &str,
++) -> Result<(), StoreError> {
++    if let Some(path) = entries
++        .keys()
++        .find(|path| crate::layout::scope_container(path, scope))
++    {
++        return Err(StoreError::Invalid(format!(
++            "{path}: governed container must be a non-symlink directory"
++        )));
++    }
++    Ok(())
++}
++
+# source casefile/casefile-store/src/checking.rs: sha256 e460b50f44677c23dfba502c769cf3176dde2d5411a04a21d3a16668a26579f4
+--- a/casefile/casefile-store/src/checking.rs
++++ b/casefile/casefile-store/src/checking.rs
+@@ -186 +186,13 @@
+-        if resolved.kind.is_some() {
++        let container = resolved
++            .scope
++            .is_some_and(|scope| crate::layout::scope_container(path, scope));
++        if container {
++            entry.classification = Classification::Invalid;
++            if selected {
++                diagnostics.push(Diagnostic::new(
++                    path,
++                    "unsafe_path",
++                    "governed container must be a non-symlink directory",
++                ));
++            }
++        } else if resolved.kind.is_some() {
+# source casefile/casefile-store/src/scanning/inventory.rs: sha256 1f1048b53410557f61078709994255e58b854c97887da022667624d65f9e83d3
+# source casefile/casefile-store/src/scanning/scoped.rs: sha256 7b0f918759606769a4b33ca374ab55b435294d0d5320fa352c7ce486c48349ee
+--- a/casefile/casefile-store/src/scanning/scoped.rs
++++ b/casefile/casefile-store/src/scanning/scoped.rs
+@@ -1,0 +2,4 @@
++use rayon::prelude::*;
++
++static READ_POOL: std::sync::LazyLock<Result<rayon::ThreadPool, rayon::ThreadPoolBuildError>> =
++    std::sync::LazyLock::new(|| rayon::ThreadPoolBuilder::new().num_threads(2).build());
+@@ -124 +128,8 @@
+-    let selected: Vec<Result<_, StoreError>> = observation.entries.iter().map(process).collect();
++    let selected: Vec<Result<_, StoreError>> = if observation.entries.len() < 2 {
++        observation.entries.iter().map(process).collect()
++    } else {
++        let pool = READ_POOL.as_ref().map_err(|error| {
++            StoreError::Invalid(format!("read worker initialization failed: {error}"))
++        })?;
++        pool.install(|| observation.entries.par_iter().map(process).collect())
++    };
+# source casefile/casefile-store/Cargo.toml: sha256 7521cd431c94f8ba2f5ca170bcf8dda4e08ca9a57d6823dc95a130ca6c978eeb
+# source casefile/Cargo.lock: sha256 8d5888510c2702de614928f4e6a14347837628bade0ee9f0a87dc4bf3c315ed1
+# source casefile/casefile-store/src/activation.rs: sha256 4dbc56218cf4efb839d02f3acc99255626f158f1cbd38077479904b7b1bfafbf
+# source casefile/casefile-store/src/layout.rs: sha256 5a37556ba8aedbdb93f775aff1c90afd04f249bf1220773ad7bb8a653c2de3ce
+--- a/casefile/casefile-store/src/layout.rs
++++ b/casefile/casefile-store/src/layout.rs
+@@ -140,0 +141,25 @@
++}
++
++pub(super) fn scope_container(path: &str, scope: &str) -> bool {
++    let Some(local) = path
++        .strip_prefix(scope)
++        .and_then(|path| path.strip_prefix('/'))
++    else {
++        return false;
++    };
++    matches!(
++        local,
++        "implementation-plan"
++            | "strategy"
++            | "strategy/transitions"
++            | "decision-log"
++            | "evidence"
++            | "review"
++            | "tickets"
++            | "epics"
++            | "boards"
++            | "progress"
++    ) || local.split_once('/').is_some_and(|(kind, disposition)| {
++        matches!(kind, "tickets" | "epics")
++            && matches!(disposition, "accepted" | "provisional" | "rejected")
++    })
+
+# Post-container-correction Rayon2/BTree -> chosen combined sorted-Vec/Rayon2 (both combined runs)
+# source casefile/casefile-store/src/read_context.rs: sha256 94cc206049618e6a5598ff438b03f545ef62bcfb999789e8ea6404650d632304
+--- a/casefile/casefile-store/src/read_context.rs
++++ b/casefile/casefile-store/src/read_context.rs
+@@ -48,2 +48,2 @@
+-    pub entries: BTreeMap<String, InventoryEntry>,
+-    pub support: BTreeMap<String, InventoryEntry>,
++    pub entries: Vec<(String, InventoryEntry)>,
++    pub support: Vec<(String, InventoryEntry)>,
+@@ -116,2 +116,2 @@
+-        let mut entries = BTreeMap::new();
+-        let mut support = BTreeMap::new();
++        let mut entries = Vec::new();
++        let mut support = Vec::new();
+@@ -135 +135 @@
+-                        entries.insert(relative, entry);
++                        entries.push((relative, entry));
+@@ -185 +185 @@
+-            entries.retain(|relative, _| {
++            entries.retain(|(relative, _)| {
+@@ -207,0 +208 @@
++        entries.sort_unstable_by(|left, right| left.0.cmp(&right.0));
+@@ -242,2 +243,13 @@
+-            support.retain(|relative, _| {
+-                !entries.contains_key(relative)
++            support.sort_by(|left, right| left.0.cmp(&right.0));
++            support.dedup_by(|later, previous| {
++                if later.0 == previous.0 {
++                    std::mem::swap(later, previous);
++                    true
++                } else {
++                    false
++                }
++            });
++            support.retain(|(relative, _)| {
++                entries
++                    .binary_search_by(|entry| entry.0.cmp(relative))
++                    .is_err()
+@@ -415 +427 @@
+-fn inventory_digest(entries: &BTreeMap<String, InventoryEntry>) -> Revision {
++fn inventory_digest(entries: &[(String, InventoryEntry)]) -> Revision {
+@@ -436 +448 @@
+-    entries: &BTreeMap<String, InventoryEntry>,
++    entries: &[(String, InventoryEntry)],
+@@ -440,2 +452,4 @@
+-        .keys()
+-        .find(|path| crate::layout::scope_container(path, scope))
++        .iter()
++        .map(|(path, _)| path)
++        .filter(|path| crate::layout::scope_container(path, scope))
++        .min()
+# source casefile/casefile-store/src/checking.rs: sha256 321b37bc912c2b2ad251f92d36b79ffab9ce8d63d49dea0f4e638af649d03f08
+--- a/casefile/casefile-store/src/checking.rs
++++ b/casefile/casefile-store/src/checking.rs
+@@ -72 +72,5 @@
+-                observation.entries.iter().chain(observation.support.iter()),
++                observation
++                    .entries
++                    .iter()
++                    .chain(observation.support.iter())
++                    .map(|(path, entry)| (path, entry)),
+# source casefile/casefile-store/src/scanning/inventory.rs: sha256 010236bb3974e57852f9d6a6997194cce0a9ddb66307fd57c33737f57eed0bb3
+--- a/casefile/casefile-store/src/scanning/inventory.rs
++++ b/casefile/casefile-store/src/scanning/inventory.rs
+@@ -28 +28,3 @@
+-        &mut entries,
++        &mut |path, entry| {
++            entries.insert(path, entry);
++        },
+@@ -51 +53 @@
+-    entries: &mut BTreeMap<String, InventoryEntry>,
++    entries: &mut Vec<(String, InventoryEntry)>,
+@@ -54 +56,7 @@
+-    collect_walk(root, directory, entries, include, None)
++    collect_walk(
++        root,
++        directory,
++        &mut |path, entry| entries.push((path, entry)),
++        include,
++        None,
++    )
+@@ -60 +68 @@
+-    entries: &mut BTreeMap<String, InventoryEntry>,
++    entries: &mut impl FnMut(String, InventoryEntry),
+@@ -121 +129 @@
+-        entries.insert(
++        entries(
+# source casefile/casefile-store/src/scanning/scoped.rs: sha256 f1ccf485802257ab15ec2389dd67d6615fd4a3244d075c326fa9f75c2ca10a89
+--- a/casefile/casefile-store/src/scanning/scoped.rs
++++ b/casefile/casefile-store/src/scanning/scoped.rs
+@@ -129 +129,5 @@
+-        observation.entries.iter().map(process).collect()
++        observation
++            .entries
++            .iter()
++            .map(|(path, entry)| process((path, entry)))
++            .collect()
+@@ -134 +138,7 @@
+-        pool.install(|| observation.entries.par_iter().map(process).collect())
++        pool.install(|| {
++            observation
++                .entries
++                .par_iter()
++                .map(|(path, entry)| process((path, entry)))
++                .collect()
++        })
+# source casefile/casefile-store/Cargo.toml: sha256 7521cd431c94f8ba2f5ca170bcf8dda4e08ca9a57d6823dc95a130ca6c978eeb
+# source casefile/Cargo.lock: sha256 8d5888510c2702de614928f4e6a14347837628bade0ee9f0a87dc4bf3c315ed1
+# source casefile/casefile-store/src/activation.rs: sha256 9b1ad5144e3c98d29881e6163cdd3e5f873a7c87e498f1f919da13704fe26c91
+--- a/casefile/casefile-store/src/activation.rs
++++ b/casefile/casefile-store/src/activation.rs
+@@ -237,2 +237,5 @@
+-        let mut scope = None;
+-        while let Some((parent, _)) = ancestor.rsplit_once('/') {
++        let mut scope = self.roots.get_key_value(path).map(|(root, _)| *root);
++        while scope.is_none() {
++            let Some((parent, _)) = ancestor.rsplit_once('/') else {
++                break;
++            };
+# source casefile/casefile-store/src/layout.rs: sha256 7d9651b214616d139e4049e7b02db77f2ee3cce1707d0af53ec1d0745e676129
+--- a/casefile/casefile-store/src/layout.rs
++++ b/casefile/casefile-store/src/layout.rs
+@@ -143,0 +144,3 @@
++    if path == scope {
++        return true;
++    }
+
+# Temporary first-stage benchmark (label2 = 2 added tickets + 2 base work-items)
+# source casefile/casefile-store-sqlite/benches/priority.rs: sha256 e97b8a156398eb7b53e40f4d4221eef2efbb326a9dc5c970e531cc071878e3a0
+--- a/casefile/casefile-store-sqlite/benches/priority.rs
++++ b/casefile/casefile-store-sqlite/benches/priority.rs
+@@ -22 +22 @@
+-    for count in [250, 1_000] {
++    for count in [2, 250, 1_000] {
+
+# Temporary actual minimum2/no-notes benchmark; base2 unchanged, no added tickets
+# source casefile/casefile-store-sqlite/benches/priority.rs: sha256 19491198644f58d479a4551b1154c766fb01e348d784b3dfb9b853704f29de74
+--- a/casefile/casefile-store-sqlite/benches/priority.rs
++++ b/casefile/casefile-store-sqlite/benches/priority.rs
+@@ -67,0 +68,19 @@
++}
++
++fn bench_minimum(criterion: &mut Criterion) {
++    let fixture = Fixture::new().progress_notes(0, false);
++    let store = Store::open(fixture.root.path()).unwrap();
++    assert_eq!(store.check(Some(INVESTIGATION)).unwrap().valid, Some(true));
++    let provider = Provider::without_cache(store);
++    let query = ProviderQuery::RecordIndex { scope: scope() };
++    let ProviderQueryResult::RecordIndex { records, .. } = provider.query(query.clone()).unwrap()
++    else {
++        panic!("index response")
++    };
++    assert_eq!(records.len(), 2);
++    criterion.bench_function(
++        "priority_minimum_2_records_0_notes/selected_record_index",
++        |bench| {
++            bench.iter(|| black_box(provider.query(black_box(query.clone())).unwrap()));
++        },
++    );
+@@ -153 +172 @@
+-    targets = bench_queries, bench_record_mutation
++    targets = bench_queries, bench_record_mutation, bench_minimum
