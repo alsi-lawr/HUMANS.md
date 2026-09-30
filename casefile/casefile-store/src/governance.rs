@@ -1,23 +1,20 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs,
-    io::Write,
     path::Path,
 };
 
 use casefile_core::{
     ActiveOwnership, Classification, Diagnostic, Kind, ProgressEntry, ProgressStatus,
-    RecordSummary, Revision, StrategyTransitionRecord, parse_progress_log, parse_strategy,
-    parse_strategy_binding, parse_strategy_projection, parse_strategy_transition,
-    render_strategy_transition, stable, validate_strategy_matrix,
+    RecordSummary, Revision, SelectedStrategyMatrix, StrategyTransitionRecord,
+    parse_selected_strategy_matrix, parse_strategy_binding, parse_strategy_transition,
+    render_strategy_transition, stable,
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use tempfile::NamedTempFile;
 
 use crate::{
     activation::{ActivationState, activation},
-    derived::{StrategyBindingState, derive_snapshot},
     layout::{checked_path, kind_for_path},
     mutation::{MutationContext, Overlay},
     revision::{require_target_revision, synthetic_revision},
@@ -25,8 +22,6 @@ use crate::{
     store::{StoreError, require_safe_target_parent},
     writing::{ensure_worktree, git_diff, introduced_diagnostics},
 };
-
-type PriorFileState = (String, Option<Vec<u8>>);
 
 const UNSELECTED_STRATEGY_ID: &str = "unselected";
 const ABSENT_MATRIX_REVISION: &str = "absent";
@@ -113,70 +108,45 @@ pub(super) fn preview_strategy_transition(
     let request = canonical_strategy_request(request)?;
     ensure_worktree(root)?;
     activated_investigation(root, &request.investigation)?;
-    validate_strategy_matrix(&request.selected_matrix_source).map_err(diagnostics_error)?;
-    let context = capture_strategy(root, &request, false)?;
-    prepare_strategy(root, request, &context)
+    let selected = parse_selected_strategy_matrix(&request.selected_matrix_source)
+        .map_err(diagnostics_error)?;
+    let context = capture_strategy(root, &request, &selected, false)?;
+    prepare_strategy(root, request, &selected, &context)
 }
 
 fn prepare_strategy(
     root: &Path,
     request: StrategyTransitionRequest,
+    selected: &SelectedStrategyMatrix,
     context: &MutationContext,
 ) -> Result<StrategyTransitionPreview, StoreError> {
     let investigation = activated_investigation(root, &request.investigation)?;
     let before = &context.before;
-    let selected_value: toml::Value = toml::from_str(&request.selected_matrix_source)
-        .map_err(|error| StoreError::Invalid(error.to_string()))?;
-    let phase = selected_value
-        .get("phase")
-        .and_then(toml::Value::as_str)
-        .ok_or_else(|| StoreError::Invalid("selected matrix phase is missing".into()))?;
-    let selected_strategy_id = selected_value
-        .get("strategy_id")
-        .and_then(toml::Value::as_str)
-        .ok_or_else(|| StoreError::Invalid("selected matrix strategy_id is missing".into()))?;
+    let phase = selected.phase.as_str();
+    let selected_strategy_id = selected.strategy_id.as_str();
     let matrix_path = format!("{investigation}/strategy/{phase}.toml");
     if kind_for_path(&matrix_path, &activation(root)?.1) != Some(Kind::Strategy) {
         return Err(StoreError::Invalid(
             "selected matrix phase is not a governed strategy target".into(),
         ));
     }
-    let current = before
-        .snapshot
-        .entries
-        .iter()
-        .find(|entry| entry.path == matrix_path);
+    let current = context.entry(&matrix_path);
     require_regular_target(root, &matrix_path, false)?;
-    let selected_summary =
-        parse_strategy(&matrix_path, &request.selected_matrix_source).map_err(diagnostics_error)?;
-    let selected_projection =
-        parse_strategy_projection(&matrix_path, &request.selected_matrix_source)
-            .map_err(diagnostics_error)?
-            .ok_or_else(|| StoreError::Invalid("selected matrix must be complete".into()))?;
+    let selected_projection = &selected.projection;
     if selected_projection.root_binding != "root" {
         return Err(StoreError::Invalid(
             "strategy transition must preserve the root binding".into(),
         ));
     }
-    let (parsed_selected_id, selected_phase) = match selected_summary {
-        RecordSummary::Strategy {
-            strategy_id, phase, ..
-        } => (strategy_id, phase),
-        _ => unreachable!("strategy parser returns a strategy summary"),
-    };
-    if selected_phase != phase || parsed_selected_id != selected_strategy_id {
-        return Err(StoreError::Invalid(
-            "selected matrix phase does not match governed phase state".into(),
-        ));
-    }
     let (previous_strategy_id, expected_matrix_revision) = match current {
         Some(current) => {
-            let current_text = std::str::from_utf8(&current.original_bytes)
-                .map_err(|_| StoreError::Invalid("governed phase matrix must be UTF-8".into()))?;
-            let current_summary =
-                parse_strategy(&matrix_path, current_text).map_err(diagnostics_error)?;
-            let current_projection = parse_strategy_projection(&matrix_path, current_text)
-                .map_err(diagnostics_error)?
+            let current_summary = current
+                .summary
+                .clone()
+                .ok_or_else(|| StoreError::Invalid("governed phase matrix is invalid".into()))?;
+            let current_projection = context
+                .facts(&matrix_path)
+                .and_then(|facts| facts.strategy.as_ref())
                 .ok_or_else(|| {
                     StoreError::Invalid("governed phase matrix must be complete".into())
                 })?;
@@ -258,11 +228,7 @@ fn prepare_strategy(
             |entry| entry.original_bytes.clone(),
         );
     let proposed_matrix_revision = digest(&normalized_selected_bytes);
-    let existing_transition = before
-        .snapshot
-        .entries
-        .iter()
-        .find(|entry| entry.path == transition_path);
+    let existing_transition = context.entry(&transition_path);
     let fresh_record = StrategyTransitionRecord {
         operation_id: request.operation_id.clone(),
         recorded_at: request.recorded_at.clone(),
@@ -331,7 +297,7 @@ fn prepare_strategy(
     let mut overlay = BTreeMap::new();
     overlay.insert(matrix_path.clone(), Some(selected_bytes.clone()));
     overlay.insert(transition_path.clone(), Some(record_bytes.clone()));
-    let proposed = context.overlay(&overlay);
+    let proposed = context.overlay_strategy(&overlay, &matrix_path, selected);
     let diagnostics = scoped_introduced(before, &proposed, &investigation);
     let matrix_change = change(root, matrix_path, current, selected_bytes)?;
     let record_change = change(root, transition_path, existing_transition, record_bytes)?;
@@ -361,10 +327,12 @@ pub(super) fn apply_strategy_transition(
             "strategy transition preview contains diagnostics".into(),
         ));
     }
-    validate_strategy_preview(&preview)?;
-    let context = capture_strategy(root, &preview.request, true)?;
+    let selected = parse_selected_strategy_matrix(&preview.request.selected_matrix_source)
+        .map_err(diagnostics_error)?;
+    validate_strategy_preview(&preview, &selected)?;
+    let context = capture_strategy(root, &preview.request, &selected, true)?;
     context.require_revisions(&preview.expected_input_revisions)?;
-    let checked = prepare_strategy(root, preview.request.clone(), &context)?;
+    let checked = prepare_strategy(root, preview.request.clone(), &selected, &context)?;
     if !checked.diagnostics.is_empty()
         || checked.changes != preview.changes
         || checked.transition_record != preview.transition_record
@@ -389,12 +357,16 @@ pub(super) fn apply_strategy_transition(
             true,
         );
     }
-    let prior = apply_multi_file_transaction(root, &preview.changes)?;
+    let prior = apply_multi_file_transaction(root, &preview.changes, &context)?;
     let resulting = match context.resulting(&changes_overlay(&preview.changes)) {
         Ok(resulting) => resulting,
         Err(error) => {
-            restore_all(root, &prior)?;
-            return Err(error);
+            return Err(crate::mutation_restore::rollback(
+                root,
+                "strategy transition verification",
+                error,
+                &prior,
+            ));
         }
     };
     if preview.changes.iter().any(|change| {
@@ -405,9 +377,11 @@ pub(super) fn apply_strategy_transition(
             .find(|entry| entry.path == change.path)
             .is_none_or(|entry| entry.original_bytes != change.rendered_bytes)
     }) {
-        restore_all(root, &prior)?;
-        return Err(StoreError::Invalid(
-            "strategy transition post-write verification failed".into(),
+        return Err(crate::mutation_restore::rollback(
+            root,
+            "strategy transition verification",
+            StoreError::Invalid("strategy transition post-write verification failed".into()),
+            &prior,
         ));
     }
     result_from_scan(
@@ -450,20 +424,15 @@ fn prepare_binding(
         };
     let before = &context.before;
     let implementation_path = format!("{investigation}/strategy/implementation.toml");
-    let implementation = before
-        .snapshot
-        .entries
-        .iter()
-        .find(|entry| entry.path == implementation_path)
+    let implementation = context
+        .entry(&implementation_path)
         .filter(|entry| entry.classification == Classification::Governed)
         .ok_or_else(|| StoreError::Invalid("selected implementation matrix is invalid".into()))?;
     let (adapter, projection) = match &implementation.summary {
         Some(RecordSummary::Strategy { adapter, phase, .. }) if phase == "implementation" => {
-            let text = std::str::from_utf8(&implementation.original_bytes).map_err(|_| {
-                StoreError::Invalid("selected implementation matrix must be UTF-8".into())
-            })?;
-            let projection = parse_strategy_projection(&implementation_path, text)
-                .map_err(diagnostics_error)?
+            let projection = context
+                .facts(&implementation_path)
+                .and_then(|facts| facts.strategy.as_ref())
                 .ok_or_else(|| {
                     StoreError::Invalid("selected implementation matrix must be complete".into())
                 })?;
@@ -487,12 +456,8 @@ fn prepare_binding(
             "binding does not match the selected implementation strategy".into(),
         ));
     }
-    ensure_binding_inactive(before, &investigation)?;
-    let existing = before
-        .snapshot
-        .entries
-        .iter()
-        .find(|entry| entry.path == path);
+    ensure_binding_inactive(context, &investigation)?;
+    let existing = context.entry(&path);
     let bytes = request.binding_source.as_bytes().to_vec();
     let mut overlay = BTreeMap::new();
     overlay.insert(path.clone(), Some(bytes.clone()));
@@ -539,11 +504,7 @@ pub(super) fn apply_writer_binding(
         .changes
         .first()
         .ok_or_else(|| StoreError::Invalid("binding preview has no target".into()))?;
-    let entry = current
-        .snapshot
-        .entries
-        .iter()
-        .find(|entry| entry.path == change.path);
+    let entry = context.entry(&change.path);
     require_target_revision(
         &root.join(&change.path),
         change.expected_target_revision.as_ref(),
@@ -556,32 +517,37 @@ pub(super) fn apply_writer_binding(
             true,
         );
     }
-    let before_bytes = entry.map(|entry| entry.original_bytes.clone());
-    atomic_write(root, &change.path, &change.rendered_bytes)?;
+    let receipt = crate::mutation_restore::apply(
+        root,
+        &change.path,
+        entry.map(|entry| entry.original_bytes.as_slice()),
+        Some(&change.rendered_bytes),
+    )?;
     let resulting = match context.resulting(&changes_overlay(&preview.changes)) {
         Ok(resulting) => resulting,
         Err(error) => {
-            restore(root, &change.path, before_bytes.as_deref())?;
-            return Err(error);
+            return Err(crate::mutation_restore::rollback(
+                root,
+                "writer binding verification",
+                error,
+                &[receipt],
+            ));
         }
     };
-    let derived = derive_snapshot(&resulting);
-    let verified = resulting
-        .snapshot
-        .entries
+    let verified = resulting.snapshot.entries.iter().any(|entry| {
+        entry.path == change.path
+            && entry.classification == Classification::Governed
+            && entry.original_bytes == change.rendered_bytes
+    }) && !resulting
+        .diagnostics
         .iter()
-        .find(|entry| entry.path == change.path)
-        .is_some_and(|entry| entry.original_bytes == change.rendered_bytes)
-        && derived.records.iter().any(|record| {
-            record.path == change.path
-                && record.strategy_binding.as_ref().is_some_and(|binding| {
-                    matches!(&binding.state, StrategyBindingState::Resolved { .. })
-                })
-        });
+        .any(|diagnostic| diagnostic.path == change.path);
     if !verified {
-        restore(root, &change.path, before_bytes.as_deref())?;
-        return Err(StoreError::Invalid(
-            "writer binding post-write verification failed".into(),
+        return Err(crate::mutation_restore::rollback(
+            root,
+            "writer binding verification",
+            StoreError::Invalid("writer binding post-write verification failed".into()),
+            &[receipt],
         ));
     }
     result_from_scan(
@@ -630,16 +596,16 @@ pub(super) fn require_writer_progress(
             "writer spawn requires one valid accepted ticket in the activated investigation".into(),
         ));
     }
-    let log = canonical_progress(scan, &investigation)?;
+    let log = canonical_progress(&context, &investigation)?;
     let mut status = ProgressStatus::Unknown;
     let mut seen = false;
-    for entry in log.entries {
+    for entry in &log.entries {
         if let ProgressEntry::Transition {
             ticket_id: id, to, ..
         } = entry
             && id == ticket_id
         {
-            status = to;
+            status = *to;
             seen = true;
         }
     }
@@ -652,7 +618,11 @@ pub(super) fn require_writer_progress(
     Ok(())
 }
 
-fn ensure_binding_inactive(scan: &ScanResult, investigation: &str) -> Result<(), StoreError> {
+fn ensure_binding_inactive(
+    context: &MutationContext,
+    investigation: &str,
+) -> Result<(), StoreError> {
+    let scan = &context.before;
     let progress_path = format!("{investigation}/progress/log.toml");
     let progress_is_absent = !scan
         .snapshot
@@ -666,7 +636,7 @@ fn ensure_binding_inactive(scan: &ScanResult, investigation: &str) -> Result<(),
     if progress_is_absent {
         return Ok(());
     }
-    let log = canonical_progress(scan, investigation)?;
+    let log = canonical_progress(context, investigation)?;
     let prefix = format!("{investigation}/tickets/accepted/");
     if scan
         .diagnostics
@@ -692,14 +662,14 @@ fn ensure_binding_inactive(scan: &ScanResult, investigation: &str) -> Result<(),
         .iter()
         .map(|ticket| (ticket.clone(), ProgressStatus::Unknown))
         .collect::<BTreeMap<_, _>>();
-    for entry in log.entries {
+    for entry in &log.entries {
         if let ProgressEntry::Transition { ticket_id, to, .. } = entry {
-            let Some(status) = statuses.get_mut(&ticket_id) else {
+            let Some(status) = statuses.get_mut(ticket_id) else {
                 return Err(StoreError::Invalid(
                     "progress contains a conflicting or unsupported ticket".into(),
                 ));
             };
-            *status = to;
+            *status = *to;
         }
     }
     if statuses.values().any(|status| {
@@ -719,32 +689,29 @@ fn ensure_binding_inactive(scan: &ScanResult, investigation: &str) -> Result<(),
     Ok(())
 }
 
-fn canonical_progress(
-    scan: &ScanResult,
+fn canonical_progress<'a>(
+    context: &'a MutationContext,
     investigation: &str,
-) -> Result<casefile_core::ProgressLog, StoreError> {
+) -> Result<&'a casefile_core::ProgressLog, StoreError> {
     let path = format!("{investigation}/progress/log.toml");
-    let matching = scan
-        .snapshot
-        .entries
+    if context
+        .before
+        .diagnostics
         .iter()
-        .filter(|entry| entry.path == path)
-        .collect::<Vec<_>>();
-    if matching.len() != 1
-        || matching[0].classification != Classification::Governed
-        || matching[0].kind != Some(Kind::Progress)
-        || scan
-            .diagnostics
-            .iter()
-            .any(|diagnostic| diagnostic.path == path)
+        .any(|diagnostic| diagnostic.path == path)
     {
         return Err(StoreError::Invalid(
             "writer binding activity requires one valid canonical progress log".into(),
         ));
     }
-    let text = std::str::from_utf8(&matching[0].original_bytes)
-        .map_err(|_| StoreError::Invalid("progress log must be UTF-8".into()))?;
-    parse_progress_log(&path, text).map_err(diagnostics_error)
+    context
+        .facts(&path)
+        .and_then(|facts| facts.progress.as_ref())
+        .ok_or_else(|| {
+            StoreError::Invalid(
+                "writer binding activity requires one valid canonical progress log".into(),
+            )
+        })
 }
 
 fn activated_investigation(root: &Path, value: &str) -> Result<String, StoreError> {
@@ -916,17 +883,12 @@ fn change(
     })
 }
 
-fn validate_strategy_preview(preview: &StrategyTransitionPreview) -> Result<(), StoreError> {
-    let selected: toml::Value = toml::from_str(&preview.request.selected_matrix_source)
-        .map_err(|error| StoreError::Invalid(error.to_string()))?;
-    let phase = selected
-        .get("phase")
-        .and_then(toml::Value::as_str)
-        .ok_or_else(|| StoreError::Invalid("selected matrix phase is missing".into()))?;
-    let strategy_id = selected
-        .get("strategy_id")
-        .and_then(toml::Value::as_str)
-        .ok_or_else(|| StoreError::Invalid("selected matrix strategy_id is missing".into()))?;
+fn validate_strategy_preview(
+    preview: &StrategyTransitionPreview,
+    selected: &SelectedStrategyMatrix,
+) -> Result<(), StoreError> {
+    let phase = selected.phase.as_str();
+    let strategy_id = selected.strategy_id.as_str();
     let timestamp_token = preview
         .request
         .recorded_at
@@ -1025,77 +987,34 @@ fn result_from_scan(
     })
 }
 
-fn apply_multi_file_transaction(
+fn apply_multi_file_transaction<'a>(
     root: &Path,
-    changes: &[GovernedChange],
-) -> Result<Vec<PriorFileState>, StoreError> {
-    let prior = changes
-        .iter()
-        .map(|change| {
-            let target = root.join(&change.path);
-            let bytes = match fs::read(&target) {
-                Ok(bytes) => Some(bytes),
-                Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
-                Err(error) => return Err(error.into()),
-            };
-            Ok((change.path.clone(), bytes))
-        })
-        .collect::<Result<Vec<_>, StoreError>>()?;
+    changes: &'a [GovernedChange],
+    context: &'a MutationContext,
+) -> Result<Vec<crate::mutation_restore::Receipt<'a>>, StoreError> {
+    let mut receipts = Vec::new();
     for change in changes.iter().filter(|change| !change.no_op) {
-        if let Err(error) = atomic_write(root, &change.path, &change.rendered_bytes) {
-            restore_all(root, &prior)?;
-            return Err(error);
-        }
-    }
-    Ok(prior)
-}
-
-fn restore_all(root: &Path, prior: &[(String, Option<Vec<u8>>)]) -> Result<(), StoreError> {
-    for (path, bytes) in prior.iter().rev() {
-        restore(root, path, bytes.as_deref())?;
-    }
-    for (path, bytes) in prior {
-        let current = fs::read(root.join(path));
-        match (bytes, current) {
-            (Some(expected), Ok(current)) if expected == &current => {}
-            (None, Err(error)) if error.kind() == std::io::ErrorKind::NotFound => {}
-            _ => {
-                return Err(StoreError::Invalid(
-                    "strategy transition rollback verification failed".into(),
+        let prior = context
+            .entry(&change.path)
+            .map(|entry| entry.original_bytes.as_slice());
+        match crate::mutation_restore::apply(
+            root,
+            &change.path,
+            prior,
+            Some(&change.rendered_bytes),
+        ) {
+            Ok(receipt) => receipts.push(receipt),
+            Err(error) => {
+                return Err(crate::mutation_restore::rollback(
+                    root,
+                    "strategy transition write",
+                    error,
+                    &receipts,
                 ));
             }
         }
     }
-    Ok(())
-}
-
-fn restore(root: &Path, path: &str, bytes: Option<&[u8]>) -> Result<(), StoreError> {
-    match bytes {
-        Some(bytes) => atomic_write(root, path, bytes),
-        None => match fs::remove_file(root.join(path)) {
-            Ok(()) => Ok(()),
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-            Err(error) => Err(error.into()),
-        },
-    }
-}
-
-fn atomic_write(root: &Path, relative: &str, bytes: &[u8]) -> Result<(), StoreError> {
-    #[cfg(test)]
-    crate::mutation_hooks::writing(root, relative)?;
-    require_regular_target(root, relative, false)?;
-    let target = root.join(relative);
-    let parent = target
-        .parent()
-        .ok_or_else(|| StoreError::Invalid("governed target has no parent".into()))?;
-    fs::create_dir_all(parent)?;
-    let mut temporary = NamedTempFile::new_in(parent)?;
-    temporary.write_all(bytes)?;
-    temporary.flush()?;
-    temporary
-        .persist(&target)
-        .map_err(|error| StoreError::Io(error.error))?;
-    Ok(())
+    Ok(receipts)
 }
 
 fn require_regular_target(root: &Path, relative: &str, required: bool) -> Result<(), StoreError> {
@@ -1149,14 +1068,10 @@ fn raw_sha256(bytes: &[u8]) -> String {
 fn capture_strategy(
     root: &Path,
     request: &StrategyTransitionRequest,
+    selected: &SelectedStrategyMatrix,
     applying: bool,
 ) -> Result<MutationContext, StoreError> {
-    let selected: toml::Value = toml::from_str(&request.selected_matrix_source)
-        .map_err(|error| StoreError::Invalid(error.to_string()))?;
-    let phase = selected
-        .get("phase")
-        .and_then(toml::Value::as_str)
-        .ok_or_else(|| StoreError::Invalid("selected matrix phase is missing".into()))?;
+    let phase = selected.phase.as_str();
     let timestamp = request
         .recorded_at
         .chars()

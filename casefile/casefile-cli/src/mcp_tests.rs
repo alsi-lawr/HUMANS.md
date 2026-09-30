@@ -1,10 +1,15 @@
 use super::*;
 use std::{cell::RefCell, process::Command, time::Duration};
 thread_local! { static DISPATCH: RefCell<Option<Box<dyn FnOnce()>>> = RefCell::new(None); }
-pub(super) fn dispatch_boundary() {
+thread_local! { static DISPATCH_FAILURE: RefCell<Option<anyhow::Error>> = const { RefCell::new(None) }; }
+pub(super) fn dispatch_boundary() -> Result<()> {
     if let Some(hook) = DISPATCH.with(|slot| slot.borrow_mut().take()) {
         hook();
     }
+    if let Some(error) = DISPATCH_FAILURE.with(|slot| slot.borrow_mut().take()) {
+        return Err(error);
+    }
+    Ok(())
 }
 
 #[test]
@@ -70,5 +75,80 @@ fn same_mcp_session_dispatches_a_disjoint_apply_while_another_apply_is_active() 
                 .join(format!("{base}/boards/{name}.toml"))
                 .exists()
         );
+    }
+}
+
+#[test]
+fn mcp_apply_rollback_failure_keeps_error_flag_and_declared_structured_details() {
+    use casefile_store::{
+        IncompleteRollback, ProviderError, RollbackCause, RollbackErrorCode, RollbackPathState,
+        RollbackReason, RollbackRemainingState, StoreError,
+    };
+    let root = tempfile::tempdir().unwrap();
+    let mut session = Session::new(Provider::without_cache(Store::open(root.path()).unwrap()));
+    session.handle(json!({"jsonrpc":"2.0", "id":1, "method":"initialize", "params":{"protocolVersion":"2025-06-18"}})).unwrap();
+    let list = session
+        .handle(json!({"jsonrpc":"2.0", "id":2, "method":"tools/list"}))
+        .unwrap()
+        .unwrap();
+    let schema = list["result"]["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|tool| tool["name"] == "casefile_apply_record")
+        .unwrap()["outputSchema"]
+        .clone();
+    let details = IncompleteRollback {
+        code: RollbackErrorCode::IncompleteRollback,
+        operation: "record batch verification".into(),
+        cause: RollbackCause::Io,
+        affected_paths: vec![
+            RollbackPathState {
+                path: "tickets/accepted/HMD-1.md".into(),
+                remaining: RollbackRemainingState::Regular {
+                    revision: casefile_core::Revision("fsmeta-v1:observed".into()),
+                },
+                reason: RollbackReason::ExternalChange,
+            },
+            RollbackPathState {
+                path: "tickets/accepted/HMD-2.md".into(),
+                remaining: RollbackRemainingState::Unknown,
+                reason: RollbackReason::ObservationFailed,
+            },
+        ],
+    };
+    DISPATCH_FAILURE.with(|slot| {
+        *slot.borrow_mut() = Some(
+            ProviderError::Store(StoreError::IncompleteRollback {
+                details: details.clone(),
+                cause: Box::new(StoreError::Invalid("PRIVATE TOML EXCERPT".into())),
+            })
+            .into(),
+        )
+    });
+    let response = session.handle(json!({"jsonrpc":"2.0", "id":3, "method":"tools/call", "params":{"name":"casefile_apply_record", "arguments":{"preview_id":"session-preview"}}})).unwrap().unwrap();
+    assert_eq!(response["result"]["isError"], true);
+    assert_eq!(
+        serde_json::from_value::<IncompleteRollback>(
+            response["result"]["structuredContent"].clone()
+        )
+        .unwrap(),
+        details
+    );
+    assert_eq!(
+        serde_json::from_str::<Value>(response["result"]["content"][0]["text"].as_str().unwrap())
+            .unwrap(),
+        response["result"]["structuredContent"]
+    );
+    assert!(!response.to_string().contains("PRIVATE TOML EXCERPT"));
+    if let Some(path) = std::env::var_os("CASEFILE_ERROR_ARTIFACT") {
+        fs::write(
+            path,
+            serde_json::to_vec_pretty(
+                &json!({"schema":schema, "response":response, "tools_list":list}),
+            )
+            .unwrap(),
+        )
+        .unwrap();
     }
 }

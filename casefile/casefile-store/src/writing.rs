@@ -42,28 +42,37 @@ pub(super) fn preview_batch(
             "record batch requires at least one request".into(),
         ));
     }
-    let requests = requests
-        .into_iter()
-        .map(|request| canonical_request(root, request))
-        .collect::<Result<Vec<_>, _>>()?;
+    let (requests, overlay, diagnostics) = preflight(requests)?;
+    if !diagnostics.is_empty() {
+        return Ok(ChangeBatchPreview {
+            requests,
+            diagnostics,
+            expected_target_revisions: BTreeMap::new(),
+            expected_input_revisions: BTreeMap::new(),
+            diff: String::new(),
+        });
+    }
+    let (requests, overlay) = canonical_batch(root, requests, overlay)?;
     ensure_worktree(root)?;
-    let overlay = request_overlay(&requests);
     let context = MutationContext::capture(root, &overlay, &[], false)?;
-    prepare_batch(root, requests, &context)
+    let mut result = prepare_batch(root, &requests, &overlay, &context)?;
+    result.requests = requests;
+    Ok(result)
 }
 
 fn prepare_batch(
     root: &Path,
-    requests: Vec<ChangeRequest>,
+    requests: &[ChangeRequest],
+    rendered: &Overlay,
     context: &MutationContext,
 ) -> Result<ChangeBatchPreview, StoreError> {
     let before = &context.before;
     let active = &context.active;
     let mut paths = BTreeSet::new();
-    let mut overlay = BTreeMap::new();
     let mut expected_target_revisions = BTreeMap::new();
     let mut diagnostics = Vec::new();
-    for request in &requests {
+
+    for request in requests {
         let path = checked_path(request.path())?;
         if !paths.insert(path.clone()) {
             diagnostics.push(Diagnostic::new(
@@ -73,23 +82,11 @@ fn prepare_batch(
             ));
             continue;
         }
-        let existing = before
-            .snapshot
-            .entries
-            .iter()
-            .find(|entry| entry.path == path);
+        let existing = context.entry(&path);
         expected_target_revisions.insert(
             path.clone(),
             existing.map(|entry| entry.content_revision.clone()),
         );
-        let proposed_bytes = match request.rendered() {
-            Some(Ok(bytes)) => Some(bytes),
-            Some(Err(diagnostic)) => {
-                diagnostics.push(diagnostic);
-                continue;
-            }
-            None => None,
-        };
         let writable = match request {
             ChangeRequest::Create { draft, .. } | ChangeRequest::Replace { draft, .. } => {
                 Some(draft.kind())
@@ -126,36 +123,31 @@ fn prepare_batch(
             diagnostics.push(diagnostic);
             continue;
         }
-        overlay.insert(path, proposed_bytes);
     }
     if !diagnostics.is_empty() {
         return Ok(ChangeBatchPreview {
-            requests,
+            requests: Vec::new(),
             expected_target_revisions,
             expected_input_revisions: context.revisions(),
             diagnostics: stable(diagnostics),
             diff: String::new(),
         });
     }
-    let proposed = context.overlay(&overlay);
+    let proposed = context.overlay(rendered);
     let diagnostics = introduced_diagnostics(&before.diagnostics, &proposed.diagnostics);
     let mut diff = String::new();
-    for request in &requests {
+    for request in requests {
         let path = request.path();
-        let existing = before
-            .snapshot
-            .entries
-            .iter()
-            .find(|entry| entry.path == path);
+        let existing = context.entry(path);
         diff.push_str(&git_diff(
             root,
             path,
             existing.map(|entry| entry.original_bytes.as_slice()),
-            overlay.get(path).and_then(Option::as_deref),
+            rendered.get(path).and_then(Option::as_deref),
         )?);
     }
     Ok(ChangeBatchPreview {
-        requests,
+        requests: Vec::new(),
         expected_target_revisions,
         expected_input_revisions: context.revisions(),
         diagnostics: stable(diagnostics),
@@ -229,11 +221,10 @@ pub(super) fn apply(root: &Path, mut preview: Preview) -> Result<ApplyResult, St
     })
 }
 
-struct BatchMutation {
+struct BatchMutation<'a> {
     path: String,
-    target: PathBuf,
-    proposed: Option<Vec<u8>>,
-    original: Option<Vec<u8>>,
+    proposed: Option<&'a [u8]>,
+    original: Option<&'a [u8]>,
 }
 
 pub(super) fn apply_batch(
@@ -245,11 +236,14 @@ pub(super) fn apply_batch(
             "record batch requires at least one request".into(),
         ));
     }
-    preview.requests = preview
-        .requests
-        .into_iter()
-        .map(|request| canonical_request(root, request))
-        .collect::<Result<Vec<_>, _>>()?;
+    let (requests, overlay, diagnostics) = preflight(preview.requests)?;
+    if !diagnostics.is_empty() {
+        return Err(StoreError::Invalid(
+            "record batch request is invalid".into(),
+        ));
+    }
+    let (requests, overlay) = canonical_batch(root, requests, overlay)?;
+    preview.requests = requests;
     let mut expected_target_revisions = BTreeMap::new();
     for (path, revision) in preview.expected_target_revisions {
         let canonical = checked_path(&path)?;
@@ -269,16 +263,14 @@ pub(super) fn apply_batch(
             "preview contains validation diagnostics".into(),
         ));
     }
-    let overlay = request_overlay(&preview.requests);
     let context = MutationContext::capture(root, &overlay, &[], true)?;
     context.require_revisions(&preview.expected_input_revisions)?;
-    let checked = prepare_batch(root, preview.requests.clone(), &context)?;
+    let checked = prepare_batch(root, &preview.requests, &overlay, &context)?;
     if !checked.diagnostics.is_empty() || checked.diff != preview.diff {
         return Err(StoreError::Invalid(
             "record batch validation changed after preview".into(),
         ));
     }
-    let current = &context.before;
     if preview.expected_target_revisions.len() != preview.requests.len() {
         return Err(StoreError::Invalid(
             "record batch target revisions are incomplete".into(),
@@ -293,21 +285,14 @@ pub(super) fn apply_batch(
                 "record batch targets must be distinct".into(),
             ));
         }
-        let current_entry = current
-            .snapshot
-            .entries
-            .iter()
-            .find(|entry| entry.path == path);
+        let current_entry = context.entry(&path);
         let expected = preview
             .expected_target_revisions
             .get(&path)
             .ok_or_else(|| StoreError::Invalid("record batch target revision is missing".into()))?;
         require_target_revision(&root.join(&path), expected.as_ref())?;
         let target = root.join(&path);
-        let proposed = request
-            .rendered()
-            .transpose()
-            .map_err(|diagnostic| StoreError::Invalid(diagnostic.message))?;
+        let proposed = overlay.get(&path).and_then(Option::as_deref);
         match request {
             ChangeRequest::Create { .. } => match fs::symlink_metadata(&target) {
                 Ok(_) => {
@@ -334,49 +319,57 @@ pub(super) fn apply_batch(
         }
         mutations.push(BatchMutation {
             path,
-            target,
             proposed,
-            original: current_entry.map(|entry| entry.original_bytes.clone()),
+            original: current_entry.map(|entry| entry.original_bytes.as_slice()),
         });
     }
     context.require_unchanged()?;
-    let mut applied = Vec::new();
-    for (index, mutation) in mutations.iter().enumerate() {
+    let mut receipts = Vec::new();
+    for mutation in &mutations {
         if mutation.proposed == mutation.original {
             continue;
         }
-        let result = apply_mutation(root, mutation);
-        if let Err(error) = result {
-            rollback_batch(&mutations, &applied).map_err(|rollback| {
-                StoreError::Invalid(format!(
-                    "record batch failed ({error}); rollback failed ({rollback})"
-                ))
-            })?;
-            return Err(error);
+        match crate::mutation_restore::apply(
+            root,
+            &mutation.path,
+            mutation.original,
+            mutation.proposed,
+        ) {
+            Ok(receipt) => receipts.push(receipt),
+            Err(error) => {
+                return Err(crate::mutation_restore::rollback(
+                    root,
+                    "record batch write",
+                    error,
+                    &receipts,
+                ));
+            }
         }
-        applied.push(index);
     }
     let resulting = match context.resulting(&overlay) {
         Ok(resulting) => resulting,
         Err(error) => {
-            rollback_batch(&mutations, &applied).map_err(|rollback| {
-                StoreError::Invalid(format!(
-                    "record batch result could not be scanned ({error}); rollback failed ({rollback})"
-                ))
-            })?;
-            return Err(error);
+            return Err(crate::mutation_restore::rollback(
+                root,
+                "record batch verification",
+                error,
+                &receipts,
+            ));
         }
     };
+    let resulting_entries = resulting
+        .snapshot
+        .entries
+        .iter()
+        .map(|entry| (entry.path.as_str(), entry))
+        .collect::<BTreeMap<_, _>>();
     let resulting_target_revisions = mutations
         .iter()
         .map(|mutation| {
             (
                 mutation.path.clone(),
-                resulting
-                    .snapshot
-                    .entries
-                    .iter()
-                    .find(|entry| entry.path == mutation.path)
+                resulting_entries
+                    .get(mutation.path.as_str())
                     .map(|entry| entry.content_revision.clone()),
             )
         })
@@ -389,16 +382,6 @@ pub(super) fn apply_batch(
         resulting_target_revisions,
         diff: preview.diff,
     })
-}
-
-fn apply_mutation(root: &Path, mutation: &BatchMutation) -> Result<(), StoreError> {
-    #[cfg(test)]
-    crate::mutation_hooks::writing(root, &mutation.path)?;
-    let _ = root;
-    match &mutation.proposed {
-        Some(bytes) => atomic_write(&mutation.target, bytes, mutation.original.is_none()),
-        None => fs::remove_file(&mutation.target).map_err(StoreError::from),
-    }
 }
 
 fn canonical_request(root: &Path, request: ChangeRequest) -> Result<ChangeRequest, StoreError> {
@@ -417,40 +400,65 @@ fn canonical_request(root: &Path, request: ChangeRequest) -> Result<ChangeReques
     })
 }
 
-fn rollback_batch(mutations: &[BatchMutation], applied: &[usize]) -> Result<(), StoreError> {
-    for index in applied.iter().rev() {
-        let mutation = &mutations[*index];
-        match &mutation.original {
-            Some(bytes) => atomic_write(&mutation.target, bytes, !mutation.target.exists())?,
-            None => match fs::symlink_metadata(&mutation.target) {
-                Ok(metadata)
-                    if metadata.file_type().is_file() && !metadata.file_type().is_symlink() =>
-                {
-                    fs::remove_file(&mutation.target)?;
-                }
-                Ok(_) => {
-                    return Err(StoreError::Invalid(
-                        "rollback target is not a regular file".into(),
-                    ));
-                }
-                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-                Err(error) => return Err(error.into()),
-            },
+fn preflight(
+    requests: Vec<ChangeRequest>,
+) -> Result<(Vec<ChangeRequest>, Overlay, Vec<Diagnostic>), StoreError> {
+    let mut paths = BTreeSet::new();
+    let mut rendered = Overlay::new();
+    let mut diagnostics = Vec::new();
+    let mut normalized = Vec::with_capacity(requests.len());
+    for request in requests {
+        let path = checked_path(request.path())?;
+        if !paths.insert(path.clone()) {
+            diagnostics.push(Diagnostic::new(
+                &path,
+                "duplicate_target",
+                "batch requests must target distinct canonical paths",
+            ));
         }
+        let request = match request {
+            ChangeRequest::Create { draft, .. } => ChangeRequest::Create {
+                path: path.clone(),
+                draft,
+            },
+            ChangeRequest::Replace { draft, .. } => ChangeRequest::Replace {
+                path: path.clone(),
+                draft,
+            },
+            ChangeRequest::Delete { .. } => ChangeRequest::Delete { path: path.clone() },
+        };
+        match request.rendered() {
+            Some(Ok(bytes)) => {
+                rendered.insert(path, Some(bytes));
+            }
+            Some(Err(diagnostic)) => diagnostics.push(diagnostic),
+            None => {
+                rendered.insert(path, None);
+            }
+        }
+        normalized.push(request);
     }
-    Ok(())
+    Ok((normalized, rendered, stable(diagnostics)))
 }
 
-fn request_overlay(requests: &[ChangeRequest]) -> Overlay {
-    requests
-        .iter()
-        .map(|request| {
-            (
-                request.path().to_owned(),
-                request.rendered().and_then(Result::ok),
-            )
-        })
-        .collect()
+fn canonical_batch(
+    root: &Path,
+    requests: Vec<ChangeRequest>,
+    mut rendered: Overlay,
+) -> Result<(Vec<ChangeRequest>, Overlay), StoreError> {
+    let mut normalized = Vec::with_capacity(requests.len());
+    let mut overlay = Overlay::new();
+    for request in requests {
+        let bytes = rendered.remove(request.path()).flatten();
+        let request = canonical_request(root, request)?;
+        if overlay.insert(request.path().into(), bytes).is_some() {
+            return Err(StoreError::Invalid(
+                "mutation targets alias the same canonical file".into(),
+            ));
+        }
+        normalized.push(request);
+    }
+    Ok((normalized, overlay))
 }
 
 pub(super) fn ensure_worktree(root: &Path) -> Result<(), StoreError> {
@@ -473,6 +481,9 @@ pub(super) fn git_diff(
     before: Option<&[u8]>,
     after: Option<&[u8]>,
 ) -> Result<String, StoreError> {
+    if before == after {
+        return Ok(String::new());
+    }
     let old = before.map(|bytes| temp(root, bytes)).transpose()?;
     let new = after.map(|bytes| temp(root, bytes)).transpose()?;
     let old_path = old
@@ -491,17 +502,23 @@ pub(super) fn git_diff(
         .arg(&old_path)
         .arg(&new_path)
         .output()?;
-    if output.status.code().is_some_and(|code| code > 1) {
-        return Err(StoreError::Invalid(
-            String::from_utf8_lossy(&output.stderr).into(),
-        ));
-    }
+    require_diff_success(&output)?;
     Ok(canonical_diff(
         String::from_utf8_lossy(&output.stdout).as_ref(),
         path,
         before.is_some(),
         after.is_some(),
     ))
+}
+
+fn require_diff_success(output: &std::process::Output) -> Result<(), StoreError> {
+    if matches!(output.status.code(), Some(0 | 1)) {
+        return Ok(());
+    }
+    Err(StoreError::Invalid(format!(
+        "approval diff subprocess failed: {}",
+        output.status
+    )))
 }
 
 fn contained_git_argument(root: &Path, path: &Path) -> Result<PathBuf, StoreError> {
@@ -534,9 +551,15 @@ fn absolute_lexical(path: &Path) -> Result<PathBuf, StoreError> {
 }
 
 fn canonical_diff(diff: &str, path: &str, before: bool, after: bool) -> String {
+    let mut in_hunk = false;
     diff.lines()
         .map(|line| {
-            if line.starts_with("diff --git ") {
+            if line.starts_with("@@") {
+                in_hunk = true;
+            }
+            if in_hunk {
+                line.into()
+            } else if line.starts_with("diff --git ") {
                 format!("diff --git a/{path} b/{path}")
             } else if line.starts_with("--- ") {
                 if before {
@@ -576,25 +599,6 @@ fn temp(root: &Path, bytes: &[u8]) -> Result<NamedTempFile, StoreError> {
     Ok(file)
 }
 
-fn atomic_write(target: &Path, bytes: &[u8], create: bool) -> Result<(), StoreError> {
-    let parent = target
-        .parent()
-        .ok_or_else(|| StoreError::Invalid("target has no parent".into()))?;
-    let mut temporary = NamedTempFile::new_in(parent)?;
-    temporary.write_all(bytes)?;
-    temporary.flush()?;
-    if create {
-        temporary
-            .persist_noclobber(target)
-            .map_err(|error| StoreError::Io(error.error))?;
-    } else {
-        temporary
-            .persist(target)
-            .map_err(|error| StoreError::Io(error.error))?;
-    }
-    Ok(())
-}
-
 #[cfg(test)]
 mod diff_argument_tests {
     use super::*;
@@ -618,5 +622,28 @@ mod diff_argument_tests {
         assert!(diff.contains("--- /dev/null"));
         assert!(diff.contains(&format!("+++ b/{path}")));
         assert!(!diff.contains(".tmp"));
+    }
+    #[test]
+    fn literal_hunk_lines_are_not_rewritten_as_canonical_file_headers() {
+        let root = tempfile::tempdir().unwrap();
+        let diff = git_diff(
+            root.path(),
+            "record.md",
+            Some(b"-- removed note\n"),
+            Some(b"++ added note\n"),
+        )
+        .unwrap();
+        assert!(diff.contains("--- a/record.md\n+++ b/record.md\n"));
+        assert!(diff.contains("--- removed note\n+++ added note\n"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn terminated_and_failed_diff_processes_cannot_publish_partial_approval_output() {
+        for script in ["printf partial; kill -TERM $$", "printf partial; exit 2"] {
+            let output = Command::new("sh").args(["-c", script]).output().unwrap();
+            assert_eq!(output.stdout, b"partial");
+            assert!(require_diff_success(&output).is_err());
+        }
     }
 }

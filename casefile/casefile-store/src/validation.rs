@@ -30,6 +30,30 @@ impl<'a> ValidationFacts<'a> {
         })
     }
 
+    pub(super) fn insert_progress_operations(
+        &mut self,
+        path: &str,
+        operations: &[(String, String)],
+    ) {
+        self.progress.insert(path.into(), operations.to_vec());
+    }
+
+    pub(super) fn insert_progress(
+        &mut self,
+        entry: &EntrySnapshot,
+        resolved: PathFacts<'a>,
+        log: &casefile_core::ProgressLog,
+    ) {
+        self.resolved.insert(entry.path.clone(), resolved);
+        self.progress.insert(
+            entry.path.clone(),
+            log.entries
+                .iter()
+                .map(|entry| (entry.id().into(), entry.ticket_id().into()))
+                .collect(),
+        );
+    }
+
     pub(super) fn insert(
         &mut self,
         entry: &EntrySnapshot,
@@ -66,24 +90,6 @@ impl<'a> ValidationFacts<'a> {
                 .insert(entry.path.clone(), parsed.strategy.clone());
         }
     }
-}
-
-pub(super) fn cross_validate(entries: &[EntrySnapshot], active: &Activation) -> Vec<Diagnostic> {
-    let mut facts = ValidationFacts::default();
-    let scopes = ScopeIndex::new(active);
-    for entry in entries {
-        let resolved = scopes.resolve(&entry.path);
-        let parsed = crate::scanning::classify_facts(
-            &entry.path,
-            &entry.original_bytes,
-            active,
-            resolved.kind,
-        )
-        .facts;
-        facts.insert(entry, resolved, parsed);
-    }
-    // Mutation projections contain only independently checked regular files or regular overlays.
-    cross_validate_facts(entries, active, &facts, |_| true)
 }
 
 pub(super) fn cross_validate_facts(

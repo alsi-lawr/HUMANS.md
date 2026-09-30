@@ -29,6 +29,8 @@ struct ErrorResponse {
     error: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     code: Option<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    details: Option<casefile_store::IncompleteRollback>,
 }
 
 pub(crate) struct Host {
@@ -48,6 +50,7 @@ struct ApiError {
     status: u16,
     message: String,
     code: Option<&'static str>,
+    details: Option<casefile_store::IncompleteRollback>,
 }
 
 impl Reply {
@@ -68,9 +71,20 @@ impl Reply {
             body: serde_json::to_vec(&ErrorResponse {
                 error: error.message,
                 code: error.code,
+                details: error.details,
             })
             .expect("error response serializes"),
         }
+    }
+    fn respond(self, request: Request) -> Result<()> {
+        let content_type =
+            Header::from_bytes("Content-Type", self.content_type).expect("static header is valid");
+        request.respond(
+            Response::from_data(self.body)
+                .with_status_code(StatusCode(self.status))
+                .with_header(content_type),
+        )?;
+        Ok(())
     }
 }
 
@@ -80,14 +94,24 @@ impl ApiError {
             status: 400,
             message: error.to_string(),
             code: None,
+            details: None,
         }
     }
     fn store(error: casefile_store::StoreError) -> Self {
+        if let casefile_store::StoreError::IncompleteRollback { details, .. } = error {
+            return Self {
+                status: 409,
+                message: "incomplete rollback".into(),
+                code: Some("incomplete_rollback"),
+                details: Some(details),
+            };
+        }
         let stale = matches!(error, casefile_store::StoreError::StaleTargetRevision);
         Self {
             status: if stale { 409 } else { 400 },
             message: error.to_string(),
             code: stale.then_some("stale_revision"),
+            details: None,
         }
     }
     fn provider(error: ProviderError) -> Self {
@@ -97,11 +121,13 @@ impl ApiError {
                 status: 400,
                 message: ProviderError::PreviewIntegrity.to_string(),
                 code: Some("preview_integrity"),
+                details: None,
             },
             other => Self {
                 status: 400,
                 message: other.to_string(),
                 code: None,
+                details: None,
             },
         }
     }
@@ -110,6 +136,7 @@ impl ApiError {
             status: 403,
             message: message.into(),
             code: None,
+            details: None,
         }
     }
     fn internal(error: impl ToString) -> Self {
@@ -117,6 +144,7 @@ impl ApiError {
             status: 500,
             message: error.to_string(),
             code: None,
+            details: None,
         }
     }
 }
@@ -133,14 +161,7 @@ impl Host {
 
     pub(crate) fn handle(&self, mut request: Request) -> Result<()> {
         let reply = self.route(&mut request).unwrap_or_else(Reply::error);
-        let content_type =
-            Header::from_bytes("Content-Type", reply.content_type).expect("static header is valid");
-        request.respond(
-            Response::from_data(reply.body)
-                .with_status_code(StatusCode(reply.status))
-                .with_header(content_type),
-        )?;
-        Ok(())
+        reply.respond(request)
     }
 
     fn route(&self, request: &mut Request) -> Result<Reply, ApiError> {
@@ -167,6 +188,7 @@ impl Host {
                         status: 415,
                         message: "Content-Type must be application/json".into(),
                         code: None,
+                        details: None,
                     });
                 }
                 let mut body = String::new();
@@ -188,11 +210,13 @@ impl Host {
                 status: 405,
                 message: "method not allowed".into(),
                 code: None,
+                details: None,
             }),
             _ => Err(ApiError {
                 status: 404,
                 message: "route not found".into(),
                 code: None,
+                details: None,
             }),
         }
     }
@@ -360,5 +384,50 @@ mod tests {
             record["search_text"],
             format!("{}\n{source}", expected.title)
         );
+    }
+    #[test]
+    fn rollback_error_crosses_the_http_failure_channel_as_409_without_private_source_contents() {
+        use super::*;
+        use casefile_store::*;
+        use std::io::{Read, Write};
+        let details = IncompleteRollback {
+            code: RollbackErrorCode::IncompleteRollback,
+            operation: "record batch verification".into(),
+            cause: RollbackCause::Io,
+            affected_paths: vec![RollbackPathState {
+                path: "tickets/accepted/HMD-1.md".into(),
+                remaining: RollbackRemainingState::Unknown,
+                reason: RollbackReason::ObservationFailed,
+            }],
+        };
+        let error = ProviderError::Store(StoreError::IncompleteRollback {
+            details: details.clone(),
+            cause: Box::new(StoreError::Invalid("PRIVATE SOURCE CONTENTS".into())),
+        });
+        let server = tiny_http::Server::http("127.0.0.1:0").unwrap();
+        let address = server.server_addr().to_ip().unwrap();
+        let pending = std::thread::spawn(move || {
+            let request = server.recv().unwrap();
+            Reply::error(ApiError::provider(error))
+                .respond(request)
+                .unwrap();
+        });
+        let mut client = std::net::TcpStream::connect(address).unwrap();
+        client
+            .set_read_timeout(Some(std::time::Duration::from_secs(10)))
+            .unwrap();
+        client.write_all(b"POST /api/apply HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\nContent-Length: 0\r\n\r\n").unwrap();
+        let mut response = String::new();
+        client.read_to_string(&mut response).unwrap();
+        pending.join().unwrap();
+        assert!(response.starts_with("HTTP/1.1 409 "));
+        let (_, body) = response.split_once("\r\n\r\n").unwrap();
+        let value: serde_json::Value = serde_json::from_str(body).unwrap();
+        assert_eq!(value["code"], "incomplete_rollback");
+        assert_eq!(
+            serde_json::from_value::<IncompleteRollback>(value["details"].clone()).unwrap(),
+            details
+        );
+        assert!(!response.contains("PRIVATE SOURCE CONTENTS"));
     }
 }

@@ -413,13 +413,22 @@ impl ToolService {
         let result = self.dispatch(name, arguments);
         match result {
             Ok(value) => success_response(request_id, tool_result(value, false)),
-            Err(error) => success_response(request_id, tool_error(&format!("{error:#}"))),
+            Err(error) => {
+                let result = match crate::rollback_details(&error) {
+                    Some(details) => tool_result(
+                        serde_json::to_value(details).expect("rollback details serialize"),
+                        true,
+                    ),
+                    None => tool_error(&format!("{error:#}")),
+                };
+                success_response(request_id, result)
+            }
         }
     }
 
     fn dispatch(&self, name: &str, arguments: Value) -> Result<Value> {
         #[cfg(test)]
-        tests::dispatch_boundary();
+        tests::dispatch_boundary()?;
         match name {
             "casefile_snapshot" => serialize(self.provider.snapshot()?),
             "casefile_query" => serialize(self.provider.query(parse(arguments)?)?),
@@ -1628,12 +1637,39 @@ fn apply_output_schema(name: &str) -> Value {
         "casefile_apply_strategy_transition" | "casefile_apply_writer_binding" => governed,
         _ => unreachable!("every Casefile tool has an explicit output schema"),
     };
-    object_schema(
+    let success = object_schema(
         json!({
             "result": result,
             "cache": cache_schema(),
         }),
         &["result", "cache"],
+    );
+    one_of_object(vec![success, rollback_output_schema()])
+}
+
+fn rollback_output_schema() -> Value {
+    let remaining = one_of_object(vec![
+        object_schema(
+            json!({"state": {"const": "regular"}, "revision": non_empty_string()}),
+            &["state", "revision"],
+        ),
+        object_schema(
+            json!({"state": {"enum": ["absent", "symlink", "directory", "other", "unknown"]}}),
+            &["state"],
+        ),
+    ]);
+    object_schema(
+        json!({
+            "code": {"const": "incomplete_rollback"},
+            "operation": non_empty_string(),
+            "cause": {"enum": ["io", "invalid", "stale"]},
+            "affected_paths": {"type": "array", "minItems": 1, "items": object_schema(json!({
+                "path": non_empty_string(),
+                "remaining": remaining,
+                "reason": {"enum": ["external_change", "observation_failed", "restore_failed"]},
+            }), &["path", "remaining", "reason"])},
+        }),
+        &["code", "operation", "cause", "affected_paths"],
     )
 }
 

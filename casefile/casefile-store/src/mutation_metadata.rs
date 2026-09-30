@@ -114,17 +114,6 @@ pub(super) fn header(root: &Path, path: &str, kind: Kind) -> Result<Header, Stor
             && !bytes.is_empty()
             && line.trim_end() == "---";
         bytes.extend_from_slice(line.as_bytes());
-        if matches!(kind, Kind::Board | Kind::StrategyTransition) {
-            if let Ok(parsed) =
-                toml::from_str::<Header>(std::str::from_utf8(&bytes).unwrap_or_default())
-            {
-                if parsed.id.is_some()
-                    || (kind == Kind::StrategyTransition && parsed.phase.is_some())
-                {
-                    return Ok(parsed);
-                }
-            }
-        }
         if end {
             break;
         }
@@ -150,11 +139,30 @@ pub(super) fn list(
     let mut paths = Vec::new();
     for entry in entries {
         let entry = entry?;
-        let path = format!("{directory}/{}", entry.file_name().to_string_lossy());
         let kind = entry.file_type()?;
+        let extension = if directory.ends_with("/boards") || directory.ends_with("/transitions") {
+            "toml"
+        } else {
+            "md"
+        };
+        if !(kind.is_file()
+            && entry
+                .path()
+                .extension()
+                .is_some_and(|actual| actual == extension)
+            || kind.is_dir() && recursive)
+        {
+            continue;
+        }
+        let name = entry.file_name().into_string().map_err(|_| {
+            StoreError::Invalid(format!(
+                "mutation dependency name in {directory} is not UTF-8"
+            ))
+        })?;
+        let path = format!("{directory}/{name}");
         if kind.is_file() {
             paths.push(path);
-        } else if kind.is_dir() && recursive {
+        } else {
             paths.extend(list(root, &path, true)?);
         }
     }

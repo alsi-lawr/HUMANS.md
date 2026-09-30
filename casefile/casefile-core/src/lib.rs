@@ -29,8 +29,8 @@ pub use markdown::{markdown_headings, validate_markdown};
 pub use metadata::arrays as parse_metadata_arrays;
 pub use progress::{
     ProgressEntry, ProgressLog, ProgressNoteCategory, ProgressProjection, ProgressStatus,
-    ProgressSummary, parse_progress_log, parse_progress_projection, render_progress_log,
-    validate_progress_log,
+    ProgressSummary, parse_progress_log, parse_progress_operations, parse_progress_projection,
+    render_progress_log, validate_progress_log,
 };
 #[doc(hidden)]
 pub use project_map::{
@@ -42,8 +42,9 @@ pub use rendering::render_markdown_html;
 pub use request::parse as parse_request;
 pub use snapshot::{CasefileSnapshot, EntrySnapshot, Revision};
 pub use strategy::{
-    BindingResolution, StrategyBinding, StrategyCoordination, StrategyLimits, StrategyPipeline,
-    StrategyProjection, StrategyRequirements, StrategyWorker,
+    BindingResolution, SelectedStrategyMatrix, StrategyBinding, StrategyCoordination,
+    StrategyLimits, StrategyPipeline, StrategyProjection, StrategyRequirements, StrategyWorker,
+    parse_selected_matrix as parse_selected_strategy_matrix,
 };
 #[doc(hidden)]
 pub use strategy::{

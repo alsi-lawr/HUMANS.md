@@ -87,7 +87,8 @@ pub struct ProgressLog {
 
 mod parse;
 pub use parse::{
-    ProgressProjection, ProgressSummary, parse_progress_log, parse_progress_projection,
+    ProgressProjection, ProgressSummary, parse_progress_log, parse_progress_operations,
+    parse_progress_projection,
 };
 
 struct EntryRef<'a> {

@@ -196,7 +196,7 @@ fn fixed_root_session_negotiates_and_exposes_canonical_snapshot_and_query() {
         false
     );
     assert_eq!(
-        output_schema("casefile_apply_progress")["required"],
+        output_schema("casefile_apply_progress")["oneOf"][0]["required"],
         json!(["result", "cache"])
     );
     let project_schema = &output_schema("casefile_snapshot")["properties"]["catalogue"]["properties"]

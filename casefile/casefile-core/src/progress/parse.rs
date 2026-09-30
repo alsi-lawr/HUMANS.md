@@ -215,6 +215,16 @@ pub fn parse_progress_log(path: &str, text: &str) -> Result<ProgressLog, Vec<Dia
     })
 }
 
+pub fn parse_progress_operations(
+    path: &str,
+    text: &str,
+) -> Result<Vec<(String, String)>, Vec<Diagnostic>> {
+    Ok(parse_entries(path, text)?
+        .into_iter()
+        .map(|entry| (entry.id.into_owned(), entry.ticket_id.into_owned()))
+        .collect())
+}
+
 pub fn parse_progress_projection(
     path: &str,
     text: &str,
@@ -275,6 +285,13 @@ mod tests {
                     .replace("HMD-001", "HMD-002")
             );
             let full = parse_progress_log("log.toml", &source).unwrap();
+            assert_eq!(
+                parse_progress_operations("log.toml", &source).unwrap(),
+                full.entries
+                    .iter()
+                    .map(|entry| (entry.id().to_owned(), entry.ticket_id().to_owned()))
+                    .collect::<Vec<_>>()
+            );
             let projected =
                 parse_progress_projection("log.toml", &source, Some("HMD-001")).unwrap();
             assert_eq!(
@@ -348,6 +365,10 @@ mod tests {
         ];
         for source in invalid {
             let full = parse_progress_log("log.toml", &source).unwrap_err();
+            assert_eq!(
+                full,
+                parse_progress_operations("log.toml", &source).unwrap_err()
+            );
             assert_eq!(
                 full,
                 parse_progress_projection("log.toml", &source, Some("OTHER")).unwrap_err()

@@ -1,0 +1,325 @@
+{
+  "provenance": "Actual initialized ToolService tools/list and tools/call; injected typed Provider Store error. Selected advertised tool copied unchanged; no hand-written validator.",
+  "full_capture_sha256": "18e6bada24c4036982a496331318bf5ed7fe44938d9f0e9946c5a5c90e7aa03d",
+  "advertised_apply_tool": {
+    "description": "Apply one exact live-session record or record-batch preview by preview_id. Obtain external approval first only when its review envelope's approval_required is true.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "preview_id": {
+          "description": "The preview_id returned by the matching preview tool in this live MCP session.",
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "preview_id"
+      ],
+      "type": "object"
+    },
+    "name": "casefile_apply_record",
+    "outputSchema": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "cache": {
+              "oneOf": [
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "state": {
+                      "const": "not_configured"
+                    }
+                  },
+                  "required": [
+                    "state"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "state": {
+                      "const": "missing"
+                    }
+                  },
+                  "required": [
+                    "state"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "current_revision": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "indexed_revision": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "state": {
+                      "const": "stale"
+                    }
+                  },
+                  "required": [
+                    "state",
+                    "indexed_revision",
+                    "current_revision"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "source_revision": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "state": {
+                      "const": "current"
+                    }
+                  },
+                  "required": [
+                    "state",
+                    "source_revision"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "message": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "state": {
+                      "const": "degraded"
+                    }
+                  },
+                  "required": [
+                    "state",
+                    "message"
+                  ],
+                  "type": "object"
+                }
+              ],
+              "type": "object"
+            },
+            "result": {
+              "oneOf": [
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "diff": {
+                      "type": "string"
+                    },
+                    "no_op": {
+                      "type": "boolean"
+                    },
+                    "path": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "resulting_target_revision": {
+                      "anyOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "path",
+                    "resulting_target_revision",
+                    "diff",
+                    "no_op"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "diff": {
+                      "type": "string"
+                    },
+                    "no_op": {
+                      "type": "boolean"
+                    },
+                    "paths": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
+                    "resulting_target_revisions": {
+                      "additionalProperties": {
+                        "anyOf": [
+                          {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "paths",
+                    "resulting_target_revisions",
+                    "diff",
+                    "no_op"
+                  ],
+                  "type": "object"
+                }
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "result",
+            "cache"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "affected_paths": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "path": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "reason": {
+                    "enum": [
+                      "external_change",
+                      "observation_failed",
+                      "restore_failed"
+                    ]
+                  },
+                  "remaining": {
+                    "oneOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "revision": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "state": {
+                            "const": "regular"
+                          }
+                        },
+                        "required": [
+                          "state",
+                          "revision"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "state": {
+                            "enum": [
+                              "absent",
+                              "symlink",
+                              "directory",
+                              "other",
+                              "unknown"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "state"
+                        ],
+                        "type": "object"
+                      }
+                    ],
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "path",
+                  "remaining",
+                  "reason"
+                ],
+                "type": "object"
+              },
+              "minItems": 1,
+              "type": "array"
+            },
+            "cause": {
+              "enum": [
+                "io",
+                "invalid",
+                "stale"
+              ]
+            },
+            "code": {
+              "const": "incomplete_rollback"
+            },
+            "operation": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "operation",
+            "cause",
+            "affected_paths"
+          ],
+          "type": "object"
+        }
+      ],
+      "type": "object"
+    }
+  },
+  "response": {
+    "id": 3,
+    "jsonrpc": "2.0",
+    "result": {
+      "content": [
+        {
+          "text": "{\"affected_paths\":[{\"path\":\"tickets/accepted/HMD-1.md\",\"reason\":\"external_change\",\"remaining\":{\"revision\":\"fsmeta-v1:observed\",\"state\":\"regular\"}},{\"path\":\"tickets/accepted/HMD-2.md\",\"reason\":\"observation_failed\",\"remaining\":{\"state\":\"unknown\"}}],\"cause\":\"io\",\"code\":\"incomplete_rollback\",\"operation\":\"record batch verification\"}\n",
+          "type": "text"
+        }
+      ],
+      "isError": true,
+      "structuredContent": {
+        "affected_paths": [
+          {
+            "path": "tickets/accepted/HMD-1.md",
+            "reason": "external_change",
+            "remaining": {
+              "revision": "fsmeta-v1:observed",
+              "state": "regular"
+            }
+          },
+          {
+            "path": "tickets/accepted/HMD-2.md",
+            "reason": "observation_failed",
+            "remaining": {
+              "state": "unknown"
+            }
+          }
+        ],
+        "cause": "io",
+        "code": "incomplete_rollback",
+        "operation": "record batch verification"
+      }
+    }
+  }
+}

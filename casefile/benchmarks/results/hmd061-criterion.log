@@ -1,0 +1,49 @@
+Gnuplot not found, using plotters backend
+Benchmarking mutation_preview_250_records/replace_batch/1
+Benchmarking mutation_preview_250_records/replace_batch/1: Warming up for 1.0000 s
+Benchmarking mutation_preview_250_records/replace_batch/1: Collecting 10 samples in estimated 2.7752 s (110 iterations)
+Benchmarking mutation_preview_250_records/replace_batch/1: Analyzing
+mutation_preview_250_records/replace_batch/1
+                        time:   [24.561 ms 25.145 ms 25.819 ms]
+                        thrpt:  [38.731  elem/s 39.769  elem/s 40.714  elem/s]
+                 change:
+                        time:   [−4.5186% −2.3979% −0.2790%] (p = 0.04 < 0.05)
+                        thrpt:  [+0.2798% +2.4568% +4.7324%]
+                        Change within noise threshold.
+Benchmarking mutation_preview_250_records/replace_batch/10
+Benchmarking mutation_preview_250_records/replace_batch/10: Warming up for 1.0000 s
+
+Warning: Unable to complete 10 samples in 2.0s. You may wish to increase target time to 2.4s or enable flat sampling.
+Benchmarking mutation_preview_250_records/replace_batch/10: Collecting 10 samples in estimated 2.4248 s (55 iterations)
+Benchmarking mutation_preview_250_records/replace_batch/10: Analyzing
+mutation_preview_250_records/replace_batch/10
+                        time:   [42.625 ms 43.726 ms 44.983 ms]
+                        thrpt:  [222.30  elem/s 228.70  elem/s 234.60  elem/s]
+                 change:
+                        time:   [−3.8877% −1.0215% +2.5065%] (p = 0.61 > 0.05)
+                        thrpt:  [−2.4452% +1.0320% +4.0450%]
+                        No change in performance detected.
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) high mild
+
+Gnuplot not found, using plotters backend
+Benchmarking priority_single_record_250_records_500_notes/preview
+Benchmarking priority_single_record_250_records_500_notes/preview: Warming up for 1.0000 s
+Benchmarking priority_single_record_250_records_500_notes/preview: Collecting 10 samples in estimated 2.9981 s (110 iterations)
+Benchmarking priority_single_record_250_records_500_notes/preview: Analyzing
+priority_single_record_250_records_500_notes/preview
+                        time:   [26.486 ms 26.866 ms 27.266 ms]
+                        change: [−14.560% −12.985% −11.325%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Benchmarking priority_single_record_250_records_500_notes/apply
+Benchmarking priority_single_record_250_records_500_notes/apply: Warming up for 1.0000 s
+
+Warning: Unable to complete 10 samples in 2.0s. You may wish to increase target time to 3.0s or enable flat sampling.
+Benchmarking priority_single_record_250_records_500_notes/apply: Collecting 10 samples in estimated 2.9941 s (55 iterations)
+Benchmarking priority_single_record_250_records_500_notes/apply: Analyzing
+priority_single_record_250_records_500_notes/apply
+                        time:   [26.652 ms 26.956 ms 27.251 ms]
+                        change: [−12.388% −10.449% −7.7641%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Found 2 outliers among 10 measurements (20.00%)
+  2 (20.00%) high mild

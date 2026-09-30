@@ -13,12 +13,61 @@ use crate::{
 use casefile_core::{
     ApplyResult, ChangeBatchApplyResult, ChangeBatchPreview, ChangeRequest, Preview, Revision,
 };
+use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeMap,
     fs,
     path::{Component, Path, PathBuf},
 };
 use thiserror::Error;
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct IncompleteRollback {
+    pub code: RollbackErrorCode,
+    pub operation: String,
+    pub cause: RollbackCause,
+    pub affected_paths: Vec<RollbackPathState>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RollbackErrorCode {
+    IncompleteRollback,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RollbackCause {
+    Io,
+    Invalid,
+    Stale,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct RollbackPathState {
+    pub path: String,
+    pub remaining: RollbackRemainingState,
+    pub reason: RollbackReason,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "state", rename_all = "snake_case")]
+pub enum RollbackRemainingState {
+    Absent,
+    Regular { revision: Revision },
+    Symlink,
+    Directory,
+    Other,
+    Unknown,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RollbackReason {
+    ExternalChange,
+    ObservationFailed,
+    RestoreFailed,
+}
 
 #[derive(Debug, Error)]
 pub enum StoreError {
@@ -28,6 +77,12 @@ pub enum StoreError {
     Invalid(String),
     #[error("stale target revision")]
     StaleTargetRevision,
+    #[error("incomplete rollback during {}", details.operation)]
+    IncompleteRollback {
+        details: IncompleteRollback,
+        #[source]
+        cause: Box<StoreError>,
+    },
 }
 
 pub(super) fn require_safe_target_parent(

@@ -504,9 +504,20 @@ fn schema(path: &str, table: &toml::map::Map<String, toml::Value>) -> Result<(),
     }
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SelectedStrategyMatrix {
+    pub strategy_id: String,
+    pub phase: String,
+    pub adapter: String,
+    pub projection: StrategyProjection,
+}
+
 /// Validates a complete selectable matrix without relying on its filesystem name.
-/// Workflow selection uses this authority before copying the matrix into its selected path.
 pub fn validate_matrix(text: &str) -> Result<(), Vec<Diagnostic>> {
+    parse_selected_matrix(text).map(|_| ())
+}
+
+pub fn parse_selected_matrix(text: &str) -> Result<SelectedStrategyMatrix, Vec<Diagnostic>> {
     let path = "strategy matrix";
     let value: toml::Value = toml::from_str(text)
         .map_err(|error| vec![Diagnostic::new(path, "invalid_toml", error.to_string())])?;
@@ -531,9 +542,14 @@ pub fn validate_matrix(text: &str) -> Result<(), Vec<Diagnostic>> {
             Diagnostic::new(path, "strategy_phase", "phase is not supported").field("phase"),
         ]);
     }
-    string(path, table, "adapter", "invalid_strategy")?;
-    parse_projection_table(path, table)?;
-    Ok(())
+    let adapter = string(path, table, "adapter", "invalid_strategy")?;
+    let projection = parse_projection_table(path, table)?;
+    Ok(SelectedStrategyMatrix {
+        strategy_id,
+        phase,
+        adapter,
+        projection,
+    })
 }
 
 #[cfg(test)]

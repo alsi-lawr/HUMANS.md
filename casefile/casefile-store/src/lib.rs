@@ -13,6 +13,8 @@ mod mutation_dependencies;
 mod mutation_hooks;
 mod mutation_locks;
 mod mutation_metadata;
+mod mutation_projection;
+mod mutation_restore;
 #[cfg(test)]
 mod mutation_tests;
 mod presentation;
@@ -67,4 +69,7 @@ pub use read_context::{
     ScopeReadToken,
 };
 pub use scanning::{ScanResult, is_store_path_excluded};
-pub use store::{Store, StoreError};
+pub use store::{
+    IncompleteRollback, RollbackCause, RollbackErrorCode, RollbackPathState, RollbackReason,
+    RollbackRemainingState, Store, StoreError,
+};
