@@ -102,6 +102,12 @@ fn exact_detail_distinguishes_supported_records_malformed_duplicates_and_absence
             100 + index
         );
         work(root.path(), kind, status, &id);
+        let progress_path = root.path().join(format!("{SCOPE}/progress/log.toml"));
+        if kind == Kind::Ticket && status == "accepted" {
+            let error = detail(&provider, &id).unwrap_err().to_string();
+            assert!(error.contains(&format!("{SCOPE}/progress/log.toml")));
+            fs::write(&progress_path, "schema_version=1\n").unwrap();
+        }
         let ProviderQueryResult::RecordDetail {
             record: Some(record),
             ..
@@ -111,6 +117,7 @@ fn exact_detail_distinguishes_supported_records_malformed_duplicates_and_absence
         };
         assert_eq!(record.kind, kind);
         assert_eq!(record.identity.identity, id);
+        fs::write(&progress_path, "malformed unrelated progress").unwrap();
     }
     let bad = format!("{SCOPE}/tickets/accepted/HMD-404.md");
     fs::write(root.path().join(&bad), "# HMD-404\nwrong format").unwrap();

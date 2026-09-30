@@ -14,9 +14,10 @@ pub(crate) enum ScopedRead {
 pub(crate) struct ScopedReadResult {
     pub(crate) freshness: crate::ScopeReadToken,
     pub(crate) drafts: BTreeMap<String, RecordDraft>,
+    pub(crate) boards: Vec<casefile_core::BoardDraft>,
+    pub(crate) progress: Option<casefile_core::ProgressProjection>,
     pub(crate) project: String,
     pub(crate) investigation: String,
-    pub(crate) path: String,
     pub(crate) entries: Vec<EntrySnapshot>,
     pub(crate) diagnostics: Vec<Diagnostic>,
 }
@@ -36,10 +37,7 @@ pub(crate) fn scoped_scan(
         ScopedRead::Boards => crate::ScopeReadTarget::Boards { scope },
         ScopedRead::StrategyTransitions => crate::ScopeReadTarget::StrategyTransitions { scope },
     };
-    let mut observation = crate::read_context::ScopeObservation::begin(root, target)?;
-    if matches!(read, ScopedRead::RecordIndex | ScopedRead::Boards) {
-        observation.observe_progress(root)?;
-    }
+    let observation = crate::read_context::ScopeObservation::begin(root, target)?;
     scoped_entries(root, observation)
 }
 
@@ -62,7 +60,7 @@ pub(crate) fn scoped_detail_scan(
     let mut entries = Vec::new();
     let mut drafts = BTreeMap::new();
     for (relative, file) in &observation.entries {
-        let (mut entry, draft, found) = selected_entry(
+        let (mut entry, parsed, found) = selected_entry(
             root,
             relative,
             file,
@@ -81,7 +79,7 @@ pub(crate) fn scoped_detail_scan(
                 .unwrap_or_else(|| format!("{relative}: requested record is invalid"));
             return Err(StoreError::Invalid(message));
         }
-        if let Some(draft) = draft {
+        if let Some(draft) = parsed.draft {
             drafts.insert(relative.clone(), draft);
         }
         entry.original_bytes = Vec::new();
@@ -93,16 +91,17 @@ pub(crate) fn scoped_detail_scan(
     {
         observation.observe_progress(root)?;
     }
-    let mut diagnostics = Vec::new();
-    append_progress(root, &observation, &mut entries, &mut diagnostics)?;
+    let diagnostics = Vec::new();
+    let progress = read_progress(root, &observation, Some(identity))?;
     let freshness = observation.verify(root)?;
     let scope = observation.target.scope();
     Ok(ScopedReadResult {
         freshness,
         drafts,
+        boards: Vec::new(),
+        progress,
         project: scope.project.clone(),
         investigation: scope.investigation.clone(),
-        path: observation.path,
         entries,
         diagnostics: stable(diagnostics),
     })
@@ -110,20 +109,22 @@ pub(crate) fn scoped_detail_scan(
 
 fn scoped_entries(
     root: &Path,
-    observation: crate::read_context::ScopeObservation,
+    mut observation: crate::read_context::ScopeObservation,
 ) -> Result<ScopedReadResult, StoreError> {
     let mut entries = Vec::new();
     let drafts = BTreeMap::new();
     let mut diagnostics = Vec::new();
+    let mut boards = Vec::new();
     let process = |(relative, file): (&String, &InventoryEntry)| {
         let kind = crate::layout::kind_in_scope(relative, &observation.path);
-        let (mut entry, draft, found) =
+        let (mut entry, parsed, found) =
             selected_entry(root, relative, file, &observation.active, kind)?;
-        if matches!(entry.kind, Some(Kind::Ticket | Kind::Epic)) {
-            entry.original_bytes = Vec::new();
-        }
-        drop(draft);
-        Ok((entry, found))
+        entry.original_bytes = Vec::new();
+        let board = match parsed.draft {
+            Some(RecordDraft::Board(board)) => Some(board),
+            _ => None,
+        };
+        Ok((entry, board, found))
     };
     let selected: Vec<Result<_, StoreError>> = if observation.entries.len() < 2 {
         observation
@@ -144,38 +145,66 @@ fn scoped_entries(
         })
     };
     for result in selected {
-        let (entry, mut found) = result?;
+        let (entry, board, mut found) = result?;
+        if let Some(board) = board {
+            boards.push(board);
+        }
         entries.push(entry);
         diagnostics.append(&mut found);
     }
-    append_progress(root, &observation, &mut entries, &mut diagnostics)?;
+    let accepted_ticket = entries.iter().any(|entry| entry.classification == Classification::Governed && entry.kind == Some(Kind::Ticket)
+        && matches!(&entry.summary, Some(RecordSummary::WorkItem { status, .. }) if status == "accepted"));
+    if (accepted_ticket
+        && matches!(
+            observation.target,
+            crate::ScopeReadTarget::RecordIndex { .. }
+        ))
+        || boards
+            .iter()
+            .any(|board| board.status_source == casefile_core::BoardStatusSource::Progress)
+    {
+        observation.observe_progress(root)?;
+    }
+    let progress = read_progress(root, &observation, None)?;
     let freshness = observation.verify(root)?;
     let scope = observation.target.scope();
     Ok(ScopedReadResult {
         freshness,
         drafts,
+        boards,
+        progress,
         project: scope.project.clone(),
         investigation: scope.investigation.clone(),
-        path: observation.path,
         entries,
         diagnostics: stable(diagnostics),
     })
 }
 
-fn append_progress(
+fn read_progress(
     root: &Path,
     observation: &crate::read_context::ScopeObservation,
-    entries: &mut Vec<EntrySnapshot>,
-    diagnostics: &mut Vec<Diagnostic>,
-) -> Result<(), StoreError> {
-    if let Some((path, Some(file))) = &observation.progress {
-        let (entry, _, mut found) =
-            selected_entry(root, path, file, &observation.active, Some(Kind::Progress))?;
-        let position = entries.partition_point(|entry| entry.path.as_str() < path.as_str());
-        entries.insert(position, entry);
-        diagnostics.append(&mut found);
+    detail_ticket: Option<&str>,
+) -> Result<Option<casefile_core::ProgressProjection>, StoreError> {
+    let Some((path, Some(file))) = &observation.progress else {
+        return Ok(None);
+    };
+    if file.kind != InventoryKind::Regular {
+        return Err(StoreError::Invalid(format!(
+            "{path}: unsafe_path: progress must be a regular non-symlink file"
+        )));
     }
-    Ok(())
+    let bytes = read_observed_entry(root, path, file)?;
+    let text = std::str::from_utf8(&bytes)
+        .map_err(|_| StoreError::Invalid(format!("{path}: invalid_utf8: progress must be UTF8")))?;
+    casefile_core::parse_progress_projection(path, text, detail_ticket)
+        .map(Some)
+        .map_err(|diagnostics| {
+            let diagnostic = &diagnostics[0];
+            StoreError::Invalid(format!(
+                "{}: {}: {}",
+                diagnostic.path, diagnostic.code, diagnostic.message
+            ))
+        })
 }
 
 fn selected_entry(
@@ -184,7 +213,7 @@ fn selected_entry(
     file: &InventoryEntry,
     active: &Activation,
     kind: Option<Kind>,
-) -> Result<(EntrySnapshot, Option<RecordDraft>, Vec<Diagnostic>), StoreError> {
+) -> Result<(EntrySnapshot, classification::ParsedFacts, Vec<Diagnostic>), StoreError> {
     let bytes = if file.kind == InventoryKind::Regular {
         read_observed_entry(root, path, file).map_err(|error| match error {
             StoreError::Invalid(message) => StoreError::Invalid(format!("{path}: {message}")),
@@ -217,7 +246,7 @@ fn selected_entry(
             content_revision: file.revision.clone(),
             original_bytes: bytes,
         },
-        parsed.facts.draft,
+        parsed.facts,
         diagnostics,
     ))
 }

@@ -34,24 +34,25 @@ impl<'a> ValidationFacts<'a> {
         &mut self,
         entry: &EntrySnapshot,
         resolved: PathFacts<'a>,
-        parsed: crate::scanning::classification::ParsedFacts,
+        parsed: impl std::borrow::Borrow<crate::scanning::classification::ParsedFacts>,
     ) {
+        let parsed = parsed.borrow();
         self.resolved.insert(entry.path.clone(), resolved);
-        if let Some(RecordDraft::Ticket(item) | RecordDraft::Epic(item)) = parsed.draft {
+        if let Some(RecordDraft::Ticket(item) | RecordDraft::Epic(item)) = &parsed.draft {
             self.work.insert(
                 entry.path.clone(),
                 WorkReferences {
-                    decision_refs: item.decision_refs,
-                    related_tickets: item.related_tickets,
-                    supersedes: item.supersedes,
-                    superseded_by: item.superseded_by,
+                    decision_refs: item.decision_refs.clone(),
+                    related_tickets: item.related_tickets.clone(),
+                    supersedes: item.supersedes.clone(),
+                    superseded_by: item.superseded_by.clone(),
                 },
             );
         }
-        if let Some(metadata) = parsed.metadata {
-            self.metadata.insert(entry.path.clone(), metadata);
+        if let Some(metadata) = &parsed.metadata {
+            self.metadata.insert(entry.path.clone(), metadata.clone());
         }
-        if let Some(log) = parsed.progress {
+        if let Some(log) = &parsed.progress {
             self.progress.insert(
                 entry.path.clone(),
                 log.entries
@@ -61,7 +62,8 @@ impl<'a> ValidationFacts<'a> {
             );
         }
         if entry.kind == Some(Kind::Strategy) {
-            self.strategies.insert(entry.path.clone(), parsed.strategy);
+            self.strategies
+                .insert(entry.path.clone(), parsed.strategy.clone());
         }
     }
 }

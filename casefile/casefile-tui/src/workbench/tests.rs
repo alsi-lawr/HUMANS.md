@@ -126,8 +126,6 @@ fn derived_record(path: &str, kind: Kind) -> DerivedRecord {
         identity: None,
         title: path.into(),
         content: None,
-        rendered_markdown: None,
-        search_text: String::new(),
         work_item: None,
         progress: None,
         board: None,

@@ -84,7 +84,7 @@ impl DerivedIndex for SqliteIndex {
         let mut connection = Connection::open(file.path())?;
         connection.execute_batch("PRAGMA journal_mode=DELETE;
             CREATE TABLE metadata (source_revision TEXT NOT NULL);
-            CREATE TABLE records (path TEXT PRIMARY KEY, project TEXT, investigation TEXT, identity TEXT, classification TEXT NOT NULL, kind TEXT, title TEXT NOT NULL, search_text TEXT NOT NULL, document TEXT NOT NULL);
+            CREATE TABLE records (path TEXT PRIMARY KEY, project TEXT, investigation TEXT, identity TEXT, classification TEXT NOT NULL, kind TEXT, title TEXT NOT NULL, document TEXT NOT NULL);
             CREATE TABLE relationships (source_project TEXT NOT NULL, source_investigation TEXT, source_identity TEXT NOT NULL, target_project TEXT NOT NULL, target_investigation TEXT, target_identity TEXT NOT NULL, kind TEXT NOT NULL, document TEXT NOT NULL);
             CREATE TABLE boards (project TEXT NOT NULL, investigation TEXT, identity TEXT NOT NULL, title TEXT NOT NULL, document TEXT NOT NULL);
             CREATE TABLE diagnostics (path TEXT NOT NULL, code TEXT NOT NULL, document TEXT NOT NULL);")?;
@@ -104,7 +104,7 @@ impl DerivedIndex for SqliteIndex {
                 .as_ref()
                 .map(|value| value.identity.as_str());
             transaction.execute(
-                "INSERT INTO records VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO records VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 params![
                     record.path,
                     project,
@@ -113,7 +113,6 @@ impl DerivedIndex for SqliteIndex {
                     format!("{:?}", record.classification),
                     record.kind.map(|value| format!("{:?}", value)),
                     record.title,
-                    record.search_text,
                     serde_json::to_string(record)?
                 ],
             )?;
@@ -218,7 +217,7 @@ impl DerivedIndex for SqliteIndex {
                         .is_some_and(|record_scope| record_scope == scope)
                 }) && search.is_none_or(|text| {
                     record
-                        .search_text
+                        .search_text()
                         .to_lowercase()
                         .contains(&text.to_lowercase())
                 })

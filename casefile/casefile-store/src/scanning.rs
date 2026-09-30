@@ -66,6 +66,20 @@ pub(super) fn scan(
     root: &Path,
     overlay: &BTreeMap<String, Option<Vec<u8>>>,
 ) -> Result<ScanResult, StoreError> {
+    Ok(scan_with_facts(root, overlay, false)?.0)
+}
+
+pub(super) fn scan_for_derivation(
+    root: &Path,
+) -> Result<(ScanResult, BTreeMap<String, classification::ParsedFacts>), StoreError> {
+    scan_with_facts(root, &BTreeMap::new(), true)
+}
+
+fn scan_with_facts(
+    root: &Path,
+    overlay: &BTreeMap<String, Option<Vec<u8>>>,
+    retain_facts: bool,
+) -> Result<(ScanResult, BTreeMap<String, classification::ParsedFacts>), StoreError> {
     let inventory = metadata_inventory(root)?;
     let mut files = inventory
         .entries
@@ -119,6 +133,7 @@ pub(super) fn scan(
         )];
     }
     let mut entries = Vec::new();
+    let mut parsed_facts = BTreeMap::new();
     let scopes = crate::activation::ScopeIndex::new(&active);
     let mut facts = ValidationFacts::default();
     let mut nonregular_paths = std::collections::BTreeSet::new();
@@ -187,7 +202,10 @@ pub(super) fn scan(
             summary,
             original_bytes: bytes,
         };
-        facts.insert(&entry, resolved, parsed.facts);
+        facts.insert(&entry, resolved, &parsed.facts);
+        if retain_facts {
+            parsed_facts.insert(entry.path.clone(), parsed.facts);
+        }
         entries.push(entry);
     }
     diagnostics.extend(cross_validate_facts(&entries, &active, &facts, |path| {
@@ -205,25 +223,30 @@ pub(super) fn scan(
             true,
         )
     };
-    Ok(ScanResult {
-        activation,
-        investigation_roots: active
-            .projects
-            .iter()
-            .map(|(project, value)| {
-                (
-                    project.clone(),
-                    value
-                        .investigations
-                        .iter()
-                        .filter_map(|path| investigation_identity(project, path).map(Into::into))
-                        .collect(),
-                )
-            })
-            .collect(),
-        snapshot: CasefileSnapshot { revision, entries },
-        diagnostics: stable(diagnostics),
-    })
+    Ok((
+        ScanResult {
+            activation,
+            investigation_roots: active
+                .projects
+                .iter()
+                .map(|(project, value)| {
+                    (
+                        project.clone(),
+                        value
+                            .investigations
+                            .iter()
+                            .filter_map(|path| {
+                                investigation_identity(project, path).map(Into::into)
+                            })
+                            .collect(),
+                    )
+                })
+                .collect(),
+            snapshot: CasefileSnapshot { revision, entries },
+            diagnostics: stable(diagnostics),
+        },
+        parsed_facts,
+    ))
 }
 
 struct CollectedFile {

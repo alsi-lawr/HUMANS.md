@@ -100,8 +100,8 @@ impl Store {
     }
 
     pub fn derived_snapshot(&self) -> Result<DerivedSnapshot, StoreError> {
-        let scan = self.scan()?;
-        Ok(derive_snapshot(&scan))
+        let (scan, facts) = crate::scanning::scan_for_derivation(&self.root)?;
+        Ok(crate::derived::derive_snapshot_from_facts(&scan, facts))
     }
 
     pub fn derive_snapshot(&self, scan: &ScanResult) -> DerivedSnapshot {

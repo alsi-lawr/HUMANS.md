@@ -304,3 +304,58 @@ value = "writer"
                 && record.strategy_binding.is_some())
     );
 }
+
+#[test]
+fn compact_cache_round_trip_preserves_source_search_and_requested_rendering() {
+    let root = fixture();
+    let store = Store::open(root.path()).unwrap();
+    let external = TempDir::new().unwrap();
+    let index = SqliteIndex::open(external.path().join("index.sqlite"), root.path()).unwrap();
+    let snapshot = current(&index, &store);
+    let record = snapshot
+        .records
+        .iter()
+        .find(|record| record.path.ends_with("tickets/accepted/HMD-011.md"))
+        .unwrap();
+    let identity = record.identity.as_ref().unwrap();
+    let Indexed::Current {
+        value: Some(cached),
+        ..
+    } = index.record(&snapshot.source_revision, identity).unwrap()
+    else {
+        panic!("cached ticket")
+    };
+    assert_eq!(&cached, record);
+    assert_eq!(cached.rendered_markdown(), record.rendered_markdown());
+    let text = record.content.as_ref().unwrap();
+    let RecordScope {
+        project,
+        investigation,
+    } = identity.scope.clone();
+    let Indexed::Current { value, .. } = index
+        .records(
+            &snapshot.source_revision,
+            Some(&RecordScope {
+                project,
+                investigation,
+            }),
+            Some("rEqUiReD"),
+        )
+        .unwrap()
+    else {
+        panic!("searched records")
+    };
+    assert!(text.to_lowercase().contains("required"));
+    assert!(value.iter().any(|entry| entry.path == cached.path));
+    let Indexed::Current { value, .. } = index
+        .records(
+            &snapshot.source_revision,
+            None,
+            Some("no-such-body-fragment"),
+        )
+        .unwrap()
+    else {
+        panic!("searched records")
+    };
+    assert!(value.is_empty());
+}

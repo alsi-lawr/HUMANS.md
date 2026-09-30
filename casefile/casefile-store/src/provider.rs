@@ -596,11 +596,7 @@ impl<C: ProviderCache> Provider<C> {
             &scope.investigation,
             crate::scanning::ScopedRead::RecordIndex,
         )?;
-        let progress = crate::derived::scoped_progress(
-            &selected.entries,
-            &selected.diagnostics,
-            &selected.path,
-        );
+        let progress = selected.progress.as_ref().map(|progress| &progress.tickets);
         let diagnostics = diagnostic_counts(&selected.diagnostics);
         let records = selected
             .entries
@@ -630,16 +626,18 @@ impl<C: ProviderCache> Provider<C> {
                             summary.2 == "accepted" && entry.kind == Some(Kind::Ticket)
                         })
                         .map(|summary| {
-                            progress.get(&summary.0).map_or(
-                                ProviderRecordProgressSummary {
-                                    status: casefile_core::ProgressStatus::Unknown,
-                                    note_count: 0,
-                                },
-                                |progress| ProviderRecordProgressSummary {
-                                    status: progress.status,
-                                    note_count: progress.notes.len(),
-                                },
-                            )
+                            progress
+                                .and_then(|progress| progress.get(&summary.0))
+                                .map_or(
+                                    ProviderRecordProgressSummary {
+                                        status: casefile_core::ProgressStatus::Unknown,
+                                        note_count: 0,
+                                    },
+                                    |progress| ProviderRecordProgressSummary {
+                                        status: progress.status,
+                                        note_count: progress.note_count,
+                                    },
+                                )
                         }),
                     diagnostic_count: diagnostics.get(&entry.path).copied().unwrap_or_default(),
                 }
@@ -689,12 +687,13 @@ impl<C: ProviderCache> Provider<C> {
                         entry.path
                     ))
                 })?;
-                let progress = crate::derived::scoped_progress(
-                    &selected.entries,
-                    &selected.diagnostics,
-                    &selected.path,
-                )
-                .remove(&identity.identity);
+                let progress = selected
+                    .progress
+                    .take()
+                    .and_then(|progress| progress.detail)
+                    .and_then(|log| {
+                        crate::derived::fold_progress(log.entries).remove(&identity.identity)
+                    });
                 let diagnostics = selected
                     .diagnostics
                     .iter()
@@ -728,10 +727,10 @@ impl<C: ProviderCache> Provider<C> {
         )?;
         let boards = crate::derived::scoped_boards(
             &selected.entries,
-            &selected.diagnostics,
+            &selected.boards,
+            selected.progress.as_ref(),
             &selected.project,
             &selected.investigation,
-            &selected.path,
         );
         Ok(ProviderQueryResult::Boards {
             freshness: selected.freshness,
@@ -772,8 +771,7 @@ impl<C: ProviderCache> Provider<C> {
     }
 
     pub fn refresh_full_cache(&self) -> Result<CacheState, ProviderError> {
-        let scan = self.store.scan()?;
-        let derived = self.store.derive_snapshot(&scan);
+        let derived = self.store.derived_snapshot()?;
         Ok(self.refresh_cache(&derived))
     }
 

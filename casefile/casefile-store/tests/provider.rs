@@ -1216,3 +1216,141 @@ fn scoped_diagnostics_report_exact_progress_target_and_bounded_follow_up() {
             .is_err()
     );
 }
+
+#[test]
+fn board_progress_dependency_is_demanded_and_malformed_required_logs_are_explicit() {
+    let root = fixture();
+    let provider = Provider::without_cache(Store::open(root.path()).unwrap());
+    let scope = InvestigationScope {
+        project: "demo".into(),
+        investigation: "sample".into(),
+    };
+    let boards_query = || {
+        provider
+            .query(ProviderQuery::Boards {
+                scope: scope.clone(),
+            })
+            .unwrap()
+    };
+    let before = boards_query();
+    let directory = root.path().join(format!("{INVESTIGATION}/progress"));
+    fs::create_dir_all(&directory).unwrap();
+    fs::write(directory.join("log.toml"), "malformed [").unwrap();
+    assert_eq!(
+        before,
+        boards_query(),
+        "disposition boards must not consume or stamp progress"
+    );
+    assert!(
+        provider
+            .query(ProviderQuery::RecordIndex {
+                scope: scope.clone()
+            })
+            .is_err()
+    );
+    let missing = InvestigationScopedIdentity {
+        scope: scope.clone(),
+        identity: "HMD-999".into(),
+    };
+    assert!(matches!(
+        provider
+            .query(ProviderQuery::RecordDetail { identity: missing })
+            .unwrap(),
+        ProviderQueryResult::RecordDetail { record: None, .. }
+    ));
+    let board = root
+        .path()
+        .join(format!("{INVESTIGATION}/boards/main.toml"));
+    let original = fs::read_to_string(&board).unwrap();
+    fs::write(
+        &board,
+        original
+            .replace(
+                "filter_statuses = [\"accepted\"]",
+                "status_source = 'progress'\nfilter_statuses = ['unknown']",
+            )
+            .replace("statuses = [\"accepted\"]", "statuses = ['unknown']"),
+    )
+    .unwrap();
+    assert!(
+        provider
+            .query(ProviderQuery::Boards {
+                scope: scope.clone()
+            })
+            .is_err()
+    );
+    fs::remove_file(&board).unwrap();
+    let empty_before = boards_query();
+    fs::write(directory.join("log.toml"), "different malformed").unwrap();
+    assert_eq!(
+        empty_before,
+        boards_query(),
+        "empty boards have no progress dependency"
+    );
+}
+
+#[test]
+fn index_summaries_and_requested_detail_decode_only_selected_notes_consistently() {
+    let root = fixture();
+    let directory = root.path().join(format!("{INVESTIGATION}/progress"));
+    fs::create_dir_all(&directory).unwrap();
+    let log = "schema_version=1\n[[entries]]\nid='note'\nrecorded_at='2026-09-30T10:00:00Z'\nrecorded_by='root'\nticket_id='HMD-011'\nkind='note'\ncategory='quirk'\nmessage=\"line\\n\\x41\"\n[[entries]]\nid='other'\nrecorded_at='2026-09-30T10:00:00Z'\nrecorded_by='root'\nticket_id='HMD-012'\nkind='note'\ncategory='quirk'\nmessage='other ticket note'\n";
+    fs::write(directory.join("log.toml"), log).unwrap();
+    let existing = root
+        .path()
+        .join(format!("{INVESTIGATION}/tickets/accepted/HMD-011.md"));
+    fs::write(
+        existing.with_file_name("HMD-012.md"),
+        fs::read_to_string(&existing)
+            .unwrap()
+            .replace("HMD-011", "HMD-012"),
+    )
+    .unwrap();
+    let store = Store::open(root.path()).unwrap();
+    let provider = Provider::without_cache(store.clone());
+    let scope = InvestigationScope {
+        project: "demo".into(),
+        investigation: "sample".into(),
+    };
+    let ProviderQueryResult::RecordIndex { records, .. } = provider
+        .query(ProviderQuery::RecordIndex {
+            scope: scope.clone(),
+        })
+        .unwrap()
+    else {
+        panic!("index")
+    };
+    assert_eq!(
+        records
+            .iter()
+            .find(|record| record.identity.as_deref() == Some("HMD-011"))
+            .unwrap()
+            .progress
+            .as_ref()
+            .unwrap()
+            .note_count,
+        1
+    );
+    let ProviderQueryResult::RecordDetail {
+        record: Some(detail),
+        ..
+    } = provider
+        .query(ProviderQuery::RecordDetail {
+            identity: InvestigationScopedIdentity {
+                scope,
+                identity: "HMD-011".into(),
+            },
+        })
+        .unwrap()
+    else {
+        panic!("detail")
+    };
+    let snapshot = store.derived_snapshot().unwrap();
+    let expected = snapshot
+        .records
+        .iter()
+        .find(|record| record.path.ends_with("tickets/accepted/HMD-011.md"))
+        .unwrap();
+    assert_eq!(detail.progress, expected.progress);
+    assert_eq!(detail.progress.unwrap().notes[0].message, "line\nA");
+}

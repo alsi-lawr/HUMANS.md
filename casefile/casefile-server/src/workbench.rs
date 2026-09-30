@@ -1,11 +1,13 @@
 use anyhow::{Result, bail};
 use casefile_core::{ChangeRequest, Diagnostic, Revision};
 use casefile_store::{
-    DerivedBoard, DerivedIndex, DerivedRecord, DerivedRelationship, Indexed, Provider,
-    ProviderApplyOutcome, ProviderPreview, ProviderRecordApplyResult, ProviderSnapshot,
-    RecordScope, ScopedIdentity,
+    DerivedBoard, DerivedIndex, DerivedRelationship, Indexed, Provider, ProviderApplyOutcome,
+    ProviderPreview, ProviderRecordApplyResult, ProviderSnapshot, RecordScope, ScopedIdentity,
 };
 use casefile_store_sqlite::SqliteIndex;
+
+#[path = "workbench/display.rs"]
+mod display;
 
 pub(crate) struct Workbench {
     provider: Provider<SqliteIndex>,
@@ -21,9 +23,28 @@ impl Workbench {
         &self,
         scope: Option<&RecordScope>,
         search: Option<&str>,
-    ) -> Result<Indexed<Vec<DerivedRecord>>> {
+    ) -> Result<Indexed<Vec<display::DisplayRecord>>> {
         let revision = self.refresh()?;
-        Ok(self.index.records(&revision, scope, search)?)
+        Ok(match self.index.records(&revision, scope, search)? {
+            Indexed::Current {
+                source_revision,
+                value,
+            } => Indexed::Current {
+                source_revision,
+                value: value
+                    .into_iter()
+                    .map(display::DisplayRecord::from_record)
+                    .collect::<Result<_>>()?,
+            },
+            Indexed::Missing => Indexed::Missing,
+            Indexed::Stale {
+                indexed_revision,
+                current_revision,
+            } => Indexed::Stale {
+                indexed_revision,
+                current_revision,
+            },
+        })
     }
 
     pub(crate) fn snapshot(&self) -> Result<ProviderSnapshot> {

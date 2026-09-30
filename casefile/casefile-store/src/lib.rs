@@ -30,8 +30,8 @@ pub use checking::{CheckResult, ScanSummary};
 pub use derived::{
     DerivedBoard, DerivedBoardColumn, DerivedCard, DerivedProgressNote, DerivedProgressTransition,
     DerivedRecord, DerivedRelationship, DerivedSnapshot, DerivedStrategy, DerivedStrategyBinding,
-    DerivedTicketProgress, EffectiveWriterBinding, RecordScope, RelationshipKind, ScopedIdentity,
-    StrategyBindingState, WriterBindingSource, derive_relationships,
+    DerivedTicketProgress, DerivedWorkItem, EffectiveWriterBinding, RecordScope, RelationshipKind,
+    ScopedIdentity, StrategyBindingState, WriterBindingSource, derive_relationships,
 };
 pub use governance::{
     GovernedApplyResult, GovernedChange, GovernedOperationKind, StrategyTransitionPreview,

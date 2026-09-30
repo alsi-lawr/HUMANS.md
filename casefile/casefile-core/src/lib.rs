@@ -28,8 +28,9 @@ pub use markdown::{markdown_headings, validate_markdown};
 #[doc(hidden)]
 pub use metadata::arrays as parse_metadata_arrays;
 pub use progress::{
-    ProgressEntry, ProgressLog, ProgressNoteCategory, ProgressStatus, parse_progress_log,
-    render_progress_log, validate_progress_log,
+    ProgressEntry, ProgressLog, ProgressNoteCategory, ProgressProjection, ProgressStatus,
+    ProgressSummary, parse_progress_log, parse_progress_projection, render_progress_log,
+    validate_progress_log,
 };
 #[doc(hidden)]
 pub use project_map::{

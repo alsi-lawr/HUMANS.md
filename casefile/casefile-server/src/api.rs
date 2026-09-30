@@ -288,3 +288,77 @@ fn header<'a>(request: &'a Request, name: &'static str) -> Option<&'a str> {
         .find(|header| header.field.equiv(name))
         .map(|header| header.value.as_str())
 }
+
+#[cfg(test)]
+mod tests {
+    use std::{fs, path::Path};
+
+    fn copy_tree(from: &Path, to: &Path) {
+        for entry in fs::read_dir(from).unwrap() {
+            let entry = entry.unwrap();
+            let target = to.join(entry.file_name());
+            if entry.file_type().unwrap().is_dir() {
+                fs::create_dir_all(&target).unwrap();
+                copy_tree(&entry.path(), &target);
+            } else {
+                fs::copy(entry.path(), target).unwrap();
+            }
+        }
+    }
+
+    #[test]
+    fn records_query_preserves_full_editable_draft_rendered_html_and_body_search() {
+        use super::*;
+        use casefile_core::{Kind, RecordDraft, WorkItemDraft};
+        use casefile_store::{Provider, Store};
+        use casefile_store_sqlite::SqliteIndex;
+        use tempfile::TempDir;
+        let root = TempDir::new().unwrap();
+        copy_tree(
+            &Path::new(env!("CARGO_MANIFEST_DIR")).join("../casefile-store/tests/fixtures/minimum"),
+            root.path(),
+        );
+        let external = TempDir::new().unwrap();
+        let database = external.path().join("index.sqlite");
+        let provider = Provider::new(
+            Store::open(root.path()).unwrap(),
+            SqliteIndex::open(&database, root.path()).unwrap(),
+        );
+        let host = Host::new(
+            Workbench::new(provider, SqliteIndex::open(&database, root.path()).unwrap()),
+            0,
+            false,
+            String::new(),
+        );
+        let reply = host.query(r#"{"query":"records","scope":{"project":"demo","investigation":"sample"},"search":"rEqUiReD"}"#).unwrap_or_else(|error| panic!("{}", error.message));
+        let json: serde_json::Value = serde_json::from_slice(&reply.body).unwrap();
+        let records = json["Current"]["value"].as_array().unwrap();
+        let record = records
+            .iter()
+            .find(|record| {
+                record["path"]
+                    .as_str()
+                    .unwrap()
+                    .ends_with("tickets/accepted/HMD-011.md")
+            })
+            .unwrap();
+        let path = record["path"].as_str().unwrap();
+        let source = fs::read_to_string(root.path().join(path)).unwrap();
+        let RecordDraft::Ticket(expected) =
+            casefile_core::parse_draft(path, Kind::Ticket, &source).unwrap()
+        else {
+            panic!("ticket")
+        };
+        let actual: WorkItemDraft = serde_json::from_value(record["work_item"].clone()).unwrap();
+        assert_eq!(expected, actual);
+        assert_eq!(record["content"], source);
+        assert_eq!(
+            record["rendered_markdown"],
+            casefile_core::render_markdown_html(&source)
+        );
+        assert_eq!(
+            record["search_text"],
+            format!("{}\n{source}", expected.title)
+        );
+    }
+}

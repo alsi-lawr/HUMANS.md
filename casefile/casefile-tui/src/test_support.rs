@@ -141,8 +141,6 @@ pub(crate) fn strategy_record(
         identity: None,
         title: entry.path.clone(),
         content: None,
-        rendered_markdown: None,
-        search_text: String::new(),
         work_item: None,
         progress: None,
         board: None,
