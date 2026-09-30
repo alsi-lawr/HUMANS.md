@@ -207,7 +207,7 @@ fn read_progress(
         })
 }
 
-fn selected_entry(
+pub(super) fn selected_entry(
     root: &Path,
     path: &str,
     file: &InventoryEntry,

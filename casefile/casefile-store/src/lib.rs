@@ -67,6 +67,7 @@ pub use read_context::{
     AttachmentState, CatalogueToken, CheckFreshness, ReadDependency, ScopeReadTarget,
     ScopeReadToken,
 };
+pub use scanning::selected::WriterBindingProjection;
 pub use scanning::{ScanResult, is_store_path_excluded};
 pub use store::{
     IncompleteRollback, RollbackCause, RollbackErrorCode, RollbackPathState, RollbackReason,

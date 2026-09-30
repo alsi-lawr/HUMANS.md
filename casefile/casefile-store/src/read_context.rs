@@ -41,6 +41,27 @@ pub(super) fn observe_attachment(root: &Path, path: &str) -> Result<AttachmentSt
     }
 }
 
+pub(super) fn read_activation(
+    root: &Path,
+) -> Result<(std::sync::Arc<Activation>, InventoryEntry), StoreError> {
+    let entry = inventory_target(root, "casefile.toml")?.ok_or_else(|| {
+        StoreError::Invalid("investigation reads require active Casefile configuration".into())
+    })?;
+    if entry.kind != InventoryKind::Regular {
+        return Err(StoreError::Invalid(
+            "casefile.toml must be a regular non-symlink file".into(),
+        ));
+    }
+    let config = crate::scanning::read_observed_entry(root, "casefile.toml", &entry)?;
+    let (state, active, _) = activation_content(Some(&config));
+    if state != ActivationState::Active {
+        return Err(StoreError::Invalid(
+            "investigation reads require active Casefile configuration".into(),
+        ));
+    }
+    Ok((std::sync::Arc::new(active), entry))
+}
+
 pub(super) struct ScopeObservation {
     pub active: std::sync::Arc<Activation>,
     config_revision: Revision,
@@ -57,22 +78,8 @@ pub(super) struct ScopeObservation {
 
 impl ScopeObservation {
     pub fn begin(root: &Path, target: ScopeReadTarget) -> Result<Self, StoreError> {
-        let entry = inventory_target(root, "casefile.toml")?.ok_or_else(|| {
-            StoreError::Invalid("investigation reads require active Casefile configuration".into())
-        })?;
-        if entry.kind != InventoryKind::Regular {
-            return Err(StoreError::Invalid(
-                "casefile.toml must be a regular non-symlink file".into(),
-            ));
-        }
-        let config = crate::scanning::read_observed_entry(root, "casefile.toml", &entry)?;
-        let (state, active, _) = activation_content(Some(&config));
-        if state != ActivationState::Active {
-            return Err(StoreError::Invalid(
-                "investigation reads require active Casefile configuration".into(),
-            ));
-        }
-        Self::from_active(root, target, std::sync::Arc::new(active), entry.revision)
+        let (active, entry) = read_activation(root)?;
+        Self::from_active(root, target, active, entry.revision)
     }
 
     fn from_active(

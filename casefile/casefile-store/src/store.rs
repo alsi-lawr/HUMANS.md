@@ -150,6 +150,25 @@ impl Store {
         Ok(Self { root })
     }
 
+    /// Reads one locally validated editable target, retaining its original bytes and revision.
+    /// Canonical cross-record validation remains independent in preview and apply.
+    pub fn read_editable_entry(
+        &self,
+        path: &str,
+        kind: casefile_core::Kind,
+    ) -> Result<Option<casefile_core::EntrySnapshot>, StoreError> {
+        crate::scanning::selected::read_editable_entry(&self.root, path, kind)
+    }
+
+    /// Resolves the selected implementation writer without granting progress permission.
+    pub fn project_writer_binding(
+        &self,
+        investigation: &str,
+        strategy_id: &str,
+    ) -> Result<crate::WriterBindingProjection, StoreError> {
+        crate::scanning::selected::project_writer_binding(&self.root, investigation, strategy_id)
+    }
+
     pub fn scan(&self) -> Result<ScanResult, StoreError> {
         scan(&self.root, &BTreeMap::new())
     }

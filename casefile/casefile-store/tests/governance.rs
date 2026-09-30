@@ -915,3 +915,80 @@ fn progress_transition_to_in_progress_is_required_again_after_interruption() {
             .is_err()
     );
 }
+
+#[test]
+fn selected_writer_projection_keeps_binding_states_and_progress_permission_separate() {
+    let root = fixture();
+    let strategy = root.path().join(format!("{INVESTIGATION}/strategy"));
+    let implementation = strategy.join("implementation.toml");
+    fs::copy(
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../adapters/codex/matrices/casefile-implement-ticket-batch.toml"),
+        &implementation,
+    )
+    .unwrap();
+    let store = Store::open(root.path()).unwrap();
+    let project = || {
+        store.project_writer_binding(
+            &INVESTIGATION.replace('/', "\\\\"),
+            "casefile-implement-ticket-batch",
+        )
+    };
+    let canonical = || {
+        store
+            .derived_snapshot()
+            .unwrap()
+            .records
+            .into_iter()
+            .find(|record| record.path == format!("{INVESTIGATION}/strategy/implementation.toml"))
+            .unwrap()
+            .strategy
+            .unwrap()
+            .binding
+            .unwrap()
+    };
+    assert_eq!(project().unwrap().binding, canonical());
+    for source in [
+        BINDING.to_owned(),
+        BINDING.replacen("codex", "claude", 1),
+        "not = [toml".into(),
+    ] {
+        fs::write(strategy.join("bindings.toml"), source).unwrap();
+        assert_eq!(project().unwrap().binding, canonical());
+    }
+    assert!(
+        store
+            .project_writer_binding(INVESTIGATION, "wrong-strategy")
+            .is_err()
+    );
+    fs::create_dir_all(root.path().join(format!("{INVESTIGATION}/progress"))).unwrap();
+    fs::write(
+        root.path()
+            .join(format!("{INVESTIGATION}/progress/log.toml")),
+        "invalid = [progress",
+    )
+    .unwrap();
+    fs::write(
+        root.path()
+            .join(format!("{INVESTIGATION}/tickets/accepted/HMD-999.md")),
+        [0xff],
+    )
+    .unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let opaque = root.path().join("unreadable-unrelated.bin");
+        fs::write(&opaque, "unrelated").unwrap();
+        fs::set_permissions(opaque, fs::Permissions::from_mode(0o000)).unwrap();
+    }
+    assert!(project().is_ok());
+    assert!(
+        store
+            .require_writer_progress(INVESTIGATION, "HMD-011")
+            .is_err()
+    );
+    fs::remove_file(&implementation).unwrap();
+    assert!(project().is_err());
+    fs::write(implementation, "not = [toml").unwrap();
+    assert!(project().is_err());
+}

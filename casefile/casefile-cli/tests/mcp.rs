@@ -571,3 +571,107 @@ fn native_restarted_provider_refuses_the_previous_process_id_without_mutating() 
     );
     assert!(!root.path().join(path).exists());
 }
+
+#[test]
+fn framing_failure_closes_without_accepting_an_unterminated_or_oversized_request() {
+    let root = fixture();
+    for bytes in [
+        serde_json::to_vec(&json!({"jsonrpc":"2.0","id":71,"method":"initialize","params":{"protocolVersion":"2025-11-25"}})).unwrap(),
+        vec![b' '; 8 * 1024 * 1024 + 1],
+    ] {
+        let mut child = command(root.path()).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().unwrap();
+        let _ = child.stdin.take().unwrap().write_all(&bytes);
+        let output = child.wait_with_output().unwrap();
+        assert!(!output.status.success());
+        assert!(output.stdout.is_empty());
+    }
+}
+
+#[test]
+fn escaped_detail_outer_overflow_returns_original_id_and_allows_next_request() {
+    let root = fixture();
+    let ticket = root
+        .path()
+        .join("projects/demo/investigations/sample/tickets/accepted/HMD-011.md");
+    let source = fs::read_to_string(&ticket)
+        .unwrap()
+        .replace("Required.", &"\\\"".repeat(750_000));
+    fs::write(ticket, source).unwrap();
+    let request_id = json!("escaped-\"\\-detail");
+    let mut child = command(root.path())
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut input = child.stdin.take().unwrap();
+    let mut output = BufReader::new(child.stdout.take().unwrap());
+    let mut exchange = |request: Value| {
+        serde_json::to_writer(&mut input, &request).unwrap();
+        input.write_all(b"\n").unwrap();
+        input.flush().unwrap();
+        let mut line = String::new();
+        assert!(output.read_line(&mut line).unwrap() > 0);
+        assert!(line.len() <= 8 * 1024 * 1024);
+        serde_json::from_str::<Value>(&line).unwrap()
+    };
+    assert_eq!(
+        exchange(
+            json!({"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25"}})
+        )["id"],
+        1
+    );
+    let overflow = exchange(
+        json!({"jsonrpc":"2.0","id":request_id,"method":"tools/call","params":{"name":"casefile_query","arguments":{"query":"record_detail","identity":{"scope":{"project":"demo","investigation":"sample"},"identity":"HMD-011"}}}}),
+    );
+    assert_eq!(overflow["id"], request_id);
+    assert_eq!(overflow["error"]["code"], -32603);
+    assert!(overflow.get("result").is_none());
+    let following = exchange(json!({"jsonrpc":"2.0","id":3,"method":"ping"}));
+    assert_eq!(following["id"], 3);
+    assert_eq!(following["result"], json!({}));
+    drop(input);
+    use std::io::Read;
+    let mut remainder = Vec::new();
+    output.read_to_end(&mut remainder).unwrap();
+    let result = child.wait_with_output().unwrap();
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    assert!(remainder.is_empty());
+}
+
+#[test]
+fn unfit_correlated_id_closes_without_partial_response_or_truncation() {
+    let root = fixture();
+    let mut child = command(root.path())
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut input = child.stdin.take().unwrap();
+    let mut output = BufReader::new(child.stdout.take().unwrap());
+    serde_json::to_writer(&mut input, &json!({"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25"}})).unwrap();
+    input.write_all(b"\n").unwrap();
+    input.flush().unwrap();
+    let mut line = String::new();
+    output.read_line(&mut line).unwrap();
+    assert_eq!(serde_json::from_str::<Value>(&line).unwrap()["id"], 1);
+    let request =
+        json!({"jsonrpc":"2.0","id":"a".repeat(8 * 1024 * 1024 - 90),"method":"tools/list"});
+    let mut bytes = serde_json::to_vec(&request).unwrap();
+    bytes.push(b'\n');
+    assert!(bytes.len() < 8 * 1024 * 1024);
+    input.write_all(&bytes).unwrap();
+    drop(input);
+    use std::io::Read;
+    let mut remainder = Vec::new();
+    output.read_to_end(&mut remainder).unwrap();
+    let result = child.wait_with_output().unwrap();
+    assert!(!result.status.success());
+    assert!(remainder.is_empty());
+    assert!(String::from_utf8_lossy(&result.stderr).contains("cannot fit a bounded response"));
+}

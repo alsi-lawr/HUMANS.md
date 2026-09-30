@@ -311,7 +311,7 @@ fn summary_title(summary: &RecordSummary) -> String {
     }
 }
 
-fn resolve_binding(
+pub(super) fn resolve_binding(
     phase: &str,
     adapter: &str,
     matrix: &StrategyProjection,

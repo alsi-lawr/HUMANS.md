@@ -256,22 +256,14 @@ impl Session {
                 })
             })
             .collect::<Vec<_>>();
-        let mut line = String::new();
+        let mut line = Vec::new();
         let read_result = loop {
-            line.clear();
-            let bytes = match input.read_line(&mut line) {
-                Ok(bytes) => bytes,
+            match read_frame(&mut input, &mut line) {
+                Ok(false) => break Ok(()),
+                Ok(true) => {}
                 Err(error) => break Err(error).context("read MCP stdio request"),
-            };
-            if bytes == 0 {
-                break Ok(());
             }
-            if bytes > MAX_MESSAGE_BYTES {
-                break Err(anyhow::anyhow!(
-                    "MCP stdio request exceeds {MAX_MESSAGE_BYTES} bytes"
-                ));
-            }
-            let request: Value = match serde_json::from_str(line.trim_end()) {
+            let request: Value = match serde_json::from_slice(&line) {
                 Ok(request) => request,
                 Err(error) => {
                     let mut output = output.lock().expect("MCP stdout");
@@ -1596,8 +1588,47 @@ fn error_response(id: Value, code: i32, message: &str) -> Value {
     json!({"jsonrpc": "2.0", "id": id, "error": {"code": code, "message": message}})
 }
 
+fn read_frame(input: &mut impl BufRead, frame: &mut Vec<u8>) -> Result<bool> {
+    frame.clear();
+    loop {
+        let available = input.fill_buf()?;
+        if available.is_empty() {
+            if frame.is_empty() {
+                return Ok(false);
+            }
+            anyhow::bail!("MCP stdio request ended before its line delimiter");
+        }
+        let delimiter = available.iter().position(|byte| *byte == b'\n');
+        let consumed = delimiter.map_or(available.len(), |index| index + 1);
+        if consumed > MAX_MESSAGE_BYTES - frame.len() {
+            anyhow::bail!("MCP stdio request exceeds {MAX_MESSAGE_BYTES} bytes");
+        }
+        frame.extend_from_slice(&available[..consumed]);
+        input.consume(consumed);
+        if delimiter.is_some() {
+            return Ok(true);
+        }
+        if frame.len() == MAX_MESSAGE_BYTES {
+            anyhow::bail!("MCP stdio request exceeds {MAX_MESSAGE_BYTES} bytes");
+        }
+    }
+}
+
 fn write_message(output: &mut impl Write, value: Value) -> Result<()> {
-    crate::json_output::write_message(output, &value)
+    let bytes = match crate::json_output::encode(&value) {
+        Ok(bytes) => bytes,
+        Err(_) => {
+            let id = value
+                .get("id")
+                .context("oversized MCP response has no request ID")?;
+            crate::json_output::encode(&error_response(id.clone(), -32603,
+                "MCP response exceeds the complete encoded message limit; request a smaller scoped result"))
+                .context("MCP request ID cannot fit a bounded response")?
+        }
+    };
+    output.write_all(&bytes)?;
+    output.flush()?;
+    Ok(())
 }
 
 #[cfg(test)]

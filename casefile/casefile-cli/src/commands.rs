@@ -1,10 +1,9 @@
 use crate::{Command, editor::EditorConfig, mcp, tui};
 use anyhow::{Context, Result};
-use casefile_core::{ChangeRequest, Classification, Kind, RecordSummary, parse_strategy};
+use casefile_core::ChangeRequest;
 use casefile_store::{
     ProgressChangeRequest, ProgressOperation, ProgressPreview, Provider, Store,
-    StrategyBindingState, StrategyTransitionRequest, WriterBindingRequest,
-    normalize_planning_relative,
+    StrategyTransitionRequest, WriterBindingRequest, normalize_planning_relative,
 };
 use serde::Serialize;
 use std::{
@@ -13,13 +12,6 @@ use std::{
     path::{Component, Path, PathBuf},
     process::ExitCode,
 };
-
-#[derive(Serialize)]
-struct WriterBindingProjection {
-    strategy_id: String,
-    adapter: String,
-    binding: StrategyBindingState,
-}
 
 pub(super) fn execute(root: PathBuf, command: Command) -> Result<ExitCode> {
     if matches!(command, Command::McpCompatibility) {
@@ -226,46 +218,8 @@ pub(super) fn execute(root: PathBuf, command: Command) -> Result<ExitCode> {
             investigation,
             strategy_id,
         } => {
-            let implementation_path = strategy_path(&investigation)?;
-            let derived = store.derived_snapshot()?;
-            let record = derived
-                .records
-                .iter()
-                .find(|record| record.path == implementation_path)
-                .ok_or_else(|| anyhow::anyhow!("selected implementation strategy is missing"))?;
-            if record.classification != Classification::Governed
-                || record.kind != Some(Kind::Strategy)
-            {
-                anyhow::bail!("selected implementation strategy is invalid or ungraphable");
-            }
-            let content = record.content.as_deref().ok_or_else(|| {
-                anyhow::anyhow!("selected implementation strategy is invalid or ungraphable")
-            })?;
-            let summary = parse_strategy(&implementation_path, content).map_err(|_| {
-                anyhow::anyhow!("selected implementation strategy is invalid or ungraphable")
-            })?;
-            let RecordSummary::Strategy {
-                strategy_id: selected_id,
-                phase,
-                adapter,
-            } = summary
-            else {
-                anyhow::bail!("selected implementation strategy is invalid or ungraphable");
-            };
-            if phase != "implementation" || selected_id != strategy_id || adapter != "codex" {
-                anyhow::bail!("requested Codex implementation strategy is not selected");
-            }
-            let strategy = record.strategy.as_ref().ok_or_else(|| {
-                anyhow::anyhow!("selected implementation strategy is invalid or ungraphable")
-            })?;
-            let binding = strategy.binding.clone().ok_or_else(|| {
-                anyhow::anyhow!("selected implementation strategy has no writer binding state")
-            })?;
-            print_json(&WriterBindingProjection {
-                strategy_id,
-                adapter,
-                binding,
-            })?;
+            let investigation = canonical_investigation(&investigation)?;
+            print_json(&store.project_writer_binding(&investigation, &strategy_id)?)?;
             Ok(ExitCode::SUCCESS)
         }
         Command::Serve { .. } => unreachable!("serve handled before opening the store"),
@@ -401,11 +355,6 @@ fn review_preview(id: &str, approval_required: bool, preview: &impl Serialize) -
         );
     }
     Ok(())
-}
-
-fn strategy_path(investigation: &str) -> Result<String> {
-    let investigation = canonical_investigation(investigation)?;
-    Ok(format!("{investigation}/strategy/implementation.toml"))
 }
 
 fn canonical_investigation(investigation: &str) -> Result<String> {

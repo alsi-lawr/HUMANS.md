@@ -449,6 +449,18 @@ fn writer_projection_uses_canonical_matrix_and_binding_states() {
         .replacen("model = \"gpt-6-astra\"", "model = \"gpt-5.6-terra\"", 1);
     fs::write(&implementation, historical).expect("historical implementation matrix");
 
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let opaque = root.path().join("unreadable-unrelated.bin");
+        fs::write(&opaque, "unrelated").unwrap();
+        fs::set_permissions(opaque, fs::Permissions::from_mode(0o000)).unwrap();
+    }
+    let progress = root
+        .path()
+        .join("projects/demo/investigations/sample/progress");
+    fs::create_dir_all(&progress).unwrap();
+    fs::write(progress.join("log.toml"), "unrelated = [invalid progress").unwrap();
     let absent = project_binding(root.path(), "casefile-implement-ticket-batch");
     assert!(
         absent.status.success(),

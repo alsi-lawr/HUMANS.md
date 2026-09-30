@@ -199,3 +199,16 @@ fn mcp_rejects_old_body_and_foreign_tool_ids_before_applying_retained_original()
             .contains("Retained original")
     );
 }
+
+#[test]
+fn fragmented_framing_preserves_complete_frames_and_refuses_partial_eof() {
+    use std::io::{BufReader, Cursor};
+    let mut input = BufReader::with_capacity(1, Cursor::new(b"{\"id\":1}\n{\"id\":2}\nunfinished"));
+    let mut frame = Vec::new();
+    assert!(read_frame(&mut input, &mut frame).unwrap());
+    assert_eq!(serde_json::from_slice::<Value>(&frame).unwrap()["id"], 1);
+    assert!(read_frame(&mut input, &mut frame).unwrap());
+    assert_eq!(serde_json::from_slice::<Value>(&frame).unwrap()["id"], 2);
+    assert!(read_frame(&mut input, &mut frame).is_err());
+    assert!(frame.len() <= MAX_MESSAGE_BYTES);
+}

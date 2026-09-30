@@ -328,6 +328,7 @@ pub(super) use inventory::{
 mod scoped;
 pub(super) use scoped::{ScopedRead, scoped_detail_scan, scoped_scan};
 pub(super) mod classification;
+pub(super) mod selected;
 pub(super) use classification::{classify_facts, invalid};
 
 fn in_active(path: &str, active: &Activation) -> bool {

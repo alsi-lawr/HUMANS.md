@@ -707,3 +707,97 @@ fn requested_governed_containers_distinguish_missing_from_unsafe_without_followi
     fs::remove_file(&investigation).unwrap();
     assert_eq!(store.check(None).unwrap().valid, Some(true));
 }
+
+#[test]
+fn editable_acquisition_is_exact_and_preserves_original_receipt_across_nested_owners() {
+    let root = fixture();
+    let path = format!("{SCOPE}/tickets/accepted/HMD-011.md");
+    let nested = format!("{SCOPE}/archive");
+    fs::write(root.path().join("casefile.toml"), format!("schema_version = 1\n[projects.demo]\nprefix = 'HMD'\ninvestigations = ['{SCOPE}', '{nested}']\n")).unwrap();
+    fs::create_dir_all(root.path().join(format!("{nested}/boards"))).unwrap();
+    let board_path = format!("{nested}/boards/work.toml");
+    fs::write(root.path().join(&board_path), "schema_version = 1\nid = 'HMD-B-099'\ntitle = 'Nested board'\nstatus_source = 'disposition'\n[[columns]]\nname = 'Accepted'\nstatuses = ['accepted']\n").unwrap();
+    fs::write(
+        root.path()
+            .join(format!("{SCOPE}/strategy/implementation.toml")),
+        "unrelated malformed strategy",
+    )
+    .unwrap();
+    fs::write(
+        root.path()
+            .join(format!("{SCOPE}/tickets/accepted/HMD-999.md")),
+        [0xff],
+    )
+    .unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let opaque = root.path().join("unreadable-unrelated.bin");
+        fs::write(&opaque, "unrelated").unwrap();
+        fs::set_permissions(opaque, fs::Permissions::from_mode(0o000)).unwrap();
+    }
+    let store = Store::open(root.path()).unwrap();
+    let entry = store
+        .read_editable_entry(&path.replace('/', "\\\\"), Kind::Ticket)
+        .unwrap()
+        .unwrap();
+    assert_eq!(entry.path, path);
+    assert_eq!(
+        entry.original_bytes,
+        fs::read(root.path().join(&path)).unwrap()
+    );
+    assert!(
+        store
+            .read_editable_entry(&board_path, Kind::Board)
+            .unwrap()
+            .is_some()
+    );
+    assert!(
+        store
+            .read_editable_entry(
+                &format!("{SCOPE}/tickets/accepted/HMD-404.md"),
+                Kind::Ticket
+            )
+            .unwrap()
+            .is_none()
+    );
+    assert!(
+        store
+            .read_editable_entry(
+                &format!("{SCOPE}/tickets/accepted/HMD-999.md"),
+                Kind::Ticket
+            )
+            .is_err()
+    );
+    fs::write(
+        root.path().join(&path),
+        entry
+            .original_bytes
+            .iter()
+            .copied()
+            .chain(b"\nExternal edit\n".iter().copied())
+            .collect::<Vec<_>>(),
+    )
+    .unwrap();
+    assert_ne!(
+        entry.content_revision,
+        store
+            .read_editable_entry(&path, Kind::Ticket)
+            .unwrap()
+            .unwrap()
+            .content_revision
+    );
+    #[cfg(unix)]
+    {
+        let outside = tempfile::tempdir().unwrap();
+        fs::write(outside.path().join("ticket"), &entry.original_bytes).unwrap();
+        fs::remove_file(root.path().join(&path)).unwrap();
+        std::os::unix::fs::symlink(outside.path().join("ticket"), root.path().join(&path)).unwrap();
+        assert!(store.read_editable_entry(&path, Kind::Ticket).is_err());
+        fs::remove_file(root.path().join(&path)).unwrap();
+        let parent = root.path().join(format!("{SCOPE}/tickets/accepted"));
+        fs::rename(&parent, parent.with_extension("saved")).unwrap();
+        std::os::unix::fs::symlink(outside.path(), &parent).unwrap();
+        assert!(store.read_editable_entry(&path, Kind::Ticket).is_err());
+    }
+}
