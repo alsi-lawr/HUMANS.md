@@ -101,8 +101,9 @@ impl DerivedRecord {
 mod boards;
 mod progress;
 mod records;
-pub(super) use boards::scoped_boards;
+pub(super) use boards::{derive_boards, scoped_boards};
 pub(super) use progress::fold_progress;
+pub(super) use records::{local_record, project_binding, ticket_progress};
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct DerivedStrategy {
@@ -267,10 +268,6 @@ pub(super) fn derive_snapshot_from_facts(
     records::derive(scan, true, facts)
 }
 
-pub(super) fn derive_presentation_snapshot(scan: &ScanResult) -> DerivedSnapshot {
-    records::derive(scan, false, fallback_facts(scan))
-}
-
 fn fallback_facts(
     scan: &ScanResult,
 ) -> BTreeMap<String, crate::scanning::classification::ParsedFacts> {
@@ -312,19 +309,6 @@ fn summary_title(summary: &RecordSummary) -> String {
         RecordSummary::ProjectMap { .. } => "Project map".into(),
         RecordSummary::Progress => "Ticket progress".into(),
     }
-}
-
-fn identity_for_progress<'a>(
-    path: &str,
-    item: &'a Option<DerivedWorkItem>,
-    scan: &ScanResult,
-) -> Option<(RecordScope, &'a str)> {
-    let item = item.as_ref()?;
-    if item.status != "accepted" {
-        return None;
-    }
-    let scope = record_scope(path, scan)?;
-    Some((scope, item.id.as_str()))
 }
 
 fn resolve_binding(

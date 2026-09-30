@@ -1,0 +1,388 @@
+HMD-062 actual focused verification, parent80d7bb79026585db655fbef7bc00f8d7ea3b741e.
+All commands executed locally; no push/release/install/live migration.
+CARGO_TARGET_DIR=/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target
+Final sequential set -e shell, actual exit0:
+  nix develop . --command cargo test --manifest-path casefile/Cargo.toml -p casefile-store -p casefile-store-sqlite -p casefile-tui -p casefile-server
+  nix develop . --command cargo clippy --manifest-path casefile/Cargo.toml --workspace --all-targets -- -D warnings
+  nix develop . --command cargo fmt --manifest-path casefile/Cargo.toml --all --check
+  nix develop . --command cargo bench --manifest-path casefile/Cargo.toml -p casefile-store-sqlite --bench baselines --no-run
+Consumer tests200 passed, including Store65 (presentation23), existing canonical/derived/scoped/mutation safety,
+SQLite4, TUI60, HTTP2 (full-edit/render/search and rollback wire behavior). No ignored/failing tests.
+Native Criterion final exit0: two original presentation controls, flags and exact executable/source hashes in hmd062-after.json.
+Hash checks before and after final measurement: all236 hmd057-before JSON + original baseline table/results/log/bench source passed unchanged.
+
+Earlier failed/exploratory attempts retained transparently below; final results supersede them.
+- initial: missed private test-reader cancellation argument; corrected signatures.
+- facts-check: helper pub(super) too narrow for same-crate re-export; changed private(crate) visibility, no public export.
+- behavior: stale classify re-export survived wrapper deletion; removed the approved obsolete re-export.
+- behavior2 (19pass/2fail): stale/new fixture incorrectly forbade root entries legitimately emitted BEFORE the paused investigation read;
+  assertion now still forbids cancelled investigation entries/Complete and retains cache/body/late-handle checks.
+  Refresh fixture destination directory missing; created its intended destination.
+- behavior3: borrowed board index initially used string identity instead of existing ScopedIdentity; fixed typed key.
+- behavior4 (20pass/1fail): archived parent was inside Store and the fixture's suffix selector selected that archive;
+  moved archive outside Store so refreshed current canonical path/handle is selected.
+- final-consumers (63pass/1fail Store): new note fixture lacked required category and correctly invalidated log/cards;
+  supplied valid category, preserving strict parser behavior.
+- clippy: two unnecessary unwraps of previous scope; rewritten guarded if-let, no suppression.
+- final-consumers4 (64pass/1fail Store): existing fake projects.toml used relative offline path; new map-dependency fixture
+  now supplies platform-native absolute offline path so governed initial state is genuine. No policy weakening.
+- direct Criterion attempt forgot CARGO_TARGET_DIR runtime export, failed exit101 before sampling with missing named baseline;
+  repeated correctly with existing named baseline, never created/replaced hmd057-before.
+- pre-cancel matched run completed, then superseded after tightening manual cancel/cache-publication mutex ordering;
+  both distributions/source/executable hashes and stdout preserved in hmd062-exploratory.json, not presented as final timing.
+- cargo fmt without --all failed on virtual manifest; final commands use --all and actual exit0.
+
+=== Final consumer test output ===
+warning: Git tree '/home/alex/dev/HUMANS.md' is dirty
+humans-md development shell
+  Setup:  (cd casefile/web && bun install)
+  Format: scripts/format-source.sh --check|--write
+  Web:    cd casefile/web; bun install; bun run typecheck; bun run test; bun run build
+  Rust:   cd casefile; cargo fmt --check; cargo clippy --workspace --all-targets -- -D warnings; cargo test --workspace
+  CI:     act pull_request -j validate --pull=false -P ubuntu-latest=catthehacker/ubuntu:act-latest
+   Compiling casefile-store v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store)
+   Compiling casefile-store-sqlite v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store-sqlite)
+   Compiling casefile-tui v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-tui)
+   Compiling casefile-server v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-server)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 6.28s
+     Running unittests src/lib.rs (.agent-workspace/20260930-speedup-implementation/writer/target/debug/deps/casefile_server-7f293284a40db51c)
+
+running 2 tests
+test api::tests::rollback_error_crosses_the_http_failure_channel_as_409_without_private_source_contents ... ok
+test api::tests::records_query_preserves_full_editable_draft_rendered_html_and_body_search ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.17s
+
+     Running unittests src/lib.rs (.agent-workspace/20260930-speedup-implementation/writer/target/debug/deps/casefile_store-ffbd8608210ee190)
+
+running 65 tests
+test layout::tests::persisted_paths_remain_strictly_slash_canonical ... ok
+test mutation_tests::process_writer ... ok
+test layout::tests::portable_planning_relative_grammar_is_host_independent ... ok
+test mutation_tests::progress_absent_publication_does_not_clobber_an_intervening_creator ... ok
+test mutation_tests::governed_write_failure_does_not_republish_an_unchanged_matrix ... ok
+test checking::tests::parent_checks_and_provider_diagnostics_exclude_activated_nested_scope_bodies ... ok
+test mutation_tests::governed_mid_transaction_failure_restores_the_matrix ... ok
+test checking::tests::scoped_check_discards_each_canonical_support_body_before_opening_the_next ... ok
+test mutation_tests::governed_post_write_cleanup_leaves_external_matrix_and_removes_own_transition ... ok
+test mutation_tests::record_batch_failure_restores_prior_targets_without_touching_unrelated_data ... ok
+test mutation_tests::global_identity_phantoms_and_multiline_board_metadata_remain_conflicts ... ok
+test mutation_tests::rollback_preserves_external_symlink_and_does_not_touch_its_outside_target ... ok
+test mutation_tests::contested_batch_cleanup_continues_and_never_rewrites_noop_or_unwritten_targets ... ok
+test mutation_tests::reverse_ordered_supersession_closure_rejects_a_new_cycle_without_writing ... ok
+test presentation::tests::activation_project_membership_invalidates_map_facts_not_unrelated_entries_or_handles ... ok
+test presentation::tests::cancellation_after_the_final_read_does_not_publish_or_cache_that_scope ... ok
+test presentation::tests::interrupted_reads_retry_but_cancellation_never_returns_partial_content ... ok
+test presentation::tests::disjoint_target_loads_do_not_cancel_each_other_or_invalidate_received_handles ... ok
+test presentation::tests::lazy_handles_survive_unrelated_edits_but_changed_and_deleted_paths_are_invalidated ... ok
+test presentation::tests::lazy_content_rejects_non_emitted_escaping_and_excluded_paths ... ok
+test presentation::tests::live_save_replacement_and_deletion_are_reconciled_per_entry ... ok
+test presentation::tests::nested_activation_uses_deepest_scope_and_membership_change_reclassifies_cached_paths ... ok
+test presentation::tests::note_only_edit_shares_board_entry_but_transition_updates_cards ... ok
+test presentation::tests::newer_nonmonotonic_load_wins_and_late_old_events_cannot_replace_handles ... ok
+test presentation::tests::one_ticket_membership_edit_updates_progress_diagnostics_and_shares_unrelated_entries ... ok
+test presentation::tests::per_entry_read_failure_is_visible_and_retried_without_a_metadata_change ... ok
+test presentation::tests::loaded_presentation_facts_match_complete_canonical_inputs ... ok
+test presentation::tests::full_refresh_after_ancestor_replacement_reacquires_descriptors_without_an_anchoring_promise ... ok
+test mutation_tests::reverse_evidence_uses_canonical_metadata_and_aliases_cannot_bypass_it ... ok
+test presentation::tests::production_catalogue_and_fetch_reject_a_root_renamed_to_a_symlink ... ok
+test presentation::tests::scoped_load_keeps_untouched_target_content_handles_usable ... ok
+test presentation::tests::unactivated_and_invalid_activation_complete_before_filesystem_catalogue_reads ... ok
+test presentation::tests::unchanged_refresh_reuses_records_without_reading_bodies_and_detail_reads_only_selection ... ok
+test presentation::tests::unrepresentable_native_names_fail_explicitly_instead_of_aliasing_a_replacement_name ... ok
+test presentation::tests::scoped_targets_emit_only_their_deterministic_activated_subtrees ... ok
+test presentation::tests::production_fetch_rejects_a_catalogued_path_whose_parent_becomes_a_symlink ... ok
+test provider::hierarchy_tests::snapshot_and_index_observe_cache_without_refreshing_it ... ok
+test revision::tests::controlled_same_identity_size_and_timestamps_edit_is_admitted ... ok
+test read_context::tests::scope_observation_rejects_affecting_changes_but_admits_unrelated_edits ... ok
+test revision::tests::revision_covers_type_native_identity_size_and_both_timestamps ... ok
+test scanning::scoped::tests::parallel_scope_read_reports_first_path_failure_and_retries_without_partial_results ... ok
+test scanning::tests::attachment_overlay_uses_proposed_regular_presence_not_original_opaque_membership ... ok
+test revision::tests::metadata_revision_detects_ordinary_edits_replacements_types_and_existence ... ok
+test scanning::tests::store_path_exclusion_is_exactly_direct_root_implementation_metadata ... ok
+test store::safety_tests::current_revision_uses_metadata_inventory_without_body_reads ... ok
+test scanning::tests::selected_descriptor_and_global_membership_observations_refuse_races ... ok
+test store::safety_tests::safe_target_parent_rejects_the_root_and_in_store_descendant_symlinks ... ok
+test validation::tests::attachment_targets_keep_canonical_store_separators ... ok
+test mutation_tests::progress_post_write_failure_restores_owned_bytes_but_discards_external_restoration ... ok
+test presentation::tests::production_saves_atomic_replacements_and_deletions_after_enumeration_stay_local ... ok
+test writing::diff_argument_tests::contained_temporary_git_arguments_are_relative_and_keep_canonical_headers ... ok
+test writing::diff_argument_tests::literal_hunk_lines_are_not_rewritten_as_canonical_file_headers ... ok
+test writing::diff_argument_tests::terminated_and_failed_diff_processes_cannot_publish_partial_approval_output ... ok
+test provider::outcome_tests::unconfigured_outcomes_do_not_read_the_store_after_commit_or_replay ... ok
+test provider::outcome_tests::cache_preparation_failure_preserves_committed_receipt_bytes_and_supported_replay ... ok
+test mutation_tests::shared_reference_changes_and_reverse_progress_membership_cannot_write_skew ... ok
+test checking::tests::scoped_check_never_opens_foreign_evidence_and_root_matches_canonical_validation ... ok
+test mutation_tests::progress_bootstrap_append_replay_and_record_batch_have_narrow_result_windows ... ok
+test mutation_tests::governed_multi_file_and_binding_results_and_legacy_replay_are_independent ... ok
+test presentation::tests::batches_and_channels_are_bounded_and_cancellation_stops_backpressure ... ok
+test mutation_tests::record_delete_no_op_and_default_board_receipts_survive_disjoint_result_changes ... ok
+test mutation_tests::independent_processes_coordinate_disjoint_targets_replacement_creation_and_identity_claims ... ok
+test mutation_tests::growth_and_nontransitive_neighbors_do_not_expand_body_reads_or_conflicts ... ok
+test mutation_tests::provider_same_session_writes_survive_locked_validation_and_result_windows ... ok
+test checking::tests::root_check_retains_one_evidence_body_as_scope_count_grows ... ok
+
+test result: ok. 65 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.48s
+
+     Running tests/derived.rs (.agent-workspace/20260930-speedup-implementation/writer/target/debug/deps/derived-a4941952ac894519)
+
+running 2 tests
+test display_accessors_preserve_requested_source_and_rendering_without_duplicate_draft_sections ... ok
+test full_and_scoped_boards_share_scope_filters_rank_and_duplicate_card_semantics ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/diff_paths.rs (.agent-workspace/20260930-speedup-implementation/writer/target/debug/deps/diff_paths-d0fddd3e08c24c5d)
+
+running 1 test
+test relative_store_roots_create_real_git_diffs_with_relative_temp_arguments ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running tests/governance.rs (.agent-workspace/20260930-speedup-implementation/writer/target/debug/deps/governance-ca37e101e83b9113)
+
+running 11 tests
+test provider_refuses_every_authoritative_transition_preview_change_without_mutation ... ok
+test historical_transition_and_backup_files_remain_raw_and_untouched ... ok
+test governed_and_progress_writes_allow_a_symlinked_ancestor_above_the_store_root ... ok
+test binding_provider_preview_is_complete_strict_atomic_and_has_no_archive_or_scratch_escape ... ok
+test progress_transition_to_in_progress_is_required_again_after_interruption ... ok
+test binding_accepts_unrelated_changes_and_refuses_invalid_schema_and_symlink_targets ... ok
+test strategy_transition_is_strict_store_visible_idempotent_and_creates_no_backup ... ok
+test first_phase_strategy_transition_creates_missing_matrix_and_refuses_later_recovery ... ok
+test strategy_replay_equates_only_line_endings_and_keeps_raw_preview_staleness ... ok
+test transition_accepts_unrelated_changes_and_preserves_collision_validation_and_rollback ... ok
+test binding_activity_is_derived_exactly_from_canonical_progress_and_spawn_requires_in_progress ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.37s
+
+     Running tests/provider.rs (.agent-workspace/20260930-speedup-implementation/writer/target/debug/deps/provider-7378da709406b547)
+
+running 16 tests
+test default_board_refuses_missing_and_ambiguous_activation_mappings_before_preview ... ok
+test record_preview_rejects_win32_special_components_without_writing ... ok
+test catalogue_union_keeps_mapping_only_and_governed_missing_mapping_projects ... ok
+test index_summaries_and_requested_detail_decode_only_selected_notes_consistently ... ok
+test board_progress_dependency_is_demanded_and_malformed_required_logs_are_explicit ... ok
+test hierarchical_reads_are_selective_bounded_and_exact ... ok
+test cache_refresh_failure_after_a_confirmed_write_is_degraded_not_authoritative ... ok
+test invalid_unactivated_and_legacy_activation_fail_closed_without_conversion ... ok
+test record_apply_requires_the_complete_provider_preview_and_preserves_store_on_alteration ... ok
+test snapshot_and_exact_scoped_reads_are_bounded_protocol_v4 ... ok
+test default_board_ignores_unrelated_diagnostics_within_and_across_investigations ... ok
+test default_board_is_named_exact_preview_with_preflight_collision_and_byte_preserving_no_op ... ok
+test record_batch_promotes_mutually_related_tickets_as_one_valid_change ... ok
+test progress_preview_integrity_covers_bootstrap_transition_replay_no_op_and_conflict ... ok
+test every_provider_apply_family_accepts_unrelated_store_changes ... ok
+test scoped_diagnostics_report_exact_progress_target_and_bounded_follow_up ... ok
+
+test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.70s
+
+     Running tests/scanning.rs (.agent-workspace/20260930-speedup-implementation/writer/target/debug/deps/scanning-138be02cb9ac9eb7)
+
+running 9 tests
+test binding_diagnostics_use_canonical_scope_despite_parent_nested_parent_order ... ok
+test deepest_activated_scope_excludes_nested_records_boards_and_progress ... ok
+test flat_project_decisions_do_not_govern_nested_archives_and_activation_errors_are_unique ... ok
+test exact_detail_distinguishes_supported_records_malformed_duplicates_and_absence ... ok
+test scoped_attachment_freshness_tracks_existence_type_and_containment_not_body_edits ... ok
+test requested_governed_containers_distinguish_missing_from_unsafe_without_following ... ok
+test typed_scope_tokens_track_only_affecting_data_and_selected_mapping_values ... ok
+test consumed_attachment_types_agree_across_scan_checks_and_independent_preview ... ok
+test native_names_never_alias_and_opaque_symlinks_are_not_followed_in_deep_trees ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.35s
+
+     Running tests/v1.rs (.agent-workspace/20260930-speedup-implementation/writer/target/debug/deps/v1-0f2ea6bb59d16d38)
+
+running 29 tests
+test derived_relationships_are_unique_and_directed ... ok
+test nested_investigation_roots_have_distinct_scoped_identities ... ok
+test binary_delete_preview_has_canonical_paths ... ok
+test activation_state_distinguishes_unactivated_and_invalid_roots ... ok
+test accepted_tickets_project_unknown_and_a_valid_log_folds_progress_notes_and_progress_boards ... ok
+test canonical_scan_excludes_only_direct_root_implementation_metadata ... ok
+test progress_apply_refuses_unsafe_paths_without_replacing_existing_bytes ... ok
+test nested_active_investigations_use_the_most_specific_binding_scope ... ok
+test atomic_progress_write_failure_preserves_the_previous_log ... ok
+test scans_each_v1_kind_and_preserves_raw_material ... ok
+test project_decisions_resolve_within_the_project_only ... ok
+test semantic_invalid_progress_suppresses_unknown_and_progress_board_cards ... ok
+test scans_the_current_v1_fixture_with_windows_line_endings ... ok
+test bootstrap_creates_only_an_absent_empty_log_and_existing_valid_log_is_byte_preserving_no_op ... ok
+test progress_target_paths_must_remain_contained ... ok
+test progress_mutations_require_active_activation_but_ignore_unrelated_diagnostics ... ok
+test strategy_binding_is_pending_without_implementation_and_unresolved_without_exact_writer ... ok
+test strategy_binding_projection_keeps_legacy_and_failure_states_distinct ... ok
+test structural_faults_are_deterministic_and_drafts_round_trip ... ok
+test generic_preview_preserves_baseline_diagnostics_but_rejects_introduced_diagnostics ... ok
+test malformed_and_cross_scope_progress_never_become_unknown_and_store_writer_is_preview_first_and_idempotent ... ok
+test reference_cycle_attachment_prefix_symlink_and_json_diagnostics_are_checked ... ok
+test binding_replacement_is_guarded_single_file_and_atomic ... ok
+test strategy_bindings_are_isolated_by_active_investigation_scope ... ok
+test work_item_references_may_cross_investigations_within_one_project_only ... ok
+test previews_and_applies_one_path_without_touching_index ... ok
+test progress_rejections_preserve_precise_same_scope_ticket_facts ... ok
+test atomic_multi_ticket_continuations_capture_the_complete_proposal ... ok
+test table_rows_and_review_faults_are_structural ... ok
+
+test result: ok. 29 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.37s
+
+     Running tests/validation.rs (.agent-workspace/20260930-speedup-implementation/writer/target/debug/deps/validation-4046070bb9e2ab97)
+
+running 1 test
+test long_supersession_chains_and_cycle_reachable_ancestors_preserve_diagnostics ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.26s
+
+     Running unittests src/lib.rs (.agent-workspace/20260930-speedup-implementation/writer/target/debug/deps/casefile_store_sqlite-2c87421d8b71203d)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/integration.rs (.agent-workspace/20260930-speedup-implementation/writer/target/debug/deps/integration-bb9f4ffa9c6e256c)
+
+running 4 tests
+test old_derived_board_json_defaults_to_disposition ... ok
+test compact_cache_round_trip_preserves_source_search_and_requested_rendering ... ok
+test strategy_binding_projection_survives_json_index_round_trip ... ok
+test replacement_index_is_revision_bound_repairable_and_queryable ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.32s
+
+     Running unittests src/lib.rs (.agent-workspace/20260930-speedup-implementation/writer/target/debug/deps/casefile_tui-07486f6d3b5492fe)
+
+running 60 tests
+test interaction::tests::edit_selection_yields_only_supported_governed_records ... ok
+test markdown::tests::renders_headings_lists_code_and_terminal_safe_html ... ok
+test record_detail::tests::metadata_and_board_columns_escape_controls_and_remain_bounded ... ok
+test record_detail::tests::source_keeps_text_beyond_the_display_limit ... ok
+test strategy_flow::tests::batching_compatibility_tracks_the_work_group_that_the_chart_will_actually_render ... ok
+test watching::tests::classifier_is_lexical_longest_root_and_exact_root_exclusions ... ok
+test watching::tests::classifier_keeps_dot_root_relative_and_absolute_namespaces_distinct ... ok
+test watching::tests::classifier_models_windows_case_and_backslash_equivalence ... ok
+test watching::tests::classifier_preserves_posix_filesystem_root_namespace ... ok
+test review::tests::review_scrolls_store_diff_and_colours_additions_and_removals ... ok
+test watching::tests::first_catalogue_rebuild_changes_events_from_store_wide_to_scoped ... ok
+test watching::tests::investigation_refresh_suppresses_exact_warning_but_retains_broader_visibility ... ok
+test strategy_flow::tests::selected_cache_refreshes_on_binding_only_change_scope_change_and_resize ... ok
+test record_detail::tests::content_keeps_lines_and_escapes_only_unsafe_controls ... ok
+test watching::tests::project_change_is_direct_for_one_investigation_and_inherited_for_sibling ... ok
+test watching::tests::restored_health_does_not_claim_freshness ... ok
+test watching::tests::unrelated_project_observation_does_not_invalidate_scoped_refresh_success ... ok
+test watching::tests::reducer_preserves_later_observation_and_failure_never_clears ... ok
+test strategy_flow::tests::selected_membership_not_declaration_order_controls_optional_review_and_correction_routing ... ok
+test strategy_flow::tests::declaration_refresh_revokes_contradictory_flows_without_rejecting_runtime_variants ... ok
+test strategy_flow::tests::a_lost_writer_binding_clears_the_cached_identifier_without_rebinding_other_roles ... ok
+test record_detail::tests::metadata_and_diagnostics_cannot_inject_terminal_controls ... ok
+test strategy_flow::tests::optional_preflight_does_not_change_the_execution_diagram ... ok
+test progressive::tests::catalogue_resolves_full_nested_investigation_target ... ok
+test progressive::tests::obsolete_generation_is_discarded_and_refresh_failure_keeps_complete_data ... ok
+test strategy_flow::layout::tests::wide_model_identifiers_wrap_inside_closed_nonoverlapping_boxes ... ok
+test progressive::tests::store_minimum_scope_allows_contextual_refresh_and_reports_its_exact_coverage ... ok
+test progressive::tests::catalogue_is_navigable_before_completion_and_post_start_observation_is_reported ... ok
+test strategy_flow::tests::resize_keeps_every_chart_cell_inside_the_pane_and_recovers_after_too_narrow ... ok
+test progressive::tests::selected_lazy_content_exposes_loaded_and_fresh_failure_states ... ok
+test workbench::tests::detail_scroll_resets_only_when_selected_content_revision_changes ... ok
+test workbench::progressive_tests::detail_promotion_and_unchanged_refresh_leave_unrelated_record_payloads_in_place ... ok
+test workbench::tests::board_card_selection_survives_complete_projection_with_deletion_and_ambiguity_controls ... ok
+test watching::tests::native_recursive_subscription_reports_a_disk_change_and_tears_down ... ok
+test workbench::tests::files_are_grouped_relative_to_the_selected_scope_and_include_project_files ... ok
+test workbench::tests::diagnostics_and_editing_remain_governed_path_only ... ok
+test workbench::tests::project_and_investigation_deletions_use_following_then_preceding_fallback ... ok
+test workbench::tests::boards_distinguish_no_definition_invalid_and_empty ... ok
+test workbench::tests::boards_are_read_only_unfiltered_and_open_a_canonical_ticket_detail ... ok
+test workbench::tests::board_keyboard_selection_marks_the_card_changes_detail_and_skips_unresolved_identities ... ok
+test workbench::tests::filtering_and_empty_hierarchy_states_remain_predictable ... ok
+test workbench::tests::refresh_target_matrix_uses_project_full_investigation_and_store_fallback ... ok
+test workbench::tests::promotion_preserves_pending_exact_and_semantic_anchors_and_handles_deletion ... ok
+test workbench::flow_tests::changing_investigation_replaces_the_chart_even_when_source_revisions_match ... ok
+test workbench::tests::unchanged_filter_exact_disappearance_is_explained_and_resume_is_round_tripped ... ok
+test workbench::flow_tests::binding_refresh_updates_chart_and_overview_without_changing_selection ... ok
+test workbench::tests::strategy_key_and_tab_cycle_preserve_existing_view_targets ... ok
+test workbench::tests::rendered_and_source_tabs_keep_markdown_readable_and_exact ... ok
+test workbench::tests::focus_navigation_help_and_go_up_are_visible ... ok
+test workbench::tests::project_investigation_ticket_drill_down_selects_a_canonical_path ... ok
+test workbench::tests::nested_investigations_with_the_same_leaf_are_selectable_independently ... ok
+test workbench::progressive_tests::scoped_refresh_updates_rendered_boards_and_progress_without_losing_selection_or_other_rows ... ok
+test workbench::tests::strategies_are_scoped_by_full_nested_investigation_identity ... ok
+test workbench::tests::strategies_filter_remain_in_files_and_are_read_only ... ok
+test workbench::relationship_tests::relationship_availability_tracks_project_coverage_not_a_stale_store_complete_flag ... ok
+test workbench::tests::strategy_records_expose_typed_overview_exact_source_and_diagnostics ... ok
+test workbench::flow_tests::chart_navigation_reaches_tail_resizes_and_files_preserves_selected_source ... ok
+test workbench::relationship_tests::canonical_relationships_follow_cross_scope_targets_without_replacing_source_bodies ... ok
+test watching::tests::fake_watcher_covers_rename_overflow_coalescing_and_teardown ... ok
+test workbench::progressive_tests::section_header_counts_keep_their_scope_across_views_filters_and_scoped_refresh ... ok
+
+test result: ok. 60 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.21s
+
+   Doc-tests casefile_server
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests casefile_store
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests casefile_store_sqlite
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests casefile_tui
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+=== Final clippy ===
+warning: Git tree '/home/alex/dev/HUMANS.md' is dirty
+humans-md development shell
+  Setup:  (cd casefile/web && bun install)
+  Format: scripts/format-source.sh --check|--write
+  Web:    cd casefile/web; bun install; bun run typecheck; bun run test; bun run build
+  Rust:   cd casefile; cargo fmt --check; cargo clippy --workspace --all-targets -- -D warnings; cargo test --workspace
+  CI:     act pull_request -j validate --pull=false -P ubuntu-latest=catthehacker/ubuntu:act-latest
+    Checking casefile-store v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store)
+    Checking casefile-store-sqlite v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store-sqlite)
+    Checking casefile-tui v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-tui)
+    Checking casefile-server v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-server)
+    Checking casefile-cli v0.8.0 (/home/alex/dev/HUMANS.md/casefile/casefile-cli)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 3.67s
+
+=== Final fmt ===
+warning: Git tree '/home/alex/dev/HUMANS.md' is dirty
+humans-md development shell
+  Setup:  (cd casefile/web && bun install)
+  Format: scripts/format-source.sh --check|--write
+  Web:    cd casefile/web; bun install; bun run typecheck; bun run test; bun run build
+  Rust:   cd casefile; cargo fmt --check; cargo clippy --workspace --all-targets -- -D warnings; cargo test --workspace
+  CI:     act pull_request -j validate --pull=false -P ubuntu-latest=catthehacker/ubuntu:act-latest
+
+=== Final benchmark build ===
+warning: Git tree '/home/alex/dev/HUMANS.md' is dirty
+humans-md development shell
+  Setup:  (cd casefile/web && bun install)
+  Format: scripts/format-source.sh --check|--write
+  Web:    cd casefile/web; bun install; bun run typecheck; bun run test; bun run build
+  Rust:   cd casefile; cargo fmt --check; cargo clippy --workspace --all-targets -- -D warnings; cargo test --workspace
+  CI:     act pull_request -j validate --pull=false -P ubuntu-latest=catthehacker/ubuntu:act-latest
+   Compiling casefile-store v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store)
+   Compiling casefile-store-sqlite v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store-sqlite)
+    Finished `bench` profile [optimized] target(s) in 20.59s
+  Executable benches/baselines.rs (.agent-workspace/20260930-speedup-implementation/writer/target/release/deps/baselines-79c3fc1f4572a921)
+
+=== Failed runtime-env Criterion invocation ===
+Gnuplot not found, using plotters backend
+Benchmarking presentation_250_records/cold_session
+
+thread 'main' (1659312) panicked at /home/alex/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/criterion-0.8.2/src/analysis/mod.rs:56:13:
+Baseline 'hmd057-before' must exist before comparison is allowed; try --save-baseline hmd057-before
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace

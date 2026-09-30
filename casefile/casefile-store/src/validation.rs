@@ -134,7 +134,11 @@ pub(super) fn cross_validate_facts(
             }
         }
     }
-    diagnostics.extend(progress_diagnostics_facts(entries, active, facts));
+    diagnostics.extend(progress_diagnostics_facts(
+        entries.iter(),
+        &facts.resolved,
+        |path| facts.progress.get(path).map(Vec::as_slice),
+    ));
     for entry in entries
         .iter()
         .filter(|entry| matches!(entry.summary, Some(RecordSummary::WorkItem { .. })))
@@ -223,36 +227,29 @@ pub(super) fn cross_validate_facts(
     diagnostics
 }
 
-pub(super) fn progress_diagnostics(
-    entries: &[EntrySnapshot],
+pub(super) fn progress_diagnostics<'a>(
+    entries: impl Iterator<Item = &'a EntrySnapshot> + Clone,
     active: &Activation,
+    operations: impl Iterator<Item = (&'a str, &'a [(String, String)])>,
 ) -> Vec<Diagnostic> {
-    let mut facts = ValidationFacts::default();
     let scopes = ScopeIndex::new(active);
-    for entry in entries {
-        let resolved = scopes.resolve(&entry.path);
-        let parsed = crate::scanning::classify_facts(
-            &entry.path,
-            &entry.original_bytes,
-            active,
-            resolved.kind,
-        )
-        .facts;
-        facts.insert(entry, resolved, parsed);
-    }
-    progress_diagnostics_facts(entries, active, &facts)
+    let resolved = entries
+        .clone()
+        .map(|entry| (entry.path.clone(), scopes.resolve(&entry.path)))
+        .collect();
+    let operations = operations.collect::<BTreeMap<_, _>>();
+    progress_diagnostics_facts(entries, &resolved, |path| operations.get(path).copied())
 }
 
-fn progress_diagnostics_facts(
-    entries: &[EntrySnapshot],
-    _active: &Activation,
-    facts: &ValidationFacts,
+fn progress_diagnostics_facts<'a, 'b>(
+    entries: impl Iterator<Item = &'a EntrySnapshot> + Clone,
+    scopes: &BTreeMap<String, PathFacts<'_>>,
+    operations: impl Fn(&str) -> Option<&'b [(String, String)]>,
 ) -> Vec<Diagnostic> {
     let mut diagnostics = Vec::new();
-    let scopes = &facts.resolved;
     let mut observed_tickets = BTreeMap::new();
     for entry in entries
-        .iter()
+        .clone()
         .filter(|entry| entry.kind == Some(Kind::Ticket))
     {
         let scope = scopes[entry.path.as_str()].scope;
@@ -269,7 +266,7 @@ fn progress_diagnostics_facts(
         }
     }
     let accepted = entries
-        .iter()
+        .clone()
         .filter_map(|entry| {
             if entry.kind == Some(Kind::Ticket) && entry.classification == Classification::Governed
             {
@@ -282,10 +279,10 @@ fn progress_diagnostics_facts(
             None
         })
         .collect::<BTreeSet<_>>();
-    for entry in entries.iter().filter(|entry| {
+    for entry in entries.filter(|entry| {
         entry.kind == Some(Kind::Progress) && entry.classification == Classification::Governed
     }) {
-        let Some(log) = facts.progress.get(&entry.path) else {
+        let Some(log) = operations(&entry.path) else {
             continue;
         };
         let scope = scopes[entry.path.as_str()].scope;

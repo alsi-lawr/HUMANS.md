@@ -127,7 +127,10 @@ fn emit_board(board: &BoardDraft, scope: &RecordScope, buckets: &Buckets<'_>) ->
     }
 }
 
-pub(super) fn derive_boards(records: &[DerivedRecord]) -> Vec<DerivedBoard> {
+pub(crate) fn derive_boards<'a>(
+    records: impl IntoIterator<Item = &'a DerivedRecord>,
+) -> Vec<DerivedBoard> {
+    let records = records.into_iter().collect::<Vec<_>>();
     let board_records: Vec<_> = records
         .iter()
         .filter(|record| {
@@ -145,7 +148,7 @@ pub(super) fn derive_boards(records: &[DerivedRecord]) -> Vec<DerivedBoard> {
         }
     }
     let mut scopes: BTreeMap<&RecordScope, Buckets<'_>> = BTreeMap::new();
-    for (order, record) in records.iter().enumerate() {
+    for (order, record) in records.iter().copied().enumerate() {
         let (Some(identity), Some(item), Some(kind)) =
             (&record.identity, &record.work_item, record.kind)
         else {

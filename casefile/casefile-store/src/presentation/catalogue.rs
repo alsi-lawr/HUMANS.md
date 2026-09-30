@@ -69,16 +69,29 @@ pub(super) fn collect_descriptors(
     active: &Activation,
     cancelled: &AtomicBool,
 ) -> Result<Vec<Descriptor>, StoreError> {
+    let scopes = ScopeIndex::new(active);
+    let previous_scopes = inner
+        .state
+        .lock()
+        .expect("presentation state")
+        .scopes
+        .values()
+        .cloned()
+        .collect::<Vec<_>>();
+    let previous = previous_scopes
+        .iter()
+        .flat_map(|scope| scope.descriptors.iter())
+        .map(|descriptor| (descriptor.path.as_str(), descriptor))
+        .collect::<BTreeMap<_, _>>();
     let start = target_root(target);
     let mut pending = vec![start];
     let mut descriptors = Vec::new();
     while let Some(directory) = pending.pop() {
-        if cancelled.load(Ordering::Acquire) {
-            break;
-        }
-        let mut children = inner.reader.read_dir(&directory)?;
+        check_cancelled(cancelled)?;
+        let mut children = inner.reader.read_dir(&directory, cancelled)?;
         children.sort();
         for path in children.into_iter().rev() {
+            check_cancelled(cancelled)?;
             if is_store_path_excluded(Path::new(&path)) {
                 continue;
             }
@@ -94,17 +107,36 @@ pub(super) fn collect_descriptors(
             if metadata.public.kind == PresentationFileKind::Other {
                 continue;
             }
-            let kind = presentation_kind(&path, active);
+            let resolved = scopes.resolve(&path);
+            let kind = resolved.kind;
+            let scope = resolved.project.map(|project| PresentationScope {
+                project: project.into(),
+                investigation: resolved
+                    .scope
+                    .and_then(|base| investigation_identity(project, base))
+                    .map(Into::into),
+            });
             let lazy = metadata.public.kind == PresentationFileKind::Regular
                 && (kind == Some(Kind::Evidence) || kind.is_none());
             let safe = normalize_planning_relative(&path).is_ok_and(|canonical| canonical == path);
-            let handle = (lazy && safe).then(|| PresentationContentHandle {
-                session: inner.session_id,
-                id: inner.next_handle.fetch_add(1, Ordering::Relaxed),
-                path: path.clone(),
+            let handle = (lazy && safe).then(|| {
+                previous
+                    .get(path.as_str())
+                    .filter(|old| {
+                        old.metadata == metadata
+                            && old.kind == kind
+                            && old.scope == scope
+                            && old.lazy
+                    })
+                    .and_then(|old| old.handle.clone())
+                    .unwrap_or_else(|| PresentationContentHandle {
+                        session: inner.session_id,
+                        id: inner.next_handle.fetch_add(1, Ordering::Relaxed),
+                        path: path.clone(),
+                    })
             });
             descriptors.push(Descriptor {
-                scope: presentation_scope(&path, active),
+                scope,
                 path,
                 metadata,
                 kind,
@@ -115,42 +147,6 @@ pub(super) fn collect_descriptors(
     }
     descriptors.sort_by(|left, right| (&left.scope, &left.path).cmp(&(&right.scope, &right.path)));
     Ok(descriptors)
-}
-
-pub(super) fn investigation_roots(active: &Activation) -> BTreeMap<String, Vec<String>> {
-    active
-        .projects
-        .iter()
-        .map(|(project, value)| {
-            (
-                project.clone(),
-                value
-                    .investigations
-                    .iter()
-                    .filter_map(|path| investigation_identity(project, path).map(Into::into))
-                    .collect(),
-            )
-        })
-        .collect()
-}
-
-pub(super) fn presentation_scope(path: &str, active: &Activation) -> Option<PresentationScope> {
-    let project = project_for(path, active)?;
-    let investigation = scope_for(path, active)
-        .and_then(|base| investigation_identity(project, base))
-        .map(Into::into);
-    Some(PresentationScope {
-        project: project.into(),
-        investigation,
-    })
-}
-
-pub(super) fn presentation_kind(path: &str, active: &Activation) -> Option<Kind> {
-    match path {
-        "casefile.toml" => Some(Kind::Activation),
-        "projects.toml" => Some(Kind::ProjectMap),
-        _ => kind_for_path(path, active),
-    }
 }
 
 pub(super) fn target_root(target: &PresentationTarget) -> String {

@@ -1,0 +1,286 @@
+{
+  "superseded": "before final manual-cancel/state-publication serialization; not final-candidate timing",
+  "run": {
+    "path": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/release/deps/baselines-79c3fc1f4572a921",
+    "sha256": "469c6be96322bd985637960d95b6221e532e03a83fff2df1be94b8f5df089b49",
+    "started": "2026-09-30T20:39:04.084748+00:00",
+    "ended": "2026-09-30T20:39:14.019503+00:00"
+  },
+  "source_sha256": {
+    "casefile/Cargo.lock": "fef9ec3610487dff0bc7395fe61edd48be7b5c37f0dc7b81591f8898537ed081",
+    "casefile/Cargo.toml": "b8f0a810fc31e948296805e071f847b6701044460ecbf4782588fc3c511bba76",
+    "casefile/benchmarks/support/mod.rs": "9a073d937a0aaef7d27be68b0dbc6821338a8bab29db2c91ffa4d248301e1361",
+    "casefile/casefile-cli/Cargo.toml": "715a1af1574d0eaa29561408146c3b302edbdf6649e1c49fce93e9d7d1b42e11",
+    "casefile/casefile-core/Cargo.toml": "47ef3670f095f44677eb34bde11cc7665af5e233e5f94addc3847ee0e7c7380b",
+    "casefile/casefile-core/src/board.rs": "2458232b2ac378e509fe7fa6419b43ee85ed3bf0f133f885d6b440e3830095ac",
+    "casefile/casefile-core/src/change.rs": "62baaecaf55dc57402839b78bd9c8ebad703a79d46ff487782a3dcfa84a29770",
+    "casefile/casefile-core/src/decision.rs": "9456e83c4656d25bbd8f0e40720ea0f81ab411392163b0fdfe0e726a0157434b",
+    "casefile/casefile-core/src/diagnostic.rs": "d85e3fc270478f566c2caa716e89a1b69671f1e7fb46f081b225982c16a7b593",
+    "casefile/casefile-core/src/lib.rs": "1283fd1ab8905bf5e0e28ea113e4c6baf3ca103018220df206c3902d135b7b04",
+    "casefile/casefile-core/src/markdown.rs": "f14af32fdc9256ab2054a6496f388b90608cf9878fdb3154d0463357d9293c7f",
+    "casefile/casefile-core/src/metadata.rs": "f479a46ea7135640c664afe3f290eed86d94499754ddb669a4cfa8feb5f3f782",
+    "casefile/casefile-core/src/progress.rs": "28b23416ff41c9aae7a39749187c9fa64aab62b0d1dfee8bd481c1dba2e61124",
+    "casefile/casefile-core/src/progress/parse.rs": "2454be911956140e8de1961a9ece31163a988c1e462cbf255f4e2606b6047285",
+    "casefile/casefile-core/src/project_map.rs": "3f778d5de7b05c0f869f1eae4013f4f4f2232f5460b828b8a902d1d6ebb08ac2",
+    "casefile/casefile-core/src/record.rs": "39c923a8117146d61d00d1f9b517949dd603d8bc59f6f0ab2a91fae0f65a4519",
+    "casefile/casefile-core/src/rendering.rs": "0d9c574c4fa1c6c69d79baffe48aa9909a3cf53e4ed4af8e2df1748fdd09a021",
+    "casefile/casefile-core/src/request.rs": "f45211b6204002f7658dfa64a18c52bab14f4c05ee4b7458452507ea36e135a5",
+    "casefile/casefile-core/src/snapshot.rs": "3e55a04b5dcb8587f529c46ae02bf1ebed030177d1abd0321f44d2b4b7b93739",
+    "casefile/casefile-core/src/strategy.rs": "9188debe2b7019aef8a6e266e327dcf3281dc244bcb4e1522306acd64d38eff6",
+    "casefile/casefile-core/src/strategy_transition.rs": "4c8924bc9d6654b8cd14ec4d5846c4c7c35c58cbcad4395a457fa29aff4f18aa",
+    "casefile/casefile-core/src/work_item.rs": "5bf5efc4ea50aeb2f5304a82dc2d4aa42f18e4a6d47649ebe0dd8c8a53f508f3",
+    "casefile/casefile-server/Cargo.toml": "82b957b999188a4b4ffbbe4a85704241cb021aacf5e743430761ee2e97310284",
+    "casefile/casefile-store-sqlite/Cargo.toml": "ebea173be90ab46b6a553e21146eecdab298e454873335cf780e3a2a5a2b1bc2",
+    "casefile/casefile-store-sqlite/benches/baselines.rs": "364657f44bf4e1c453300105f889b24acb9309c338c168cb288633db18e350fc",
+    "casefile/casefile-store-sqlite/benches/priority.rs": "3d5aec3b6ff7f784446f55d21446edc58468539b963b4ff82868dd0111d8655f",
+    "casefile/casefile-store-sqlite/benches/support/mod.rs": "94b9cfd03b314e442357c084b68261dbe5509a1c667ee61f9334ce43ce401272",
+    "casefile/casefile-store-sqlite/src/lib.rs": "5419285937324b47c96697a9d3cf0d4053295eca85445fa7220fee335a8c395d",
+    "casefile/casefile-store-sqlite/tests/integration.rs": "7aed482eb84941207f73a473915d76806c2b9e4a7193e0784297c0085b00f915",
+    "casefile/casefile-store/Cargo.toml": "7521cd431c94f8ba2f5ca170bcf8dda4e08ca9a57d6823dc95a130ca6c978eeb",
+    "casefile/casefile-store/src/activation.rs": "9b1ad5144e3c98d29881e6163cdd3e5f873a7c87e498f1f919da13704fe26c91",
+    "casefile/casefile-store/src/checking.rs": "68793eb54a3fbc404349d1c568c3eddf2635fa89447ce652da76740c81d8531c",
+    "casefile/casefile-store/src/derived.rs": "b906f1acef7d14066537213601ffdf34f3fa60328893fb7d51a350096d06985a",
+    "casefile/casefile-store/src/derived/boards.rs": "38b3c2cbb943792d9c11542fbb2312a5c1fa6990e2979a179fc4806baf4c724f",
+    "casefile/casefile-store/src/derived/progress.rs": "07b37ec31d91e874debff73e2c87b1839f2a9ef28d90c4c1f6a93f0c1eb94a58",
+    "casefile/casefile-store/src/derived/records.rs": "21bb9a7f332f816331ffa875f5ff0837f5c9f15e98a7978094f1191f3d7c379e",
+    "casefile/casefile-store/src/governance.rs": "a0dd9f7c2cc6f960a253fe9456409a42c205e0ec51da5c7114d61a755e52c34a",
+    "casefile/casefile-store/src/index.rs": "20e36c9ec19d21791a17558e53eb583d8ded96f1cdc4ffd4ca152c3db2556f62",
+    "casefile/casefile-store/src/layout.rs": "7d9651b214616d139e4049e7b02db77f2ee3cce1707d0af53ec1d0745e676129",
+    "casefile/casefile-store/src/lib.rs": "ce4ba0b8ead4e8484cc8f9444abde2761e6128c9159f95f649c7056cb89ef931",
+    "casefile/casefile-store/src/mutation.rs": "09bb9edc247b1ad0c66926294babbaa86249ab0f5b6dda96cea5579c243dd6aa",
+    "casefile/casefile-store/src/mutation_dependencies.rs": "7d944577065ce8f6b97cc748de818e1fea67fc1606985f9b1d843b1a1591ecd1",
+    "casefile/casefile-store/src/mutation_hooks.rs": "e7ffd9ff983b33e310e13fd3486b6e55afe4cc86e5b7c9baad681ab528e2b9e5",
+    "casefile/casefile-store/src/mutation_locks.rs": "eb4bbb2ad522b6ddc67dbbe016cc364603e7c09929aac0195ce34d3cde3bd27d",
+    "casefile/casefile-store/src/mutation_metadata.rs": "50c3efe33e1aa12c9b3efadcc7bdca35799c84628930e4771936c8dc956e0fdf",
+    "casefile/casefile-store/src/mutation_projection.rs": "5c69b4d20e94f84f9c42157115672ee89792bb0feda22c4c15dc2be831db8ad5",
+    "casefile/casefile-store/src/mutation_restore.rs": "6e62d3c6f0596e11300695effa4c67a91ce69395b7f94a3f5379697d49dac53a",
+    "casefile/casefile-store/src/mutation_tests.rs": "0b3fa162f0189c3a1503fa71f0d79e1074ac0d0e399f86b4560c7d7aa6008d06",
+    "casefile/casefile-store/src/presentation.rs": "186eb0efd3718f4c296f0172842716c6fe3d864a439580637ddc77da3c45eb22",
+    "casefile/casefile-store/src/presentation/catalogue.rs": "b09c614c51984f036fa3568f7c83568b39a58e4777ce886c061403156d6c1508",
+    "casefile/casefile-store/src/presentation/content.rs": "53492c8cb103122cd5babc10a8e8500e888336f72ec7f11f1a6e378b8ed6c2f0",
+    "casefile/casefile-store/src/presentation/entries.rs": "0b3c562550651f42ff6123e9c8a61feca80260dfd57237fab009724a941acf59",
+    "casefile/casefile-store/src/presentation/facts.rs": "b6dfa861574402468c21ea291832011018378ee8b781db39b8f60e7231d4721c",
+    "casefile/casefile-store/src/presentation/loading.rs": "0497e94e2931c26f5056eb826532f3a24c9a1cae34f4c3fe02b0661211d39bcf",
+    "casefile/casefile-store/src/presentation/model.rs": "df23fb59633165c787d7977285d1d689f2d027845aa7d87b70e504fe3cb8f641",
+    "casefile/casefile-store/src/presentation/reader.rs": "54c1eb388bbd0c4788ee7d12f8cde92bd4ae2cf179e982ef088b0890a5c371f9",
+    "casefile/casefile-store/src/presentation/scope.rs": "f3a8b2c6bfa508e0f6d6c41230ad4bcb6bfcffcc75021384433eb1530702ca14",
+    "casefile/casefile-store/src/presentation/session.rs": "6e8ae740b69258d8786f9a68cefab8cf0e242560c96bbb3fcca44fdeb8d1509f",
+    "casefile/casefile-store/src/presentation/tests.rs": "fd35855427b16e7c11933b849980fbdf33b4dd6ff075be77245bc83e5bb49171",
+    "casefile/casefile-store/src/progress.rs": "00d6c76ab18d6d1ba21048d877d7b5e556387eb16a8b3c308edc2c860a9681dd",
+    "casefile/casefile-store/src/provider.rs": "df07e9cb79d6cb010c873dbf9c50e0dc9b32ca4d52450ea09e0024a54d3ee838",
+    "casefile/casefile-store/src/provider/outcome_tests.rs": "5bef39141f18af960fdfa21d2f7cf54928df54a3a7ce914015aafabeb4dcd825",
+    "casefile/casefile-store/src/read_context.rs": "94cc206049618e6a5598ff438b03f545ef62bcfb999789e8ea6404650d632304",
+    "casefile/casefile-store/src/read_context/tokens.rs": "c9be378c514ff715f7f7559e05eac0669599e97df4acd01bf8f8801ee042e47c",
+    "casefile/casefile-store/src/revision.rs": "703e6cfed119c6ec42dfcafe9d9b9e479920986836156aaf1a05eceea0d7ccd6",
+    "casefile/casefile-store/src/scanning.rs": "4f88a7b5f6f1c64aa541ea726c234040846d28d22b0aa7f0dd9edca5088719e0",
+    "casefile/casefile-store/src/scanning/classification.rs": "77d19ac8ee470aa1eebf3e04c8ecdd2458c15fb2abcdeedcdbc5406bccdbb265",
+    "casefile/casefile-store/src/scanning/inventory.rs": "010236bb3974e57852f9d6a6997194cce0a9ddb66307fd57c33737f57eed0bb3",
+    "casefile/casefile-store/src/scanning/scoped.rs": "132a46d633ab7761fc233efeff212f5d436210ba30f9f4a713848ff8020be944",
+    "casefile/casefile-store/src/store.rs": "c5d5822e6deebd33c35435c8ca3a8330bb995f3f76c5465d31bf7dec5bc580ac",
+    "casefile/casefile-store/src/validation.rs": "845f20b8ea2181037f61e37c4118376b5e8cb0085f38ac45cc070a2347725cae",
+    "casefile/casefile-store/src/writing.rs": "914070c2dc00864b63aca85fb0a09025c4de7f420f69a3887edea817fd47991b",
+    "casefile/casefile-store/tests/derived.rs": "fa93ab5213bfd7619f0b4dd93193e9a396c5bc0c09e645adc782f0a3e14a03df",
+    "casefile/casefile-store/tests/diff_paths.rs": "67f9de6faa3d6d32aa0b723ff7b1918d7ae25191d89a157a5cece92be9039651",
+    "casefile/casefile-store/tests/governance.rs": "75720f3f217741d139920ecf94fdc541d6136ed710bdde4a35195ffa7b585607",
+    "casefile/casefile-store/tests/provider.rs": "25bf17d1f37b00479c9a9f849545aafae156d4ad6ccf301fd185f3d4927ec210",
+    "casefile/casefile-store/tests/scanning.rs": "15a5f8ea4a198bb7b9d15b963ca5ecb25524f29db6fde9cc9d31291f597be893",
+    "casefile/casefile-store/tests/v1.rs": "23f0267781c22526161fc0db28590a43ab60b06211d6bd8d35e6438f67e54db0",
+    "casefile/casefile-store/tests/validation.rs": "9f7fe4c0c3047d186f3f5b5ca860b00e994508156dce10247b210248765bac1c",
+    "casefile/casefile-tui/Cargo.toml": "83f381e98fea9b3af577f0d9785dec49886f60bedd4baf9c992e3e0f8f273d4d"
+  },
+  "distributions": {
+    "presentation_250_records/cold_session": {
+      "sample": {
+        "sampling_mode": "Linear",
+        "iters": [
+          3.0,
+          6.0,
+          9.0,
+          12.0,
+          15.0,
+          18.0,
+          21.0,
+          24.0,
+          27.0,
+          30.0
+        ],
+        "times": [
+          54464927.0,
+          105835455.0,
+          158317104.0,
+          208088474.0,
+          252547829.0,
+          316354731.0,
+          363156950.0,
+          416574217.0,
+          464005078.0,
+          522164051.0
+        ]
+      },
+      "estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 17240599.044259258,
+            "upper_bound": 17649957.555185184
+          },
+          "point_estimate": 17437878.719616402,
+          "standard_error": 104130.41768121115
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 17271316.150462963,
+            "upper_bound": 17607252.666666664
+          },
+          "point_estimate": 17381363.704166666,
+          "standard_error": 99184.3620206914
+        },
+        "median_abs_dev": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 47428.12605798337,
+            "upper_bound": 557792.7464472749
+          },
+          "point_estimate": 289025.13612988964,
+          "standard_error": 122817.8656713556
+        },
+        "slope": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 17199530.942028984,
+            "upper_bound": 17430956.613463625
+          },
+          "point_estimate": 17321807.077056278,
+          "standard_error": 58765.53496390976
+        },
+        "std_dev": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 134594.92190439656,
+            "upper_bound": 471774.24935912585
+          },
+          "point_estimate": 343244.04845660663,
+          "standard_error": 88748.19745506436
+        }
+      },
+      "change": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": -0.5065526112203667,
+            "upper_bound": -0.4919978586152264
+          },
+          "point_estimate": -0.4993074672687209,
+          "standard_error": 0.003651599984690371
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": -0.5049471203157854,
+            "upper_bound": -0.4925522090386366
+          },
+          "point_estimate": -0.4990669982864847,
+          "standard_error": 0.0036075956857730546
+        }
+      }
+    },
+    "presentation_250_records/unchanged_refresh": {
+      "sample": {
+        "sampling_mode": "Linear",
+        "iters": [
+          27.0,
+          54.0,
+          81.0,
+          108.0,
+          135.0,
+          162.0,
+          189.0,
+          216.0,
+          243.0,
+          270.0
+        ],
+        "times": [
+          37053239.0,
+          74968188.0,
+          114468317.0,
+          150449861.0,
+          184889706.0,
+          222690951.0,
+          263212802.0,
+          291317775.0,
+          334330259.0,
+          371679114.0
+        ]
+      },
+      "estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 1370354.867361846,
+            "upper_bound": 1390671.3916931218
+          },
+          "point_estimate": 1380486.1937198706,
+          "standard_error": 5170.439254264509
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 1372094.4388888888,
+            "upper_bound": 1392660.3280423281
+          },
+          "point_estimate": 1376216.9991769549,
+          "standard_error": 6024.476139627857
+        },
+        "median_abs_dev": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 1448.3601509531952,
+            "upper_bound": 30178.672370023804
+          },
+          "point_estimate": 13896.70607328408,
+          "standard_error": 7558.811305035411
+        },
+        "slope": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 1364023.848589522,
+            "upper_bound": 1385419.0697352511
+          },
+          "point_estimate": 1374851.7105339104,
+          "standard_error": 5409.04693944636
+        },
+        "std_dev": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 8066.625904518703,
+            "upper_bound": 23247.86773008173
+          },
+          "point_estimate": 17334.26578795068,
+          "standard_error": 4029.70944080056
+        }
+      },
+      "change": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": -0.03759307216420388,
+            "upper_bound": -0.022409062388737338
+          },
+          "point_estimate": -0.029714954179111963,
+          "standard_error": 0.003972805374452755
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": -0.03657076608227272,
+            "upper_bound": -0.020043709331586612
+          },
+          "point_estimate": -0.03275256093170764,
+          "standard_error": 0.004639187268600917
+        }
+      }
+    }
+  },
+  "stdout": "Gnuplot not found, using plotters backend\nBenchmarking presentation_250_records/cold_session\nBenchmarking presentation_250_records/cold_session: Warming up for 1.0000 s\nBenchmarking presentation_250_records/cold_session: Collecting 10 samples in estimated 2.8896 s (165 iterations)\nBenchmarking presentation_250_records/cold_session: Analyzing\npresentation_250_records/cold_session\n                        time:   [17.200 ms 17.322 ms 17.431 ms]\n                        thrpt:  [14.342 Kelem/s 14.433 Kelem/s 14.535 Kelem/s]\n                 change:\n                        time:   [\u221250.655% \u221249.931% \u221249.200%] (p = 0.00 < 0.05)\n                        thrpt:  [+96.850% +99.723% +102.66%]\n                        Performance has improved.\nFound 2 outliers among 10 measurements (20.00%)\n  1 (10.00%) low mild\n  1 (10.00%) high mild\nBenchmarking presentation_250_records/unchanged_refresh\nBenchmarking presentation_250_records/unchanged_refresh: Warming up for 1.0000 s\nBenchmarking presentation_250_records/unchanged_refresh: Collecting 10 samples in estimated 2.0388 s (1485 iterations)\nBenchmarking presentation_250_records/unchanged_refresh: Analyzing\npresentation_250_records/unchanged_refresh\n                        time:   [1.3640 ms 1.3749 ms 1.3854 ms]\n                        thrpt:  [180.45 Kelem/s 181.84 Kelem/s 183.28 Kelem/s]\n                 change:\n                        time:   [\u22123.7593% \u22122.9715% \u22122.2409%] (p = 0.00 < 0.05)\n                        thrpt:  [+2.2923% +3.0625% +3.9062%]\n                        Performance has improved.\n\n"
+}

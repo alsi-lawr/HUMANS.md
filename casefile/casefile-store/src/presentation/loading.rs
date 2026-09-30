@@ -3,6 +3,7 @@ use super::*;
 pub(super) fn run_load(
     inner: Arc<SessionInner>,
     request: PresentationLoadRequest,
+    order: u64,
     sender: SyncSender<PresentationEvent>,
     cancelled: Arc<AtomicBool>,
 ) {
@@ -51,6 +52,7 @@ pub(super) fn run_load(
             .map(|descriptor| descriptor.scope.clone())
             .collect::<BTreeSet<_>>();
         let mut completed = 0;
+        let mut pending = BTreeMap::new();
         for scope in descriptors.chunk_by(|left, right| left.scope == right.scope) {
             if cancelled.load(Ordering::Acquire) {
                 return Ok(());
@@ -62,8 +64,10 @@ pub(super) fn run_load(
                 .scopes
                 .get(&scope[0].scope)
                 .cloned();
+            let project_context = project_context(&activation, scope);
             let loaded = if let Some(previous) = previous.as_ref().filter(|previous| {
                 previous.reusable
+                    && previous.project_context == project_context
                     && previous.descriptors.len() == scope.len()
                     && previous.descriptors.iter().zip(scope).all(|(a, b)| {
                         a.path == b.path && a.metadata == b.metadata && a.kind == b.kind
@@ -82,12 +86,7 @@ pub(super) fn run_load(
             if cancelled.load(Ordering::Acquire) {
                 return Ok(());
             }
-            inner
-                .state
-                .lock()
-                .expect("presentation state")
-                .scopes
-                .insert(scope[0].scope.clone(), loaded.clone());
+            pending.insert(scope[0].scope.clone(), loaded.clone());
             for chunk in loaded.entries.chunks(PRESENTATION_BATCH_LIMIT) {
                 completed += chunk.len();
                 if !send_bounded(
@@ -108,18 +107,34 @@ pub(super) fn run_load(
                 }
             }
         }
-        inner
-            .state
-            .lock()
-            .expect("presentation state")
-            .scopes
-            .retain(|scope, loaded| {
+        check_cancelled(&cancelled)?;
+        let current_handles = pending
+            .values()
+            .flat_map(|scope| &scope.descriptors)
+            .map(|descriptor| (descriptor.path.as_str(), &descriptor.handle))
+            .collect::<BTreeMap<_, _>>();
+        {
+            let mut state = inner.state.lock().expect("presentation state");
+            if !state.current(&request.target, order) {
+                return Ok(());
+            }
+            state.scopes.retain(|scope, loaded| {
                 current_scopes.contains(scope)
                     || !loaded
                         .descriptors
                         .iter()
                         .any(|descriptor| target_contains(&request.target, &descriptor.path))
             });
+            // A completed scope refresh invalidates only changed/deleted lazy descriptors, across views.
+            state.handles.retain(|(_, path), emitted| {
+                !target_contains(&request.target, path)
+                    || current_handles
+                        .get(path.as_str())
+                        .is_some_and(|handle| **handle == emitted.descriptor.handle)
+            });
+            drop(current_handles);
+            state.scopes.extend(pending);
+        }
         send_bounded(
             &sender,
             &cancelled,

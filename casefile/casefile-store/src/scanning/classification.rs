@@ -1,20 +1,5 @@
 use super::*;
 
-pub(crate) fn classify(
-    path: &str,
-    bytes: &[u8],
-    active: &Activation,
-) -> (
-    Classification,
-    Option<Kind>,
-    Option<String>,
-    Option<RecordSummary>,
-    Vec<Diagnostic>,
-) {
-    let classified = classify_facts(path, bytes, active, kind_for_path(path, active));
-    classified.classification
-}
-
 #[derive(Default)]
 pub(crate) struct ParsedFacts {
     pub draft: Option<RecordDraft>,

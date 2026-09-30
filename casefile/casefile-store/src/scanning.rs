@@ -2,7 +2,6 @@ use crate::{
     activation::{
         Activation, ActivationState, activation_content, activation_entry, investigation_identity,
     },
-    layout::kind_for_path,
     revision::{metadata_revision, open_file_revision, store_revision, synthetic_revision},
     store::StoreError,
     validation::{ValidationFacts, cross_validate_facts},
@@ -10,8 +9,7 @@ use crate::{
 use casefile_core::{
     CasefileSnapshot, Classification, Diagnostic, EntrySnapshot, Kind, ProjectMap, RecordDraft,
     RecordSummary, Revision, parse_decision, parse_metadata_arrays, parse_progress_log,
-    parse_project_map, parse_project_map_values, parse_request, parse_strategy_binding,
-    parse_strategy_projection, stable,
+    parse_project_map, parse_project_map_values, parse_request, parse_strategy_binding, stable,
 };
 use std::{
     collections::BTreeMap,
@@ -330,7 +328,7 @@ pub(super) use inventory::{
 mod scoped;
 pub(super) use scoped::{ScopedRead, scoped_detail_scan, scoped_scan};
 pub(super) mod classification;
-pub(super) use classification::{classify, classify_facts, invalid};
+pub(super) use classification::{classify_facts, invalid};
 
 fn in_active(path: &str, active: &Activation) -> bool {
     active
@@ -338,21 +336,6 @@ fn in_active(path: &str, active: &Activation) -> bool {
         .values()
         .flat_map(|project| &project.investigations)
         .any(|base| crate::activation::contains_path(base, path))
-}
-
-pub(super) fn binding_diagnostics(entries: &[EntrySnapshot]) -> Vec<Diagnostic> {
-    binding_diagnostics_with(entries, |entry| {
-        std::str::from_utf8(&entry.original_bytes)
-            .ok()
-            .and_then(|text| parse_strategy_projection(&entry.path, text).ok().flatten())
-            .map(|projection| {
-                projection
-                    .workers
-                    .iter()
-                    .filter(|worker| worker.role == "implementation-writer")
-                    .count()
-            })
-    })
 }
 
 pub(super) fn binding_diagnostics_facts(

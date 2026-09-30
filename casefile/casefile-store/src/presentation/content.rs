@@ -2,7 +2,7 @@ use super::*;
 
 #[derive(Clone)]
 pub(super) struct EmittedContent {
-    pub(super) generation: u64,
+    pub(super) order: u64,
     pub(super) descriptor: Descriptor,
     pub(super) target: PresentationTarget,
 }
@@ -42,7 +42,7 @@ pub(super) fn run_content(
     ) {
         return;
     }
-    let result = fetch_entry(&inner, &selected);
+    let result = fetch_entry(&inner, &selected, &cancelled);
     let event = match result {
         Ok(entry) => PresentationContentEvent::Loaded {
             generation: request.generation,
@@ -62,6 +62,7 @@ pub(super) fn run_content(
 pub(super) fn fetch_entry(
     inner: &SessionInner,
     emitted: &EmittedContent,
+    cancelled: &AtomicBool,
 ) -> Result<PresentationEntry, StoreError> {
     let mut descriptor = emitted.descriptor.clone();
     let (_, active, _) = inner.reader.activation()?;
@@ -71,60 +72,44 @@ pub(super) fn fetch_entry(
             "selected content must remain a regular non-symlink file".into(),
         ));
     }
-    let bytes = inner.reader.read(&descriptor.path)?;
+    let bytes = inner.reader.read(&descriptor.path, cancelled)?;
+    check_cancelled(cancelled)?;
     descriptor.lazy = false;
-    let (classification, kind, identity, summary, diagnostics) =
-        classify(&descriptor.path, &bytes, &active);
-    let scan = ScanResult {
-        activation: ActivationState::Active,
-        investigation_roots: investigation_roots(&active),
-        snapshot: CasefileSnapshot {
-            revision: Revision("presentation".into()),
-            entries: vec![EntrySnapshot {
-                path: descriptor.path.clone(),
-                classification,
-                kind,
-                identity,
-                summary,
-                content_revision: descriptor.metadata.public.revision.clone(),
-                original_bytes: bytes,
-            }],
-        },
-        diagnostics,
-    };
-    let derived = derive_presentation_snapshot(&scan);
-    let indexes = PresentationIndexes::new(&scan, &derived);
-    let mut entry = presentation_entry(&descriptor, &indexes);
+    descriptor.kind = ScopeIndex::new(&active).resolve(&descriptor.path).kind;
+    let classified = classify_facts(&descriptor.path, &bytes, &active, descriptor.kind);
+    check_cancelled(cancelled)?;
+    let file = parsed_file(&descriptor, bytes, classified, false);
+    let mut entry = Arc::try_unwrap(file.entry).expect("requested content has one owner");
     entry.progress = PresentationFact::Unavailable;
     entry.boards = PresentationFact::Unavailable;
     Ok(entry)
 }
 
 pub(super) fn register_handles(
-    inner: &SessionInner,
-    generation: u64,
+    state: &mut SessionLoadedState,
+    order: u64,
     target: &PresentationTarget,
     entries: &[Arc<PresentationEntry>],
 ) {
-    let mut handles = inner.handles.lock().expect("presentation handles");
+    let handles = &mut state.handles;
     for entry in entries {
         let Some(handle) = &entry.content_handle else {
             continue;
         };
         let key = (target.clone(), entry.path.clone());
         if let Some(emitted) = handles.get_mut(&key) {
-            if emitted.generation > generation {
+            if emitted.order > order {
                 continue;
             }
             if emitted.descriptor.handle.as_ref() == Some(handle) {
-                emitted.generation = generation;
+                emitted.order = order;
                 continue;
             }
         }
         handles.insert(
             key,
             EmittedContent {
-                generation,
+                order,
                 target: target.clone(),
                 descriptor: Descriptor {
                     path: entry.path.clone(),
@@ -169,9 +154,10 @@ pub(super) fn select_emitted(
         }
     };
     let emitted = inner
-        .handles
+        .state
         .lock()
-        .expect("presentation handles")
+        .expect("presentation state")
+        .handles
         .get(&(target.clone(), path.into()))
         .cloned()
         .ok_or_else(|| {
