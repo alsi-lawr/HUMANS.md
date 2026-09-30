@@ -225,6 +225,7 @@ version = "0.1.0"
 dependencies = [
  "casefile-core",
  "libc",
+ "notify",
  "rayon",
  "regex",
  "serde",

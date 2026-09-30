@@ -152,3 +152,50 @@ fn mcp_apply_rollback_failure_keeps_error_flag_and_declared_structured_details()
         .unwrap();
     }
 }
+
+#[test]
+fn mcp_rejects_old_body_and_foreign_tool_ids_before_applying_retained_original() {
+    let root = tempfile::tempdir().unwrap();
+    let base = "projects/demo/investigations/sample";
+    fs::write(
+        root.path().join("casefile.toml"),
+        format!(
+            "schema_version = 1\n[projects.demo]\nprefix = \"HMD\"\ninvestigations = [\"{base}\"]\n"
+        ),
+    )
+    .unwrap();
+    assert!(
+        Command::new("git")
+            .args(["init", "-q"])
+            .current_dir(root.path())
+            .status()
+            .unwrap()
+            .success()
+    );
+    let tools = Session::new(Provider::without_cache(Store::open(root.path()).unwrap())).tools;
+    let path = format!("{base}/boards/review.toml");
+    let preview = tools.dispatch("casefile_preview_record", json!({"request":{
+        "operation":"create", "path":path, "draft":{"kind":"board", "id":"HMD-review", "title":"Retained original", "status_source":"disposition", "columns":[{"name":"Accepted", "statuses":["accepted"]}]}
+    }})).unwrap();
+    let id = &preview["preview_id"];
+    let obsolete = json!({"name":"casefile_apply_record", "arguments":{"preview_id":id, "canonical":{"request":{"operation":"delete","path":path}}}});
+    let refusal = tools.call_tool(json!(1), Some(&obsolete));
+    assert_eq!(refusal["result"]["isError"], true);
+    assert!(!root.path().join(&path).exists());
+    let wrong_family = tools.call_tool(
+        json!(2),
+        Some(&json!({"name":"casefile_apply_progress", "arguments":{"preview_id":id}})),
+    );
+    assert_eq!(wrong_family["result"]["isError"], true);
+    assert!(!root.path().join(&path).exists());
+    let outcome = tools.call_tool(
+        json!(3),
+        Some(&json!({"name":"casefile_apply_record", "arguments":{"preview_id":id}})),
+    );
+    assert_eq!(outcome["result"]["isError"], false, "{outcome}");
+    assert!(
+        fs::read_to_string(root.path().join(path))
+            .unwrap()
+            .contains("Retained original")
+    );
+}

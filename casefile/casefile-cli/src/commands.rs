@@ -127,7 +127,7 @@ pub(super) fn execute(root: PathBuf, command: Command) -> Result<ExitCode> {
             let provider = Provider::without_cache(store);
             let preview = provider.preview_record(request)?;
             review_preview(&preview.preview_id, preview.approval_required, &preview)?;
-            print_json(&provider.apply_record(preview)?)?;
+            print_json(&provider.apply_record(&preview.preview_id)?)?;
             Ok(ExitCode::SUCCESS)
         }
         Command::ProgressPreview { request } => {
@@ -140,7 +140,7 @@ pub(super) fn execute(root: PathBuf, command: Command) -> Result<ExitCode> {
             let provider = Provider::without_cache(store);
             let preview = provider.preview_progress(operation)?;
             review_preview(&preview.preview_id, preview.approval_required, &preview)?;
-            print_json(&provider.apply_progress(preview)?)?;
+            print_json(&provider.apply_progress(&preview.preview_id)?)?;
             Ok(ExitCode::SUCCESS)
         }
         Command::ProgressBootstrap { investigation } => {
@@ -179,7 +179,7 @@ pub(super) fn execute(root: PathBuf, command: Command) -> Result<ExitCode> {
             let provider = Provider::without_cache(store);
             let preview = provider.preview_strategy_transition(request)?;
             review_preview(&preview.preview_id, preview.approval_required, &preview)?;
-            print_json(&provider.apply_strategy_transition(preview)?)?;
+            print_json(&provider.apply_strategy_transition(&preview.preview_id)?)?;
             Ok(ExitCode::SUCCESS)
         }
         Command::WriterBindingPreview { request } => {
@@ -192,7 +192,7 @@ pub(super) fn execute(root: PathBuf, command: Command) -> Result<ExitCode> {
             let provider = Provider::without_cache(store);
             let preview = provider.preview_writer_binding(request)?;
             review_preview(&preview.preview_id, preview.approval_required, &preview)?;
-            print_json(&provider.apply_writer_binding(preview)?)?;
+            print_json(&provider.apply_writer_binding(&preview.preview_id)?)?;
             Ok(ExitCode::SUCCESS)
         }
         Command::DefaultDeliveryBoardPreview { investigation } => {
@@ -205,7 +205,7 @@ pub(super) fn execute(root: PathBuf, command: Command) -> Result<ExitCode> {
             let provider = Provider::without_cache(store);
             let preview = provider.preview_default_delivery_board(investigation)?;
             review_preview(&preview.preview_id, preview.approval_required, &preview)?;
-            print_json(&provider.apply_default_delivery_board(preview)?)?;
+            print_json(&provider.apply_default_delivery_board(&preview.preview_id)?)?;
             Ok(ExitCode::SUCCESS)
         }
         Command::RequireWriterProgress {

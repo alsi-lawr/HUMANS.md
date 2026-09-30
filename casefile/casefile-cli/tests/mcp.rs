@@ -39,7 +39,7 @@ fn command(root: &Path) -> Command {
         .arg(root)
         .arg("--expected-root")
         .arg(root)
-        .args(["--expected-provider-protocol", "4"])
+        .args(["--expected-provider-protocol", "5"])
         .args(["--required-provider-operations", OPERATIONS]);
     command
 }
@@ -81,7 +81,7 @@ fn compatibility_contract_is_machine_readable_and_complete() {
     );
     let value: Value = serde_json::from_slice(&output.stdout).expect("JSON");
     assert_eq!(value["identity"], "casefile");
-    assert_eq!(value["provider_protocol_version"], 4);
+    assert_eq!(value["provider_protocol_version"], 5);
     assert_eq!(
         value["required_provider_operations"]
             .as_array()
@@ -217,7 +217,7 @@ fn fixed_root_session_negotiates_and_exposes_canonical_snapshot_and_query() {
     };
     let snapshot = &response(3)["result"]["structuredContent"];
     assert_eq!(snapshot["activation"], "active");
-    assert_eq!(snapshot["capabilities"]["protocol_version"], 4);
+    assert_eq!(snapshot["capabilities"]["protocol_version"], 5);
     assert_eq!(snapshot["catalogue"]["projects"][0]["name"], "demo");
     assert!(snapshot.get("projections").is_none());
     let query = &response(4)["result"]["structuredContent"];
@@ -277,8 +277,8 @@ fn root_protocol_and_capability_refusals_happen_before_tool_service() {
     for (flag, value, diagnostic) in [
         (
             "--expected-provider-protocol",
-            "3",
-            "requires provider protocol 3",
+            "4",
+            "requires provider protocol 4",
         ),
         (
             "--required-provider-operations",
@@ -463,11 +463,8 @@ fn provider_preview_and_apply_remain_one_session_exact_operations() {
         }])
     );
     assert!(preview.get("canonical").is_none());
-    assert!(
-        preview["diff"]["sha256"]
-            .as_str()
-            .is_some_and(|digest| digest.starts_with("sha256:"))
-    );
+    assert_eq!(preview["diff"].as_object().unwrap().len(), 1);
+    assert!(preview["diff"]["bytes"].as_u64().is_some());
     assert!(
         !preview_response["result"]["content"][0]["text"]
             .as_str()
@@ -523,4 +520,54 @@ fn directory_state(root: &Path) -> Vec<(String, Vec<u8>)> {
     visit(root, root, &mut files);
     files.sort_by(|left, right| left.0.cmp(&right.0));
     files
+}
+
+#[test]
+fn native_restarted_provider_refuses_the_previous_process_id_without_mutating() {
+    let root = fixture();
+    assert!(
+        Command::new("git")
+            .args(["init", "-q"])
+            .current_dir(root.path())
+            .status()
+            .unwrap()
+            .success()
+    );
+    let initialize = json!({"jsonrpc":"2.0", "id":1, "method":"initialize", "params":{"protocolVersion":"2025-06-18"}});
+    let path = "projects/demo/investigations/sample/boards/restart.toml";
+    let preview = json!({"jsonrpc":"2.0", "id":2, "method":"tools/call", "params":{"name":"casefile_preview_record", "arguments":{"request":{
+        "operation":"create", "path":path, "draft":{"kind":"board", "id":"HMD-restart", "title":"Restart preview", "status_source":"disposition", "columns":[{"name":"Accepted", "statuses":["accepted"]}]}
+    }}}});
+    let responses = |output: std::process::Output| {
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        output
+            .stdout
+            .split(|byte| *byte == b'\n')
+            .filter(|line| !line.is_empty())
+            .map(|line| serde_json::from_slice::<Value>(line).unwrap())
+            .collect::<Vec<_>>()
+    };
+    let first = responses(session(root.path(), &[initialize.clone(), preview.clone()]));
+    let old_id = first.iter().find(|value| value["id"] == 2).unwrap()["result"]["structuredContent"]["preview_id"].clone();
+    assert!(old_id.as_str().is_some());
+    let second = responses(session(
+        root.path(),
+        &[
+            initialize,
+            preview,
+            json!({"jsonrpc":"2.0", "id":3, "method":"tools/call", "params":{"name":"casefile_apply_record", "arguments":{"preview_id":old_id}}}),
+        ],
+    ));
+    let new_id = &second.iter().find(|value| value["id"] == 2).unwrap()["result"]["structuredContent"]
+        ["preview_id"];
+    assert_ne!(&old_id, new_id);
+    assert_eq!(
+        second.iter().find(|value| value["id"] == 3).unwrap()["result"]["isError"],
+        true
+    );
+    assert!(!root.path().join(path).exists());
 }

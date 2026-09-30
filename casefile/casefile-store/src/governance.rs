@@ -318,6 +318,13 @@ pub(super) fn apply_strategy_transition(
     mut preview: StrategyTransitionPreview,
 ) -> Result<GovernedApplyResult, StoreError> {
     preview.request = canonical_strategy_request(preview.request)?;
+    apply_strategy_transition_ref(root, &preview)
+}
+
+pub(super) fn apply_strategy_transition_ref(
+    root: &Path,
+    preview: &StrategyTransitionPreview,
+) -> Result<GovernedApplyResult, StoreError> {
     ensure_worktree(root)?;
     if preview.operation != GovernedOperationKind::StrategyTransition {
         return Err(StoreError::Invalid("wrong governed operation kind".into()));
@@ -329,7 +336,7 @@ pub(super) fn apply_strategy_transition(
     }
     let selected = parse_selected_strategy_matrix(&preview.request.selected_matrix_source)
         .map_err(diagnostics_error)?;
-    validate_strategy_preview(&preview, &selected)?;
+    validate_strategy_preview(preview, &selected)?;
     let context = capture_strategy(root, &preview.request, &selected, true)?;
     context.require_revisions(&preview.expected_input_revisions)?;
     let checked = prepare_strategy(root, preview.request.clone(), &selected, &context)?;
@@ -480,6 +487,13 @@ pub(super) fn apply_writer_binding(
     mut preview: WriterBindingPreview,
 ) -> Result<GovernedApplyResult, StoreError> {
     preview.request = canonical_writer_binding_request(preview.request)?;
+    apply_writer_binding_ref(root, &preview)
+}
+
+pub(super) fn apply_writer_binding_ref(
+    root: &Path,
+    preview: &WriterBindingPreview,
+) -> Result<GovernedApplyResult, StoreError> {
     ensure_worktree(root)?;
     if preview.operation != GovernedOperationKind::WriterBinding {
         return Err(StoreError::Invalid("wrong governed operation kind".into()));
@@ -489,7 +503,7 @@ pub(super) fn apply_writer_binding(
             "writer binding preview contains diagnostics".into(),
         ));
     }
-    validate_binding_preview(&preview)?;
+    validate_binding_preview(preview)?;
     let context = capture_binding(root, &preview.request, true)?;
     context.require_revisions(&preview.expected_input_revisions)?;
     let checked = prepare_binding(root, preview.request.clone(), &context)?;

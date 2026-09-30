@@ -89,8 +89,8 @@ fn bench_record_mutation(criterion: &mut Criterion) {
     let provider = Provider::without_cache(store.clone());
     let preview = provider.preview_record(request.clone()).unwrap();
     assert!(!preview.no_op);
-    assert!(preview.canonical.diagnostics.is_empty());
-    let outcome = provider.apply_record(preview).unwrap();
+    assert!(preview.diagnostics.is_empty());
+    let outcome = provider.apply_record(&preview.preview_id).unwrap();
     assert!(!outcome.result.no_op);
     assert_eq!(
         parse_draft(
@@ -103,12 +103,13 @@ fn bench_record_mutation(criterion: &mut Criterion) {
     );
     provider
         .apply_record(
-            provider
+            &provider
                 .preview_record(ChangeRequest::Replace {
                     path: path.clone(),
                     draft: original.clone(),
                 })
-                .unwrap(),
+                .unwrap()
+                .preview_id,
         )
         .unwrap();
     let mut group = criterion.benchmark_group("priority_single_record_250_records_500_notes");
@@ -139,7 +140,13 @@ fn bench_record_mutation(criterion: &mut Criterion) {
                 assert!(!preview.no_op);
                 (provider, preview)
             },
-            |(provider, preview)| black_box(provider.apply_record(black_box(preview)).unwrap()),
+            |(provider, preview)| {
+                black_box(
+                    provider
+                        .apply_record(black_box(&preview.preview_id))
+                        .unwrap(),
+                )
+            },
             BatchSize::PerIteration,
         );
     });

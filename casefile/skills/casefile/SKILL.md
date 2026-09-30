@@ -15,7 +15,7 @@ never clone or mirror the planning store in task scratch. Use the session's `.ag
 for disposable, non-authoritative previews, content-hash backups, isolated output, and command logs.
 Never infer a source path or replace the root.
 
-Establish read context hierarchically through Provider protocol v4: call `casefile_snapshot`, use
+Establish read context hierarchically through Provider protocol v5: call `casefile_snapshot`, use
 its catalogue to resolve the exact project and complete investigation scope, then request that
 scope's `record_index`. Request `record_detail` only for the exact identities necessary for the
 current step. For validation failures use the exact scope's `diagnostics` query, then the returned
@@ -35,7 +35,7 @@ the exact query target and necessary dependencies. Compare tokens only for the s
 scope, and (for detail) identity. Different targets legitimately have different revisions. Re-read
 that exact target when its affecting data/dependencies change; unrelated edits do not invalidate
 its context. These observation tokens are not mutation preconditions: preview/apply independently
-capture and validate their own freshness. Provider v4 is separate from MCP's dated transport
+capture and validate their own freshness. Provider v5 is separate from MCP's dated transport
 protocol negotiation.
 
 Route the current phase to `casefile-investigate`, `casefile-review`, `casefile-implement`, or
@@ -43,7 +43,10 @@ Route the current phase to `casefile-investigate`, `casefile-review`, `casefile-
 choices and a recommendation, then wait for human selection.
 
 Review the Provider's compact preview envelope. Request confirmation only when
-`approval_required = true`, then apply its `preview_id` in the same MCP session.
+`approval_required = true`, then apply only its `preview_id` in the same MCP session. Provider v5
+retains the original once; returned review fields are not an approval payload and must not be sent
+back with the ID. Native filesystem events invalidate disposable caches, never authorize writes;
+Store applies independently revalidate canonical dependencies under their existing locks.
 
 When starting a new Casefile, activate the new investigation root, then call
 `casefile_preview_default_delivery_board`, review its envelope, and apply its `preview_id`. The

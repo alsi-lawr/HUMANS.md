@@ -6,6 +6,7 @@ license.workspace = true
 
 [dependencies]
 casefile-core = { path = "../casefile-core" }
+notify.workspace = true
 regex.workspace = true
 serde = { workspace = true, features = ["rc"] }
 serde-saphyr.workspace = true

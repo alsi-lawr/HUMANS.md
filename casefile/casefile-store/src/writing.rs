@@ -6,9 +6,10 @@ use crate::{
 };
 use casefile_core::{
     ApplyResult, ChangeBatchApplyResult, ChangeBatchPreview, ChangeRequest, Diagnostic, Kind,
-    Preview, stable,
+    Preview, Revision, stable,
 };
 use std::{
+    borrow::{Borrow, Cow},
     collections::{BTreeMap, BTreeSet},
     fs,
     io::Write,
@@ -62,7 +63,7 @@ pub(super) fn preview_batch(
 
 fn prepare_batch(
     root: &Path,
-    requests: &[ChangeRequest],
+    requests: &[impl Borrow<ChangeRequest>],
     rendered: &Overlay,
     context: &MutationContext,
 ) -> Result<ChangeBatchPreview, StoreError> {
@@ -73,6 +74,7 @@ fn prepare_batch(
     let mut diagnostics = Vec::new();
 
     for request in requests {
+        let request: &ChangeRequest = request.borrow();
         let path = checked_path(request.path())?;
         if !paths.insert(path.clone()) {
             diagnostics.push(Diagnostic::new(
@@ -137,6 +139,7 @@ fn prepare_batch(
     let diagnostics = introduced_diagnostics(&before.diagnostics, &proposed.diagnostics);
     let mut diff = String::new();
     for request in requests {
+        let request: &ChangeRequest = request.borrow();
         let path = request.path();
         let existing = context.entry(path);
         diff.push_str(&git_diff(
@@ -194,21 +197,20 @@ fn diagnostic_key(
     )
 }
 
-pub(super) fn apply(root: &Path, mut preview: Preview) -> Result<ApplyResult, StoreError> {
-    preview.request = canonical_request(root, preview.request)?;
-    let path = preview.request.path().to_owned();
-    let result = apply_batch(
+pub(super) fn apply(root: &Path, preview: Preview) -> Result<ApplyResult, StoreError> {
+    apply_ref(root, &preview)
+}
+
+pub(super) fn apply_ref(root: &Path, preview: &Preview) -> Result<ApplyResult, StoreError> {
+    let path =
+        super::mutation_locks::canonical_target(root, &checked_path(preview.request.path())?)?;
+    let result = apply_batch_values(
         root,
-        ChangeBatchPreview {
-            requests: vec![preview.request],
-            expected_target_revisions: BTreeMap::from([(
-                path.clone(),
-                preview.expected_target_revision,
-            )]),
-            expected_input_revisions: preview.expected_input_revisions,
-            diagnostics: preview.diagnostics,
-            diff: preview.diff,
-        },
+        std::slice::from_ref(&preview.request),
+        std::iter::once((path.as_str(), preview.expected_target_revision.as_ref())),
+        &preview.expected_input_revisions,
+        &preview.diagnostics,
+        &preview.diff,
     )?;
     Ok(ApplyResult {
         resulting_target_revision: result
@@ -229,24 +231,67 @@ struct BatchMutation<'a> {
 
 pub(super) fn apply_batch(
     root: &Path,
-    mut preview: ChangeBatchPreview,
+    preview: ChangeBatchPreview,
 ) -> Result<ChangeBatchApplyResult, StoreError> {
-    if preview.requests.is_empty() {
+    apply_batch_ref(root, &preview)
+}
+
+pub(super) fn apply_batch_ref(
+    root: &Path,
+    preview: &ChangeBatchPreview,
+) -> Result<ChangeBatchApplyResult, StoreError> {
+    apply_batch_values(
+        root,
+        &preview.requests,
+        preview
+            .expected_target_revisions
+            .iter()
+            .map(|(path, revision)| (path.as_str(), revision.as_ref())),
+        &preview.expected_input_revisions,
+        &preview.diagnostics,
+        &preview.diff,
+    )
+}
+
+fn apply_batch_values<'a>(
+    root: &Path,
+    requests: &[ChangeRequest],
+    targets: impl Iterator<Item = (&'a str, Option<&'a Revision>)>,
+    expected_input_revisions: &BTreeMap<String, Option<Revision>>,
+    diagnostics: &[Diagnostic],
+    diff: &str,
+) -> Result<ChangeBatchApplyResult, StoreError> {
+    if requests.is_empty() {
         return Err(StoreError::Invalid(
             "record batch requires at least one request".into(),
         ));
     }
-    let (requests, overlay, diagnostics) = preflight(preview.requests)?;
-    if !diagnostics.is_empty() {
+    let BorrowedPreflight {
+        mut requests,
+        mut rendered,
+        diagnostics: request_diagnostics,
+    } = preflight_ref(requests)?;
+    if !request_diagnostics.is_empty() {
         return Err(StoreError::Invalid(
             "record batch request is invalid".into(),
         ));
     }
-    let (requests, overlay) = canonical_batch(root, requests, overlay)?;
-    preview.requests = requests;
+    let mut overlay = Overlay::new();
+    for request in &mut requests {
+        let path = super::mutation_locks::canonical_target(root, request.path())?;
+        let bytes = rendered.remove(request.path()).flatten();
+        if path != request.path() {
+            *request = Cow::Owned(canonical_request(root, request.clone().into_owned())?);
+        }
+        if overlay.insert(path, bytes).is_some() {
+            return Err(StoreError::Invalid(
+                "record batch targets contain duplicate canonical paths".into(),
+            ));
+        }
+    }
     let mut expected_target_revisions = BTreeMap::new();
-    for (path, revision) in preview.expected_target_revisions {
-        let canonical = checked_path(&path)?;
+    for (path, revision) in targets {
+        let canonical = checked_path(path)?;
         if expected_target_revisions
             .insert(canonical, revision)
             .is_some()
@@ -256,29 +301,29 @@ pub(super) fn apply_batch(
             ));
         }
     }
-    preview.expected_target_revisions = expected_target_revisions;
     ensure_worktree(root)?;
-    if !preview.diagnostics.is_empty() {
+    if !diagnostics.is_empty() {
         return Err(StoreError::Invalid(
             "preview contains validation diagnostics".into(),
         ));
     }
     let context = MutationContext::capture(root, &overlay, &[], true)?;
-    context.require_revisions(&preview.expected_input_revisions)?;
-    let checked = prepare_batch(root, &preview.requests, &overlay, &context)?;
-    if !checked.diagnostics.is_empty() || checked.diff != preview.diff {
+    context.require_revisions(expected_input_revisions)?;
+    let checked = prepare_batch(root, &requests, &overlay, &context)?;
+    if !checked.diagnostics.is_empty() || checked.diff != diff {
         return Err(StoreError::Invalid(
             "record batch validation changed after preview".into(),
         ));
     }
-    if preview.expected_target_revisions.len() != preview.requests.len() {
+    if expected_target_revisions.len() != requests.len() {
         return Err(StoreError::Invalid(
             "record batch target revisions are incomplete".into(),
         ));
     }
     let mut paths = BTreeSet::new();
-    let mut mutations = Vec::with_capacity(preview.requests.len());
-    for request in &preview.requests {
+    let mut mutations = Vec::with_capacity(requests.len());
+    for request in &requests {
+        let request: &ChangeRequest = request.borrow();
         let path = checked_path(request.path())?;
         if !paths.insert(path.clone()) {
             return Err(StoreError::Invalid(
@@ -286,11 +331,10 @@ pub(super) fn apply_batch(
             ));
         }
         let current_entry = context.entry(&path);
-        let expected = preview
-            .expected_target_revisions
+        let expected = expected_target_revisions
             .get(&path)
             .ok_or_else(|| StoreError::Invalid("record batch target revision is missing".into()))?;
-        require_target_revision(&root.join(&path), expected.as_ref())?;
+        require_target_revision(&root.join(&path), *expected)?;
         let target = root.join(&path);
         let proposed = overlay.get(&path).and_then(Option::as_deref);
         match request {
@@ -380,7 +424,7 @@ pub(super) fn apply_batch(
             .map(|mutation| mutation.path)
             .collect(),
         resulting_target_revisions,
-        diff: preview.diff,
+        diff: diff.to_owned(),
     })
 }
 
@@ -403,10 +447,56 @@ fn canonical_request(root: &Path, request: ChangeRequest) -> Result<ChangeReques
 fn preflight(
     requests: Vec<ChangeRequest>,
 ) -> Result<(Vec<ChangeRequest>, Overlay, Vec<Diagnostic>), StoreError> {
+    let (paths, rendered, diagnostics) = preflight_values(&requests)?;
+    let requests = requests
+        .into_iter()
+        .zip(paths)
+        .map(|(request, path)| normalized_request(request, path))
+        .collect();
+    Ok((requests, rendered, diagnostics))
+}
+
+struct BorrowedPreflight<'a> {
+    requests: Vec<Cow<'a, ChangeRequest>>,
+    rendered: Overlay,
+    diagnostics: Vec<Diagnostic>,
+}
+
+fn preflight_ref(requests: &[ChangeRequest]) -> Result<BorrowedPreflight<'_>, StoreError> {
+    let (paths, rendered, diagnostics) = preflight_values(requests)?;
+    let requests = requests
+        .iter()
+        .zip(paths)
+        .map(|(request, path)| {
+            if request.path() == path {
+                Cow::Borrowed(request)
+            } else {
+                Cow::Owned(normalized_request(request.clone(), path))
+            }
+        })
+        .collect();
+    Ok(BorrowedPreflight {
+        requests,
+        rendered,
+        diagnostics,
+    })
+}
+
+fn normalized_request(request: ChangeRequest, path: String) -> ChangeRequest {
+    match request {
+        ChangeRequest::Create { draft, .. } => ChangeRequest::Create { path, draft },
+        ChangeRequest::Replace { draft, .. } => ChangeRequest::Replace { path, draft },
+        ChangeRequest::Delete { .. } => ChangeRequest::Delete { path },
+    }
+}
+
+fn preflight_values(
+    requests: &[ChangeRequest],
+) -> Result<(Vec<String>, Overlay, Vec<Diagnostic>), StoreError> {
     let mut paths = BTreeSet::new();
+    let mut normalized_paths = Vec::with_capacity(requests.len());
     let mut rendered = Overlay::new();
     let mut diagnostics = Vec::new();
-    let mut normalized = Vec::with_capacity(requests.len());
     for request in requests {
         let path = checked_path(request.path())?;
         if !paths.insert(path.clone()) {
@@ -416,29 +506,24 @@ fn preflight(
                 "batch requests must target distinct canonical paths",
             ));
         }
-        let request = match request {
-            ChangeRequest::Create { draft, .. } => ChangeRequest::Create {
-                path: path.clone(),
-                draft,
-            },
-            ChangeRequest::Replace { draft, .. } => ChangeRequest::Replace {
-                path: path.clone(),
-                draft,
-            },
-            ChangeRequest::Delete { .. } => ChangeRequest::Delete { path: path.clone() },
+        let bytes = match request {
+            ChangeRequest::Create { draft, .. } | ChangeRequest::Replace { draft, .. } => {
+                Some(casefile_core::render_draft(&path, draft))
+            }
+            ChangeRequest::Delete { .. } => None,
         };
-        match request.rendered() {
+        match bytes {
             Some(Ok(bytes)) => {
-                rendered.insert(path, Some(bytes));
+                rendered.insert(path.clone(), Some(bytes));
             }
             Some(Err(diagnostic)) => diagnostics.push(diagnostic),
             None => {
-                rendered.insert(path, None);
+                rendered.insert(path.clone(), None);
             }
         }
-        normalized.push(request);
+        normalized_paths.push(path);
     }
-    Ok((normalized, rendered, stable(diagnostics)))
+    Ok((normalized_paths, rendered, stable(diagnostics)))
 }
 
 fn canonical_batch(

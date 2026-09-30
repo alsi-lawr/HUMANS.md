@@ -112,13 +112,13 @@ fn provider_same_session_writes_survive_locked_validation_and_result_windows() {
                 if event == boundary {
                     if let Some(preview) = second.take() {
                         shared
-                            .apply_record(preview)
+                            .apply_record(&preview.preview_id)
                             .expect("same Provider disjoint write");
                     }
                 }
             });
             provider
-                .apply_record(first)
+                .apply_record(&first.preview_id)
                 .expect("first committed outcome");
             mutation_hooks::clear();
             assert!(
@@ -296,20 +296,26 @@ fn progress_bootstrap_append_replay_and_record_batch_have_narrow_result_windows(
         Boundary::Result,
         store.preview(board("bootstrap-overlap")).unwrap(),
     );
-    provider.apply_progress(bootstrap).unwrap();
+    provider.apply_progress(&bootstrap.preview_id).unwrap();
     mutation_hooks::clear();
     let progress = provider.preview_progress(append()).unwrap();
     disjoint_at(
         Boundary::Result,
         store.preview(board("append-overlap")).unwrap(),
     );
-    provider.apply_progress(progress.clone()).unwrap();
+    provider.apply_progress(&progress.preview_id).unwrap();
     mutation_hooks::clear();
     disjoint_at(
         Boundary::Locked,
         store.preview(board("replay-overlap")).unwrap(),
     );
-    assert!(provider.apply_progress(progress).unwrap().result.no_op);
+    assert!(
+        provider
+            .apply_progress(&progress.preview_id)
+            .unwrap()
+            .result
+            .no_op
+    );
     mutation_hooks::clear();
     let batch = store
         .preview_batch(vec![board("batch-a"), board("batch-b")])
@@ -361,7 +367,7 @@ fn shared_reference_changes_and_reverse_progress_membership_cannot_write_skew() 
         })
         .unwrap();
     assert!(deletion.diagnostics.is_empty());
-    provider.apply_progress(pending).unwrap();
+    provider.apply_progress(&pending.preview_id).unwrap();
     assert!(store.apply(deletion).is_err());
     assert!(root.path().join(&first).exists());
     assert!(store.scan().unwrap().diagnostics.is_empty());
@@ -474,7 +480,7 @@ fn governed_multi_file_and_binding_results_and_legacy_replay_are_independent() {
     assert!(records.iter().any(|r| r.expected_store_revision.is_none()));
     let provider = Provider::without_cache(store.clone());
     provider
-        .apply_progress(provider.bootstrap_progress(BASE).unwrap())
+        .apply_progress(&provider.bootstrap_progress(BASE).unwrap().preview_id)
         .unwrap();
     let binding = WriterBindingRequest { investigation: BASE.into(), binding_source:"schema_version = 1\nadapter = \"codex\"\nrole = \"implementation-writer\"\nmodel = \"gpt-6-astra\"\nreasoning_effort = \"high\"\n\n[resolution]\nmode = \"named_agent_type\"\nvalue = \"casefile-implementation-writer-gpt-6-astra-high\"\n".into() };
     let preview = store.preview_writer_binding(binding).unwrap();
@@ -664,7 +670,7 @@ fn record_delete_no_op_and_default_board_receipts_survive_disjoint_result_change
         Boundary::Result,
         store.preview(board("no-op-overlap")).unwrap(),
     );
-    let result = provider.apply_record(no_op).unwrap();
+    let result = provider.apply_record(&no_op.preview_id).unwrap();
     mutation_hooks::clear();
     assert_eq!(
         result.result.result.resulting_target_revision,
@@ -688,7 +694,9 @@ fn record_delete_no_op_and_default_board_receipts_survive_disjoint_result_change
         Boundary::Result,
         store.preview(board("default-overlap")).unwrap(),
     );
-    let created = provider.apply_default_delivery_board(preview).unwrap();
+    let created = provider
+        .apply_default_delivery_board(&preview.preview_id)
+        .unwrap();
     mutation_hooks::clear();
     let repeated = provider.preview_default_delivery_board(BASE).unwrap();
     assert!(repeated.no_op);
@@ -696,7 +704,9 @@ fn record_delete_no_op_and_default_board_receipts_survive_disjoint_result_change
         Boundary::Result,
         store.preview(board("default-no-op-overlap")).unwrap(),
     );
-    let result = provider.apply_default_delivery_board(repeated).unwrap();
+    let result = provider
+        .apply_default_delivery_board(&repeated.preview_id)
+        .unwrap();
     mutation_hooks::clear();
     assert_eq!(
         created.result.result.resulting_target_revision,

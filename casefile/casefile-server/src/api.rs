@@ -1,7 +1,7 @@
 use crate::{assets, workbench::Workbench};
 use anyhow::Result;
 use casefile_core::ChangeRequest;
-use casefile_store::{ProviderError, ProviderPreview, RecordScope, ScopedIdentity};
+use casefile_store::{ProviderError, RecordScope, ScopedIdentity};
 use serde::{Deserialize, Serialize};
 use tiny_http::{Header, Method, Request, Response, StatusCode};
 
@@ -289,8 +289,16 @@ impl Host {
                 "write capability is missing or invalid",
             ));
         }
-        let preview: ProviderPreview = serde_json::from_str(body).map_err(ApiError::request)?;
-        let outcome = self.workbench.apply(preview).map_err(ApiError::provider)?;
+        #[derive(serde::Deserialize)]
+        #[serde(deny_unknown_fields)]
+        struct ApplyRequest {
+            preview_id: String,
+        }
+        let request: ApplyRequest = serde_json::from_str(body).map_err(ApiError::request)?;
+        let outcome = self
+            .workbench
+            .apply(&request.preview_id)
+            .map_err(ApiError::provider)?;
         Reply::json(&outcome)
     }
 }

@@ -165,14 +165,17 @@ export type Relationship = Readonly<{
   kind: "decision" | "related" | "supersedes" | "superseded_by";
 }>;
 export type ChangeRequest = Readonly<{ operation: "replace"; path: string; draft: RecordDraft }>;
+export type PreviewId = Readonly<{ tag: "preview_id"; value: string }>;
+export type PreviewOperation = Readonly<{
+  operation: "create" | "replace" | "delete";
+  path: string;
+}>;
 export type Preview = Readonly<{
-  preview_id: string;
+  preview_id: PreviewId;
+  kind: "record";
   approval_required: boolean;
-  rendered_bytes: ReadonlyArray<number> | null;
   no_op: boolean;
-  request: ChangeRequest;
-  expected_target_revision: string | null;
-  readonly expected_input_revisions: Readonly<{ [path: string]: string | null }>;
+  operations: ReadonlyArray<PreviewOperation>;
   diagnostics: ReadonlyArray<Diagnostic>;
   diff: string;
 }>;

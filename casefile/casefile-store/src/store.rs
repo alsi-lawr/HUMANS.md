@@ -177,6 +177,38 @@ impl Store {
         writing::preview(&self.root, request)
     }
 
+    pub(crate) fn apply_ref(&self, preview: &Preview) -> Result<ApplyResult, StoreError> {
+        super::writing::apply_ref(&self.root, preview)
+    }
+
+    pub(crate) fn apply_batch_ref(
+        &self,
+        preview: &ChangeBatchPreview,
+    ) -> Result<ChangeBatchApplyResult, StoreError> {
+        super::writing::apply_batch_ref(&self.root, preview)
+    }
+
+    pub(crate) fn apply_progress_ref(
+        &self,
+        preview: &ProgressPreview,
+    ) -> Result<ProgressApplyResult, StoreError> {
+        super::progress::apply_ref(&self.root, preview)
+    }
+
+    pub(crate) fn apply_strategy_transition_ref(
+        &self,
+        preview: &StrategyTransitionPreview,
+    ) -> Result<GovernedApplyResult, StoreError> {
+        super::governance::apply_strategy_transition_ref(&self.root, preview)
+    }
+
+    pub(crate) fn apply_writer_binding_ref(
+        &self,
+        preview: &WriterBindingPreview,
+    ) -> Result<GovernedApplyResult, StoreError> {
+        super::governance::apply_writer_binding_ref(&self.root, preview)
+    }
+
     pub fn apply(&self, preview: Preview) -> Result<ApplyResult, StoreError> {
         writing::apply(&self.root, preview)
     }

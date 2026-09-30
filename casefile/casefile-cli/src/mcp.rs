@@ -1,16 +1,14 @@
 use anyhow::{Context, Result, bail};
 use casefile_core::ChangeRequest;
 use casefile_store::{
-    ActivationState, DefaultBoardPreview, PROVIDER_PROTOCOL_VERSION, ProgressOperation, Provider,
-    ProviderApprovalPolicy, ProviderBatchPreview, ProviderCapabilities, ProviderMutationState,
-    ProviderOperation, ProviderPreview, ProviderProgressPreview, ProviderStrategyTransitionPreview,
-    ProviderWriterBindingPreview, Store, StrategyTransitionRequest, WriterBindingRequest,
+    ActivationState, PROVIDER_PROTOCOL_VERSION, ProgressOperation, Provider,
+    ProviderApprovalPolicy, ProviderCapabilities, ProviderMutationState, ProviderOperation,
+    ProviderPreview, ProviderPreviewKind, Store, StrategyTransitionRequest, WriterBindingRequest,
 };
 use serde::{Serialize, de::DeserializeOwned};
 use serde_json::{Value, json};
-use sha2::{Digest, Sha256};
 use std::{
-    collections::{BTreeMap, BTreeSet, VecDeque},
+    collections::{BTreeMap, BTreeSet},
     fs,
     io::{self, BufRead, Write},
     path::{Path, PathBuf},
@@ -21,7 +19,6 @@ use std::{
 const MCP_PROTOCOL_VERSIONS: &[&str] = &["2024-11-05", "2025-03-26", "2025-06-18", "2025-11-25"];
 const MAX_MESSAGE_BYTES: usize = 8 * 1024 * 1024;
 const TOOL_WORKERS: usize = 16;
-const PREVIEW_LIMIT: usize = 256;
 const REQUIRED_PROVIDER_OPERATIONS: &[&str] = &[
     "snapshot",
     "record_index",
@@ -215,7 +212,6 @@ struct Session {
 #[derive(Clone)]
 struct ToolService {
     provider: Arc<Provider>,
-    previews: Arc<Mutex<PreviewVault>>,
 }
 
 struct QueuedToolCall {
@@ -223,28 +219,11 @@ struct QueuedToolCall {
     params: Option<Value>,
 }
 
-#[derive(Clone)]
-enum StoredPreview {
-    Record(ProviderPreview),
-    RecordBatch(ProviderBatchPreview),
-    Progress(ProviderProgressPreview),
-    Board(DefaultBoardPreview),
-    StrategyTransition(ProviderStrategyTransitionPreview),
-    WriterBinding(ProviderWriterBindingPreview),
-}
-
-#[derive(Default)]
-struct PreviewVault {
-    order: VecDeque<String>,
-    values: BTreeMap<String, StoredPreview>,
-}
-
 impl Session {
     fn new(provider: Provider) -> Self {
         Self {
             tools: ToolService {
                 provider: Arc::new(provider),
-                previews: Arc::new(Mutex::new(PreviewVault::default())),
             },
             initialized: false,
         }
@@ -440,277 +419,123 @@ impl ToolService {
                     requests: Option<Vec<ChangeRequest>>,
                 }
                 let arguments = parse::<Arguments>(arguments)?;
-                match (arguments.request, arguments.requests) {
-                    (Some(request), None) => self.publish_preview(StoredPreview::Record(
-                        self.provider.preview_record(request)?,
-                    )),
-                    (None, Some(requests)) => self.publish_preview(StoredPreview::RecordBatch(
-                        self.provider.preview_record_batch(requests)?,
-                    )),
+                let preview = match (arguments.request, arguments.requests) {
+                    (Some(request), None) => self.provider.preview_record(request)?,
+                    (None, Some(requests)) => self.provider.preview_record_batch(requests)?,
                     _ => bail!("pass exactly one of request or requests"),
+                };
+                review_envelope(&preview)
+            }
+            "casefile_apply_record" => {
+                let id = preview_id(arguments)?;
+                match self.provider.preview_kind(&id)? {
+                    ProviderPreviewKind::Record => serialize(self.provider.apply_record(&id)?),
+                    ProviderPreviewKind::RecordBatch => {
+                        serialize(self.provider.apply_record_batch(&id)?)
+                    }
+                    ProviderPreviewKind::Progress
+                    | ProviderPreviewKind::DefaultDeliveryBoard
+                    | ProviderPreviewKind::StrategyTransition
+                    | ProviderPreviewKind::WriterBinding => {
+                        bail!("preview was produced by a different Casefile tool")
+                    }
                 }
             }
-            "casefile_apply_record" => match self.preview_by_id(arguments)? {
-                StoredPreview::Record(preview) => serialize(self.provider.apply_record(preview)?),
-                StoredPreview::RecordBatch(preview) => {
-                    serialize(self.provider.apply_record_batch(preview)?)
-                }
-                _ => bail!("preview was produced by a different Casefile tool"),
-            },
             "casefile_preview_progress" => {
                 #[derive(serde::Deserialize)]
                 struct Arguments {
                     operation: ProgressOperation,
                 }
-                self.publish_preview(StoredPreview::Progress(
-                    self.provider
+                review_envelope(
+                    &self
+                        .provider
                         .preview_progress(parse::<Arguments>(arguments)?.operation)?,
-                ))
+                )
             }
             "casefile_apply_progress" => {
-                let preview = match self.preview_by_id(arguments)? {
-                    StoredPreview::Progress(preview) => preview,
-                    _ => bail!("preview was produced by a different Casefile tool"),
-                };
-                serialize(self.provider.apply_progress(preview)?)
+                serialize(self.provider.apply_progress(&preview_id(arguments)?)?)
             }
             "casefile_preview_default_delivery_board" => {
                 #[derive(serde::Deserialize)]
                 struct Arguments {
                     investigation: String,
                 }
-                self.publish_preview(StoredPreview::Board(
-                    self.provider.preview_default_delivery_board(
+                review_envelope(
+                    &self.provider.preview_default_delivery_board(
                         parse::<Arguments>(arguments)?.investigation,
                     )?,
-                ))
+                )
             }
-            "casefile_apply_default_delivery_board" => {
-                let preview = match self.preview_by_id(arguments)? {
-                    StoredPreview::Board(preview) => preview,
-                    _ => bail!("preview was produced by a different Casefile tool"),
-                };
-                serialize(self.provider.apply_default_delivery_board(preview)?)
-            }
+            "casefile_apply_default_delivery_board" => serialize(
+                self.provider
+                    .apply_default_delivery_board(&preview_id(arguments)?)?,
+            ),
             "casefile_preview_strategy_transition" => {
                 #[derive(serde::Deserialize)]
                 struct Arguments {
                     request: StrategyTransitionRequest,
                 }
-                self.publish_preview(StoredPreview::StrategyTransition(
-                    self.provider
+                review_envelope(
+                    &self
+                        .provider
                         .preview_strategy_transition(parse::<Arguments>(arguments)?.request)?,
-                ))
+                )
             }
-            "casefile_apply_strategy_transition" => {
-                let preview = match self.preview_by_id(arguments)? {
-                    StoredPreview::StrategyTransition(preview) => preview,
-                    _ => bail!("preview was produced by a different Casefile tool"),
-                };
-                serialize(self.provider.apply_strategy_transition(preview)?)
-            }
+            "casefile_apply_strategy_transition" => serialize(
+                self.provider
+                    .apply_strategy_transition(&preview_id(arguments)?)?,
+            ),
             "casefile_preview_writer_binding" => {
                 #[derive(serde::Deserialize)]
                 struct Arguments {
                     request: WriterBindingRequest,
                 }
-                self.publish_preview(StoredPreview::WriterBinding(
-                    self.provider
+                review_envelope(
+                    &self
+                        .provider
                         .preview_writer_binding(parse::<Arguments>(arguments)?.request)?,
-                ))
+                )
             }
-            "casefile_apply_writer_binding" => {
-                let preview = match self.preview_by_id(arguments)? {
-                    StoredPreview::WriterBinding(preview) => preview,
-                    _ => bail!("preview was produced by a different Casefile tool"),
-                };
-                serialize(self.provider.apply_writer_binding(preview)?)
-            }
+            "casefile_apply_writer_binding" => serialize(
+                self.provider
+                    .apply_writer_binding(&preview_id(arguments)?)?,
+            ),
             _ => bail!("unknown Casefile tool {name}"),
         }
     }
-
-    fn publish_preview(&self, internal: StoredPreview) -> Result<Value> {
-        let public = review_envelope(&internal)?;
-        let preview_id = public
-            .get("preview_id")
-            .and_then(Value::as_str)
-            .context("provider preview is missing preview_id")?
-            .to_owned();
-        let mut vault = self.previews.lock().expect("MCP preview vault");
-        vault.order.push_back(preview_id.clone());
-        vault.values.insert(preview_id, internal);
-        while vault.order.len() > PREVIEW_LIMIT {
-            if let Some(expired) = vault.order.pop_front() {
-                vault.values.remove(&expired);
-            }
-        }
-        Ok(public)
-    }
-
-    fn preview_by_id(&self, arguments: Value) -> Result<StoredPreview> {
-        #[derive(serde::Deserialize)]
-        #[serde(deny_unknown_fields)]
-        struct Arguments {
-            preview_id: String,
-        }
-        let preview_id = parse::<Arguments>(arguments)?.preview_id;
-        let vault = self.previews.lock().expect("MCP preview vault");
-        vault
-            .values
-            .get(&preview_id)
-            .cloned()
-            .context("provider preview is unknown or expired")
-    }
 }
 
-#[derive(Serialize)]
-struct ReviewOperation {
-    operation: &'static str,
-    path: String,
+fn preview_id(arguments: Value) -> Result<String> {
+    #[derive(serde::Deserialize)]
+    #[serde(deny_unknown_fields)]
+    struct Arguments {
+        preview_id: String,
+    }
+    Ok(parse::<Arguments>(arguments)?.preview_id)
 }
 
-fn review_envelope(preview: &StoredPreview) -> Result<Value> {
-    let (preview_id, approval_required, no_op, operations, diagnostics, diffs) = match preview {
-        StoredPreview::Record(preview) => (
-            preview.preview_id.as_str(),
-            preview.approval_required,
-            preview.no_op,
-            vec![record_review_operation(&preview.canonical.request)],
-            serialize(&preview.canonical.diagnostics)?,
-            vec![preview.canonical.diff.as_str()],
-        ),
-        StoredPreview::RecordBatch(preview) => (
-            preview.preview_id.as_str(),
-            preview.approval_required,
-            preview.no_op,
-            preview
-                .canonical
-                .requests
-                .iter()
-                .map(record_review_operation)
-                .collect(),
-            serialize(&preview.canonical.diagnostics)?,
-            vec![preview.canonical.diff.as_str()],
-        ),
-        StoredPreview::Progress(preview) => (
-            preview.preview_id.as_str(),
-            preview.approval_required,
-            preview.canonical.no_op,
-            vec![ReviewOperation {
-                operation: match preview.operation {
-                    ProgressOperation::Bootstrap { .. } => "bootstrap",
-                    ProgressOperation::Append { .. } => "append",
-                },
-                path: preview.canonical.path.clone(),
-            }],
-            serialize(&preview.canonical.diagnostics)?,
-            vec![preview.canonical.diff.as_str()],
-        ),
-        StoredPreview::Board(preview) => (
-            preview.preview_id.as_str(),
-            preview.approval_required,
-            preview.no_op,
-            vec![record_review_operation(&preview.canonical.request)],
-            serialize(&preview.canonical.diagnostics)?,
-            vec![preview.canonical.diff.as_str()],
-        ),
-        StoredPreview::StrategyTransition(preview) => (
-            preview.preview_id.as_str(),
-            preview.approval_required,
-            preview.canonical.no_op,
-            preview
-                .canonical
-                .changes
-                .iter()
-                .map(|change| ReviewOperation {
-                    operation: governed_review_operation(
-                        change.expected_target_revision.is_some(),
-                        change.proposed_target_revision.is_some(),
-                    ),
-                    path: change.path.clone(),
-                })
-                .collect(),
-            serialize(&preview.canonical.diagnostics)?,
-            preview
-                .canonical
-                .changes
-                .iter()
-                .map(|change| change.diff.as_str())
-                .collect(),
-        ),
-        StoredPreview::WriterBinding(preview) => (
-            preview.preview_id.as_str(),
-            preview.approval_required,
-            preview.canonical.no_op,
-            preview
-                .canonical
-                .changes
-                .iter()
-                .map(|change| ReviewOperation {
-                    operation: governed_review_operation(
-                        change.expected_target_revision.is_some(),
-                        change.proposed_target_revision.is_some(),
-                    ),
-                    path: change.path.clone(),
-                })
-                .collect(),
-            serialize(&preview.canonical.diagnostics)?,
-            preview
-                .canonical
-                .changes
-                .iter()
-                .map(|change| change.diff.as_str())
-                .collect(),
-        ),
-    };
+fn review_envelope(preview: &ProviderPreview) -> Result<Value> {
     let mut operation_counts = BTreeMap::new();
-    for operation in &operations {
+    for operation in &preview.operations {
         *operation_counts
-            .entry(operation.operation)
+            .entry(
+                serialize(operation.operation)?
+                    .as_str()
+                    .context("review operation")?
+                    .to_owned(),
+            )
             .or_insert(0_usize) += 1;
     }
     Ok(json!({
-        "preview_id": preview_id,
-        "approval_required": approval_required,
-        "no_op": no_op,
+        "preview_id": preview.preview_id,
+        "kind": preview.kind,
+        "approval_required": preview.approval_required,
+        "no_op": preview.no_op,
         "operation_counts": operation_counts,
-        "operations": operations,
-        "diagnostics": diagnostics,
-        "diff": diff_summary(&diffs),
+        "operations": preview.operations,
+        "diagnostics": preview.diagnostics,
+        "diff": { "bytes": preview.diff.len() },
     }))
-}
-
-fn record_review_operation(request: &ChangeRequest) -> ReviewOperation {
-    ReviewOperation {
-        operation: match request {
-            ChangeRequest::Create { .. } => "create",
-            ChangeRequest::Replace { .. } => "replace",
-            ChangeRequest::Delete { .. } => "delete",
-        },
-        path: request.path().to_owned(),
-    }
-}
-
-fn governed_review_operation(expected: bool, proposed: bool) -> &'static str {
-    match (expected, proposed) {
-        (false, true) => "create",
-        (true, false) => "delete",
-        _ => "replace",
-    }
-}
-
-fn diff_summary(diffs: &[&str]) -> Value {
-    let mut hasher = Sha256::new();
-    let mut bytes = 0_usize;
-    for diff in diffs {
-        bytes += diff.len();
-        hasher.update(diff.as_bytes());
-    }
-    json!({
-        "bytes": bytes,
-        "sha256": format!("sha256:{:x}", hasher.finalize()),
-    })
 }
 
 fn is_tool_call(request: &Value) -> bool {
@@ -1552,6 +1377,7 @@ fn preview_output_schema() -> Value {
     object_schema(
         json!({
             "preview_id": non_empty_string(),
+            "kind": {"type":"string", "enum":["record", "record_batch", "progress", "default_delivery_board", "strategy_transition", "writer_binding"]},
             "approval_required": {"type": "boolean"},
             "no_op": {"type": "boolean"},
             "operation_counts": {
@@ -1579,13 +1405,13 @@ fn preview_output_schema() -> Value {
             "diff": object_schema(
                 json!({
                     "bytes": {"type": "integer", "minimum": 0},
-                    "sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
                 }),
-                &["bytes", "sha256"],
+                &["bytes"],
             ),
         }),
         &[
             "preview_id",
+            "kind",
             "approval_required",
             "no_op",
             "operation_counts",

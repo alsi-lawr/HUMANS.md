@@ -227,6 +227,14 @@ pub(super) fn apply(
     mut preview: ProgressPreview,
 ) -> Result<ProgressApplyResult, StoreError> {
     preview.request.investigation = checked_path(&preview.request.investigation)?;
+    apply_ref(root, &preview)
+}
+
+pub(super) fn apply_ref(
+    root: &Path,
+    preview: &ProgressPreview,
+) -> Result<ProgressApplyResult, StoreError> {
+    checked_path(&preview.request.investigation)?;
     ensure_worktree(root)?;
     if !preview.diagnostics.is_empty() {
         return Err(StoreError::Invalid(
@@ -259,7 +267,7 @@ pub(super) fn apply(
                 path,
                 resulting_target_revision: current_entry
                     .map(|entry| entry.content_revision.clone()),
-                diff: preview.diff,
+                diff: preview.diff.clone(),
                 no_op: true,
             });
         }
@@ -288,7 +296,7 @@ pub(super) fn apply(
         return Ok(ProgressApplyResult {
             path,
             resulting_target_revision: current_entry.map(|entry| entry.content_revision.clone()),
-            diff: preview.diff,
+            diff: preview.diff.clone(),
             no_op: true,
         });
     }
@@ -331,7 +339,7 @@ pub(super) fn apply(
             .iter()
             .find(|entry| entry.path == path)
             .map(|entry| entry.content_revision.clone()),
-        diff: preview.diff,
+        diff: preview.diff.clone(),
         no_op: false,
     })
 }

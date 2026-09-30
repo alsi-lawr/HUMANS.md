@@ -272,3 +272,45 @@ test("accepts target-only mutation receipts but rejects a missing target result"
     }),
   ).toThrow();
 });
+
+test("compact record review rejects obsolete authority fields and applies only its live ID", async () => {
+  const { decodePreview } = await import("./api-contract");
+  const { apply } = await import("./api");
+  const envelope = {
+    preview_id: "live-provider-original",
+    kind: "record",
+    approval_required: false,
+    no_op: false,
+    operations: [{ operation: "replace", path: "tickets/accepted/HMD-011.md" }],
+    diagnostics: [],
+    diff: "reviewed diff",
+  };
+  const preview = decodePreview(envelope);
+  expect(preview.diff).toBe(envelope.diff);
+  expect(() => decodePreview({ ...envelope, request: { operation: "delete" } })).toThrow();
+  const originalFetch = globalThis.fetch;
+  let sent: unknown;
+  globalThis.fetch = Object.assign(
+    async (_request: Parameters<typeof fetch>[0], options?: Parameters<typeof fetch>[1]) => {
+      if (typeof options?.body !== "string") throw new Error("expected JSON request");
+      sent = JSON.parse(options.body);
+      return Response.json({
+        result: {
+          path: "tickets/accepted/HMD-011.md",
+          resulting_target_revision: "changed",
+          diff: "reviewed diff",
+          no_op: false,
+        },
+        cache: { state: "not_configured" },
+      });
+    },
+    { preconnect: originalFetch.preconnect },
+  );
+  try {
+    const outcome = await apply(preview, "write-capability", new AbortController().signal);
+    expect(outcome.tag).toBe("success");
+    expect(sent).toEqual({ preview_id: envelope.preview_id });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

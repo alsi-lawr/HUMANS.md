@@ -5,13 +5,13 @@ import {
   type BoardPayload,
   type BoardStatusSource,
   type Card,
-  type ChangeRequest,
   type Classification,
   type Diagnostic,
   type EffectiveWriterBinding,
   type Identity,
   type Kind,
   type Preview,
+  type PreviewOperation,
   type Record,
   type Relationship,
   type Scope,
@@ -394,25 +394,6 @@ const decodeDiagnostic = (value: unknown): Diagnostic => {
     message: string(input.message, "diagnostic message"),
   };
 };
-const decodeChangeRequest = (value: unknown): ChangeRequest => {
-  const input = object(value, "change request");
-  if (input.operation !== "replace") return contractError("change operation");
-  const draft = object(input.draft, "record draft");
-  const kind = draft.kind;
-  if (kind === "board")
-    return {
-      operation: "replace",
-      path: string(input.path, "change path"),
-      draft: { kind, ...decodeBoardPayload(draft) },
-    };
-  if (kind !== "ticket" && kind !== "epic") return contractError("draft kind");
-  return {
-    operation: "replace",
-    path: string(input.path, "change path"),
-    draft: { kind, ...decodeWorkItem(draft) },
-  };
-};
-
 export const decodeCurrent = <T>(value: unknown, decode: Decoder<T>): T => {
   return decodeIndexed(value, decode).value;
 };
@@ -432,24 +413,40 @@ export const decodeRelationships = (value: unknown): ReadonlyArray<Relationship>
   array(value, "relationships", decodeRelationship);
 export const decodeDiagnostics = (value: unknown): ReadonlyArray<Diagnostic> =>
   array(value, "diagnostics", decodeDiagnostic);
+const decodePreviewOperation = (value: unknown): PreviewOperation => {
+  const input = object(value, "preview operation");
+  const operation = input.operation;
+  if (operation !== "create" && operation !== "replace" && operation !== "delete")
+    return contractError("preview operation kind");
+  return { operation, path: nonEmptyString(input.path, "preview operation path") };
+};
 export const decodePreview = (value: unknown): Preview => {
   const input = object(value, "preview");
+  if (input.kind !== "record") return contractError("preview kind");
+  if (
+    Object.keys(input).some(
+      (key) =>
+        ![
+          "preview_id",
+          "kind",
+          "approval_required",
+          "no_op",
+          "operations",
+          "diagnostics",
+          "diff",
+        ].includes(key),
+    )
+  )
+    return contractError("preview fields");
   return {
-    preview_id: nonEmptyString(input.preview_id, "provider preview identity"),
+    preview_id: {
+      tag: "preview_id",
+      value: nonEmptyString(input.preview_id, "provider preview identity"),
+    },
+    kind: input.kind,
     approval_required: boolean(input.approval_required, "preview approval requirement"),
-    rendered_bytes: nullable(input.rendered_bytes, (item) =>
-      array(item, "rendered bytes", (byte) => unsignedInteger(byte, "rendered byte")),
-    ),
     no_op: boolean(input.no_op, "preview no-op state"),
-    request: decodeChangeRequest(input.request),
-    expected_target_revision: nullable(input.expected_target_revision, (item) =>
-      string(item, "target revision"),
-    ),
-    expected_input_revisions: Object.fromEntries(
-      Object.entries(object(input.expected_input_revisions, "preview input revisions")).map(
-        ([path, revision]) => [path, nullable(revision, (item) => string(item, "input revision"))],
-      ),
-    ),
+    operations: array(input.operations, "preview operations", decodePreviewOperation),
     diagnostics: decodeDiagnostics(input.diagnostics),
     diff: string(input.diff, "preview diff"),
   };

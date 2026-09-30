@@ -99,4 +99,10 @@ export const apply = (
   capability: string,
   signal: AbortSignal,
 ): Promise<ApiResult<ApplyResponse>> =>
-  post("/api/apply", value, signal, capability, decodeApplyResponse);
+  post(
+    "/api/apply",
+    { preview_id: value.preview_id.value },
+    signal,
+    capability,
+    decodeApplyResponse,
+  );

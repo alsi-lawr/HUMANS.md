@@ -52,17 +52,16 @@ pub use presentation::{
 };
 pub use progress::{ProgressApplyResult, ProgressChangeRequest, ProgressPreview};
 pub use provider::{
-    CacheState, DefaultBoardApplyResult, DefaultBoardPreview, InvestigationScope,
-    InvestigationScopedIdentity, NoCache, PROVIDER_PROTOCOL_VERSION, ProgressOperation, Provider,
-    ProviderApplyOutcome, ProviderApprovalPolicy, ProviderBatchPreview, ProviderCache,
-    ProviderCapabilities, ProviderCatalogue, ProviderDiagnosticCount, ProviderDiagnosticCoverage,
-    ProviderError, ProviderIndexDiagnosticCoverage, ProviderIndexDiagnosticCoverageKind,
-    ProviderInvestigation, ProviderMutationState, ProviderOperation, ProviderPreview,
-    ProviderProgressPreview, ProviderProject, ProviderQuery, ProviderQueryResult,
-    ProviderRecordApplyResult, ProviderRecordBatchApplyResult, ProviderRecordDetail,
-    ProviderRecordDiagnosticCoverage, ProviderRecordIndexEntry, ProviderRecordProgressSummary,
-    ProviderSnapshot, ProviderStrategyTransitionPreview, ProviderWriterBindingPreview,
-    StrategyTransitionProjection,
+    CacheState, DefaultBoardApplyResult, InvestigationScope, InvestigationScopedIdentity, NoCache,
+    PROVIDER_PROTOCOL_VERSION, ProgressOperation, Provider, ProviderApplyOutcome,
+    ProviderApprovalPolicy, ProviderCache, ProviderCapabilities, ProviderCatalogue,
+    ProviderDiagnosticCount, ProviderDiagnosticCoverage, ProviderError,
+    ProviderIndexDiagnosticCoverage, ProviderIndexDiagnosticCoverageKind, ProviderInvestigation,
+    ProviderMutationState, ProviderOperation, ProviderPreview, ProviderPreviewKind,
+    ProviderProject, ProviderQuery, ProviderQueryResult, ProviderRecordApplyResult,
+    ProviderRecordBatchApplyResult, ProviderRecordDetail, ProviderRecordDiagnosticCoverage,
+    ProviderRecordIndexEntry, ProviderRecordProgressSummary, ProviderReviewOperation,
+    ProviderReviewOperationKind, ProviderSnapshot, StrategyTransitionProjection,
 };
 pub use read_context::{
     AttachmentState, CatalogueToken, CheckFreshness, ReadDependency, ScopeReadTarget,

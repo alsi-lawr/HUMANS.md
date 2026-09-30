@@ -78,10 +78,10 @@ impl Workbench {
 
     pub(crate) fn apply(
         &self,
-        preview: ProviderPreview,
+        preview_id: &str,
     ) -> Result<ProviderApplyOutcome<ProviderRecordApplyResult>, casefile_store::ProviderError>
     {
-        self.provider.apply_record(preview)
+        self.provider.apply_record(preview_id)
     }
 
     fn refresh(&self) -> Result<Revision> {
