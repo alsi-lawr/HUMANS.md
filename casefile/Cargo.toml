@@ -9,6 +9,7 @@ license = "MIT"
 [workspace.dependencies]
 anyhow = "1.0.98"
 clap = { version = "4.5.40", features = ["derive"] }
+criterion = "0.8.2"
 crossterm = "=0.29.0"
 getrandom = "0.4.3"
 notify = "=9.0.0-rc.4"

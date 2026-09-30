@@ -390,7 +390,7 @@ impl App {
         }
     }
 
-    fn handle(&mut self, key: KeyCode) {
+    pub(crate) fn handle(&mut self, key: KeyCode) {
         if self.show_help {
             match key {
                 KeyCode::Char('q') => self.interaction = Some(Interaction::Quit),

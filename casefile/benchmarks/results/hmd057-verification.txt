@@ -1,0 +1,94 @@
+HMD-057 focused verification (2026-09-30)
+Source branch: casefile-speedup-cleanup-20260930
+Baseline source: 3b173d93195bffc722565fb8c5f13488f8585aaa
+All commands use repository nix develop shell and absolute writer/target CARGO_TARGET_DIR.
+
+cargo fmt --all --check: passed
+cargo clippy -p casefile-store-sqlite --bench baselines --bench priority -p casefile-server --bench http -p casefile-tui --bench interactions -- -D warnings: passed
+cargo bench -p casefile-server --bench http -p casefile-store-sqlite --bench baselines --bench priority -p casefile-tui --bench interactions --no-run: passed
+
+Benchmark discovery:
+http_loopback_records/unchanged/250: benchmark
+http_loopback_records/search_hit/250: benchmark
+http_loopback_records/search_miss/250: benchmark
+http_loopback_records/unchanged/1000: benchmark
+http_loopback_records/search_hit/1000: benchmark
+http_loopback_records/search_miss/1000: benchmark
+inventory/metadata_summary/2000: benchmark
+inventory/scoped_check/2000: benchmark
+inventory/full_scan/2000: benchmark
+inventory/metadata_summary/8000: benchmark
+inventory/scoped_check/8000: benchmark
+inventory/full_scan/8000: benchmark
+activation_roots/scoped_check/1: benchmark
+activation_roots/scoped_check/100: benchmark
+records/scoped_check/250: benchmark
+records/full_derived/250: benchmark
+records/record_index/250: benchmark
+records/boards/250: benchmark
+records/scoped_check/1000: benchmark
+records/full_derived/1000: benchmark
+records/record_index/1000: benchmark
+records/boards/1000: benchmark
+supersession/independent/250: benchmark
+supersession/chain/250: benchmark
+supersession/independent/500: benchmark
+supersession/chain/500: benchmark
+progress/accepted_target/250: benchmark
+progress/missing_targets/250: benchmark
+progress/accepted_target/500: benchmark
+progress/missing_targets/500: benchmark
+scoped_progress_250_records/record_index/0: benchmark
+scoped_progress_250_records/disposition_boards/0: benchmark
+scoped_progress_250_records/missing_detail/0: benchmark
+scoped_progress_250_records/record_index/500: benchmark
+scoped_progress_250_records/disposition_boards/500: benchmark
+scoped_progress_250_records/missing_detail/500: benchmark
+core_parsing/ticket_parse: benchmark
+core_parsing/ticket_render_roundtrip: benchmark
+core_parsing/progress_parse_500_notes: benchmark
+presentation_250_records/cold_session: benchmark
+presentation_250_records/unchanged_refresh: benchmark
+mutation_preview_250_records/replace_batch/1: benchmark
+mutation_preview_250_records/replace_batch/10: benchmark
+sqlite_500_records/prepare_replacement: benchmark
+sqlite_500_records/records_all: benchmark
+sqlite_500_records/records_search_miss: benchmark
+sqlite_500_records/relationships_miss: benchmark
+sqlite_500_records/boards: benchmark
+priority_scope_500_notes/existing_detail/250: benchmark
+priority_scope_500_notes/missing_detail/250: benchmark
+priority_scope_500_notes/selected_record_index/250: benchmark
+priority_scope_500_notes/existing_detail/1000: benchmark
+priority_scope_500_notes/missing_detail/1000: benchmark
+priority_scope_500_notes/selected_record_index/1000: benchmark
+priority_single_record_250_records_500_notes/preview: benchmark
+priority_single_record_250_records_500_notes/apply: benchmark
+tui_250_records_500_notes/selected_scope_navigation: benchmark
+tui_250_records_500_notes/list_scroll_20_frames: benchmark
+tui_250_records_500_notes/detail_scroll_20_frames: benchmark
+
+cargo bench <same four targets> -- --test: 59 Success results
+
+cargo test -p casefile-tui --lib:
+test result: ok. 60 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.21s
+cargo build -p casefile-tui --lib: passed
+
+Original source/table preservation:
+ff1b320625f483e239acaccc5baadd98eedb2f4a90aca7a4efefb7eaefb75d68  casefile/benchmarks/BASELINE.md
+364657f44bf4e1c453300105f889b24acb9309c338c168cb288633db18e350fc  casefile/casefile-store-sqlite/benches/baselines.rs
+
+Final run environment:
+Wed Sep 30 12:10:00 UTC 2026
+rustc 1.95.0 (59807616e 2026-04-14) (built from a source tarball)
+binary: rustc
+commit-hash: 59807616e1fa2540724bfbac14d7976d7e4a3860
+commit-date: 2026-04-14
+host: x86_64-unknown-linux-gnu
+release: 1.95.0
+LLVM version: 21.1.8
+Linux nixos 6.18.53 #1-NixOS SMP PREEMPT_DYNAMIC Mon Sep 21 13:06:06 UTC 2026 x86_64 GNU/Linux
+Wed Sep 30 12:14:08 UTC 2026
+
+Exploratory compilation-contended run is excluded. Automatic Criterion change notices in final stdout are not speedup claims.
+Root retains the native named baseline hmd057-before and owns final pipeline scratch cleanup.

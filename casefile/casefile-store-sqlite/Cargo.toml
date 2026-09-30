@@ -11,3 +11,14 @@ rusqlite.workspace = true
 serde_json.workspace = true
 tempfile.workspace = true
 thiserror.workspace = true
+
+[dev-dependencies]
+criterion.workspace = true
+
+[[bench]]
+name = "baselines"
+harness = false
+
+[[bench]]
+name = "priority"
+harness = false
