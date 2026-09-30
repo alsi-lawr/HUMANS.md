@@ -1,6 +1,6 @@
 use casefile_core::{BoardStatusSource, Classification, Kind};
 use casefile_store::{DerivedBoard, DerivedIndex, Indexed, RecordScope, ScopedIdentity, Store};
-use casefile_store_sqlite::SqliteIndex;
+use casefile_store_sqlite::{SqliteIndex, SqliteIndexError};
 use std::{fs, path::Path};
 use tempfile::TempDir;
 
@@ -358,4 +358,337 @@ fn compact_cache_round_trip_preserves_source_search_and_requested_rendering() {
         panic!("searched records")
     };
     assert!(value.is_empty());
+}
+
+#[test]
+fn pushed_scope_and_search_match_rust_unicode_substrings_in_path_order() {
+    let root = fixture();
+    fs::write(
+        root.path().join("unscoped.md"),
+        "İSTANBUL ΟΣ Σ Straße café cafe\u{301} 100% foo_bar left\0right",
+    )
+    .unwrap();
+    fs::create_dir_all(root.path().join("projects/demo/decision-log")).unwrap();
+    fs::write(root.path().join("projects/demo/decision-log/HMD-D-700-project.md"),
+        "# HMD-D-700 - Project Unicode\n\n## Status\n\naccepted\n\n## Decision\n\nİSTANBUL Straße project-only.\n").unwrap();
+    fs::write(
+        root.path()
+            .join("projects/demo/investigations/sample/Unicode.md"),
+        "İSTANBUL ΟΣ investigation-only 100% foo_bar left\0right",
+    )
+    .unwrap();
+    let store = Store::open(root.path()).unwrap();
+    let external = TempDir::new().unwrap();
+    let index = SqliteIndex::open(external.path().join("index.sqlite"), root.path()).unwrap();
+    let mut snapshot = store.derived_snapshot().unwrap();
+    snapshot.records.reverse();
+    assert!(matches!(
+        index
+            .publish(index.prepare(&snapshot).unwrap(), &store)
+            .unwrap(),
+        Indexed::Current { .. }
+    ));
+    let scopes = [
+        None,
+        Some(RecordScope {
+            project: "demo".into(),
+            investigation: None,
+        }),
+        Some(RecordScope {
+            project: "demo".into(),
+            investigation: Some("sample".into()),
+        }),
+        Some(RecordScope {
+            project: "other".into(),
+            investigation: Some("sample".into()),
+        }),
+    ];
+    for scope in &scopes {
+        for needle in [
+            None,
+            Some(""),
+            Some("İ"),
+            Some("i\u{307}"),
+            Some("ΟΣ"),
+            Some("οσ"),
+            Some("Σ"),
+            Some("straße"),
+            Some("STRASSE"),
+            Some("café"),
+            Some("cafe\u{301}"),
+            Some("%"),
+            Some("_"),
+            Some("left\0right"),
+            Some("missing"),
+        ] {
+            let mut expected = snapshot
+                .records
+                .iter()
+                .filter(|record| {
+                    scope
+                        .as_ref()
+                        .is_none_or(|scope| record.scope.as_ref() == Some(scope))
+                        && needle.is_none_or(|needle| {
+                            record
+                                .search_text()
+                                .to_lowercase()
+                                .contains(&needle.to_lowercase())
+                        })
+                })
+                .cloned()
+                .collect::<Vec<_>>();
+            expected.sort_by(|a, b| a.path.cmp(&b.path));
+            let Indexed::Current { value, .. } = index
+                .records(&snapshot.source_revision, scope.as_ref(), needle)
+                .unwrap()
+            else {
+                panic!("current search");
+            };
+            assert_eq!(value, expected, "scope {scope:?}, needle {needle:?}");
+        }
+    }
+    let null_scope = RecordScope {
+        project: "demo".into(),
+        investigation: None,
+    };
+    let Indexed::Current { value, .. } = index
+        .records(
+            &snapshot.source_revision,
+            Some(&null_scope),
+            Some("project-only"),
+        )
+        .unwrap()
+    else {
+        panic!("project records");
+    };
+    assert_eq!(value.len(), 1);
+    assert!(value[0].path.ends_with("HMD-D-700-project.md"));
+    let Indexed::Current {
+        value: Some(project_decision),
+        ..
+    } = index
+        .record(
+            &snapshot.source_revision,
+            value[0].identity.as_ref().unwrap(),
+        )
+        .unwrap()
+    else {
+        panic!("project identity");
+    };
+    assert_eq!(project_decision, value[0]);
+}
+
+#[test]
+fn exact_duplicate_identity_is_ambiguous_in_canonical_and_indexed_reads() {
+    use casefile_store::{
+        InvestigationScope, InvestigationScopedIdentity, Provider, ProviderError, ProviderQuery,
+    };
+    let root = fixture();
+    let original = "projects/demo/investigations/sample/tickets/accepted/HMD-011.md";
+    let duplicate = "projects/demo/investigations/sample/tickets/provisional/HMD-011.md";
+    fs::create_dir_all(
+        root.path()
+            .join("projects/demo/investigations/sample/tickets/provisional"),
+    )
+    .unwrap();
+    fs::write(
+        root.path().join(duplicate),
+        fs::read_to_string(root.path().join(original))
+            .unwrap()
+            .replace("status: accepted", "status: provisional"),
+    )
+    .unwrap();
+    let store = Store::open(root.path()).unwrap();
+    let provider = Provider::without_cache(store.clone());
+    assert!(
+        matches!(provider.query(ProviderQuery::RecordDetail { identity: InvestigationScopedIdentity {
+        scope: InvestigationScope { project: "demo".into(), investigation: "sample".into() }, identity: "HMD-011".into()
+    } }), Err(ProviderError::AmbiguousRecordIdentity { paths }) if paths == [original, duplicate])
+    );
+    let external = TempDir::new().unwrap();
+    let index = SqliteIndex::open(external.path().join("index.sqlite"), root.path()).unwrap();
+    let snapshot = current(&index, &store);
+    let identity = ScopedIdentity {
+        scope: RecordScope {
+            project: "demo".into(),
+            investigation: Some("sample".into()),
+        },
+        identity: "HMD-011".into(),
+    };
+    assert!(
+        matches!(index.record(&snapshot.source_revision, &identity), Err(SqliteIndexError::AmbiguousRecordIdentity { paths }) if paths == [original, duplicate])
+    );
+    let other_scope = ScopedIdentity {
+        scope: RecordScope {
+            project: "demo".into(),
+            investigation: None,
+        },
+        identity: "HMD-011".into(),
+    };
+    assert!(matches!(
+        index
+            .record(&snapshot.source_revision, &other_scope)
+            .unwrap(),
+        Indexed::Current { value: None, .. }
+    ));
+}
+
+#[test]
+fn relationship_endpoints_and_board_scopes_preserve_nullable_identity_and_order() {
+    let root = fixture();
+    fs::create_dir_all(root.path().join("projects/demo/decision-log")).unwrap();
+    fs::write(
+        root.path()
+            .join("projects/demo/decision-log/HMD-D-700-project.md"),
+        "# HMD-D-700 - Project\n\n## Status\n\naccepted\n\n## Decision\n\nProject.\n",
+    )
+    .unwrap();
+    let path = root
+        .path()
+        .join("projects/demo/investigations/sample/tickets/accepted/HMD-011.md");
+    fs::write(
+        &path,
+        fs::read_to_string(&path)
+            .unwrap()
+            .replace("HMD-D-001", "HMD-D-700"),
+    )
+    .unwrap();
+    let boards = root
+        .path()
+        .join("projects/demo/investigations/sample/boards");
+    let board = fs::read_to_string(boards.join("main.toml")).unwrap();
+    fs::write(boards.join("a.toml"), board.replace("HMD-board", "HMD-z")).unwrap();
+    fs::write(boards.join("z.toml"), board.replace("HMD-board", "HMD-a")).unwrap();
+    let store = Store::open(root.path()).unwrap();
+    let external = TempDir::new().unwrap();
+    let index = SqliteIndex::open(external.path().join("index.sqlite"), root.path()).unwrap();
+    let snapshot = current(&index, &store);
+    let project_decision = ScopedIdentity {
+        scope: RecordScope {
+            project: "demo".into(),
+            investigation: None,
+        },
+        identity: "HMD-D-700".into(),
+    };
+    let ticket = ScopedIdentity {
+        scope: RecordScope {
+            project: "demo".into(),
+            investigation: Some("sample".into()),
+        },
+        identity: "HMD-011".into(),
+    };
+    for identity in [&project_decision, &ticket] {
+        let mut expected = snapshot
+            .relationships
+            .iter()
+            .filter(|r| &r.source == identity || &r.target == identity)
+            .cloned()
+            .collect::<Vec<_>>();
+        expected.sort_by_key(|r| {
+            (
+                format!("{:?}", r.kind),
+                r.source.identity.clone(),
+                r.target.identity.clone(),
+            )
+        });
+        let Indexed::Current { value, .. } = index
+            .relationships(&snapshot.source_revision, identity)
+            .unwrap()
+        else {
+            panic!("relationships");
+        };
+        assert_eq!(value, expected);
+        assert!(
+            value
+                .iter()
+                .any(|r| r.source == ticket && r.target == project_decision)
+        );
+    }
+    let Indexed::Current { value, .. } = index
+        .relationships(
+            &snapshot.source_revision,
+            &ScopedIdentity {
+                scope: ticket.scope.clone(),
+                identity: project_decision.identity.clone(),
+            },
+        )
+        .unwrap()
+    else {
+        panic!("nullable miss");
+    };
+    assert!(value.is_empty());
+    for scope in [&ticket.scope, &project_decision.scope] {
+        let mut expected = snapshot
+            .boards
+            .iter()
+            .filter(|b| &b.identity.scope == scope)
+            .cloned()
+            .collect::<Vec<_>>();
+        expected.sort_by(|a, b| a.identity.identity.cmp(&b.identity.identity));
+        let Indexed::Current { value, .. } =
+            index.boards(&snapshot.source_revision, scope).unwrap()
+        else {
+            panic!("boards");
+        };
+        assert_eq!(value, expected);
+    }
+}
+
+#[test]
+fn failed_replacement_keeps_published_index_and_prior_schema_rebuilds_as_missing() {
+    let root = fixture();
+    let store = Store::open(root.path()).unwrap();
+    let external = TempDir::new().unwrap();
+    let path = external.path().join("index.sqlite");
+    let index = SqliteIndex::open(&path, root.path()).unwrap();
+    let snapshot = current(&index, &store);
+    let original = fs::read(&path).unwrap();
+    let mut duplicate_path = snapshot.clone();
+    duplicate_path
+        .records
+        .push(duplicate_path.records[0].clone());
+    assert!(matches!(
+        index.prepare(&duplicate_path),
+        Err(SqliteIndexError::Sql(_))
+    ));
+    assert_eq!(fs::read(&path).unwrap(), original);
+    assert!(
+        matches!(index.records(&snapshot.source_revision, None, None).unwrap(), Indexed::Current { value, .. } if value == snapshot.records)
+    );
+
+    let old_path = external.path().join("old.sqlite");
+    let old = rusqlite::Connection::open(&old_path).unwrap();
+    old.execute_batch("CREATE TABLE metadata (source_revision TEXT NOT NULL); CREATE TABLE records (path TEXT PRIMARY KEY, project TEXT, investigation TEXT, identity TEXT, classification TEXT NOT NULL, kind TEXT, title TEXT NOT NULL, document TEXT NOT NULL);").unwrap();
+    old.execute(
+        "INSERT INTO metadata VALUES (?)",
+        [&snapshot.source_revision.0],
+    )
+    .unwrap();
+    drop(old);
+    let bytes_before = fs::read(&old_path).unwrap();
+    let old_index = SqliteIndex::open(&old_path, root.path()).unwrap();
+    assert!(matches!(
+        old_index.state(&snapshot.source_revision).unwrap(),
+        Indexed::Missing
+    ));
+    assert!(matches!(
+        old_index
+            .records(&snapshot.source_revision, None, Some("minimum"))
+            .unwrap(),
+        Indexed::Missing
+    ));
+    assert_eq!(fs::read(&old_path).unwrap(), bytes_before);
+    let provider = casefile_store::Provider::new(store, old_index);
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    loop {
+        if matches!(
+            provider.refresh_full_cache().unwrap(),
+            casefile_store::CacheState::Current { .. }
+        ) {
+            break;
+        }
+        assert!(std::time::Instant::now() < deadline);
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    assert_ne!(fs::read(&old_path).unwrap(), bytes_before);
 }

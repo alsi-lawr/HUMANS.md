@@ -1,0 +1,89 @@
+HMD-064 final focused verification
+Parent9cde6d83915ae08c246a03622d08a6b57d6d74e0
+Absolute CARGO_TARGET_DIR=/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target
+
+Final sequential commands ran under sh -ec/set -e, actual exit0 (commands printed below).13 tests PASS: SQLite8+Server2+native CLI HTTP3. Relevant all-target Clippy -D warnings, workspace fmt and release baseline compile PASS AFTER combined observation correction. Native query proof rerun AFTER final source: actual rebuilt target/debug/casefile server and disposable minimum Store, Python HTTP client, then Python SQLite3.53.3 EXPLAIN diagnostics against its real produced DB. No brittle planner assertions or live Store/config.
+python3 .agent-workspace/20260930-speedup-implementation/writer/hmd064/query-probe.py
+Exact executed proof source retained in hmd064-query-probe.py; replay by copying to original scratch basename/path (writes diagnostic JSON there).
+
+=== final-checks1.log: final actual exit0 ===
+warning: Git tree '/home/alex/dev/HUMANS.md' is dirty
+humans-md development shell
+  Setup:  (cd casefile/web && bun install)
+  Format: scripts/format-source.sh --check|--write
+  Web:    cd casefile/web; bun install; bun run typecheck; bun run test; bun run build
+  Rust:   cd casefile; cargo fmt --check; cargo clippy --workspace --all-targets -- -D warnings; cargo test --workspace
+  CI:     act pull_request -j validate --pull=false -P ubuntu-latest=catthehacker/ubuntu:act-latest
++ cargo test --manifest-path casefile/Cargo.toml -p casefile-store-sqlite -p casefile-server --lib --test integration
+   Compiling casefile-store-sqlite v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store-sqlite)
+   Compiling casefile-server v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-server)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.06s
+     Running unittests src/lib.rs (.agent-workspace/20260930-speedup-implementation/writer/target/debug/deps/casefile_server-06dd12b7df655a71)
+
+running 2 tests
+test api::tests::rollback_error_crosses_the_http_failure_channel_as_409_without_private_source_contents ... ok
+test api::tests::records_query_preserves_full_editable_draft_rendered_html_and_body_search ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s
+
+     Running unittests src/lib.rs (.agent-workspace/20260930-speedup-implementation/writer/target/debug/deps/casefile_store_sqlite-973a156cc87c6f0a)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/integration.rs (.agent-workspace/20260930-speedup-implementation/writer/target/debug/deps/integration-67d27f3fb965b830)
+
+running 8 tests
+test old_derived_board_json_defaults_to_disposition ... ok
+test compact_cache_round_trip_preserves_source_search_and_requested_rendering ... ok
+test relationship_endpoints_and_board_scopes_preserve_nullable_identity_and_order ... ok
+test strategy_binding_projection_survives_json_index_round_trip ... ok
+test exact_duplicate_identity_is_ambiguous_in_canonical_and_indexed_reads ... ok
+test pushed_scope_and_search_match_rust_unicode_substrings_in_path_order ... ok
+test failed_replacement_keeps_published_index_and_prior_schema_rebuilds_as_missing ... ok
+test replacement_index_is_revision_bound_repairable_and_queryable ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.46s
+
++ cargo test --manifest-path casefile/Cargo.toml -p casefile-cli --test serve
+   Compiling casefile-store-sqlite v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store-sqlite)
+   Compiling casefile-server v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-server)
+   Compiling casefile-cli v0.8.0 (/home/alex/dev/HUMANS.md/casefile/casefile-cli)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 5.05s
+     Running tests/serve.rs (.agent-workspace/20260930-speedup-implementation/writer/target/debug/deps/serve-e5812c367c3d99b8)
+
+running 3 tests
+test serve_transports_derived_ticket_progress ... ok
+test serve_exposes_only_the_fixed_read_contract ... ok
+test serve_preserves_preview_and_gates_apply_with_capability ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.19s
+
++ cargo clippy --manifest-path casefile/Cargo.toml -p casefile-store-sqlite -p casefile-server -p casefile-cli --all-targets -- -D warnings
+    Checking casefile-store-sqlite v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store-sqlite)
+    Checking casefile-server v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-server)
+    Checking casefile-cli v0.8.0 (/home/alex/dev/HUMANS.md/casefile/casefile-cli)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.06s
++ cargo fmt --manifest-path casefile/Cargo.toml --all --check
++ cargo bench --manifest-path casefile/Cargo.toml -p casefile-store-sqlite --bench baselines --no-run
+   Compiling casefile-store-sqlite v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store-sqlite)
+    Finished `bench` profile [optimized] target(s) in 6.64s
+  Executable benches/baselines.rs (.agent-workspace/20260930-speedup-implementation/writer/target/release/deps/baselines-a1b7be9b5e9f5b39)
+
+=== bench-discovery.log: final actual exit0 ===
+Gnuplot not found, using plotters backend
+sqlite_500_records/prepare_replacement: benchmark
+sqlite_500_records/records_all: benchmark
+sqlite_500_records/records_search_miss: benchmark
+sqlite_500_records/relationships_miss: benchmark
+sqlite_500_records/boards: benchmark
+
+
+=== native-query.log: final actual exit0 ===
+Actual native SQLite-backed HTTP Unicode/NUL/scope/full-display proof PASS; EXPLAIN captured diagnostically only
+
+=== Superseded success / exploratory attempts ===
+Initial SQLite-only8-test run PASS before adding multiple-board identity-vs-path ordering. Initial pre-combined13 checks and five measurements also PASS, but superseded by one necessary combined schema/revision SELECT source correction. Prior source reconstructed via hmd064-combined-query.diff and SHA verified against pre-combined artifact. Final13 checks/five measurements rerun on exact final source. One approved unchanged prepare-only diagnostic after extremely high final prepare variance, all three distributions retained. No further repeats/variants, no failed compiler/test/clippy/performance invocation. First installed read-only casefile_query call nested query rather than flat tag, returned argument decode error; corrected hierarchy reads succeeded, no mutation. A read-only cat tried nonexistent tests/index.rs; actual existing integration.rs read/used.
+
+Final provenance:71 source hashes and release executable match final candidate AND unchanged diagnostic. All236 saved native hmd057-before JSON and4 original table/results/log/baselines.rs hashes match retained manifests. Original benchmark sources/helpers and prior durable artifacts unchanged. Live Criterion new/prepare now contains approved diagnostic; immutable hmd064-after.json retains the full final-five distribution.

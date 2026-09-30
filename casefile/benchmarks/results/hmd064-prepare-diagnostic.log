@@ -1,0 +1,11 @@
+Gnuplot not found, using plotters backend
+Benchmarking sqlite_500_records/prepare_replacement
+Benchmarking sqlite_500_records/prepare_replacement: Warming up for 1.0000 s
+
+Warning: Unable to complete 10 samples in 2.0s. You may wish to increase target time to 3.7s or enable flat sampling.
+Benchmarking sqlite_500_records/prepare_replacement: Collecting 10 samples in estimated 3.6618 s (55 iterations)
+Benchmarking sqlite_500_records/prepare_replacement: Analyzing
+sqlite_500_records/prepare_replacement
+                        time:   [66.600 ms 67.316 ms 67.836 ms]
+                        change: [−1.1780% +0.8668% +2.7066%] (p = 0.43 > 0.05)
+                        No change in performance detected.

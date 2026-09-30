@@ -3,13 +3,15 @@ use casefile_store::{
     DerivedBoard, DerivedIndex, DerivedRecord, DerivedRelationship, DerivedSnapshot, Indexed,
     RecordScope, RevisionSource, ScopedIdentity, StoreError,
 };
-use rusqlite::{Connection, params};
+use rusqlite::{Connection, ToSql, params, params_from_iter};
 use std::{
     fs,
     path::{Path, PathBuf},
 };
 use tempfile::NamedTempFile;
 use thiserror::Error;
+
+const SCHEMA_VERSION: i64 = 1;
 
 #[derive(Debug, Error)]
 pub enum SqliteIndexError {
@@ -23,6 +25,8 @@ pub enum SqliteIndexError {
     InsidePlanningRoot,
     #[error("canonical revision check failed: {0}")]
     Revision(#[from] StoreError),
+    #[error("record identity is ambiguous across paths (first two): {paths:?}")]
+    AmbiguousRecordIdentity { paths: [String; 2] },
 }
 
 pub struct SqliteIndex {
@@ -53,11 +57,19 @@ impl SqliteIndex {
             return Ok(Indexed::Missing);
         }
         let connection = Connection::open(&self.path)?;
-        let indexed = Revision(connection.query_row(
-            "SELECT source_revision FROM metadata LIMIT 1",
+        let indexed = connection.query_row(
+            "SELECT source_revision, user_version FROM metadata CROSS JOIN pragma_user_version LIMIT 1",
             [],
-            |row| row.get(0),
-        )?);
+            |row| {
+                if row.get::<_, i64>(1)? != SCHEMA_VERSION {
+                    return Ok(None);
+                }
+                Ok(Some(Revision(row.get(0)?)))
+            },
+        )?;
+        let Some(indexed) = indexed else {
+            return Ok(Indexed::Missing);
+        };
         if indexed != *current {
             return Ok(Indexed::Stale {
                 indexed_revision: indexed,
@@ -82,9 +94,10 @@ impl DerivedIndex for SqliteIndex {
             .ok_or(SqliteIndexError::InsidePlanningRoot)?;
         let file = NamedTempFile::new_in(parent)?;
         let mut connection = Connection::open(file.path())?;
+        connection.pragma_update(None, "user_version", SCHEMA_VERSION)?;
         connection.execute_batch("PRAGMA journal_mode=DELETE;
             CREATE TABLE metadata (source_revision TEXT NOT NULL);
-            CREATE TABLE records (path TEXT PRIMARY KEY, project TEXT, investigation TEXT, identity TEXT, classification TEXT NOT NULL, kind TEXT, title TEXT NOT NULL, document TEXT NOT NULL);
+            CREATE TABLE records (path TEXT PRIMARY KEY, project TEXT, investigation TEXT, identity TEXT, classification TEXT NOT NULL, kind TEXT, title TEXT NOT NULL, search_text TEXT NOT NULL, document TEXT NOT NULL);
             CREATE TABLE relationships (source_project TEXT NOT NULL, source_investigation TEXT, source_identity TEXT NOT NULL, target_project TEXT NOT NULL, target_investigation TEXT, target_identity TEXT NOT NULL, kind TEXT NOT NULL, document TEXT NOT NULL);
             CREATE TABLE boards (project TEXT NOT NULL, investigation TEXT, identity TEXT NOT NULL, title TEXT NOT NULL, document TEXT NOT NULL);
             CREATE TABLE diagnostics (path TEXT NOT NULL, code TEXT NOT NULL, document TEXT NOT NULL);")?;
@@ -93,19 +106,20 @@ impl DerivedIndex for SqliteIndex {
             "INSERT INTO metadata VALUES (?)",
             [&snapshot.source_revision.0],
         )?;
-        for record in &snapshot.records {
-            let (project, investigation) = record
-                .scope
-                .as_ref()
-                .map(|value| (Some(value.project.as_str()), value.investigation.as_deref()))
-                .unwrap_or((None, None));
-            let identity = record
-                .identity
-                .as_ref()
-                .map(|value| value.identity.as_str());
-            transaction.execute(
-                "INSERT INTO records VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                params![
+        {
+            let mut insert =
+                transaction.prepare("INSERT INTO records VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")?;
+            for record in &snapshot.records {
+                let (project, investigation) = record
+                    .scope
+                    .as_ref()
+                    .map(|value| (Some(value.project.as_str()), value.investigation.as_deref()))
+                    .unwrap_or((None, None));
+                let identity = record
+                    .identity
+                    .as_ref()
+                    .map(|value| value.identity.as_str());
+                insert.execute(params![
                     record.path,
                     project,
                     investigation,
@@ -113,14 +127,16 @@ impl DerivedIndex for SqliteIndex {
                     format!("{:?}", record.classification),
                     record.kind.map(|value| format!("{:?}", value)),
                     record.title,
+                    record.search_text().to_lowercase(),
                     serde_json::to_string(record)?
-                ],
-            )?;
+                ])?;
+            }
         }
-        for relationship in &snapshot.relationships {
-            transaction.execute(
-                "INSERT INTO relationships VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                params![
+        {
+            let mut insert =
+                transaction.prepare("INSERT INTO relationships VALUES (?, ?, ?, ?, ?, ?, ?, ?)")?;
+            for relationship in &snapshot.relationships {
+                insert.execute(params![
                     relationship.source.scope.project,
                     relationship.source.scope.investigation,
                     relationship.source.identity,
@@ -129,31 +145,36 @@ impl DerivedIndex for SqliteIndex {
                     relationship.target.identity,
                     format!("{:?}", relationship.kind),
                     serde_json::to_string(relationship)?
-                ],
-            )?;
+                ])?;
+            }
         }
-        for board in &snapshot.boards {
-            transaction.execute(
-                "INSERT INTO boards VALUES (?, ?, ?, ?, ?)",
-                params![
+        {
+            let mut insert = transaction.prepare("INSERT INTO boards VALUES (?, ?, ?, ?, ?)")?;
+            for board in &snapshot.boards {
+                insert.execute(params![
                     board.identity.scope.project,
                     board.identity.scope.investigation,
                     board.identity.identity,
                     board.title,
                     serde_json::to_string(board)?
-                ],
-            )?;
+                ])?;
+            }
         }
-        for diagnostic in &snapshot.diagnostics {
-            transaction.execute(
-                "INSERT INTO diagnostics VALUES (?, ?, ?)",
-                params![
+        {
+            let mut insert = transaction.prepare("INSERT INTO diagnostics VALUES (?, ?, ?)")?;
+            for diagnostic in &snapshot.diagnostics {
+                insert.execute(params![
                     diagnostic.path,
                     diagnostic.code,
                     serde_json::to_string(diagnostic)?
-                ],
-            )?;
+                ])?;
+            }
         }
+        transaction.execute_batch("CREATE INDEX records_scope_path ON records (project, investigation, path);
+            CREATE INDEX records_identity ON records (project, investigation, identity, path);
+            CREATE INDEX relationships_source ON relationships (source_project, source_investigation, source_identity);
+            CREATE INDEX relationships_target ON relationships (target_project, target_investigation, target_identity);
+            CREATE INDEX boards_scope ON boards (project, investigation, identity);")?;
         transaction.commit()?;
         drop(connection);
         Ok((file, snapshot.source_revision.clone()))
@@ -191,9 +212,15 @@ impl DerivedIndex for SqliteIndex {
         identity: &ScopedIdentity,
     ) -> Result<Indexed<Option<DerivedRecord>>, SqliteIndexError> {
         self.checked(current, |connection| {
-            let mut statement = connection.prepare("SELECT document FROM records WHERE project = ? AND investigation IS ? AND identity = ?")?;
+            let mut statement = connection.prepare("SELECT path, document FROM records WHERE project = ? AND investigation IS ? AND identity = ? ORDER BY path LIMIT 2")?;
             let mut rows = statement.query(params![identity.scope.project, identity.scope.investigation, identity.identity])?;
-            rows.next()?.map(|row| serde_json::from_str(&row.get::<_, String>(0)?).map_err(Into::into)).transpose()
+            let Some(first) = rows.next()? else { return Ok(None); };
+            let path: String = first.get(0)?;
+            let document: String = first.get(1)?;
+            if let Some(second) = rows.next()? {
+                return Err(SqliteIndexError::AmbiguousRecordIdentity { paths: [path, second.get(0)?] });
+            }
+            Ok(Some(serde_json::from_str(&document)?))
         })
     }
 
@@ -204,25 +231,24 @@ impl DerivedIndex for SqliteIndex {
         search: Option<&str>,
     ) -> Result<Indexed<Vec<DerivedRecord>>, SqliteIndexError> {
         self.checked(current, |connection| {
-            let mut statement = connection.prepare("SELECT document FROM records ORDER BY path")?;
-            let rows = statement.query_map([], |row| row.get::<_, String>(0))?;
-            let mut records = rows
-                .map(|row| Ok(serde_json::from_str::<DerivedRecord>(&row?)?))
-                .collect::<Result<Vec<_>, SqliteIndexError>>()?;
-            records.retain(|record| {
-                scope.is_none_or(|scope| {
-                    record
-                        .scope
-                        .as_ref()
-                        .is_some_and(|record_scope| record_scope == scope)
-                }) && search.is_none_or(|text| {
-                    record
-                        .search_text()
-                        .to_lowercase()
-                        .contains(&text.to_lowercase())
-                })
-            });
-            Ok(records)
+            let search = search.map(str::to_lowercase);
+            let mut sql = String::from("SELECT document FROM records");
+            let mut parameters: Vec<&dyn ToSql> = Vec::new();
+            if let Some(scope) = scope {
+                sql.push_str(" WHERE project = ? AND investigation IS ?");
+                parameters.extend([&scope.project as &dyn ToSql, &scope.investigation]);
+            }
+            if let Some(search) = &search {
+                sql.push_str(if scope.is_some() { " AND" } else { " WHERE" });
+                sql.push_str(" instr(search_text, ?) > 0");
+                parameters.push(search);
+            }
+            sql.push_str(" ORDER BY path");
+            let mut statement = connection.prepare(&sql)?;
+            let rows =
+                statement.query_map(params_from_iter(parameters), |row| row.get::<_, String>(0))?;
+            rows.map(|row| Ok(serde_json::from_str::<DerivedRecord>(&row?)?))
+                .collect::<Result<Vec<_>, SqliteIndexError>>()
         })
     }
 
