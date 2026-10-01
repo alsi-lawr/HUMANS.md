@@ -141,12 +141,22 @@ fn project_investigation_ticket_drill_down_selects_a_canonical_path() {
     assert!(projects.contains("[1] PROJECTS 1"));
     assert!(projects.contains("demo"));
 
+    app.handle(KeyCode::Up);
+    app.handle(KeyCode::Down);
+    assert_eq!(app.browser.selected_project(), Some("demo"));
+
     app.handle(KeyCode::Enter);
     let investigations = test_support::render(&app, 120, 32);
     assert!(investigations.contains("[2] INVESTIGATIONS 1"));
     assert!(investigations.contains("sample"));
 
+    app.handle(KeyCode::Char('k'));
+    app.handle(KeyCode::Char('j'));
+    assert_eq!(app.browser.selected_investigation(), Some("sample"));
+
     app.handle(KeyCode::Enter);
+    app.handle(KeyCode::Up);
+    app.handle(KeyCode::Down);
     let tickets = test_support::render(&app, 120, 32);
     assert!(tickets.contains("[3] TICKETS 1"));
     assert!(tickets.contains("HMD-013"));
@@ -198,6 +208,11 @@ fn nested_investigations_with_the_same_leaf_are_selectable_independently() {
     assert!(investigations.contains("alpha/shared"));
     assert!(investigations.contains("beta/shared"));
 
+    app.handle(KeyCode::Up);
+    assert_eq!(app.browser.selected_investigation(), Some("beta/shared"));
+    app.handle(KeyCode::Char('j'));
+    assert_eq!(app.browser.selected_investigation(), Some("alpha/shared"));
+
     app.handle(KeyCode::Enter);
     let alpha = test_support::render(&app, 120, 32);
     assert!(alpha.contains("HMD-101"));
@@ -209,6 +224,14 @@ fn nested_investigations_with_the_same_leaf_are_selectable_independently() {
     let beta = test_support::render(&app, 120, 32);
     assert!(beta.contains("HMD-102"));
     assert!(!beta.contains("HMD-101"));
+
+    app.handle(KeyCode::Backspace);
+    app.handle(KeyCode::Down);
+    app.handle(KeyCode::Enter);
+    assert_eq!(
+        app.browser.selected_path(),
+        Some("projects/demo/investigations/alpha/shared/tickets/accepted/HMD-101.md")
+    );
 }
 
 #[test]
@@ -315,6 +338,8 @@ fn boards_are_read_only_unfiltered_and_open_a_canonical_ticket_detail() {
         app.handle(key);
     }
     app.handle(KeyCode::Enter);
+    app.handle(KeyCode::Up);
+    app.handle(KeyCode::Down);
     let output = test_support::render(&app, 160, 28);
     assert!(output.contains("[6] BOARDS 1"));
     assert!(output.contains("Delivery"));
@@ -406,6 +431,10 @@ fn strategies_are_scoped_by_full_nested_investigation_identity() {
 fn strategy_records_expose_typed_overview_exact_source_and_diagnostics() {
     let mut app = strategy_app();
     app.handle(KeyCode::Char('5'));
+    app.handle(KeyCode::Char('k'));
+    assert_eq!(app.browser.selected_path(), Some(INVALID_STRATEGY_PATH));
+    app.handle(KeyCode::Char('j'));
+    assert_eq!(app.browser.selected_path(), Some(BINDING_PATH));
     app.handle(KeyCode::Down);
     let strategy = test_support::render(&app, 160, 44);
     for expected in [
@@ -484,6 +513,76 @@ fn strategies_filter_remain_in_files_and_are_read_only() {
 }
 
 #[test]
+fn ticket_navigation_wraps_filtered_scope_order_and_updates_detail_without_wrapping_pages() {
+    let first = "projects/demo/investigations/sample/tickets/accepted/HMD-013.md";
+    let last = "projects/demo/investigations/sample/tickets/accepted/HMD-015.md";
+    let mut scan = test_support::scan();
+    scan.investigation_roots
+        .get_mut("demo")
+        .unwrap()
+        .push("sample/child".into());
+    let first_body = "first scoped body\n".repeat(100);
+    scan.snapshot.entries = vec![
+        ticket_entry(first, "HMD-013", "Keep first", first_body.as_bytes()),
+        ticket_entry(
+            "projects/demo/investigations/sample/tickets/accepted/HMD-014.md",
+            "HMD-014",
+            "Skip middle",
+            b"middle scoped body",
+        ),
+        ticket_entry(last, "HMD-015", "Keep last", b"last scoped body"),
+        ticket_entry(
+            "projects/demo/investigations/sample/child/tickets/accepted/HMD-888.md",
+            "HMD-888",
+            "Keep outside",
+            b"outside body",
+        ),
+    ];
+    let mut app = test_support::app(scan);
+    app.handle(KeyCode::Char('3'));
+    app.handle(KeyCode::Char('/'));
+    for character in "Keep".chars() {
+        app.handle(KeyCode::Char(character));
+    }
+    app.handle(KeyCode::Enter);
+    app.handle(KeyCode::Right);
+    app.handle(KeyCode::Right);
+    app.handle(KeyCode::PageUp);
+    assert_eq!(app.browser.selected_path(), Some(first));
+    test_support::render(&app, 120, 24);
+    app.handle(KeyCode::Tab);
+    app.handle(KeyCode::PageDown);
+    assert!(app.detail.scroll_position() > 0);
+    assert_eq!(app.browser.selected_path(), Some(first));
+    app.handle(KeyCode::Tab);
+
+    app.handle(KeyCode::Up);
+    assert_eq!(app.browser.selected_path(), Some(last));
+    assert_eq!(app.detail.scroll_position(), 0);
+    let output = test_support::render(&app, 120, 24);
+    assert!(output.contains("last scoped body"));
+    assert!(!output.contains("first scoped body"));
+    assert!(!output.contains("Keep outside"));
+    assert!(!output.contains("Skip middle"));
+
+    app.handle(KeyCode::Down);
+    assert_eq!(app.browser.selected_path(), Some(first));
+    assert!(test_support::render(&app, 120, 24).contains("first scoped body"));
+    app.handle(KeyCode::Char('k'));
+    assert_eq!(app.browser.selected_path(), Some(last));
+    app.handle(KeyCode::Char('j'));
+    assert_eq!(app.browser.selected_path(), Some(first));
+    app.handle(KeyCode::Down);
+    assert_eq!(app.browser.selected_path(), Some(last));
+    app.handle(KeyCode::PageDown);
+    assert_eq!(app.browser.selected_path(), Some(last));
+    app.handle(KeyCode::Home);
+    assert_eq!(app.browser.selected_path(), Some(first));
+    app.handle(KeyCode::End);
+    assert_eq!(app.browser.selected_path(), Some(last));
+}
+
+#[test]
 fn filtering_and_empty_hierarchy_states_remain_predictable() {
     let mut app = test_support::app(test_support::scan());
     app.handle(KeyCode::Char('3'));
@@ -492,6 +591,8 @@ fn filtering_and_empty_hierarchy_states_remain_predictable() {
         app.handle(key);
     }
     app.handle(KeyCode::Enter);
+    app.handle(KeyCode::Up);
+    app.handle(KeyCode::Char('j'));
     assert!(app.browser.selected(&app.scan).is_none());
     assert!(test_support::render(&app, 90, 28).contains("Nothing matches the active filter"));
     app.handle(KeyCode::Char('c'));
@@ -511,7 +612,10 @@ fn filtering_and_empty_hierarchy_states_remain_predictable() {
         },
         diagnostics: Vec::new(),
     };
-    let app = test_support::app(empty);
+    let mut app = test_support::app(empty);
+    app.handle(KeyCode::Up);
+    app.handle(KeyCode::Down);
+    assert!(app.browser.selected_project().is_none());
     let output = test_support::render(&app, 160, 28);
     assert!(output.contains("No projects are present"));
     assert!(output.contains("UNACTIVATED"));
@@ -526,8 +630,19 @@ fn focus_navigation_help_and_go_up_are_visible() {
     app.handle(KeyCode::Right);
     test_support::render(&app, 70, 24);
     app.handle(KeyCode::Tab);
+    app.handle(KeyCode::Up);
+    app.handle(KeyCode::Char('k'));
+    assert_eq!(app.detail.scroll_position(), 0);
     app.handle(KeyCode::PageDown);
     assert!(app.detail.scroll_position() > 0);
+    app.handle(KeyCode::End);
+    let bottom = app.detail.scroll_position();
+    app.handle(KeyCode::Down);
+    app.handle(KeyCode::Char('j'));
+    assert_eq!(app.detail.scroll_position(), bottom);
+    assert_eq!(app.browser.selected_path(), Some(TICKET_PATH));
+    app.handle(KeyCode::Home);
+    assert_eq!(app.detail.scroll_position(), 0);
     app.handle(KeyCode::Tab);
     app.handle(KeyCode::Backspace);
     assert!(test_support::render(&app, 100, 30).contains("Investigations"));
@@ -598,6 +713,9 @@ fn boards_distinguish_no_definition_invalid_and_empty() {
     let scan = test_support::scan();
     let mut no_board = App::new(scan.clone(), test_support::derived(&scan));
     no_board.handle(KeyCode::Char('6'));
+    no_board.handle(KeyCode::Up);
+    no_board.handle(KeyCode::Down);
+    assert!(no_board.browser.selected_path().is_none());
     assert!(test_support::render(&no_board, 120, 28).contains("no board definitions"));
 
     let mut invalid_scan = scan.clone();
@@ -624,6 +742,9 @@ fn boards_distinguish_no_definition_invalid_and_empty() {
     derived.boards.push(board_with_cards("Empty", Vec::new()));
     let mut empty = App::new(scan.clone(), derived);
     empty.handle(KeyCode::Char('6'));
+    empty.handle(KeyCode::Up);
+    empty.handle(KeyCode::Down);
+    assert!(empty.browser.selected_path().is_none());
     assert!(test_support::render(&empty, 120, 28).contains("No cards."));
 }
 
@@ -642,6 +763,18 @@ fn board_keyboard_selection_marks_the_card_changes_detail_and_skips_unresolved_i
                 rank: Some(4),
             }),
             b"follow-up",
+        ),
+        test_support::entry(
+            "projects/demo/investigations/sample/tickets/accepted/HMD-015.md",
+            Classification::Governed,
+            Some(Kind::Ticket),
+            Some(RecordSummary::WorkItem {
+                id: "HMD-015".into(),
+                title: "Later board".into(),
+                status: "accepted".into(),
+                rank: None,
+            }),
+            b"later-board",
         ),
         test_support::entry(
             "projects/demo/investigations/sample/tickets/accepted/HMD-099.md",
@@ -669,26 +802,42 @@ fn board_keyboard_selection_marks_the_card_changes_detail_and_skips_unresolved_i
         ),
     ]);
     let mut derived = test_support::derived(&scan);
-    derived.boards.push(board_with_cards(
+    let mut delivery = board_with_cards(
         "Delivery",
         vec![
-            board_card("HMD-013", "Navigator"),
             board_card("HMD-014", "Follow-up"),
             board_card("HMD-404", "Missing ticket"),
             board_card("HMD-099", "Ambiguous ticket"),
         ],
+    );
+    delivery.columns.push(DerivedBoardColumn {
+        name: "NEXT".into(),
+        statuses: vec!["unknown".into()],
+        cards: vec![board_card("HMD-013", "Navigator")],
+    });
+    derived.boards.push(delivery);
+    derived.boards.push(board_with_cards(
+        "Later",
+        vec![board_card("HMD-015", "Later board")],
     ));
     let mut app = App::new(scan, derived);
 
     app.handle(KeyCode::Char('6'));
     let initial = test_support::render(&app, 160, 56);
-    assert!(initial.contains("> HMD-013  unknown  Navigator"));
+    assert!(initial.contains("> HMD-014  unknown  Follow-up"));
     assert!(initial.contains("Missing ticket"));
     assert!(initial.contains("missing identity]"));
     assert!(initial.contains("Ambiguous ticket"));
     assert!(initial.contains("ambiguous identity]"));
     assert!(initial.contains("Navigator"));
 
+    app.handle(KeyCode::Up);
+    assert_eq!(
+        app.browser.selected_path(),
+        Some("projects/demo/investigations/sample/tickets/accepted/HMD-015.md")
+    );
+    let wrapped = test_support::render(&app, 120, 24);
+    assert!(wrapped.contains("> HMD-015  unknown  Later board"));
     app.handle(KeyCode::Down);
     let selected_next = test_support::render(&app, 160, 56);
     assert!(selected_next.contains("> HMD-014  unknown  Follow-up"));
@@ -699,6 +848,32 @@ fn board_keyboard_selection_marks_the_card_changes_detail_and_skips_unresolved_i
             .map(|entry| entry.path.as_str()),
         Some("projects/demo/investigations/sample/tickets/accepted/HMD-014.md"),
     );
+    app.handle(KeyCode::Down);
+    assert_eq!(app.browser.selected_path(), Some(TICKET_PATH));
+    app.handle(KeyCode::Char('j'));
+    assert_eq!(
+        app.browser.selected_path(),
+        Some("projects/demo/investigations/sample/tickets/accepted/HMD-015.md")
+    );
+    app.handle(KeyCode::PageDown);
+    assert!(app.browser.selected_path().unwrap().ends_with("HMD-015.md"));
+    app.handle(KeyCode::Char('j'));
+    assert!(app.browser.selected_path().unwrap().ends_with("HMD-014.md"));
+    app.handle(KeyCode::PageUp);
+    assert!(app.browser.selected_path().unwrap().ends_with("HMD-014.md"));
+    app.handle(KeyCode::Char('k'));
+    assert!(app.browser.selected_path().unwrap().ends_with("HMD-015.md"));
+    app.handle(KeyCode::Char('k'));
+    assert_eq!(app.browser.selected_path(), Some(TICKET_PATH));
+    app.handle(KeyCode::Home);
+    assert!(app.browser.selected_path().unwrap().ends_with("HMD-014.md"));
+    app.handle(KeyCode::End);
+    assert!(app.browser.selected_path().unwrap().ends_with("HMD-015.md"));
+    app.handle(KeyCode::Right);
+    app.handle(KeyCode::Right);
+    assert!(test_support::render(&app, 120, 24).contains("later-board"));
+    app.handle(KeyCode::Char('e'));
+    assert_eq!(app.interaction, None);
 }
 
 #[test]
@@ -1146,6 +1321,12 @@ fn project_and_investigation_deletions_use_following_then_preceding_fallback() {
     );
 
     let mut project = App::new(scan.clone(), test_support::derived(&scan));
+    project.handle(KeyCode::Up);
+    assert_eq!(project.browser.selected_project(), Some("other"));
+    assert_eq!(project.browser.selected_investigation(), Some("only"));
+    project.handle(KeyCode::Down);
+    assert_eq!(project.browser.selected_project(), Some("demo"));
+    assert_eq!(project.browser.selected_investigation(), Some("alpha"));
     project.handle(KeyCode::Down);
     assert_eq!(project.browser.selected_project(), Some("other"));
     scan.investigation_roots.remove("other");
@@ -1300,7 +1481,9 @@ fn viewport_navigation_keeps_last_group_selected_across_resize_and_filter() {
     }
     let mut app = test_support::app(scan);
     app.set_view(View::Files);
-    app.handle(KeyCode::End);
+    app.handle(KeyCode::Home);
+    let first = app.browser.selected_path().unwrap().to_owned();
+    app.handle(KeyCode::Up);
     let selected = "projects/demo/investigations/sample/z-5/row-19.txt";
     assert_eq!(app.browser.selected_path(), Some(selected));
     for (width, height) in [(120, 16), (70, 24), (140, 20)] {
@@ -1311,6 +1494,11 @@ fn viewport_navigation_keeps_last_group_selected_across_resize_and_filter() {
         );
         assert_eq!(app.browser.selected_path(), Some(selected));
     }
+    app.handle(KeyCode::Down);
+    assert_eq!(app.browser.selected_path(), Some(first.as_str()));
+    assert!(test_support::render(&app, 120, 16).contains("e-raw.txt"));
+    app.handle(KeyCode::Char('k'));
+    assert_eq!(app.browser.selected_path(), Some(selected));
     app.handle(KeyCode::Char('/'));
     for character in "z-5/row-19".chars() {
         app.handle(KeyCode::Char(character));

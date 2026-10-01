@@ -950,20 +950,12 @@ fn next_value(selected: Option<&str>, values: &[String], offset: isize) -> Optio
     if values.is_empty() {
         return None;
     }
-    let index = selected
-        .and_then(|selected| {
-            values
-                .binary_search_by(|value| value.as_str().cmp(selected))
-                .ok()
-        })
-        .unwrap_or(0);
-    let next = if offset == isize::MAX {
-        values.len() - 1
-    } else if offset == isize::MIN {
-        0
-    } else {
-        (index as isize + offset).clamp(0, values.len() as isize - 1) as usize
-    };
+    let index = selected.and_then(|selected| {
+        values
+            .binary_search_by(|value| value.as_str().cmp(selected))
+            .ok()
+    });
+    let next = navigation_index(index, values.len(), offset);
     Some(values[next].clone())
 }
 
@@ -982,19 +974,23 @@ fn select_value(selected: &mut Option<String>, values: &[String], offset: isize)
     if values.is_empty() {
         return selected.take().is_some();
     }
-    let index = selected_index(values, selected.as_deref()).unwrap_or(0);
-    let next = if offset == isize::MAX {
-        values.len() - 1
-    } else if offset == isize::MIN {
-        0
-    } else {
-        (index as isize + offset).clamp(0, values.len() as isize - 1) as usize
-    };
+    let index = selected_index(values, selected.as_deref());
+    let next = navigation_index(index, values.len(), offset);
     if selected.as_deref() == Some(values[next].as_str()) {
         false
     } else {
         *selected = Some(values[next].clone());
         true
+    }
+}
+
+fn navigation_index(index: Option<usize>, count: usize, offset: isize) -> usize {
+    match (index, offset) {
+        (_, isize::MAX) => count - 1,
+        (_, isize::MIN) => 0,
+        (Some(0), -1) => count - 1,
+        (Some(index), 1) if index == count - 1 => 0,
+        _ => (index.unwrap_or(0) as isize + offset).clamp(0, count as isize - 1) as usize,
     }
 }
 
