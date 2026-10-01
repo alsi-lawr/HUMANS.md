@@ -139,6 +139,10 @@ fn typed_scope_tokens_track_only_affecting_data_and_selected_mapping_values() {
     let store = Store::open(root.path()).unwrap();
     let provider = Provider::without_cache(store.clone());
     let before = index(&provider);
+    assert!(
+        matches!(&before, ProviderQueryResult::RecordIndex { records, .. }
+        if records.iter().any(|record| record.identity.as_deref() == Some("HMD-011")))
+    );
 
     fs::write(
         root.path().join(format!("{SCOPE}/evidence/unrelated.md")),

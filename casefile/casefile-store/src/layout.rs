@@ -92,7 +92,17 @@ pub(super) fn project_decision(path: &str, project: &str) -> bool {
 
 pub(super) fn kind_in_scope(path: &str, scope: &str) -> Option<Kind> {
     let rest = path.strip_prefix(scope)?.strip_prefix('/')?;
-    let mut components = rest.split('/');
+    kind_from_components(rest.split('/'))
+}
+
+pub(super) fn kind_in_native_relative_path(path: &str) -> Option<Kind> {
+    kind_from_components(path.split(['/', std::path::MAIN_SEPARATOR]))
+}
+
+fn kind_from_components<'a>(
+    mut components: impl DoubleEndedIterator<Item = &'a str> + Clone,
+) -> Option<Kind> {
+    let mut tail = components.clone();
     let first = components.next()?;
     let second = components.next();
     let third = components.next();
@@ -117,12 +127,7 @@ pub(super) fn kind_in_scope(path: &str, scope: &str) -> Option<Kind> {
             Some(Kind::Decision)
         }
         ("evidence", Some(name), None, _) if name.ends_with(".md") => Some(Kind::Evidence),
-        ("review", Some(_), _, _)
-            if rest
-                .rsplit('/')
-                .next()
-                .is_some_and(|name| name.ends_with(".md")) =>
-        {
+        ("review", Some(_), _, _) if tail.next_back().is_some_and(|name| name.ends_with(".md")) => {
             Some(Kind::Review)
         }
         ("tickets" | "epics", Some("provisional" | "accepted" | "rejected"), Some(name), None)
@@ -150,22 +155,37 @@ pub(super) fn scope_container(path: &str, scope: &str) -> bool {
     else {
         return false;
     };
+    scope_container_components(local.split('/'))
+}
+
+pub(super) fn scope_container_native_relative_path(path: &str) -> bool {
+    path.is_empty() || scope_container_components(path.split(['/', std::path::MAIN_SEPARATOR]))
+}
+
+fn scope_container_components<'a>(mut components: impl Iterator<Item = &'a str>) -> bool {
     matches!(
-        local,
-        "implementation-plan"
-            | "strategy"
-            | "strategy/transitions"
-            | "decision-log"
-            | "evidence"
-            | "review"
-            | "tickets"
-            | "epics"
-            | "boards"
-            | "progress"
-    ) || local.split_once('/').is_some_and(|(kind, disposition)| {
-        matches!(kind, "tickets" | "epics")
-            && matches!(disposition, "accepted" | "provisional" | "rejected")
-    })
+        (components.next(), components.next(), components.next()),
+        (
+            Some(
+                "implementation-plan"
+                    | "strategy"
+                    | "decision-log"
+                    | "evidence"
+                    | "review"
+                    | "tickets"
+                    | "epics"
+                    | "boards"
+                    | "progress"
+            ),
+            None,
+            None
+        ) | (Some("strategy"), Some("transitions"), None)
+            | (
+                Some("tickets" | "epics"),
+                Some("accepted" | "provisional" | "rejected"),
+                None
+            )
+    )
 }
 
 #[cfg(test)]

@@ -183,9 +183,9 @@ impl ScopeObservation {
                 };
                 included
                     && (is_dir
-                        || relative.to_str().is_none_or(|relative| {
-                            crate::layout::scope_container(relative, &path)
-                                || crate::layout::kind_in_scope(relative, &path).is_some()
+                        || selected.to_str().is_none_or(|local| {
+                            crate::layout::scope_container_native_relative_path(local)
+                                || crate::layout::kind_in_native_relative_path(local).is_some()
                         }))
             })?;
             require_directory_containers(&entries, &path)?;
@@ -221,10 +221,10 @@ impl ScopeObservation {
                     let included = local.components().next().is_none_or(|component| matches!(component, Component::Normal(value) if value == "tickets" || value == "epics" || value == "decision-log"));
                     included
                         && (is_dir
-                            || relative.to_str().is_none_or(|relative| {
-                                crate::layout::scope_container(relative, base)
+                            || local.to_str().is_none_or(|local| {
+                                crate::layout::scope_container_native_relative_path(local)
                                     || matches!(
-                                        crate::layout::kind_in_scope(relative, base),
+                                        crate::layout::kind_in_native_relative_path(local),
                                         Some(
                                             casefile_core::Kind::Ticket
                                                 | casefile_core::Kind::Epic
@@ -235,15 +235,19 @@ impl ScopeObservation {
                 })?;
                 require_directory_containers(&support, base)?;
             }
+            let decision_path = format!("projects/{}/decision-log", scope.project);
             collect_selected(
                 root,
-                &root.join(format!("projects/{}/decision-log", scope.project)),
+                &root.join(&decision_path),
                 &mut support,
                 |relative, is_dir| {
+                    let local = relative
+                        .strip_prefix(&decision_path)
+                        .expect("decision traversal");
                     !is_dir
-                        && relative.to_str().is_none_or(|relative| {
-                            crate::layout::project_decision(relative, &scope.project)
-                        })
+                        && local
+                            .to_str()
+                            .is_none_or(|name| name.ends_with(".md") && name.contains('-'))
                 },
             )?;
             let index = crate::activation::ScopeIndex::new(&active);
