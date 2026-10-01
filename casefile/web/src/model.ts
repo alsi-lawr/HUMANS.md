@@ -179,7 +179,88 @@ export type Preview = Readonly<{
   diagnostics: ReadonlyArray<Diagnostic>;
   diff: string;
 }>;
+const workspaceIdentifier = (value: unknown, name: string): string => {
+  if (typeof value !== "string" || value.length === 0) throw new Error(`invalid ${name}`);
+  return value;
+};
+export class WorkspaceSourceRevision {
+  private constructor(private readonly text: string) {}
+  static decode(value: unknown): WorkspaceSourceRevision {
+    return new WorkspaceSourceRevision(workspaceIdentifier(value, "workspace source revision"));
+  }
+  get value(): string {
+    return this.text;
+  }
+  toJSON(): string {
+    return this.text;
+  }
+}
+export class IndexPublicationId {
+  private constructor(private readonly text: string) {}
+  static decode(value: unknown): IndexPublicationId {
+    return new IndexPublicationId(workspaceIdentifier(value, "index publication"));
+  }
+  get value(): string {
+    return this.text;
+  }
+  toJSON(): string {
+    return this.text;
+  }
+}
+export class ProviderInstanceId {
+  private constructor(private readonly text: string) {}
+  static decode(value: unknown): ProviderInstanceId {
+    return new ProviderInstanceId(workspaceIdentifier(value, "Provider instance"));
+  }
+  get value(): string {
+    return this.text;
+  }
+  toJSON(): string {
+    return this.text;
+  }
+}
+export type WorkspaceReadToken = Readonly<{
+  token: "workspace_index";
+  source_revision: WorkspaceSourceRevision;
+  publication_id: IndexPublicationId;
+  provider_instance: ProviderInstanceId;
+}>;
+export type WorkspaceContext = Readonly<{
+  knownToken: WorkspaceReadToken | undefined;
+  search: string | undefined;
+}>;
+export type WorkspaceResponse =
+  | Readonly<{
+      state: "unchanged";
+      freshness: WorkspaceReadToken;
+      matching_paths: ReadonlyArray<string>;
+    }>
+  | Readonly<{
+      state: "updated";
+      freshness: WorkspaceReadToken;
+      records: ReadonlyArray<Record>;
+      diagnostics: ReadonlyArray<Diagnostic>;
+      matching_paths: ReadonlyArray<string>;
+    }>;
+export type WorkspaceProjection =
+  Readonly<{ tag: "available"; value: WorkspaceResponse }> | Readonly<{ tag: "unavailable" }>;
+export type RollbackRemaining =
+  | Readonly<{ state: "regular"; revision: string }>
+  | Readonly<{ state: "absent" | "symlink" | "directory" | "other" | "unknown" }>;
+export type IncompleteRollback = Readonly<{
+  code: "incomplete_rollback";
+  operation: string;
+  cause: "io" | "invalid" | "stale";
+  affected_paths: ReadonlyArray<
+    Readonly<{
+      path: string;
+      remaining: RollbackRemaining;
+      reason: "external_change" | "observation_failed" | "restore_failed";
+    }>
+  >;
+}>;
 export type ApplyResponse = Readonly<{
+  workspace: WorkspaceProjection;
   result: Readonly<{
     path: string;
     resulting_target_revision: string | null;

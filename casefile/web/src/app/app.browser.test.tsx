@@ -36,15 +36,30 @@ test("navigates and reconciles governed work against the shared host fixture", a
   const host = await startHost();
   const browserFetch = globalThis.fetch;
   const relationshipQueries: Array<unknown> = [];
+  const workspaceQueries: Array<unknown> = [];
+  let unavailableProjection = false;
   globalThis.fetch = Object.assign(
     async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
       if (typeof init?.body === "string") {
         const body: unknown = JSON.parse(init.body);
         if (isRelationshipQuery(body)) relationshipQueries.push(body);
+        if (isQuery(body, "workspace")) workspaceQueries.push(body);
       }
       const target =
         typeof input === "string" && input.startsWith("/") ? `${host.url}${input}` : input;
-      return await networkFetch(target, init);
+      const response = await networkFetch(target, init);
+      if (unavailableProjection && input === "/api/apply" && response.ok) {
+        const committed: unknown = await response.json();
+        if (typeof committed !== "object" || committed === null || Array.isArray(committed))
+          throw new Error("invalid committed apply");
+        // Simulate only the unavailable projection wire; the real host has already committed.
+        return Response.json({
+          ...committed,
+          workspace: null,
+          cache: { state: "degraded", message: "fixture projection unavailable" },
+        });
+      }
+      return response;
     },
     { preconnect: browserFetch.preconnect },
   );
@@ -219,8 +234,11 @@ test("navigates and reconciles governed work against the shared host fixture", a
     await change(labelledInput(container, "Title"), "Reconciled browser title");
     await click(container, "Resume after reconciliation");
     await click(container, "Preview changes");
+    const workspaceQueriesBeforeApply = workspaceQueries.length;
     await click(container, "Apply preview");
+    await waitFor(() => container.textContent?.includes("Applied.") === true);
     expect(await readFile(canonical, "utf8")).toContain("Reconciled browser title");
+    expect(workspaceQueries.length).toBe(workspaceQueriesBeforeApply);
 
     await click(container, "Files");
     await click(container, "main.toml");
@@ -228,6 +246,18 @@ test("navigates and reconciles governed work against the shared host fixture", a
     await click(container, "Preview changes");
     await waitFor(() => container.textContent?.includes('title = "Revised board"') === true);
     expect(container.textContent).toContain('title = "Revised board"');
+    unavailableProjection = true;
+    const beforeFallback = workspaceQueries.length;
+    await click(container, "Apply preview");
+    await waitFor(() => container.textContent?.includes("fixture projection unavailable") === true);
+    await waitFor(() => container.textContent?.includes("Revised board") === true);
+    expect(
+      await readFile(
+        join(host.root, "projects/demo/investigations/sample/boards/main.toml"),
+        "utf8",
+      ),
+    ).toContain('title = "Revised board"');
+    expect(workspaceQueries.length).toBe(beforeFallback + 1);
   } finally {
     await act(async () => root.unmount());
     container.remove();
@@ -400,6 +430,80 @@ const isRelationshipQuery = (
   if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
   return Reflect.get(value, "query") === "relationships";
 };
+
+const isQuery = (value: unknown, query: string): boolean =>
+  typeof value === "object" &&
+  value !== null &&
+  !Array.isArray(value) &&
+  Reflect.get(value, "query") === query;
+
+test("a delayed obsolete search reply cannot replace the newer guarded workspace", async () => {
+  const { createRoot } = await import("react-dom/client");
+  const host = await startHost();
+  const browserFetch = globalThis.fetch;
+  const delayed = deferred();
+  const captured = deferred();
+  const states: Array<string> = [];
+  globalThis.fetch = Object.assign(
+    async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+      const body: unknown = typeof init?.body === "string" ? JSON.parse(init.body) : undefined;
+      const target =
+        typeof input === "string" && input.startsWith("/") ? `${host.url}${input}` : input;
+      const response = await networkFetch(target, init);
+      if (isQuery(body, "workspace")) {
+        const value: unknown = await response.clone().json();
+        if (
+          typeof value === "object" &&
+          value !== null &&
+          typeof Reflect.get(value, "state") === "string"
+        )
+          states.push(Reflect.get(value, "state"));
+        if (
+          typeof body === "object" &&
+          body !== null &&
+          Reflect.get(body, "search") === "Minimum ticket"
+        ) {
+          captured.resolve();
+          await delayed.promise;
+        }
+      }
+      return response;
+    },
+    { preconnect: browserFetch.preconnect },
+  );
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  try {
+    await act(async () => root.render(<App />));
+    await waitFor(() => container.textContent?.includes("Casefile projects") === true);
+    await click(container, "demo");
+    await click(container, "sample");
+    await waitFor(() => container.textContent?.includes("Minimum ticket") === true);
+    await change(labelledInput(container, "Search records"), "Minimum ticket");
+    await captured.promise;
+    await change(labelledInput(container, "Search records"), "Minimum epic");
+    await waitFor(
+      () =>
+        container.textContent?.includes("Minimum epic") === true &&
+        container.textContent?.includes("Minimum ticket") !== true,
+    );
+    await act(async () => {
+      delayed.resolve();
+      await settle();
+    });
+    expect(container.textContent).toContain("Minimum epic");
+    expect(container.textContent).not.toContain("Minimum ticket");
+    expect(states).toContain("updated");
+    expect(states).toContain("unchanged");
+  } finally {
+    delayed.resolve();
+    await act(async () => root.unmount());
+    container.remove();
+    globalThis.fetch = browserFetch;
+    await host.stop();
+  }
+}, 120_000);
 
 type Deferred = Readonly<{ promise: Promise<void>; resolve: () => void }>;
 

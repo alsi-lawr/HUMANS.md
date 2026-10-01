@@ -39,7 +39,7 @@ pub use governance::{
     GovernedApplyResult, GovernedChange, GovernedOperationKind, StrategyTransitionPreview,
     StrategyTransitionRequest, WriterBindingPreview, WriterBindingRequest,
 };
-pub use index::{DerivedIndex, Indexed, RevisionSource};
+pub use index::{DerivedIndex, IndexPublicationId, Indexed, RevisionSource};
 pub use layout::normalize_planning_relative;
 pub use presentation::{
     FactAvailability, PRESENTATION_BATCH_LIMIT, PRESENTATION_CHANNEL_CAPACITY,
@@ -62,6 +62,7 @@ pub use provider::{
     ProviderRecordBatchApplyResult, ProviderRecordDetail, ProviderRecordDiagnosticCoverage,
     ProviderRecordIndexEntry, ProviderRecordProgressSummary, ProviderReviewOperation,
     ProviderReviewOperationKind, ProviderSnapshot, StrategyTransitionProjection,
+    WorkspaceReadToken,
 };
 pub use read_context::{
     AttachmentState, CatalogueToken, CheckFreshness, ReadDependency, ScopeReadTarget,

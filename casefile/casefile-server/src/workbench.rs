@@ -1,22 +1,50 @@
 use anyhow::{Result, bail};
-use casefile_core::{ChangeRequest, Diagnostic, Revision};
+use casefile_core::{ChangeRequest, Diagnostic};
 use casefile_store::{
     DerivedBoard, DerivedIndex, DerivedRelationship, Indexed, Provider, ProviderApplyOutcome,
     ProviderPreview, ProviderRecordApplyResult, ProviderSnapshot, RecordScope, ScopedIdentity,
 };
 use casefile_store_sqlite::SqliteIndex;
+use serde::Serialize;
 
 #[path = "workbench/display.rs"]
 mod display;
+#[path = "workbench/workspace.rs"]
+pub(crate) mod workspace;
 
 pub(crate) struct Workbench {
     provider: Provider<SqliteIndex>,
-    index: SqliteIndex,
+}
+
+#[derive(Serialize)]
+pub(crate) struct ApplyReply {
+    #[serde(flatten)]
+    outcome: ProviderApplyOutcome<ProviderRecordApplyResult>,
+    workspace: Option<workspace::WorkspaceResponse>,
+}
+
+fn current<T>(result: Indexed<T>) -> Result<T> {
+    match result {
+        Indexed::Current { value, .. } => Ok(value),
+        Indexed::Missing => bail!("current index is missing"),
+        Indexed::Stale { .. } => bail!("index changed during projection"),
+    }
 }
 
 impl Workbench {
-    pub(crate) fn new(provider: Provider<SqliteIndex>, index: SqliteIndex) -> Self {
-        Self { provider, index }
+    pub(crate) fn new(provider: Provider<SqliteIndex>) -> Self {
+        Self { provider }
+    }
+
+    fn read<T>(
+        &self,
+        project: impl FnOnce(&SqliteIndex, &casefile_store::WorkspaceReadToken) -> Result<T>,
+    ) -> Result<Indexed<T>> {
+        let (token, value) = self.provider.read_full_index(project)?;
+        Ok(Indexed::Current {
+            source_revision: token.source_revision,
+            value,
+        })
     }
 
     pub(crate) fn records(
@@ -24,26 +52,11 @@ impl Workbench {
         scope: Option<&RecordScope>,
         search: Option<&str>,
     ) -> Result<Indexed<Vec<display::DisplayRecord>>> {
-        let revision = self.refresh()?;
-        Ok(match self.index.records(&revision, scope, search)? {
-            Indexed::Current {
-                source_revision,
-                value,
-            } => Indexed::Current {
-                source_revision,
-                value: value
-                    .into_iter()
-                    .map(display::DisplayRecord::from_record)
-                    .collect::<Result<_>>()?,
-            },
-            Indexed::Missing => Indexed::Missing,
-            Indexed::Stale {
-                indexed_revision,
-                current_revision,
-            } => Indexed::Stale {
-                indexed_revision,
-                current_revision,
-            },
+        self.read(|index, token| {
+            current(index.records(&token.source_revision, scope, search)?)?
+                .into_iter()
+                .map(display::DisplayRecord::from_record)
+                .collect()
         })
     }
 
@@ -55,18 +68,25 @@ impl Workbench {
         &self,
         identity: &ScopedIdentity,
     ) -> Result<Indexed<Vec<DerivedRelationship>>> {
-        let revision = self.refresh()?;
-        Ok(self.index.relationships(&revision, identity)?)
+        self.read(|index, token| current(index.relationships(&token.source_revision, identity)?))
     }
 
     pub(crate) fn boards(&self, scope: &RecordScope) -> Result<Indexed<Vec<DerivedBoard>>> {
-        let revision = self.refresh()?;
-        Ok(self.index.boards(&revision, scope)?)
+        self.read(|index, token| current(index.boards(&token.source_revision, scope)?))
     }
 
     pub(crate) fn diagnostics(&self) -> Result<Indexed<Vec<Diagnostic>>> {
-        let revision = self.refresh()?;
-        Ok(self.index.diagnostics(&revision)?)
+        self.read(|index, token| current(index.diagnostics(&token.source_revision)?))
+    }
+
+    pub(crate) fn workspace(
+        &self,
+        context: &workspace::WorkspaceContext,
+    ) -> Result<workspace::WorkspaceResponse> {
+        let (token, value) = self
+            .provider
+            .read_full_index(|index, token| workspace::project(index, token, context))?;
+        Ok(workspace::WorkspaceResponse::from_projection(token, value))
     }
 
     pub(crate) fn preview(
@@ -79,22 +99,23 @@ impl Workbench {
     pub(crate) fn apply(
         &self,
         preview_id: &str,
-    ) -> Result<ProviderApplyOutcome<ProviderRecordApplyResult>, casefile_store::ProviderError>
-    {
-        self.provider.apply_record(preview_id)
-    }
-
-    fn refresh(&self) -> Result<Revision> {
-        let state = self.provider.refresh_full_cache()?;
-        let casefile_store::CacheState::Current {
-            source_revision: revision,
-        } = state
-        else {
-            bail!("provider cache did not publish the canonical revision")
+        context: Option<&workspace::WorkspaceContext>,
+    ) -> Result<ApplyReply, casefile_store::ProviderError> {
+        let Some(context) = context else {
+            return Ok(ApplyReply {
+                outcome: self.provider.apply_record(preview_id)?,
+                workspace: None,
+            });
         };
-        if !matches!(self.index.state(&revision)?, Indexed::Current { .. }) {
-            bail!("provider cache did not publish the canonical revision");
-        }
-        Ok(revision)
+        let (outcome, projection) = self
+            .provider
+            .apply_record_with_index(preview_id, |index, token| {
+                workspace::project(index, token, context)
+            })?;
+        Ok(ApplyReply {
+            outcome,
+            workspace: projection
+                .map(|(token, value)| workspace::WorkspaceResponse::from_projection(token, value)),
+        })
     }
 }

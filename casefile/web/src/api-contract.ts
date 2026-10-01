@@ -1,5 +1,12 @@
 import {
   type ApplyResponse,
+  type WorkspaceReadToken,
+  WorkspaceSourceRevision,
+  IndexPublicationId,
+  ProviderInstanceId,
+  type WorkspaceResponse,
+  type IncompleteRollback,
+  type RollbackRemaining,
   type Board,
   type BoardDraft,
   type BoardPayload,
@@ -26,10 +33,10 @@ import {
 type JsonObject = Readonly<{ [key: string]: unknown }>;
 export type Decoder<T> = (value: unknown) => T;
 export type Indexed<T> = Readonly<{ sourceRevision: string; value: T }>;
-export type HostFailure = Readonly<{
-  message: string;
-  code: "stale_revision" | undefined;
-}>;
+export type HostFailure =
+  | Readonly<{ message: string; code: undefined }>
+  | Readonly<{ message: string; code: "stale_revision" }>
+  | Readonly<{ message: string; code: "incomplete_rollback"; details: IncompleteRollback }>;
 
 const contractError = (label: string): never => {
   throw new Error(`The host returned an invalid ${label}.`);
@@ -451,6 +458,37 @@ export const decodePreview = (value: unknown): Preview => {
     diff: string(input.diff, "preview diff"),
   };
 };
+const decodeWorkspaceToken = (value: unknown): WorkspaceReadToken => {
+  const input = object(value, "workspace freshness");
+  if (input.token !== "workspace_index") return contractError("workspace token domain");
+  return {
+    token: "workspace_index",
+    source_revision: WorkspaceSourceRevision.decode(input.source_revision),
+    publication_id: IndexPublicationId.decode(input.publication_id),
+    provider_instance: ProviderInstanceId.decode(input.provider_instance),
+  };
+};
+export const decodeWorkspaceResponse = (value: unknown): WorkspaceResponse => {
+  const input = object(value, "workspace response");
+  const freshness = decodeWorkspaceToken(input.freshness);
+  const matching_paths = array(input.matching_paths, "matching record paths", (item) =>
+    nonEmptyString(item, "record path"),
+  );
+  switch (input.state) {
+    case "unchanged":
+      return { state: "unchanged", freshness, matching_paths };
+    case "updated":
+      return {
+        state: "updated",
+        freshness,
+        matching_paths,
+        records: decodeRecords(input.records),
+        diagnostics: decodeDiagnostics(input.diagnostics),
+      };
+    default:
+      return contractError("workspace response state");
+  }
+};
 export const decodeApplyResponse = (value: unknown): ApplyResponse => {
   const input = object(value, "apply response");
   const result = object(input.result, "apply result");
@@ -459,6 +497,10 @@ export const decodeApplyResponse = (value: unknown): ApplyResponse => {
   if (state !== "not_configured" && state !== "current" && state !== "degraded")
     return contractError("provider cache state");
   return {
+    workspace:
+      input.workspace === null
+        ? { tag: "unavailable" }
+        : { tag: "available", value: decodeWorkspaceResponse(input.workspace) },
     result: {
       path: string(result.path, "applied path"),
       resulting_target_revision: nullable(result.resulting_target_revision, (item) =>
@@ -474,11 +516,62 @@ export const decodeApplyResponse = (value: unknown): ApplyResponse => {
     },
   };
 };
+const decodeRemaining = (value: unknown): RollbackRemaining => {
+  const input = object(value, "rollback remaining state");
+  switch (input.state) {
+    case "regular":
+      return { state: "regular", revision: nonEmptyString(input.revision, "remaining revision") };
+    case "absent":
+    case "symlink":
+    case "directory":
+    case "other":
+    case "unknown":
+      return { state: input.state };
+    default:
+      return contractError("rollback remaining state");
+  }
+};
+const decodeRollback = (value: unknown): IncompleteRollback => {
+  const input = object(value, "rollback details");
+  if (
+    input.code !== "incomplete_rollback" ||
+    (input.cause !== "io" && input.cause !== "invalid" && input.cause !== "stale")
+  )
+    return contractError("rollback category");
+  return {
+    code: "incomplete_rollback",
+    operation: nonEmptyString(input.operation, "rollback operation"),
+    cause: input.cause,
+    affected_paths: array(input.affected_paths, "rollback affected paths", (item) => {
+      const path = object(item, "rollback path");
+      const reason = path.reason;
+      if (
+        reason !== "external_change" &&
+        reason !== "observation_failed" &&
+        reason !== "restore_failed"
+      )
+        return contractError("rollback reason");
+      return {
+        path: nonEmptyString(path.path, "rollback path"),
+        remaining: decodeRemaining(path.remaining),
+        reason,
+      };
+    }),
+  };
+};
 export const decodeHostFailure = (value: unknown, status: number): HostFailure => {
   if (!isObject(value) || typeof value.error !== "string")
     return { message: `The host rejected this request (${status}).`, code: undefined };
-  return {
-    message: value.error,
-    code: value.code === "stale_revision" ? "stale_revision" : undefined,
-  };
+  switch (value.code) {
+    case "stale_revision":
+      return { message: value.error, code: "stale_revision" };
+    case "incomplete_rollback":
+      return {
+        message: value.error,
+        code: "incomplete_rollback",
+        details: decodeRollback(value.details),
+      };
+    default:
+      return { message: value.error, code: undefined };
+  }
 };

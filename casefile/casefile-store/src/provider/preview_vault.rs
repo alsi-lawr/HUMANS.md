@@ -59,6 +59,10 @@ impl Default for PreviewVault {
 }
 
 impl PreviewVault {
+    pub(super) fn instance(&self) -> &str {
+        &self.prefix
+    }
+
     pub(super) fn remember(&mut self, original: StoredPreview) -> ProviderPreview {
         self.next += 1;
         let id = format!("{}-{}", self.prefix, self.next);

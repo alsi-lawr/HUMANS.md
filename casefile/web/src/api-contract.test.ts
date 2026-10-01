@@ -1,10 +1,12 @@
 import { expect, test } from "bun:test";
+import { type IncompleteRollback } from "./model";
 import {
   decodeApplyResponse,
   decodeBoards,
   decodeCurrent,
   decodeHostFailure,
   decodeRecords,
+  decodeWorkspaceResponse,
 } from "./api-contract";
 
 const projectDecision = {
@@ -257,6 +259,7 @@ test("accepts target-only mutation receipts but rejects a missing target result"
       no_op: false,
     },
     cache: { state: "not_configured" },
+    workspace: null,
   };
   expect(decodeApplyResponse(response).result.resulting_target_revision).toBe("target-revision");
   expect(
@@ -302,15 +305,99 @@ test("compact record review rejects obsolete authority fields and applies only i
           no_op: false,
         },
         cache: { state: "not_configured" },
+        workspace: null,
       });
     },
     { preconnect: originalFetch.preconnect },
   );
   try {
-    const outcome = await apply(preview, "write-capability", new AbortController().signal);
+    const outcome = await apply(preview, {
+      capability: "write-capability",
+      signal: new AbortController().signal,
+      context: { knownToken: undefined, search: undefined },
+    });
     expect(outcome.tag).toBe("success");
-    expect(sent).toEqual({ preview_id: envelope.preview_id });
+    expect(sent).toEqual({ preview_id: envelope.preview_id, context: {} });
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test("workspace publications retain full drafts once and permit paths-only search replies", () => {
+  const freshness = {
+    token: "workspace_index",
+    source_revision: "source",
+    publication_id: "native-publication",
+    provider_instance: "provider-instance",
+  };
+  const updated = decodeWorkspaceResponse({
+    state: "updated",
+    freshness,
+    records: [projectDecision],
+    diagnostics: [],
+    matching_paths: [projectDecision.path],
+  });
+  expect(updated.state).toBe("updated");
+  if (updated.state !== "updated") throw new Error("updated workspace");
+  expect(updated.records[0]?.content).toBe(projectDecision.content);
+  expect(updated.records[0]?.rendered_markdown).toBe(projectDecision.rendered_markdown);
+  const unchanged = decodeWorkspaceResponse({ state: "unchanged", freshness, matching_paths: [] });
+  expect(unchanged.state).toBe("unchanged");
+  expect(unchanged.freshness.publication_id.value).toBe(freshness.publication_id);
+  expect(JSON.parse(JSON.stringify(unchanged.freshness))).toEqual(freshness);
+  expect(() =>
+    decodeWorkspaceResponse({
+      state: "unchanged",
+      freshness: { ...freshness, publication_id: "" },
+      matching_paths: [],
+    }),
+  ).toThrow();
+  expect(() =>
+    decodeWorkspaceResponse({
+      state: "unchanged",
+      freshness: { ...freshness, token: "scope_read" },
+      matching_paths: [],
+    }),
+  ).toThrow();
+  expect(() =>
+    decodeWorkspaceResponse({ state: "updated", freshness, matching_paths: [] }),
+  ).toThrow();
+});
+
+test("incomplete rollback carries sanitized remaining-state details through the typed browser boundary", () => {
+  const details: IncompleteRollback = {
+    code: "incomplete_rollback",
+    operation: "record batch restoration",
+    cause: "io",
+    affected_paths: [
+      {
+        path: "tickets/accepted/HMD-011.md",
+        remaining: { state: "regular", revision: "external-revision" },
+        reason: "external_change",
+      },
+      {
+        path: "tickets/accepted/HMD-012.md",
+        remaining: { state: "unknown" },
+        reason: "observation_failed",
+      },
+    ],
+  };
+  const result = decodeHostFailure(
+    { error: "incomplete rollback", code: "incomplete_rollback", details },
+    409,
+  );
+  expect(result).toEqual({ message: "incomplete rollback", code: "incomplete_rollback", details });
+  expect(() =>
+    decodeHostFailure(
+      {
+        error: "incomplete rollback",
+        code: "incomplete_rollback",
+        details: {
+          ...details,
+          affected_paths: [{ ...details.affected_paths[0], remaining: { state: "regular" } }],
+        },
+      },
+      409,
+    ),
+  ).toThrow();
 });

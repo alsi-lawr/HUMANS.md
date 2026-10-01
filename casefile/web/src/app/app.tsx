@@ -107,7 +107,13 @@ export const App = (): ReactNode => {
           onCapability={changes.setCapability}
           onDraft={updateDraft}
           onPreview={() => changes.prepare(selection.record, selection.draft)}
-          onApply={() => changes.apply(workspace.refresh)}
+          onApply={() =>
+            changes.apply({
+              context: workspace.context(),
+              completed: workspace.accept,
+              refresh: workspace.refresh,
+            })
+          }
           onReconcile={changes.resolveConflict}
         />
       </div>

@@ -20,6 +20,8 @@ use thiserror::Error;
 
 pub const PROVIDER_PROTOCOL_VERSION: u32 = 5;
 
+mod indexed;
+pub use indexed::WorkspaceReadToken;
 mod preview_vault;
 mod review;
 mod watching;
@@ -374,6 +376,8 @@ pub enum ProviderError {
     ReadOnly(String),
     #[error("provider preview is unknown, expired, or belongs to another operation")]
     PreviewIntegrity,
+    #[error("provider index read failed: {0}")]
+    CacheRead(String),
     #[error("default delivery-board mapping is invalid: {0}")]
     DefaultBoardMapping(String),
     #[error("unsupported provider protocol version {requested}; supported version is {supported}")]
@@ -703,42 +707,22 @@ impl<C: ProviderCache> Provider<C> {
     }
 
     pub fn refresh_full_cache(&self) -> Result<CacheState, ProviderError> {
-        if !self.cache.configured() {
-            return Ok(CacheState::NotConfigured);
-        }
-        let mut watch = self.watch.lock().expect("cache refresh");
-        let watch = watch.as_mut().expect("configured cache watcher");
-        let observation = watch.observe();
-        let revision = self.store.current_revision()?;
-        if !observation.dirty {
-            let state = self.cache.observe(&revision);
-            if matches!(state, CacheState::Current { .. }) {
-                if self.store.current_revision()? != revision {
-                    return Ok(CacheState::Degraded {
-                        message: "canonical content changed during cache observation".into(),
-                    });
-                }
-                return Ok(match watch.reconcile(&observation) {
-                    Ok(()) => state,
-                    Err(message) => CacheState::Degraded { message },
-                });
-            }
-        }
-        let derived = self.store.derived_snapshot()?;
-        let state = self.refresh_cache(&derived);
-        if !matches!(state, CacheState::Current { .. }) {
-            return Ok(state);
-        }
-        let current_revision = self.store.current_revision()?;
-        if current_revision != derived.source_revision {
-            return Ok(CacheState::Degraded {
-                message: "canonical content changed during cache refresh".into(),
-            });
-        }
-        Ok(match watch.reconcile(&observation) {
-            Ok(()) => state,
-            Err(message) => CacheState::Degraded { message },
-        })
+        let (state, _) = self.full_cache_phase(
+            |cache, revision, published| {
+                (
+                    if published {
+                        CacheState::Current {
+                            source_revision: revision.clone(),
+                        }
+                    } else {
+                        cache.observe(revision)
+                    },
+                    Some(()),
+                )
+            },
+            |_, _, ()| Ok(()),
+        )?;
+        Ok(state)
     }
 
     pub fn preview_record(&self, request: ChangeRequest) -> Result<ProviderPreview, ProviderError> {
@@ -755,13 +739,20 @@ impl<C: ProviderCache> Provider<C> {
         &self,
         preview_id: &str,
     ) -> Result<ProviderApplyOutcome<ProviderRecordApplyResult>, ProviderError> {
+        self.outcome(self.apply_record_canonical(preview_id)?)
+    }
+
+    fn apply_record_canonical(
+        &self,
+        preview_id: &str,
+    ) -> Result<ProviderRecordApplyResult, ProviderError> {
         self.require_mutation()?;
         let original = self.retained(preview_id)?;
         let StoredPreview::Record(preview) = original.as_ref() else {
             return Err(ProviderError::PreviewIntegrity);
         };
         let result = self.store.apply_ref(preview)?;
-        self.outcome(ProviderRecordApplyResult {
+        Ok(ProviderRecordApplyResult {
             result,
             no_op: preview.diff.is_empty() && preview.diagnostics.is_empty(),
         })

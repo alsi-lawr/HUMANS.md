@@ -100,7 +100,10 @@ fn replacement_index_is_revision_bound_repairable_and_queryable() {
     let before = store.scan().expect("scan").snapshot.entries;
     let snapshot = current(&index, &store);
     let first_bytes = fs::read(&path).expect("database");
+    let first_publication = index.publication(&snapshot.source_revision).unwrap();
     current(&index, &store);
+    let second_publication = index.publication(&snapshot.source_revision).unwrap();
+    assert_ne!(first_publication, second_publication);
     assert_eq!(
         first_bytes,
         fs::read(&path).expect("deterministic database")
@@ -445,6 +448,19 @@ fn pushed_scope_and_search_match_rust_unicode_substrings_in_path_order() {
                 panic!("current search");
             };
             assert_eq!(value, expected, "scope {scope:?}, needle {needle:?}");
+            let Indexed::Current { value: paths, .. } = index
+                .record_paths(&snapshot.source_revision, scope.as_ref(), needle)
+                .unwrap()
+            else {
+                panic!("current path search");
+            };
+            assert_eq!(
+                paths,
+                expected
+                    .iter()
+                    .map(|record| record.path.clone())
+                    .collect::<Vec<_>>()
+            );
         }
     }
     let null_scope = RecordScope {

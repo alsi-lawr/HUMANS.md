@@ -6,6 +6,8 @@ mod api;
 mod assets;
 #[path = "../../benchmarks/support/mod.rs"]
 mod support;
+#[path = "../src/transport.rs"]
+mod transport;
 #[path = "../src/workbench.rs"]
 mod workbench;
 
@@ -15,56 +17,41 @@ use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use std::{
     hint::black_box,
     io::{Read, Write},
-    net::{SocketAddr, TcpStream},
-    sync::{
-        Arc,
-        atomic::{AtomicBool, Ordering},
-    },
-    thread::{self, JoinHandle},
+    net::{SocketAddr, TcpListener, TcpStream},
+    sync::Arc,
     time::Duration,
 };
 use support::{Fixture, INVESTIGATION};
 use tempfile::TempDir;
-use tiny_http::Server;
 
 struct Loopback {
-    server: Arc<Server>,
+    runtime: tokio::runtime::Runtime,
     address: SocketAddr,
-    stopped: Arc<AtomicBool>,
-    worker: Option<JoinHandle<()>>,
+    worker: tokio::task::JoinHandle<anyhow::Result<()>>,
 }
 
 impl Loopback {
     fn new(store: Store, index_path: &std::path::Path) -> Self {
-        let root = store.observation_root();
-        let provider_index = SqliteIndex::open(index_path, root).unwrap();
-        let query_index = SqliteIndex::open(index_path, root).unwrap();
-        let server = Arc::new(Server::http(("127.0.0.1", 0)).unwrap());
-        let address = server.server_addr().to_ip().unwrap();
-        let host = api::Host::new(
-            workbench::Workbench::new(Provider::new(store, provider_index), query_index),
+        let index = SqliteIndex::open(index_path, store.observation_root()).unwrap();
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let address = listener.local_addr().unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let runtime = transport::runtime().unwrap();
+        let listener = {
+            let _entered = runtime.enter();
+            tokio::net::TcpListener::from_std(listener).unwrap()
+        };
+        let host = Arc::new(api::Host::new(
+            workbench::Workbench::new(Provider::new(store, index)),
             address.port(),
             false,
             "benchmark-only".into(),
-        );
-        let stopped = Arc::new(AtomicBool::new(false));
-        let worker_server = server.clone();
-        let worker_stopped = stopped.clone();
-        let worker = thread::spawn(move || {
-            while !worker_stopped.load(Ordering::Relaxed) {
-                if let Some(request) = worker_server
-                    .recv_timeout(Duration::from_millis(100))
-                    .unwrap()
-                {
-                    host.handle(request).unwrap();
-                }
-            }
-        });
+        ));
+        let worker = runtime.spawn(transport::serve(listener, host));
         Self {
-            server,
+            runtime,
             address,
-            stopped,
-            worker: Some(worker),
+            worker,
         }
     }
 
@@ -82,9 +69,10 @@ impl Loopback {
 
 impl Drop for Loopback {
     fn drop(&mut self) {
-        self.stopped.store(true, Ordering::Relaxed);
-        self.server.unblock();
-        self.worker.take().unwrap().join().unwrap();
+        self.worker.abort();
+        self.runtime.block_on(async {
+            let _ = (&mut self.worker).await;
+        });
     }
 }
 

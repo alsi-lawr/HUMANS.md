@@ -148,11 +148,17 @@ fn cache_preparation_failure_preserves_committed_receipt_bytes_and_supported_rep
 struct RetainedCache {
     snapshot: std::cell::RefCell<Option<DerivedSnapshot>>,
     refuse_publication: Cell<bool>,
+    observation_error: Cell<bool>,
     edit_during_observe: std::cell::RefCell<Option<std::path::PathBuf>>,
 }
 
 impl ProviderCache for RetainedCache {
     fn observe(&self, revision: &Revision) -> CacheState {
+        if self.observation_error.get() {
+            return CacheState::Degraded {
+                message: "cache observation unavailable".into(),
+            };
+        }
         if let Some(path) = self.edit_during_observe.borrow_mut().take() {
             fs::write(path, "external edit during cache observation").unwrap();
         }
@@ -401,4 +407,39 @@ fn native_watch_keeps_opaque_symlink_descendant_changes_outside_canonical_cache(
             .iter()
             .any(|record| record.path.ends_with("external.md"))
     );
+}
+
+#[test]
+fn ordinary_cache_observation_error_preserves_the_previous_publication_without_repair() {
+    let (_temporary, provider) = configured_fixture();
+    reconcile(&provider);
+    let retained_revision = provider
+        .cache
+        .snapshot
+        .borrow()
+        .as_ref()
+        .unwrap()
+        .source_revision
+        .clone();
+    provider.cache.observation_error.set(true);
+    provider.cache.refuse_publication.set(true);
+    let CacheState::Degraded { message } = provider.refresh_full_cache().unwrap() else {
+        panic!("ordinary cache error")
+    };
+    assert_eq!(message, "cache observation unavailable");
+    assert_eq!(
+        provider
+            .cache
+            .snapshot
+            .borrow()
+            .as_ref()
+            .unwrap()
+            .source_revision,
+        retained_revision
+    );
+    provider.cache.observation_error.set(false);
+    assert!(matches!(
+        provider.refresh_full_cache().unwrap(),
+        CacheState::Current { .. }
+    ));
 }

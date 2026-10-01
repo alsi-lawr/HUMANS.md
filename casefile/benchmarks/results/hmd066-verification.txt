@@ -1,0 +1,1502 @@
+# HMD-066 actual verification evidence
+All final shell chains use sh -ec; the caller exits with captured command status. Parent985f30e.
+
+## fetch.log
+warning: Git tree '/home/alex/dev/HUMANS.md' is dirty
+humans-md development shell
+  Setup:  (cd casefile/web && bun install)
+  Format: scripts/format-source.sh --check|--write
+  Web:    cd casefile/web; bun install; bun run typecheck; bun run test; bun run build
+  Rust:   cd casefile; cargo fmt --check; cargo clippy --workspace --all-targets -- -D warnings; cargo test --workspace
+  CI:     act pull_request -j validate --pull=false -P ubuntu-latest=catthehacker/ubuntu:act-latest
+    Updating crates.io index
+     Locking 12 packages to latest compatible versions
+      Adding atomic-waker v1.1.2
+      Adding bytes v1.12.1
+      Adding futures-channel v0.3.34
+      Adding http v1.5.0
+      Adding http-body v1.1.0
+      Adding http-body-util v0.1.5
+      Adding httparse v1.10.1
+      Adding hyper v1.11.1
+      Adding hyper-util v0.1.21
+      Adding socket2 v0.6.5
+      Adding tokio v1.53.1
+      Adding tokio-io-timeout v1.2.1
+ Downloading crates ...
+  Downloaded tokio-io-timeout v1.2.1
+  Downloaded futures-core v0.3.34
+  Downloaded futures-task v0.3.34
+  Downloaded futures-util v0.3.34
+  Downloaded http-body-util v0.1.5
+  Downloaded futures-channel v0.3.34
+  Downloaded http v1.5.0
+  Downloaded hyper-util v0.1.21
+  Downloaded hyper v1.11.1
+  Downloaded web-sys v0.3.103
+
+## core-check.log
+warning: Git tree '/home/alex/dev/HUMANS.md' is dirty
+humans-md development shell
+  Setup:  (cd casefile/web && bun install)
+  Format: scripts/format-source.sh --check|--write
+  Web:    cd casefile/web; bun install; bun run typecheck; bun run test; bun run build
+  Rust:   cd casefile; cargo fmt --check; cargo clippy --workspace --all-targets -- -D warnings; cargo test --workspace
+  CI:     act pull_request -j validate --pull=false -P ubuntu-latest=catthehacker/ubuntu:act-latest
+    Checking casefile-core v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-core)
+    Checking casefile-store v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store)
+error[E0624]: method `full_cache_phase` is private
+   --> casefile-store/src/provider.rs:710:31
+    |
+710 |           let (state, _) = self.full_cache_phase(
+    |                                 ^^^^^^^^^^^^^^^^ private method
+    |
+   ::: casefile-store/src/provider/indexed.rs:16:5
+    |
+ 16 | /     fn full_cache_phase<R, T>(
+ 17 | |         &self,
+ 18 | |         inspect: impl Fn(&C, &Revision, bool) -> (CacheState, Option<R>),
+ 19 | |         project: impl FnOnce(&C, &Revision, R) -> Result<T, String>,
+ 20 | |     ) -> Result<(CacheState, Option<T>), ProviderError> {
+    | |_______________________________________________________- private method defined here
+
+For more information about this error, try `rustc --explain E0624`.
+error: could not compile `casefile-store` (lib) due to 1 previous error
+
+## server-check.log
+warning: Git tree '/home/alex/dev/HUMANS.md' is dirty
+humans-md development shell
+  Setup:  (cd casefile/web && bun install)
+  Format: scripts/format-source.sh --check|--write
+  Web:    cd casefile/web; bun install; bun run typecheck; bun run test; bun run build
+  Rust:   cd casefile; cargo fmt --check; cargo clippy --workspace --all-targets -- -D warnings; cargo test --workspace
+  CI:     act pull_request -j validate --pull=false -P ubuntu-latest=catthehacker/ubuntu:act-latest
+    Checking smallvec v1.15.2
+    Checking bytes v1.12.1
+    Checking pin-project-lite v0.2.17
+    Checking socket2 v0.6.5
+    Checking futures-core v0.3.34
+   Compiling httparse v1.10.1
+    Checking atomic-waker v1.1.2
+    Checking futures-channel v0.3.34
+    Checking granit-parser v0.0.7
+    Checking rusqlite v0.40.1
+    Checking tokio v1.53.1
+    Checking http v1.5.0
+    Checking serde-saphyr v0.0.29
+    Checking http-body v1.1.0
+    Checking http-body-util v0.1.5
+    Checking casefile-core v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-core)
+    Checking hyper v1.11.1
+    Checking tokio-io-timeout v1.2.1
+    Checking hyper-util v0.1.21
+    Checking casefile-store v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store)
+    Checking casefile-store-sqlite v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store-sqlite)
+    Checking casefile-server v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-server)
+error[E0277]: `PhantomPinned` cannot be unpinned
+    --> casefile-server/src/transport.rs:28:35
+     |
+  28 |                 .serve_connection(TokioIo::new(stream), service)
+     |                  ---------------- ^^^^^^^^^^^^^^^^^^^^ within `(PhantomData<&()>, PhantomPinned)`, the trait `Unpin` is not implemented for `PhantomPinned`
+     |                  |
+     |                  required by a bound introduced by this call
+     |
+     = note: consider using the `pin!` macro
+             consider using `Box::pin` if you need to access the pinned value outside of the current scope
+     = note: required because it appears within the type `(PhantomData<&()>, PhantomPinned)`
+     = note: required for `tokio::time::Sleep` to implement `Unpin`
+note: required because it appears within the type `tokio_io_timeout::_::__Origin<'_>`
+    --> /home/alex/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/pin-project-lite-0.2.17/src/lib.rs:1251:21
+     |
+1251 |           $vis struct __Origin<'__pin, $($impl_generics)*>
+     |                       ^^^^^^^^
+     |
+    ::: /home/alex/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-io-timeout-1.2.1/src/lib.rs:19:1
+     |
+  19 | / pin_project! {
+  20 | |     #[derive(Debug)]
+  21 | |     struct TimeoutState {
+  22 | |         timeout: Option<Duration>,
+...    |
+  27 | | }
+     | |_- in this macro invocation
+     = note: required for `tokio_io_timeout::TimeoutState` to implement `Unpin`
+note: required because it appears within the type `tokio_io_timeout::_::__Origin<'_, TimeoutWriter<tokio::net::TcpStream>>`
+    --> /home/alex/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/pin-project-lite-0.2.17/src/lib.rs:1251:21
+     |
+1251 |           $vis struct __Origin<'__pin, $($impl_generics)*>
+     |                       ^^^^^^^^
+     |
+    ::: /home/alex/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-io-timeout-1.2.1/src/lib.rs:90:1
+     |
+  90 | / pin_project! {
+  91 | |     /// An `AsyncRead`er which applies a timeout to read operations.
+  92 | |     #[derive(Debug)]
+  93 | |     pub struct TimeoutReader<R> {
+...    |
+  99 | | }
+     | |_- in this macro invocation
+     = note: required for `TimeoutReader<TimeoutWriter<tokio::net::TcpStream>>` to implement `Unpin`
+note: required because it appears within the type `tokio_io_timeout::_::__Origin<'_, tokio::net::TcpStream>`
+    --> /home/alex/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/pin-project-lite-0.2.17/src/lib.rs:1251:21
+     |
+1251 |           $vis struct __Origin<'__pin, $($impl_generics)*>
+     |                       ^^^^^^^^
+     |
+    ::: /home/alex/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-io-timeout-1.2.1/src/lib.rs:370:1
+     |
+ 370 | / pin_project! {
+ 371 | |     /// A stream which applies read and write timeouts to an inner stream.
+ 372 | |     #[derive(Debug)]
+ 373 | |     pub struct TimeoutStream<S> {
+...    |
+ 377 | | }
+     | |_- in this macro invocation
+     = note: required for `TimeoutStream<tokio::net::TcpStream>` to implement `Unpin`
+note: required because it appears within the type `tokio::_::__Origin<'_, TimeoutStream<tokio::net::TcpStream>>`
+    --> /home/alex/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/pin-project-lite-0.2.17/src/lib.rs:1251:21
+     |
+1251 |           $vis struct __Origin<'__pin, $($impl_generics)*>
+     |                       ^^^^^^^^
+     |
+    ::: /home/alex/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/hyper-util-0.1.21/src/rt/tokio.rs:89:1
+     |
+  89 | / pin_project! {
+  90 | |     /// A wrapper that implements Tokio's IO traits for an inner type that
+  91 | |     /// implements hyper's IO traits, or vice versa (implements hyper's IO
+  92 | |     /// traits for a type that implements Tokio's IO traits).
+...    |
+  98 | | }
+     | |_- in this macro invocation
+     = note: required for `TokioIo<TimeoutStream<tokio::net::TcpStream>>` to implement `Unpin`
+note: required by a bound in `hyper::server::conn::http1::Builder::serve_connection`
+    --> /home/alex/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/hyper-1.11.1/src/server/conn/http1.rs:458:27
+     |
+ 452 |     pub fn serve_connection<I, S>(&self, io: I, service: S) -> Connection<I, S>
+     |            ---------------- required by a bound in this associated function
+...
+ 458 |         I: Read + Write + Unpin,
+     |                           ^^^^^ required by this bound in `Builder::serve_connection`
+     = note: this error originates in the macro `$crate::__pin_project_make_unpin_impl` which comes from the expansion of the macro `pin_project` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: `PhantomPinned` cannot be unpinned
+    --> casefile-server/src/transport.rs:29:18
+     |
+  29 |                 .await
+     |                  ^^^^^ within `(PhantomData<&()>, PhantomPinned)`, the trait `Unpin` is not implemented for `PhantomPinned`
+     |
+     = note: consider using the `pin!` macro
+             consider using `Box::pin` if you need to access the pinned value outside of the current scope
+     = note: required because it appears within the type `(PhantomData<&()>, PhantomPinned)`
+     = note: required for `tokio::time::Sleep` to implement `Unpin`
+note: required because it appears within the type `tokio_io_timeout::_::__Origin<'_>`
+    --> /home/alex/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/pin-project-lite-0.2.17/src/lib.rs:1251:21
+     |
+1251 |           $vis struct __Origin<'__pin, $($impl_generics)*>
+     |                       ^^^^^^^^
+     |
+    ::: /home/alex/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-io-timeout-1.2.1/src/lib.rs:19:1
+     |
+  19 | / pin_project! {
+  20 | |     #[derive(Debug)]
+  21 | |     struct TimeoutState {
+  22 | |         timeout: Option<Duration>,
+...    |
+  27 | | }
+     | |_- in this macro invocation
+     = note: required for `tokio_io_timeout::TimeoutState` to implement `Unpin`
+note: required because it appears within the type `tokio_io_timeout::_::__Origin<'_, TimeoutWriter<tokio::net::TcpStream>>`
+    --> /home/alex/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/pin-project-lite-0.2.17/src/lib.rs:1251:21
+     |
+1251 |           $vis struct __Origin<'__pin, $($impl_generics)*>
+     |                       ^^^^^^^^
+     |
+    ::: /home/alex/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-io-timeout-1.2.1/src/lib.rs:90:1
+     |
+  90 | / pin_project! {
+  91 | |     /// An `AsyncRead`er which applies a timeout to read operations.
+  92 | |     #[derive(Debug)]
+  93 | |     pub struct TimeoutReader<R> {
+...    |
+  99 | | }
+     | |_- in this macro invocation
+     = note: required for `TimeoutReader<TimeoutWriter<tokio::net::TcpStream>>` to implement `Unpin`
+note: required because it appears within the type `tokio_io_timeout::_::__Origin<'_, tokio::net::TcpStream>`
+    --> /home/alex/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/pin-project-lite-0.2.17/src/lib.rs:1251:21
+     |
+1251 |           $vis struct __Origin<'__pin, $($impl_generics)*>
+     |                       ^^^^^^^^
+     |
+    ::: /home/alex/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-io-timeout-1.2.1/src/lib.rs:370:1
+     |
+ 370 | / pin_project! {
+ 371 | |     /// A stream which applies read and write timeouts to an inner stream.
+ 372 | |     #[derive(Debug)]
+ 373 | |     pub struct TimeoutStream<S> {
+...    |
+ 377 | | }
+     | |_- in this macro invocation
+     = note: required for `TimeoutStream<tokio::net::TcpStream>` to implement `Unpin`
+note: required because it appears within the type `tokio::_::__Origin<'_, TimeoutStream<tokio::net::TcpStream>>`
+    --> /home/alex/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/pin-project-lite-0.2.17/src/lib.rs:1251:21
+     |
+1251 |           $vis struct __Origin<'__pin, $($impl_generics)*>
+     |                       ^^^^^^^^
+     |
+    ::: /home/alex/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/hyper-util-0.1.21/src/rt/tokio.rs:89:1
+     |
+  89 | / pin_project! {
+  90 | |     /// A wrapper that implements Tokio's IO traits for an inner type that
+  91 | |     /// implements hyper's IO traits, or vice versa (implements hyper's IO
+  92 | |     /// traits for a type that implements Tokio's IO traits).
+...    |
+  98 | | }
+     | |_- in this macro invocation
+     = note: required for `TokioIo<TimeoutStream<tokio::net::TcpStream>>` to implement `Unpin`
+     = note: required for `Connection<TokioIo<TimeoutStream<TcpStream>>, ServiceFn<..., ...>>` to implement `Future`
+     = note: required for `Connection<TokioIo<TimeoutStream<TcpStream>>, ServiceFn<..., ...>>` to implement `IntoFuture`
+     = note: the full name for the type has been written to '/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/debug/deps/casefile_server-bd10318761e3efa3.long-type-16892474238554524713.txt'
+     = note: consider using `--verbose` to print the full type name to the console
+     = note: this error originates in the macro `$crate::__pin_project_make_unpin_impl` which comes from the expansion of the macro `pin_project` (in Nightly builds, run with -Z macro-backtrace for more info)
+help: remove the `.await`
+     |
+  29 -                 .await
+     |
+
+For more information about this error, try `rustc --explain E0277`.
+error: could not compile `casefile-server` (lib) due to 2 previous errors
+
+## combined-check.log
+warning: Git tree '/home/alex/dev/HUMANS.md' is dirty
+humans-md development shell
+  Setup:  (cd casefile/web && bun install)
+  Format: scripts/format-source.sh --check|--write
+  Web:    cd casefile/web; bun install; bun run typecheck; bun run test; bun run build
+  Rust:   cd casefile; cargo fmt --check; cargo clippy --workspace --all-targets -- -D warnings; cargo test --workspace
+  CI:     act pull_request -j validate --pull=false -P ubuntu-latest=catthehacker/ubuntu:act-latest
+    Checking casefile-server v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-server)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.42s
+$ tsc --noEmit
+
+## initial-tests.log
+warning: Git tree '/home/alex/dev/HUMANS.md' is dirty
+humans-md development shell
+  Setup:  (cd casefile/web && bun install)
+  Format: scripts/format-source.sh --check|--write
+  Web:    cd casefile/web; bun install; bun run typecheck; bun run test; bun run build
+  Rust:   cd casefile; cargo fmt --check; cargo clippy --workspace --all-targets -- -D warnings; cargo test --workspace
+  CI:     act pull_request -j validate --pull=false -P ubuntu-latest=catthehacker/ubuntu:act-latest
+   Compiling casefile-store v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 7.98s
+     Running unittests src/lib.rs (.agent-workspace/20260930-speedup-implementation/writer/target/debug/deps/casefile_store-35dd4c6b7f743430)
+
+running 7 tests
+test provider::outcome_tests::observation_window_external_edit_cannot_claim_the_old_index_is_current ... ok
+test provider::outcome_tests::events_and_rescan_require_rebuild_even_when_metadata_revision_is_unchanged ... ok
+test provider::outcome_tests::current_cache_survives_publication_failure_but_required_external_changes_do_not ... ok
+test provider::outcome_tests::unconfigured_outcomes_do_not_read_the_store_after_commit_or_replay ... ok
+test provider::outcome_tests::native_watch_create_edit_rename_delete_reconciles_canonical_index_content ... ok
+test provider::outcome_tests::cache_preparation_failure_preserves_committed_receipt_bytes_and_supported_replay ... ok
+test provider::outcome_tests::native_watch_keeps_opaque_symlink_descendant_changes_outside_canonical_cache ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 63 filtered out; finished in 0.23s
+
+   Compiling casefile-store v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store)
+   Compiling casefile-store-sqlite v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store-sqlite)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 8.54s
+     Running tests/integration.rs (.agent-workspace/20260930-speedup-implementation/writer/target/debug/deps/integration-67d27f3fb965b830)
+
+running 8 tests
+test old_derived_board_json_defaults_to_disposition ... ok
+test compact_cache_round_trip_preserves_source_search_and_requested_rendering ... ok
+test strategy_binding_projection_survives_json_index_round_trip ... ok
+test exact_duplicate_identity_is_ambiguous_in_canonical_and_indexed_reads ... ok
+test relationship_endpoints_and_board_scopes_preserve_nullable_identity_and_order ... ok
+test pushed_scope_and_search_match_rust_unicode_substrings_in_path_order ... ok
+test failed_replacement_keeps_published_index_and_prior_schema_rebuilds_as_missing ... ok
+test replacement_index_is_revision_bound_repairable_and_queryable ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.47s
+
+   Compiling smallvec v1.15.2
+   Compiling bytes v1.12.1
+   Compiling pin-project-lite v0.2.17
+   Compiling socket2 v0.6.5
+   Compiling futures-core v0.3.34
+   Compiling httparse v1.10.1
+   Compiling atomic-waker v1.1.2
+   Compiling futures-channel v0.3.34
+   Compiling granit-parser v0.0.7
+   Compiling rusqlite v0.40.1
+   Compiling tokio v1.53.1
+   Compiling http v1.5.0
+   Compiling serde-saphyr v0.0.29
+   Compiling http-body v1.1.0
+   Compiling http-body-util v0.1.5
+   Compiling casefile-core v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-core)
+   Compiling hyper v1.11.1
+   Compiling tokio-io-timeout v1.2.1
+   Compiling hyper-util v0.1.21
+   Compiling casefile-store v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store)
+   Compiling casefile-store-sqlite v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store-sqlite)
+   Compiling casefile-server v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-server)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 18.34s
+     Running unittests src/lib.rs (.agent-workspace/20260930-speedup-implementation/writer/target/debug/deps/casefile_server-0aa4c2e56cba8eb5)
+
+running 2 tests
+test api::tests::rollback_error_crosses_the_http_failure_channel_as_409_without_private_source_contents ... ok
+test api::tests::records_query_preserves_full_editable_draft_rendered_html_and_body_search ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.09s
+
+bun test v1.3.13 (bf2e2cec)
+
+src/api-contract.test.ts:
+(pass) decodes the owned project-scope wire shape without a null investigation [1.00ms]
+(pass) accepts the canonical progress record kind and rejects future kinds
+(pass) accepts the canonical strategy transition record kind
+(pass) preserves the host stale-revision failure code
+(pass) decodes both canonical board status sources and rejects malformed selectors [1.00ms]
+(pass) strictly decodes typed strategy and binding projections
+(pass) rejects malformed strategy runtime pairs and impossible effective sources [1.00ms]
+35 |   | Readonly<{ message: string; code: "stale_revision" }>
+36 |   | Readonly<{ message: string; code: "incomplete_rollback"; details: IncompleteRollback }>;
+37 |
+38 |
+39 | const contractError = (label: string): never => {
+40 |   throw new Error(`The host returned an invalid ${label}.`);
+                                                               ^
+error: The host returned an invalid workspace response.
+      at contractError (/home/alex/dev/HUMANS.md/casefile/web/src/api-contract.ts:40:59)
+      at decodeWorkspaceResponse (/home/alex/dev/HUMANS.md/casefile/web/src/api-contract.ts:465:17)
+      at decodeApplyResponse (/home/alex/dev/HUMANS.md/casefile/web/src/api-contract.ts:482:95)
+      at <anonymous> (/home/alex/dev/HUMANS.md/casefile/web/src/api-contract.test.ts:261:10)
+(fail) accepts target-only mutation receipts but rejects a missing target result [2.00ms]
+306 |     },
+307 |     { preconnect: originalFetch.preconnect },
+308 |   );
+309 |   try {
+310 |     const outcome = await apply(preview, { capability: "write-capability", signal: new AbortController().signal, context: { knownToken: undefined, search: undefined } });
+311 |     expect(outcome.tag).toBe("success");
+                              ^
+error: expect(received).toBe(expected)
+
+Expected: "success"
+Received: "failure"
+
+      at <anonymous> (/home/alex/dev/HUMANS.md/casefile/web/src/api-contract.test.ts:311:25)
+(fail) compact record review rejects obsolete authority fields and applies only its live ID [2.00ms]
+
+ 7 pass
+ 2 fail
+ 21 expect() calls
+Ran 9 tests across 1 file. [18.00ms]
+
+## second-tests.log
+warning: Git tree '/home/alex/dev/HUMANS.md' is dirty
+humans-md development shell
+  Setup:  (cd casefile/web && bun install)
+  Format: scripts/format-source.sh --check|--write
+  Web:    cd casefile/web; bun install; bun run typecheck; bun run test; bun run build
+  Rust:   cd casefile; cargo fmt --check; cargo clippy --workspace --all-targets -- -D warnings; cargo test --workspace
+  CI:     act pull_request -j validate --pull=false -P ubuntu-latest=catthehacker/ubuntu:act-latest
+   Compiling casefile-store v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store)
+   Compiling casefile-store-sqlite v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store-sqlite)
+   Compiling casefile-server v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-server)
+error[E0599]: no method named `preview` found for struct `Provider<C>` in the current scope
+   --> casefile-server/src/api.rs:638:14
+    |
+637 |           let preview = provider
+    |  _______________________-
+638 | |             .preview(ChangeRequest::Replace {
+    | |_____________-^^^^^^^
+    |
+help: there is a method `preview_kind` with a similar name
+    |
+638 |             .preview_kind(ChangeRequest::Replace {
+    |                     +++++
+
+For more information about this error, try `rustc --explain E0599`.
+error: could not compile `casefile-server` (lib test) due to 1 previous error
+
+## third-tests.log
+warning: Git tree '/home/alex/dev/HUMANS.md' is dirty
+humans-md development shell
+  Setup:  (cd casefile/web && bun install)
+  Format: scripts/format-source.sh --check|--write
+  Web:    cd casefile/web; bun install; bun run typecheck; bun run test; bun run build
+  Rust:   cd casefile; cargo fmt --check; cargo clippy --workspace --all-targets -- -D warnings; cargo test --workspace
+  CI:     act pull_request -j validate --pull=false -P ubuntu-latest=catthehacker/ubuntu:act-latest
+   Compiling casefile-server v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-server)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 4.25s
+     Running unittests src/lib.rs (/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/debug/deps/casefile_server-0aa4c2e56cba8eb5)
+
+running 9 tests
+test api::tests::rollback_error_crosses_the_http_failure_channel_as_409_without_private_source_contents ... ok
+test api::tests::committed_apply_projection_failure_stays_success_and_old_payload_is_refused ... ok
+test api::tests::records_query_preserves_full_editable_draft_rendered_html_and_body_search ... ok
+test api::tests::workspace_tokens_distinguish_same_source_replacement_and_provider_restart ... FAILED
+test api::tests::callback_replacement_and_canonical_edit_refuse_partial_current_data ... ok
+test api::tests::progressing_body_may_take_longer_than_the_idle_deadline ... ok
+test api::tests::stalled_headers_and_body_expire_while_unrelated_and_large_requests_succeed ... ok
+test api::tests::non_reader_write_timeout_does_not_hold_unrelated_requests ... ok
+test api::tests::admitted_apply_survives_disconnected_client_beyond_io_deadline has been running for over 60 seconds
+error: test failed, to rerun pass `-p casefile-server --lib`
+
+Caused by:
+  process didn't exit successfully: `/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/debug/deps/casefile_server-0aa4c2e56cba8eb5` (signal: 15, SIGTERM: termination signal)
+
+## token-debug.log
+warning: Git tree '/home/alex/dev/HUMANS.md' is dirty
+humans-md development shell
+  Setup:  (cd casefile/web && bun install)
+  Format: scripts/format-source.sh --check|--write
+  Web:    cd casefile/web; bun install; bun run typecheck; bun run test; bun run build
+  Rust:   cd casefile; cargo fmt --check; cargo clippy --workspace --all-targets -- -D warnings; cargo test --workspace
+  CI:     act pull_request -j validate --pull=false -P ubuntu-latest=catthehacker/ubuntu:act-latest
+   Compiling casefile-server v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-server)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.14s
+     Running unittests src/lib.rs (/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/debug/deps/casefile_server-0aa4c2e56cba8eb5)
+
+running 1 test
+
+thread 'api::tests::workspace_tokens_distinguish_same_source_replacement_and_provider_restart' (1902925) panicked at casefile-server/src/api.rs:518:37:
+unknown field `token`, expected one of `source_revision`, `publication_id`, `provider_instance`
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test api::tests::workspace_tokens_distinguish_same_source_replacement_and_provider_restart ... FAILED
+
+failures:
+
+failures:
+    api::tests::workspace_tokens_distinguish_same_source_replacement_and_provider_restart
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 8 filtered out; finished in 0.36s
+
+error: test failed, to rerun pass `-p casefile-server --lib`
+
+## fourth-tests.log
+warning: Git tree '/home/alex/dev/HUMANS.md' is dirty
+humans-md development shell
+  Setup:  (cd casefile/web && bun install)
+  Format: scripts/format-source.sh --check|--write
+  Web:    cd casefile/web; bun install; bun run typecheck; bun run test; bun run build
+  Rust:   cd casefile; cargo fmt --check; cargo clippy --workspace --all-targets -- -D warnings; cargo test --workspace
+  CI:     act pull_request -j validate --pull=false -P ubuntu-latest=catthehacker/ubuntu:act-latest
+   Compiling casefile-store v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store)
+   Compiling casefile-store-sqlite v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store-sqlite)
+   Compiling casefile-server v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-server)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 7.60s
+     Running unittests src/lib.rs (/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/debug/deps/casefile_server-0aa4c2e56cba8eb5)
+
+running 9 tests
+test api::tests::rollback_error_crosses_the_http_failure_channel_as_409_without_private_source_contents ... ok
+test api::tests::records_query_preserves_full_editable_draft_rendered_html_and_body_search ... ok
+test api::tests::committed_apply_projection_failure_stays_success_and_old_payload_is_refused ... ok
+test api::tests::callback_replacement_and_canonical_edit_refuse_partial_current_data ... ok
+test api::tests::workspace_tokens_distinguish_same_source_replacement_and_provider_restart ... ok
+test api::tests::progressing_body_may_take_longer_than_the_idle_deadline ... ok
+test api::tests::stalled_headers_and_body_expire_while_unrelated_and_large_requests_succeed ... ok
+test api::tests::admitted_apply_survives_disconnected_client_beyond_io_deadline ... FAILED
+test api::tests::non_reader_write_timeout_does_not_hold_unrelated_requests ... ok
+
+failures:
+
+---- api::tests::admitted_apply_survives_disconnected_client_beyond_io_deadline stdout ----
+HTTP connection failed: connection closed before message completed
+
+thread 'api::tests::admitted_apply_survives_disconnected_client_beyond_io_deadline' (1903649) panicked at casefile-server/src/api.rs:845:9:
+assertion `left == right` failed
+  left: 409
+ right: 200
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    api::tests::admitted_apply_survives_disconnected_client_beyond_io_deadline
+
+test result: FAILED. 8 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 36.06s
+
+error: test failed, to rerun pass `-p casefile-server --lib`
+
+## fifth-tests.log
+warning: Git tree '/home/alex/dev/HUMANS.md' is dirty
+humans-md development shell
+  Setup:  (cd casefile/web && bun install)
+  Format: scripts/format-source.sh --check|--write
+  Web:    cd casefile/web; bun install; bun run typecheck; bun run test; bun run build
+  Rust:   cd casefile; cargo fmt --check; cargo clippy --workspace --all-targets -- -D warnings; cargo test --workspace
+  CI:     act pull_request -j validate --pull=false -P ubuntu-latest=catthehacker/ubuntu:act-latest
+   Compiling casefile-server v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-server)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.91s
+     Running unittests src/lib.rs (/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/debug/deps/casefile_server-0aa4c2e56cba8eb5)
+
+running 9 tests
+test api::tests::rollback_error_crosses_the_http_failure_channel_as_409_without_private_source_contents ... ok
+test api::tests::records_query_preserves_full_editable_draft_rendered_html_and_body_search ... ok
+test api::tests::committed_apply_projection_failure_stays_success_and_old_payload_is_refused ... ok
+test api::tests::callback_replacement_and_canonical_edit_refuse_partial_current_data ... ok
+test api::tests::workspace_tokens_distinguish_same_source_replacement_and_provider_restart ... ok
+test api::tests::progressing_body_may_take_longer_than_the_idle_deadline ... ok
+test api::tests::admitted_apply_survives_disconnected_client_beyond_io_deadline ... ok
+test api::tests::stalled_headers_and_body_expire_while_unrelated_and_large_requests_succeed ... ok
+test api::tests::non_reader_write_timeout_does_not_hold_unrelated_requests ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 36.05s
+
+   Compiling casefile-store v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store)
+   Compiling casefile-store-sqlite v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store-sqlite)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 6.27s
+     Running tests/integration.rs (/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/debug/deps/integration-67d27f3fb965b830)
+
+running 8 tests
+test old_derived_board_json_defaults_to_disposition ... ok
+test exact_duplicate_identity_is_ambiguous_in_canonical_and_indexed_reads ... ok
+test strategy_binding_projection_survives_json_index_round_trip ... ok
+test compact_cache_round_trip_preserves_source_search_and_requested_rendering ... ok
+test relationship_endpoints_and_board_scopes_preserve_nullable_identity_and_order ... ok
+test pushed_scope_and_search_match_rust_unicode_substrings_in_path_order ... ok
+test failed_replacement_keeps_published_index_and_prior_schema_rebuilds_as_missing ... ok
+test replacement_index_is_revision_bound_repairable_and_queryable ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.45s
+
+   Compiling casefile-store v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 6.83s
+     Running unittests src/lib.rs (/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/debug/deps/casefile_store-35dd4c6b7f743430)
+
+running 8 tests
+test provider::outcome_tests::ordinary_cache_observation_error_preserves_the_previous_publication_without_repair ... ok
+test provider::outcome_tests::current_cache_survives_publication_failure_but_required_external_changes_do_not ... ok
+test provider::outcome_tests::events_and_rescan_require_rebuild_even_when_metadata_revision_is_unchanged ... ok
+test provider::outcome_tests::observation_window_external_edit_cannot_claim_the_old_index_is_current ... ok
+test provider::outcome_tests::unconfigured_outcomes_do_not_read_the_store_after_commit_or_replay ... ok
+test provider::outcome_tests::cache_preparation_failure_preserves_committed_receipt_bytes_and_supported_replay ... ok
+test provider::outcome_tests::native_watch_create_edit_rename_delete_reconciles_canonical_index_content ... ok
+test provider::outcome_tests::native_watch_keeps_opaque_symlink_descendant_changes_outside_canonical_cache ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 63 filtered out; finished in 0.24s
+
+   Compiling casefile-store v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 7.83s
+     Running tests/provider.rs (/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/debug/deps/provider-64cbf6142fa47848)
+
+running 17 tests
+test catalogue_union_keeps_mapping_only_and_governed_missing_mapping_projects ... ok
+test default_board_refuses_missing_and_ambiguous_activation_mappings_before_preview ... ok
+test record_preview_rejects_win32_special_components_without_writing ... ok
+test index_summaries_and_requested_detail_decode_only_selected_notes_consistently ... ok
+test board_progress_dependency_is_demanded_and_malformed_required_logs_are_explicit ... ok
+test hierarchical_reads_are_selective_bounded_and_exact ... ok
+test cache_refresh_failure_after_a_confirmed_write_is_degraded_not_authoritative ... ok
+test invalid_unactivated_and_legacy_activation_fail_closed_without_conversion ... ok
+test record_ids_bind_original_authority_and_foreign_or_unknown_ids_preserve_the_store ... ok
+test default_board_ignores_unrelated_diagnostics_within_and_across_investigations ... ok
+test default_board_is_named_exact_preview_with_preflight_collision_and_byte_preserving_no_op ... ok
+test snapshot_and_exact_scoped_reads_are_bounded_protocol_v5 ... ok
+test record_batch_promotes_mutually_related_tickets_as_one_valid_change ... ok
+test progress_preview_integrity_covers_bootstrap_transition_replay_no_op_and_conflict ... ok
+test every_provider_apply_family_accepts_unrelated_store_changes ... ok
+test scoped_diagnostics_report_exact_progress_target_and_bounded_follow_up ... ok
+test preview_count_eviction_is_oldest_first_and_newest_id_still_applies_original ... ok
+
+test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.44s
+
+    Checking serde v1.0.228
+    Checking zerocopy v0.8.54
+    Checking thiserror v2.0.18
+    Checking serde_spanned v0.6.9
+    Checking toml_datetime v0.6.11
+    Checking tinytemplate v1.2.1
+    Checking toml_edit v0.22.27
+    Checking toml v0.8.23
+    Checking ahash v0.8.12
+    Checking half v2.7.1
+    Checking serde-saphyr v0.0.29
+    Checking ciborium-ll v0.2.2
+    Checking ciborium v0.2.2
+    Checking criterion v0.8.2
+    Checking casefile-core v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-core)
+    Checking casefile-store v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store)
+error: very complex type used. Consider factoring parts into `type` definitions
+   --> casefile-store/src/provider/indexed.rs:117:10
+    |
+117 |       ) -> Result<
+    |  __________^
+118 | |         (
+119 | |             ProviderApplyOutcome<ProviderRecordApplyResult>,
+120 | |             Option<(WorkspaceReadToken, T)>,
+121 | |         ),
+122 | |         ProviderError,
+123 | |     > {
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#type_complexity
+    = note: `-D clippy::type-complexity` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(clippy::type_complexity)]`
+
+error: could not compile `casefile-store` (lib) due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `casefile-store` (lib test) due to 1 previous error
+
+## sixth-tests.log
+warning: Git tree '/home/alex/dev/HUMANS.md' is dirty
+humans-md development shell
+  Setup:  (cd casefile/web && bun install)
+  Format: scripts/format-source.sh --check|--write
+  Web:    cd casefile/web; bun install; bun run typecheck; bun run test; bun run build
+  Rust:   cd casefile; cargo fmt --check; cargo clippy --workspace --all-targets -- -D warnings; cargo test --workspace
+  CI:     act pull_request -j validate --pull=false -P ubuntu-latest=catthehacker/ubuntu:act-latest
+    Checking casefile-store v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store)
+    Checking casefile-store-sqlite v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store-sqlite)
+    Checking casefile-server v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-server)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 6.53s
+   Compiling serde-saphyr v0.0.29
+   Compiling parking_lot_core v0.9.12
+   Compiling rusqlite v0.40.1
+   Compiling parking_lot v0.12.5
+   Compiling crossterm v0.29.0
+   Compiling ratatui-crossterm v0.1.2
+   Compiling ratatui v0.30.2
+   Compiling casefile-core v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-core)
+   Compiling casefile-store v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store)
+   Compiling casefile-store-sqlite v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store-sqlite)
+   Compiling casefile-tui v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-tui)
+   Compiling casefile-server v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-server)
+   Compiling casefile-cli v0.8.0 (/home/alex/dev/HUMANS.md/casefile/casefile-cli)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 20.17s
+     Running tests/serve.rs (/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/debug/deps/serve-1cd899656028a7a0)
+
+running 3 tests
+test serve_transports_derived_ticket_progress ... ok
+test serve_preserves_preview_and_gates_apply_with_capability ... ok
+test serve_exposes_only_the_fixed_read_contract ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.20s
+
+$ tsc --noEmit
+src/api-contract.test.ts(343,26): error TS2769: No overload matches this call.
+  The last overload gave the following error.
+    Argument of type '{ message: string; code: "incomplete_rollback"; details: { code: string; operation: string; cause: string; affected_paths: ({ path: string; remaining: { state: string; revision: string; }; reason: string; } | { path: string; remaining: { revision?: undefined; state: string; }; reason: string; })[]; }; }' is not assignable to parameter of type 'HostFailure'.
+      The types of 'details.code' are incompatible between these types.
+        Type 'string' is not assignable to type '"incomplete_rollback"'.
+error: script "typecheck" exited with code 1
+
+## browser-tests.log
+warning: Git tree '/home/alex/dev/HUMANS.md' is dirty
+humans-md development shell
+  Setup:  (cd casefile/web && bun install)
+  Format: scripts/format-source.sh --check|--write
+  Web:    cd casefile/web; bun install; bun run typecheck; bun run test; bun run build
+  Rust:   cd casefile; cargo fmt --check; cargo clippy --workspace --all-targets -- -D warnings; cargo test --workspace
+  CI:     act pull_request -j validate --pull=false -P ubuntu-latest=catthehacker/ubuntu:act-latest
+$ tsc --noEmit
+bun test v1.3.13 (bf2e2cec)
+
+src/api-contract.test.ts:
+(pass) decodes the owned project-scope wire shape without a null investigation
+(pass) accepts the canonical progress record kind and rejects future kinds [1.00ms]
+(pass) accepts the canonical strategy transition record kind
+(pass) preserves the host stale-revision failure code
+(pass) decodes both canonical board status sources and rejects malformed selectors
+(pass) strictly decodes typed strategy and binding projections [1.00ms]
+(pass) rejects malformed strategy runtime pairs and impossible effective sources
+(pass) accepts target-only mutation receipts but rejects a missing target result
+(pass) compact record review rejects obsolete authority fields and applies only its live ID [2.00ms]
+(pass) workspace publications retain full drafts once and permit paths-only search replies
+(pass) incomplete rollback carries sanitized remaining-state details through the typed browser boundary
+
+src/app/app.browser.test.tsx:
+(pass) navigates and reconciles governed work against the shared host fixture [4947.01ms]
+(pass) rejects stale board projections across scope changes and refresh outcomes [878.00ms]
+(pass) loads a progress log and places cards in their recorded board columns [567.00ms]
+(pass) keeps nested investigations with the same leaf independently selectable [768.00ms]
+(pass) a delayed obsolete search reply cannot replace the newer guarded workspace [769.00ms]
+
+ 16 pass
+ 0 fail
+ 114 expect() calls
+Ran 16 tests across 2 files. [8.08s]
+
+## web-build.log
+warning: Git tree '/home/alex/dev/HUMANS.md' is dirty
+humans-md development shell
+  Setup:  (cd casefile/web && bun install)
+  Format: scripts/format-source.sh --check|--write
+  Web:    cd casefile/web; bun install; bun run typecheck; bun run test; bun run build
+  Rust:   cd casefile; cargo fmt --check; cargo clippy --workspace --all-targets -- -D warnings; cargo test --workspace
+  CI:     act pull_request -j validate --pull=false -P ubuntu-latest=catthehacker/ubuntu:act-latest
+src/model.ts 100ms
+src/api.ts 18ms
+src/api-contract.ts 54ms
+src/api-contract.test.ts 26ms
+src/app/use-workspace.ts 16ms
+src/app/app.tsx 12ms
+src/app/app.browser.test.tsx 64ms
+src/record-detail/use-change-review.ts 7ms
+$ tsc --noEmit
+$ bun run build.ts
+≈ tailwindcss v4.3.3
+
+Done in 47ms
+
+## final-checks.log
+warning: Git tree '/home/alex/dev/HUMANS.md' is dirty
+humans-md development shell
+  Setup:  (cd casefile/web && bun install)
+  Format: scripts/format-source.sh --check|--write
+  Web:    cd casefile/web; bun install; bun run typecheck; bun run test; bun run build
+  Rust:   cd casefile; cargo fmt --check; cargo clippy --workspace --all-targets -- -D warnings; cargo test --workspace
+  CI:     act pull_request -j validate --pull=false -P ubuntu-latest=catthehacker/ubuntu:act-latest
+   Compiling casefile-store v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store)
+   Compiling casefile-store-sqlite v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store-sqlite)
+   Compiling casefile-server v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-server)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 4.40s
+     Running unittests src/lib.rs (/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/debug/deps/casefile_server-0aa4c2e56cba8eb5)
+
+running 9 tests
+test api::tests::rollback_error_crosses_the_http_failure_channel_as_409_without_private_source_contents ... ok
+test api::tests::records_query_preserves_full_editable_draft_rendered_html_and_body_search ... ok
+test api::tests::committed_apply_projection_failure_stays_success_and_old_payload_is_refused ... ok
+test api::tests::callback_replacement_and_canonical_edit_refuse_partial_current_data ... ok
+test api::tests::workspace_tokens_distinguish_same_source_replacement_and_provider_restart ... ok
+test api::tests::progressing_body_may_take_longer_than_the_idle_deadline ... ok
+test api::tests::admitted_apply_survives_disconnected_client_beyond_io_deadline ... ok
+test api::tests::stalled_headers_and_body_expire_while_unrelated_and_large_requests_succeed ... ok
+test api::tests::non_reader_write_timeout_does_not_hold_unrelated_requests ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 36.05s
+
+   Compiling casefile-store v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store)
+   Compiling casefile-store-sqlite v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store-sqlite)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.57s
+     Running tests/integration.rs (/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/debug/deps/integration-67d27f3fb965b830)
+
+running 8 tests
+test old_derived_board_json_defaults_to_disposition ... ok
+test compact_cache_round_trip_preserves_source_search_and_requested_rendering ... ok
+test exact_duplicate_identity_is_ambiguous_in_canonical_and_indexed_reads ... ok
+test strategy_binding_projection_survives_json_index_round_trip ... ok
+test relationship_endpoints_and_board_scopes_preserve_nullable_identity_and_order ... ok
+test pushed_scope_and_search_match_rust_unicode_substrings_in_path_order ... ok
+test failed_replacement_keeps_published_index_and_prior_schema_rebuilds_as_missing ... ok
+test replacement_index_is_revision_bound_repairable_and_queryable ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.48s
+
+   Compiling casefile-store v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.40s
+     Running unittests src/lib.rs (/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/debug/deps/casefile_store-35dd4c6b7f743430)
+
+running 8 tests
+test provider::outcome_tests::ordinary_cache_observation_error_preserves_the_previous_publication_without_repair ... ok
+test provider::outcome_tests::observation_window_external_edit_cannot_claim_the_old_index_is_current ... ok
+test provider::outcome_tests::current_cache_survives_publication_failure_but_required_external_changes_do_not ... ok
+test provider::outcome_tests::events_and_rescan_require_rebuild_even_when_metadata_revision_is_unchanged ... ok
+test provider::outcome_tests::unconfigured_outcomes_do_not_read_the_store_after_commit_or_replay ... ok
+test provider::outcome_tests::native_watch_create_edit_rename_delete_reconciles_canonical_index_content ... ok
+test provider::outcome_tests::cache_preparation_failure_preserves_committed_receipt_bytes_and_supported_replay ... ok
+test provider::outcome_tests::native_watch_keeps_opaque_symlink_descendant_changes_outside_canonical_cache ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 63 filtered out; finished in 0.24s
+
+   Compiling casefile-store v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.51s
+     Running tests/provider.rs (/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/debug/deps/provider-64cbf6142fa47848)
+
+running 17 tests
+test default_board_refuses_missing_and_ambiguous_activation_mappings_before_preview ... ok
+test catalogue_union_keeps_mapping_only_and_governed_missing_mapping_projects ... ok
+test record_preview_rejects_win32_special_components_without_writing ... ok
+test index_summaries_and_requested_detail_decode_only_selected_notes_consistently ... ok
+test board_progress_dependency_is_demanded_and_malformed_required_logs_are_explicit ... ok
+test hierarchical_reads_are_selective_bounded_and_exact ... ok
+test invalid_unactivated_and_legacy_activation_fail_closed_without_conversion ... ok
+test cache_refresh_failure_after_a_confirmed_write_is_degraded_not_authoritative ... ok
+test record_ids_bind_original_authority_and_foreign_or_unknown_ids_preserve_the_store ... ok
+test default_board_ignores_unrelated_diagnostics_within_and_across_investigations ... ok
+test snapshot_and_exact_scoped_reads_are_bounded_protocol_v5 ... ok
+test record_batch_promotes_mutually_related_tickets_as_one_valid_change ... ok
+test default_board_is_named_exact_preview_with_preflight_collision_and_byte_preserving_no_op ... ok
+test progress_preview_integrity_covers_bootstrap_transition_replay_no_op_and_conflict ... ok
+test every_provider_apply_family_accepts_unrelated_store_changes ... ok
+test scoped_diagnostics_report_exact_progress_target_and_bounded_follow_up ... ok
+test preview_count_eviction_is_oldest_first_and_newest_id_still_applies_original ... ok
+
+test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.47s
+
+   Compiling casefile-server v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-server)
+   Compiling casefile-cli v0.8.0 (/home/alex/dev/HUMANS.md/casefile/casefile-cli)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 4.06s
+     Running tests/serve.rs (/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/debug/deps/serve-1cd899656028a7a0)
+
+running 3 tests
+test serve_transports_derived_ticket_progress ... ok
+test serve_preserves_preview_and_gates_apply_with_capability ... ok
+test serve_exposes_only_the_fixed_read_contract ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.75s
+
+    Checking serde-saphyr v0.0.29
+    Checking rusqlite v0.40.1
+    Checking parking_lot_core v0.9.12
+    Checking parking_lot v0.12.5
+    Checking crossterm v0.29.0
+    Checking ratatui-crossterm v0.1.2
+    Checking ratatui v0.30.2
+    Checking casefile-core v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-core)
+    Checking casefile-store v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store)
+    Checking casefile-store-sqlite v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store-sqlite)
+    Checking casefile-tui v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-tui)
+    Checking casefile-server v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-server)
+    Checking casefile-cli v0.8.0 (/home/alex/dev/HUMANS.md/casefile/casefile-cli)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 10.99s
+$ tsc --noEmit
+Checking formatting...
+All matched files use Prettier code style!
+bun test v1.3.13 (bf2e2cec)
+
+src/api-contract.test.ts:
+(pass) decodes the owned project-scope wire shape without a null investigation
+(pass) accepts the canonical progress record kind and rejects future kinds
+(pass) accepts the canonical strategy transition record kind [1.00ms]
+(pass) preserves the host stale-revision failure code
+(pass) decodes both canonical board status sources and rejects malformed selectors
+(pass) strictly decodes typed strategy and binding projections [1.00ms]
+(pass) rejects malformed strategy runtime pairs and impossible effective sources
+(pass) accepts target-only mutation receipts but rejects a missing target result
+(pass) compact record review rejects obsolete authority fields and applies only its live ID [1.00ms]
+(pass) workspace publications retain full drafts once and permit paths-only search replies [1.00ms]
+(pass) incomplete rollback carries sanitized remaining-state details through the typed browser boundary
+
+src/app/app.browser.test.tsx:
+522 |
+523 | const waitFor = async (condition: () => boolean): Promise<void> => {
+524 |   const deadline = Date.now() + 5_000;
+525 |   while (!condition()) {
+526 |     if (Date.now() >= deadline)
+527 |       throw new Error(`Timed out waiting for the workbench: ${document.body.textContent}`);
+                      ^
+error: Timed out waiting for the workbench: CCasefilePlanning workbenchSearch recordsWrite capability loadedRefreshCasefileProjectsInvestigationsTicketsFilesStrategiesBoardsProjectsdemo1 invInvestigationssample2 ticketsDiagnosticsClearTicketsGoverned workgovernedepicMinimum epicHMD-E-001.mdgovernedticketConcurrent titleHMD-011.mdRecord detailgovernedticketConcurrent titleprojects/demo/investigations/sample/tickets/accepted/HMD-011.mdOverviewRenderedSourceDiagnosticsRelationshipsdecisionHMD-D-001demo / sampleContextScopedemo / sampleStatusacceptedRank1ConfidencehighEdit ticketHMD-011 · demo / sampleTitleReported by roleReported by agentSource commitCreated atUpdated atConfidenceRequirement and evidenceRequired.ImpactImpact.Resolution boundaryBoundary.Acceptance criteriaCriteria.VerificationTests.Relationships and duplicate analysisNone.Review and disposition historyAccepted.decision refsrelated ticketssupersedessuperseded byWrite capabilityHeld only in this page’s memory and sent only when applying a reviewed preview.Preview changesApplying…Preview diagnosticsNo host diagnostics.Exact diffdiff --git a/projects/demo/investigations/sample/tickets/accepted/HMD-011.md b/projects/demo/investigations/sample/tickets/accepted/HMD-011.md
+index 27d35e5..59e942f 100644
+--- a/projects/demo/investigations/sample/tickets/accepted/HMD-011.md
++++ b/projects/demo/investigations/sample/tickets/accepted/HMD-011.md
+@@ -1,12 +1,12 @@
+ ---
+ id: HMD-011
+-title: "Concurrent title"
+-project: "demo"
+-investigation: "sample"
++title: Reconciled browser title
++project: demo
++investigation: sample
+ status: accepted
+-reported_by_role: "inspector"
+-reported_by_agent: "agent"
+-source_commit: "abc"
++reported_by_role: inspector
++reported_by_agent: agent
++source_commit: abc
+ created_at: 2026-07-18T10:00:00Z
+ updated_at: 2026-07-18T10:00:00Z
+ confidence: high
+
+      at <anonymous> (/home/alex/dev/HUMANS.md/casefile/web/src/app/app.browser.test.tsx:527:17)
+      at async <anonymous> (/home/alex/dev/HUMANS.md/casefile/web/src/app/app.browser.test.tsx:239:11)
+(fail) navigates and reconciles governed work against the shared host fixture [10309.03ms]
+(pass) rejects stale board projections across scope changes and refresh outcomes [1126.00ms]
+(pass) loads a progress log and places cards in their recorded board columns [763.00ms]
+(pass) keeps nested investigations with the same leaf independently selectable [974.00ms]
+(pass) a delayed obsolete search reply cannot replace the newer guarded workspace [1019.00ms]
+
+ 15 pass
+ 1 fail
+ 111 expect() calls
+Ran 16 tests across 2 files. [14.35s]
+
+## apply-debug.log
+warning: Git tree '/home/alex/dev/HUMANS.md' is dirty
+humans-md development shell
+  Setup:  (cd casefile/web && bun install)
+  Format: scripts/format-source.sh --check|--write
+  Web:    cd casefile/web; bun install; bun run typecheck; bun run test; bun run build
+  Rust:   cd casefile; cargo fmt --check; cargo clippy --workspace --all-targets -- -D warnings; cargo test --workspace
+  CI:     act pull_request -j validate --pull=false -P ubuntu-latest=catthehacker/ubuntu:act-latest
+   Compiling casefile-server v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-server)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.09s
+     Running unittests src/lib.rs (/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/debug/deps/casefile_server-0aa4c2e56cba8eb5)
+
+running 1 test
+test api::tests::real_http_apply_returns_the_committed_workspace_without_another_refresh ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 9 filtered out; finished in 0.17s
+
+bun test v1.3.13 (bf2e2cec)
+
+src/app/app.browser.test.tsx:
+HTTP connection failed: connection error
+HTTP connection failed: connection error
+(pass) navigates and reconciles governed work against the shared host fixture [8944.03ms]
+
+ 1 pass
+ 4 filtered out
+ 0 fail
+ 62 expect() calls
+Ran 1 test across 1 file. [9.06s]
+
+## final-verification.log
+warning: Git tree '/home/alex/dev/HUMANS.md' is dirty
+humans-md development shell
+  Setup:  (cd casefile/web && bun install)
+  Format: scripts/format-source.sh --check|--write
+  Web:    cd casefile/web; bun install; bun run typecheck; bun run test; bun run build
+  Rust:   cd casefile; cargo fmt --check; cargo clippy --workspace --all-targets -- -D warnings; cargo test --workspace
+  CI:     act pull_request -j validate --pull=false -P ubuntu-latest=catthehacker/ubuntu:act-latest
+$ bun run build.ts
+≈ tailwindcss v4.3.3
+
+Done in 86ms
+../casefile-server/web/assets/app.js: OK
+../casefile-server/web/assets/app.css: OK
+$ tsc --noEmit
+Checking formatting...
+All matched files use Prettier code style!
+   Compiling casefile-server v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-server)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.87s
+     Running unittests src/lib.rs (/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/debug/deps/casefile_server-0aa4c2e56cba8eb5)
+
+running 10 tests
+test api::tests::rollback_error_crosses_the_http_failure_channel_as_409_without_private_source_contents ... ok
+test api::tests::records_query_preserves_full_editable_draft_rendered_html_and_body_search ... ok
+test api::tests::committed_apply_projection_failure_stays_success_and_old_payload_is_refused ... ok
+test api::tests::callback_replacement_and_canonical_edit_refuse_partial_current_data ... ok
+test api::tests::real_http_apply_returns_the_committed_workspace_without_another_refresh ... ok
+test api::tests::workspace_tokens_distinguish_same_source_replacement_and_provider_restart ... ok
+test api::tests::progressing_body_may_take_longer_than_the_idle_deadline ... ok
+test api::tests::admitted_apply_survives_disconnected_client_beyond_io_deadline ... ok
+test api::tests::stalled_headers_and_body_expire_while_unrelated_and_large_requests_succeed ... ok
+test api::tests::non_reader_write_timeout_does_not_hold_unrelated_requests ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 36.04s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.08s
+     Running tests/integration.rs (/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/debug/deps/integration-67d27f3fb965b830)
+
+running 8 tests
+test old_derived_board_json_defaults_to_disposition ... ok
+test relationship_endpoints_and_board_scopes_preserve_nullable_identity_and_order ... ok
+test exact_duplicate_identity_is_ambiguous_in_canonical_and_indexed_reads ... ok
+test strategy_binding_projection_survives_json_index_round_trip ... ok
+test compact_cache_round_trip_preserves_source_search_and_requested_rendering ... ok
+test pushed_scope_and_search_match_rust_unicode_substrings_in_path_order ... ok
+test failed_replacement_keeps_published_index_and_prior_schema_rebuilds_as_missing ... ok
+test replacement_index_is_revision_bound_repairable_and_queryable ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.47s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.08s
+     Running unittests src/lib.rs (/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/debug/deps/casefile_store-35dd4c6b7f743430)
+
+running 8 tests
+test provider::outcome_tests::ordinary_cache_observation_error_preserves_the_previous_publication_without_repair ... ok
+test provider::outcome_tests::observation_window_external_edit_cannot_claim_the_old_index_is_current ... ok
+test provider::outcome_tests::events_and_rescan_require_rebuild_even_when_metadata_revision_is_unchanged ... ok
+test provider::outcome_tests::current_cache_survives_publication_failure_but_required_external_changes_do_not ... ok
+test provider::outcome_tests::unconfigured_outcomes_do_not_read_the_store_after_commit_or_replay ... ok
+test provider::outcome_tests::native_watch_create_edit_rename_delete_reconciles_canonical_index_content ... ok
+test provider::outcome_tests::cache_preparation_failure_preserves_committed_receipt_bytes_and_supported_replay ... ok
+test provider::outcome_tests::native_watch_keeps_opaque_symlink_descendant_changes_outside_canonical_cache ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 63 filtered out; finished in 0.23s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.07s
+     Running tests/provider.rs (/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/debug/deps/provider-64cbf6142fa47848)
+
+running 17 tests
+test default_board_refuses_missing_and_ambiguous_activation_mappings_before_preview ... ok
+test catalogue_union_keeps_mapping_only_and_governed_missing_mapping_projects ... ok
+test record_preview_rejects_win32_special_components_without_writing ... ok
+test index_summaries_and_requested_detail_decode_only_selected_notes_consistently ... ok
+test board_progress_dependency_is_demanded_and_malformed_required_logs_are_explicit ... ok
+test hierarchical_reads_are_selective_bounded_and_exact ... ok
+test cache_refresh_failure_after_a_confirmed_write_is_degraded_not_authoritative ... ok
+test invalid_unactivated_and_legacy_activation_fail_closed_without_conversion ... ok
+test record_ids_bind_original_authority_and_foreign_or_unknown_ids_preserve_the_store ... ok
+test default_board_ignores_unrelated_diagnostics_within_and_across_investigations ... ok
+test default_board_is_named_exact_preview_with_preflight_collision_and_byte_preserving_no_op ... ok
+test record_batch_promotes_mutually_related_tickets_as_one_valid_change ... ok
+test snapshot_and_exact_scoped_reads_are_bounded_protocol_v5 ... ok
+test progress_preview_integrity_covers_bootstrap_transition_replay_no_op_and_conflict ... ok
+test every_provider_apply_family_accepts_unrelated_store_changes ... ok
+test scoped_diagnostics_report_exact_progress_target_and_bounded_follow_up ... ok
+test preview_count_eviction_is_oldest_first_and_newest_id_still_applies_original ... ok
+
+test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.49s
+
+   Compiling casefile-server v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-server)
+   Compiling casefile-cli v0.8.0 (/home/alex/dev/HUMANS.md/casefile/casefile-cli)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 4.06s
+     Running tests/serve.rs (/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/debug/deps/serve-1cd899656028a7a0)
+
+running 3 tests
+test serve_transports_derived_ticket_progress ... ok
+test serve_preserves_preview_and_gates_apply_with_capability ... ok
+test serve_exposes_only_the_fixed_read_contract ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.21s
+
+    Checking casefile-server v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-server)
+    Checking casefile-cli v0.8.0 (/home/alex/dev/HUMANS.md/casefile/casefile-cli)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.91s
+bun test v1.3.13 (bf2e2cec)
+
+src/api-contract.test.ts:
+(pass) decodes the owned project-scope wire shape without a null investigation [1.00ms]
+(pass) accepts the canonical progress record kind and rejects future kinds
+(pass) accepts the canonical strategy transition record kind
+(pass) preserves the host stale-revision failure code
+(pass) decodes both canonical board status sources and rejects malformed selectors [1.00ms]
+(pass) strictly decodes typed strategy and binding projections
+(pass) rejects malformed strategy runtime pairs and impossible effective sources
+(pass) accepts target-only mutation receipts but rejects a missing target result [1.00ms]
+(pass) compact record review rejects obsolete authority fields and applies only its live ID [1.00ms]
+(pass) workspace publications retain full drafts once and permit paths-only search replies
+(pass) incomplete rollback carries sanitized remaining-state details through the typed browser boundary
+
+src/app/app.browser.test.tsx:
+HTTP connection failed: connection error
+(pass) navigates and reconciles governed work against the shared host fixture [5091.02ms]
+(pass) rejects stale board projections across scope changes and refresh outcomes [876.00ms]
+(pass) loads a progress log and places cards in their recorded board columns [572.00ms]
+(pass) keeps nested investigations with the same leaf independently selectable [766.00ms]
+(pass) a delayed obsolete search reply cannot replace the newer guarded workspace [771.00ms]
+
+ 16 pass
+ 0 fail
+ 116 expect() calls
+Ran 16 tests across 2 files. [8.23s]
+   Compiling smallvec v1.15.2
+   Compiling bytes v1.12.1
+   Compiling pin-project-lite v0.2.17
+   Compiling socket2 v0.6.5
+   Compiling httparse v1.10.1
+   Compiling futures-core v0.3.34
+   Compiling atomic-waker v1.1.2
+   Compiling futures-channel v0.3.34
+   Compiling granit-parser v0.0.7
+   Compiling rusqlite v0.40.1
+   Compiling tokio v1.53.1
+   Compiling http v1.5.0
+   Compiling serde-saphyr v0.0.29
+   Compiling http-body v1.1.0
+   Compiling http-body-util v0.1.5
+   Compiling casefile-core v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-core)
+   Compiling hyper v1.11.1
+   Compiling tokio-io-timeout v1.2.1
+   Compiling hyper-util v0.1.21
+   Compiling casefile-store v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store)
+   Compiling casefile-store-sqlite v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store-sqlite)
+   Compiling casefile-server v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-server)
+    Finished `bench` profile [optimized] target(s) in 27.96s
+  Executable benches/http.rs (/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/release/deps/http-7be4e3cdc56e296b)
+
+## streaming-final-verification.log
+warning: Git tree '/home/alex/dev/HUMANS.md' is dirty
+humans-md development shell
+  Setup:  (cd casefile/web && bun install)
+  Format: scripts/format-source.sh --check|--write
+  Web:    cd casefile/web; bun install; bun run typecheck; bun run test; bun run build
+  Rust:   cd casefile; cargo fmt --check; cargo clippy --workspace --all-targets -- -D warnings; cargo test --workspace
+  CI:     act pull_request -j validate --pull=false -P ubuntu-latest=catthehacker/ubuntu:act-latest
+   Compiling casefile-store-sqlite v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store-sqlite)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.97s
+     Running tests/integration.rs (/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/debug/deps/integration-67d27f3fb965b830)
+
+running 8 tests
+test old_derived_board_json_defaults_to_disposition ... ok
+test compact_cache_round_trip_preserves_source_search_and_requested_rendering ... ok
+test strategy_binding_projection_survives_json_index_round_trip ... ok
+test exact_duplicate_identity_is_ambiguous_in_canonical_and_indexed_reads ... ok
+test relationship_endpoints_and_board_scopes_preserve_nullable_identity_and_order ... ok
+test pushed_scope_and_search_match_rust_unicode_substrings_in_path_order ... ok
+test failed_replacement_keeps_published_index_and_prior_schema_rebuilds_as_missing ... ok
+test replacement_index_is_revision_bound_repairable_and_queryable ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.50s
+
+   Compiling casefile-store-sqlite v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store-sqlite)
+   Compiling casefile-server v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-server)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 4.00s
+     Running unittests src/lib.rs (/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/debug/deps/casefile_server-0aa4c2e56cba8eb5)
+
+running 10 tests
+test api::tests::rollback_error_crosses_the_http_failure_channel_as_409_without_private_source_contents ... ok
+test api::tests::records_query_preserves_full_editable_draft_rendered_html_and_body_search ... ok
+test api::tests::committed_apply_projection_failure_stays_success_and_old_payload_is_refused ... ok
+test api::tests::callback_replacement_and_canonical_edit_refuse_partial_current_data ... ok
+test api::tests::workspace_tokens_distinguish_same_source_replacement_and_provider_restart ... ok
+test api::tests::real_http_apply_returns_the_committed_workspace_without_another_refresh ... ok
+test api::tests::progressing_body_may_take_longer_than_the_idle_deadline ... ok
+test api::tests::admitted_apply_survives_disconnected_client_beyond_io_deadline ... ok
+test api::tests::stalled_headers_and_body_expire_while_unrelated_and_large_requests_succeed ... ok
+test api::tests::non_reader_write_timeout_does_not_hold_unrelated_requests ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 36.05s
+
+   Compiling casefile-store-sqlite v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store-sqlite)
+   Compiling casefile-server v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-server)
+   Compiling casefile-cli v0.8.0 (/home/alex/dev/HUMANS.md/casefile/casefile-cli)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 5.68s
+     Running tests/serve.rs (/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/debug/deps/serve-1cd899656028a7a0)
+
+running 3 tests
+test serve_transports_derived_ticket_progress ... ok
+test serve_exposes_only_the_fixed_read_contract ... ok
+test serve_preserves_preview_and_gates_apply_with_capability ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.20s
+
+    Checking casefile-store-sqlite v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store-sqlite)
+    Checking casefile-server v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-server)
+    Checking casefile-cli v0.8.0 (/home/alex/dev/HUMANS.md/casefile/casefile-cli)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.08s
+$ tsc --noEmit
+bun test v1.3.13 (bf2e2cec)
+
+src/api-contract.test.ts:
+(pass) decodes the owned project-scope wire shape without a null investigation [1.00ms]
+(pass) accepts the canonical progress record kind and rejects future kinds
+(pass) accepts the canonical strategy transition record kind
+(pass) preserves the host stale-revision failure code
+(pass) decodes both canonical board status sources and rejects malformed selectors
+(pass) strictly decodes typed strategy and binding projections [1.00ms]
+(pass) rejects malformed strategy runtime pairs and impossible effective sources
+(pass) accepts target-only mutation receipts but rejects a missing target result
+(pass) compact record review rejects obsolete authority fields and applies only its live ID [2.00ms]
+(pass) workspace publications retain full drafts once and permit paths-only search replies
+(pass) incomplete rollback carries sanitized remaining-state details through the typed browser boundary
+
+src/app/app.browser.test.tsx:
+HTTP connection failed: connection error
+HTTP connection failed: connection error
+(pass) navigates and reconciles governed work against the shared host fixture [5093.02ms]
+(pass) rejects stale board projections across scope changes and refresh outcomes [876.00ms]
+(pass) loads a progress log and places cards in their recorded board columns [574.00ms]
+(pass) keeps nested investigations with the same leaf independently selectable [773.00ms]
+(pass) a delayed obsolete search reply cannot replace the newer guarded workspace [773.00ms]
+
+ 16 pass
+ 0 fail
+ 116 expect() calls
+Ran 16 tests across 2 files. [8.24s]
+   Compiling casefile-store-sqlite v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store-sqlite)
+   Compiling casefile-server v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-server)
+    Finished `bench` profile [optimized] target(s) in 8.40s
+  Executable benches/http.rs (/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/release/deps/http-7be4e3cdc56e296b)
+
+## criterion-missing-target.log
+Gnuplot not found, using plotters backend
+Benchmarking http_loopback_records/unchanged/250
+
+thread 'main' (1918602) panicked at /home/alex/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/criterion-0.8.2/src/analysis/mod.rs:56:13:
+Baseline 'hmd057-before' must exist before comparison is allowed; try --save-baseline hmd057-before
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+## discovery.log
+Gnuplot not found, using plotters backend
+http_loopback_records/unchanged/250: benchmark
+http_loopback_records/search_hit/250: benchmark
+http_loopback_records/search_miss/250: benchmark
+http_loopback_records/unchanged/1000: benchmark
+http_loopback_records/search_hit/1000: benchmark
+http_loopback_records/search_miss/1000: benchmark
+
+
+## final-before-preservation.log
+casefile/benchmarks/BASELINE.md: OK
+casefile/benchmarks/results/hmd057-before.json: OK
+casefile/benchmarks/results/hmd057-before.log: OK
+casefile/casefile-store-sqlite/benches/baselines.rs: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/http_loopback_records/search_miss/1000/hmd057-before/benchmark.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/records/full_derived/1000/hmd057-before/sample.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/mutation_preview_250_records/replace_batch/1/hmd057-before/estimates.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/supersession/chain/500/hmd057-before/sample.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/priority_scope_500_notes/selected_record_index/250/hmd057-before/tukey.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/scoped_progress_250_records/disposition_boards/0/hmd057-before/sample.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/presentation_250_records/unchanged_refresh/hmd057-before/sample.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/presentation_250_records/cold_session/hmd057-before/sample.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/scoped_progress_250_records/missing_detail/500/hmd057-before/sample.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/supersession/independent/250/hmd057-before/benchmark.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/priority_scope_500_notes/selected_record_index/250/hmd057-before/sample.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/records/boards/1000/hmd057-before/tukey.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/priority_scope_500_notes/missing_detail/250/hmd057-before/sample.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/records/record_index/1000/hmd057-before/sample.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/inventory/full_scan/2000/hmd057-before/estimates.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/records/scoped_check/1000/hmd057-before/estimates.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/scoped_progress_250_records/disposition_boards/0/hmd057-before/tukey.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/http_loopback_records/search_miss/250/hmd057-before/estimates.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/http_loopback_records/search_hit/1000/hmd057-before/benchmark.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/tui_250_records_500_notes/list_scroll_20_frames/hmd057-before/benchmark.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/sqlite_500_records/prepare_replacement/hmd057-before/estimates.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/priority_scope_500_notes/missing_detail/1000/hmd057-before/tukey.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/core_parsing/progress_parse_500_notes/hmd057-before/estimates.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/activation_roots/scoped_check/1/hmd057-before/estimates.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/mutation_preview_250_records/replace_batch/10/hmd057-before/estimates.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/inventory/full_scan/8000/hmd057-before/tukey.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/records/full_derived/250/hmd057-before/estimates.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/progress/accepted_target/500/hmd057-before/sample.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/http_loopback_records/search_hit/250/hmd057-before/benchmark.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/progress/accepted_target/250/hmd057-before/sample.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/core_parsing/ticket_render_roundtrip/hmd057-before/estimates.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/sqlite_500_records/records_search_miss/hmd057-before/sample.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/scoped_progress_250_records/record_index/500/hmd057-before/benchmark.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/http_loopback_records/unchanged/250/hmd057-before/benchmark.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/records/scoped_check/1000/hmd057-before/tukey.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/priority_scope_500_notes/selected_record_index/1000/hmd057-before/estimates.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/sqlite_500_records/relationships_miss/hmd057-before/estimates.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/tui_250_records_500_notes/list_scroll_20_frames/hmd057-before/estimates.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/supersession/chain/500/hmd057-before/benchmark.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/http_loopback_records/search_miss/1000/hmd057-before/estimates.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/http_loopback_records/search_hit/250/hmd057-before/sample.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/inventory/metadata_summary/2000/hmd057-before/sample.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/presentation_250_records/cold_session/hmd057-before/estimates.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/progress/missing_targets/500/hmd057-before/tukey.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/progress/missing_targets/500/hmd057-before/estimates.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/priority_scope_500_notes/existing_detail/250/hmd057-before/tukey.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/records/boards/250/hmd057-before/sample.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/progress/missing_targets/250/hmd057-before/benchmark.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/records/boards/250/hmd057-before/benchmark.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/priority_single_record_250_records_500_notes/apply/hmd057-before/tukey.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/inventory/full_scan/8000/hmd057-before/estimates.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/activation_roots/scoped_check/100/hmd057-before/estimates.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/sqlite_500_records/prepare_replacement/hmd057-before/sample.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/supersession/chain/250/hmd057-before/benchmark.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/inventory/scoped_check/2000/hmd057-before/tukey.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/priority_single_record_250_records_500_notes/apply/hmd057-before/sample.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/http_loopback_records/search_hit/250/hmd057-before/tukey.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/scoped_progress_250_records/record_index/500/hmd057-before/estimates.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/http_loopback_records/search_miss/250/hmd057-before/benchmark.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/records/scoped_check/1000/hmd057-before/benchmark.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/supersession/independent/250/hmd057-before/sample.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/activation_roots/scoped_check/100/hmd057-before/tukey.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/presentation_250_records/unchanged_refresh/hmd057-before/benchmark.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/records/boards/1000/hmd057-before/sample.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/sqlite_500_records/records_all/hmd057-before/tukey.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/supersession/independent/500/hmd057-before/sample.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/inventory/scoped_check/8000/hmd057-before/estimates.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/supersession/independent/500/hmd057-before/benchmark.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/inventory/full_scan/8000/hmd057-before/sample.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/priority_single_record_250_records_500_notes/preview/hmd057-before/tukey.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/scoped_progress_250_records/missing_detail/0/hmd057-before/tukey.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/mutation_preview_250_records/replace_batch/10/hmd057-before/benchmark.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/sqlite_500_records/records_all/hmd057-before/estimates.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/progress/accepted_target/250/hmd057-before/estimates.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/activation_roots/scoped_check/1/hmd057-before/tukey.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/tui_250_records_500_notes/selected_scope_navigation/hmd057-before/estimates.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/core_parsing/ticket_parse/hmd057-before/tukey.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/inventory/metadata_summary/2000/hmd057-before/tukey.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/records/scoped_check/250/hmd057-before/estimates.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/sqlite_500_records/boards/hmd057-before/estimates.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/http_loopback_records/unchanged/250/hmd057-before/tukey.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/supersession/independent/500/hmd057-before/estimates.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/sqlite_500_records/records_all/hmd057-before/benchmark.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/core_parsing/ticket_parse/hmd057-before/sample.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/inventory/scoped_check/2000/hmd057-before/sample.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/sqlite_500_records/relationships_miss/hmd057-before/tukey.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/http_loopback_records/unchanged/1000/hmd057-before/sample.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/priority_scope_500_notes/existing_detail/1000/hmd057-before/estimates.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/presentation_250_records/unchanged_refresh/hmd057-before/estimates.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/core_parsing/progress_parse_500_notes/hmd057-before/benchmark.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/records/boards/250/hmd057-before/tukey.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/http_loopback_records/search_hit/1000/hmd057-before/estimates.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/inventory/metadata_summary/2000/hmd057-before/benchmark.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/inventory/scoped_check/2000/hmd057-before/benchmark.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/sqlite_500_records/records_search_miss/hmd057-before/tukey.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/supersession/chain/500/hmd057-before/tukey.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/scoped_progress_250_records/record_index/0/hmd057-before/benchmark.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/http_loopback_records/search_hit/250/hmd057-before/estimates.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/scoped_progress_250_records/record_index/500/hmd057-before/sample.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/http_loopback_records/search_miss/1000/hmd057-before/sample.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/activation_roots/scoped_check/100/hmd057-before/sample.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/tui_250_records_500_notes/detail_scroll_20_frames/hmd057-before/sample.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/scoped_progress_250_records/missing_detail/500/hmd057-before/estimates.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/inventory/full_scan/2000/hmd057-before/sample.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/http_loopback_records/unchanged/1000/hmd057-before/estimates.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/activation_roots/scoped_check/100/hmd057-before/benchmark.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/scoped_progress_250_records/disposition_boards/0/hmd057-before/estimates.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/core_parsing/ticket_render_roundtrip/hmd057-before/tukey.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/progress/missing_targets/500/hmd057-before/benchmark.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/inventory/scoped_check/2000/hmd057-before/estimates.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/activation_roots/scoped_check/1/hmd057-before/benchmark.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/records/record_index/250/hmd057-before/estimates.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/records/scoped_check/250/hmd057-before/benchmark.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/scoped_progress_250_records/disposition_boards/500/hmd057-before/sample.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/scoped_progress_250_records/disposition_boards/500/hmd057-before/tukey.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/sqlite_500_records/records_all/hmd057-before/sample.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/http_loopback_records/unchanged/1000/hmd057-before/tukey.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/activation_roots/scoped_check/1/hmd057-before/sample.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/inventory/metadata_summary/2000/hmd057-before/estimates.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/tui_250_records_500_notes/detail_scroll_20_frames/hmd057-before/estimates.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/priority_scope_500_notes/selected_record_index/250/hmd057-before/estimates.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/priority_scope_500_notes/existing_detail/1000/hmd057-before/sample.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/core_parsing/ticket_render_roundtrip/hmd057-before/sample.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/tui_250_records_500_notes/detail_scroll_20_frames/hmd057-before/tukey.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/http_loopback_records/search_miss/250/hmd057-before/sample.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/records/record_index/250/hmd057-before/sample.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/progress/missing_targets/500/hmd057-before/sample.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/mutation_preview_250_records/replace_batch/1/hmd057-before/benchmark.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/records/full_derived/250/hmd057-before/benchmark.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/priority_scope_500_notes/existing_detail/250/hmd057-before/benchmark.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/progress/accepted_target/500/hmd057-before/benchmark.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/inventory/metadata_summary/8000/hmd057-before/benchmark.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/priority_single_record_250_records_500_notes/preview/hmd057-before/estimates.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/mutation_preview_250_records/replace_batch/10/hmd057-before/tukey.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/supersession/independent/250/hmd057-before/tukey.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/progress/accepted_target/250/hmd057-before/benchmark.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/http_loopback_records/unchanged/250/hmd057-before/estimates.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/scoped_progress_250_records/record_index/0/hmd057-before/sample.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/sqlite_500_records/records_search_miss/hmd057-before/benchmark.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/inventory/metadata_summary/8000/hmd057-before/estimates.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/inventory/metadata_summary/8000/hmd057-before/tukey.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/progress/accepted_target/500/hmd057-before/tukey.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/priority_scope_500_notes/selected_record_index/250/hmd057-before/benchmark.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/core_parsing/ticket_parse/hmd057-before/estimates.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/supersession/chain/250/hmd057-before/tukey.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/inventory/full_scan/2000/hmd057-before/tukey.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/supersession/independent/500/hmd057-before/tukey.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/priority_single_record_250_records_500_notes/apply/hmd057-before/estimates.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/supersession/chain/250/hmd057-before/sample.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/inventory/full_scan/8000/hmd057-before/benchmark.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/records/full_derived/1000/hmd057-before/tukey.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/tui_250_records_500_notes/selected_scope_navigation/hmd057-before/tukey.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/scoped_progress_250_records/missing_detail/0/hmd057-before/benchmark.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/priority_scope_500_notes/existing_detail/250/hmd057-before/sample.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/priority_scope_500_notes/existing_detail/1000/hmd057-before/benchmark.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/core_parsing/progress_parse_500_notes/hmd057-before/sample.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/progress/accepted_target/500/hmd057-before/estimates.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/inventory/full_scan/2000/hmd057-before/benchmark.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/presentation_250_records/cold_session/hmd057-before/benchmark.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/records/full_derived/250/hmd057-before/tukey.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/sqlite_500_records/prepare_replacement/hmd057-before/benchmark.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/priority_single_record_250_records_500_notes/preview/hmd057-before/sample.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/records/full_derived/1000/hmd057-before/benchmark.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/priority_scope_500_notes/missing_detail/250/hmd057-before/benchmark.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/records/record_index/1000/hmd057-before/tukey.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/records/scoped_check/250/hmd057-before/tukey.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/priority_scope_500_notes/missing_detail/250/hmd057-before/estimates.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/sqlite_500_records/boards/hmd057-before/benchmark.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/http_loopback_records/search_miss/1000/hmd057-before/tukey.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/scoped_progress_250_records/disposition_boards/0/hmd057-before/benchmark.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/sqlite_500_records/relationships_miss/hmd057-before/sample.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/records/full_derived/250/hmd057-before/sample.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/supersession/chain/500/hmd057-before/estimates.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/inventory/scoped_check/8000/hmd057-before/tukey.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/priority_scope_500_notes/selected_record_index/1000/hmd057-before/sample.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/progress/missing_targets/250/hmd057-before/estimates.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/records/record_index/250/hmd057-before/benchmark.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/sqlite_500_records/boards/hmd057-before/sample.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/records/record_index/1000/hmd057-before/benchmark.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/inventory/scoped_check/8000/hmd057-before/sample.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/mutation_preview_250_records/replace_batch/1/hmd057-before/sample.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/sqlite_500_records/prepare_replacement/hmd057-before/tukey.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/tui_250_records_500_notes/selected_scope_navigation/hmd057-before/benchmark.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/inventory/scoped_check/8000/hmd057-before/benchmark.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/http_loopback_records/search_hit/1000/hmd057-before/tukey.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/presentation_250_records/unchanged_refresh/hmd057-before/tukey.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/priority_scope_500_notes/existing_detail/250/hmd057-before/estimates.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/records/boards/1000/hmd057-before/estimates.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/core_parsing/progress_parse_500_notes/hmd057-before/tukey.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/priority_single_record_250_records_500_notes/preview/hmd057-before/benchmark.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/records/record_index/1000/hmd057-before/estimates.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/progress/missing_targets/250/hmd057-before/sample.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/priority_scope_500_notes/missing_detail/1000/hmd057-before/estimates.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/tui_250_records_500_notes/list_scroll_20_frames/hmd057-before/tukey.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/priority_scope_500_notes/existing_detail/1000/hmd057-before/tukey.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/scoped_progress_250_records/record_index/500/hmd057-before/tukey.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/priority_scope_500_notes/missing_detail/250/hmd057-before/tukey.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/records/boards/250/hmd057-before/estimates.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/http_loopback_records/unchanged/250/hmd057-before/sample.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/priority_single_record_250_records_500_notes/apply/hmd057-before/benchmark.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/scoped_progress_250_records/disposition_boards/500/hmd057-before/benchmark.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/progress/accepted_target/250/hmd057-before/tukey.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/scoped_progress_250_records/record_index/0/hmd057-before/tukey.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/progress/missing_targets/250/hmd057-before/tukey.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/tui_250_records_500_notes/detail_scroll_20_frames/hmd057-before/benchmark.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/mutation_preview_250_records/replace_batch/10/hmd057-before/sample.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/scoped_progress_250_records/record_index/0/hmd057-before/estimates.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/core_parsing/ticket_parse/hmd057-before/benchmark.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/priority_scope_500_notes/selected_record_index/1000/hmd057-before/tukey.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/records/scoped_check/1000/hmd057-before/sample.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/tui_250_records_500_notes/list_scroll_20_frames/hmd057-before/sample.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/mutation_preview_250_records/replace_batch/1/hmd057-before/tukey.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/priority_scope_500_notes/selected_record_index/1000/hmd057-before/benchmark.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/http_loopback_records/unchanged/1000/hmd057-before/benchmark.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/scoped_progress_250_records/missing_detail/0/hmd057-before/sample.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/http_loopback_records/search_miss/250/hmd057-before/tukey.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/scoped_progress_250_records/missing_detail/0/hmd057-before/estimates.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/records/boards/1000/hmd057-before/benchmark.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/priority_scope_500_notes/missing_detail/1000/hmd057-before/sample.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/records/scoped_check/250/hmd057-before/sample.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/presentation_250_records/cold_session/hmd057-before/tukey.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/supersession/independent/250/hmd057-before/estimates.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/inventory/metadata_summary/8000/hmd057-before/sample.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/sqlite_500_records/records_search_miss/hmd057-before/estimates.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/sqlite_500_records/relationships_miss/hmd057-before/benchmark.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/scoped_progress_250_records/missing_detail/500/hmd057-before/benchmark.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/records/full_derived/1000/hmd057-before/estimates.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/supersession/chain/250/hmd057-before/estimates.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/records/record_index/250/hmd057-before/tukey.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/http_loopback_records/search_hit/1000/hmd057-before/sample.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/sqlite_500_records/boards/hmd057-before/tukey.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/scoped_progress_250_records/disposition_boards/500/hmd057-before/estimates.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/priority_scope_500_notes/missing_detail/1000/hmd057-before/benchmark.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/core_parsing/ticket_render_roundtrip/hmd057-before/benchmark.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/scoped_progress_250_records/missing_detail/500/hmd057-before/tukey.json: OK
+.agent-workspace/20260930-speedup-implementation/writer/target/criterion/tui_250_records_500_notes/selected_scope_navigation/hmd057-before/sample.json: OK
+
+## Explicit preliminary corrections
+third-tests.log: test hook paused both original apply and replay; owned test binary PID1902354 was SIGTERM-terminated, session exit101. Corrected hook is one-shot with a test-only recv watchdog. No product/server process was killed.
+fourth-tests.log: changed record ID replay expected200 incorrectly; canonical write succeeded, supported stale replay was409. Fixture corrected to verify published committed content plus stale refusal, not loosened mutation freshness.
+criterion-missing-target.log: direct executable invocation omitted runtime CARGO_TARGET_DIR, exited101 before collecting samples. Corrected invocation uses the retained absolute directory and existing native baseline, never rehydrates/saves a fictitious before baseline.
+Asset rebuild: original CSS23070 bytes -> generated21889 bytes; removes obsolete lexical filter/support, adds lexical static utility. Root approved generated output. AuthoredCSS/classes/layout/packages unchanged. final-verification.log proves both JS and CSS exactly reproducible via production build.
+Final streaming SQL row decode removes introduced Vec<String> gather; initial measured six are retained as superseded source, final six use exact final production source.
+Postmeasurement source/binary SHA256 comparisons all pass; four old artifact/source objects +236 named native before objects pass SHA256 validation.
+
+Evidence closeout: initial staged diff check found whitespace only in captured logs; presentation trailing spaces/blank EOF lines trimmed. Source, sample/estimate JSON and measured binaries unchanged.
+
+FINAL HANDOFF AUDIT: staged exact35 owned paths; source provenance 126 files and measured release binary match; fixture probe matches; original4 plus native236 before hashes PASS; staged diff check PASS. No source changes after final six measurements.
+Owned scratch removed (retained root target/before manifests untouched):
+  apply-debug.log
+  asset-before-rebuild.txt
+  before-preservation.log
+  browser-tests.log
+  combined-check.log
+  core-check.log
+  criterion-missing-target.log
+  criterion.log
+  discovery.log
+  fetch.log
+  fifth-tests.log
+  final-before-preservation.log
+  final-checks.log
+  final-verification.log
+  fixture-probe.json
+  fixture-probe.py
+  fourth-tests.log
+  generated.css
+  initial-tests.log
+  measurement-provenance.json
+  missing-target-provenance.json
+  pre-streaming-after.json
+  pre-streaming-criterion.log
+  pre-streaming-provenance.json
+  results-table.md
+  second-tests.log
+  server-check.log
+  sixth-tests.log
+  streaming-final-verification.log
+  third-tests.log
+  token-debug.log
+  ts-skills.txt
+  unselected-generated-css.diff
+  web-build.log

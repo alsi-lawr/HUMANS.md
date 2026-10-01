@@ -1,0 +1,1087 @@
+{
+  "parent": "985f30e5731275a76660bf31cfcecff60a12df70",
+  "command": [
+    "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/release/deps/http-7be4e3cdc56e296b",
+    "^http_loopback_records/",
+    "--bench",
+    "--baseline",
+    "hmd057-before"
+  ],
+  "source_sha256": {
+    "casefile/Cargo.lock": "0728d84b97d2564f6a5798777e693abf68c8dd15f1cd053462bd65689a46334a",
+    "casefile/Cargo.toml": "93faca5025855579badbd520ba05286857d27143c257c9ccb3d3a41d0549091d",
+    "casefile/benchmarks/support/mod.rs": "9a073d937a0aaef7d27be68b0dbc6821338a8bab29db2c91ffa4d248301e1361",
+    "casefile/casefile-core/Cargo.toml": "47ef3670f095f44677eb34bde11cc7665af5e233e5f94addc3847ee0e7c7380b",
+    "casefile/casefile-core/src/board.rs": "2458232b2ac378e509fe7fa6419b43ee85ed3bf0f133f885d6b440e3830095ac",
+    "casefile/casefile-core/src/change.rs": "62baaecaf55dc57402839b78bd9c8ebad703a79d46ff487782a3dcfa84a29770",
+    "casefile/casefile-core/src/decision.rs": "9456e83c4656d25bbd8f0e40720ea0f81ab411392163b0fdfe0e726a0157434b",
+    "casefile/casefile-core/src/diagnostic.rs": "d85e3fc270478f566c2caa716e89a1b69671f1e7fb46f081b225982c16a7b593",
+    "casefile/casefile-core/src/lib.rs": "1283fd1ab8905bf5e0e28ea113e4c6baf3ca103018220df206c3902d135b7b04",
+    "casefile/casefile-core/src/markdown.rs": "f14af32fdc9256ab2054a6496f388b90608cf9878fdb3154d0463357d9293c7f",
+    "casefile/casefile-core/src/metadata.rs": "f479a46ea7135640c664afe3f290eed86d94499754ddb669a4cfa8feb5f3f782",
+    "casefile/casefile-core/src/progress/parse.rs": "2454be911956140e8de1961a9ece31163a988c1e462cbf255f4e2606b6047285",
+    "casefile/casefile-core/src/progress.rs": "28b23416ff41c9aae7a39749187c9fa64aab62b0d1dfee8bd481c1dba2e61124",
+    "casefile/casefile-core/src/project_map.rs": "3f778d5de7b05c0f869f1eae4013f4f4f2232f5460b828b8a902d1d6ebb08ac2",
+    "casefile/casefile-core/src/record.rs": "39c923a8117146d61d00d1f9b517949dd603d8bc59f6f0ab2a91fae0f65a4519",
+    "casefile/casefile-core/src/rendering.rs": "0d9c574c4fa1c6c69d79baffe48aa9909a3cf53e4ed4af8e2df1748fdd09a021",
+    "casefile/casefile-core/src/request.rs": "f45211b6204002f7658dfa64a18c52bab14f4c05ee4b7458452507ea36e135a5",
+    "casefile/casefile-core/src/snapshot.rs": "3e55a04b5dcb8587f529c46ae02bf1ebed030177d1abd0321f44d2b4b7b93739",
+    "casefile/casefile-core/src/strategy.rs": "9188debe2b7019aef8a6e266e327dcf3281dc244bcb4e1522306acd64d38eff6",
+    "casefile/casefile-core/src/strategy_transition.rs": "4c8924bc9d6654b8cd14ec4d5846c4c7c35c58cbcad4395a457fa29aff4f18aa",
+    "casefile/casefile-core/src/work_item.rs": "5bf5efc4ea50aeb2f5304a82dc2d4aa42f18e4a6d47649ebe0dd8c8a53f508f3",
+    "casefile/casefile-server/Cargo.toml": "2a02a3a3a13e8ca96042e0d733cac27dd28788914c723593fa54c4078951ca11",
+    "casefile/casefile-server/benches/http.rs": "2b3fb07c9819c5fb829fa0d3c18ed2c89448682772dd781fae891e748f9d9b55",
+    "casefile/casefile-server/src/api.rs": "8e0ba5f4853ebc7d5e9970cfd84a5a5c99d3df34e295773ddf4ec7c92a43cc6c",
+    "casefile/casefile-server/src/assets.rs": "ee10f630be8e1dc5b019500d7abbf0b6ee35ee08f5390ee08d3e4e7edd2dc488",
+    "casefile/casefile-server/src/lib.rs": "b9da77fc3ffa9b88e7c8b1fcf2c55def135cafde3591d98d289180c20b5127ba",
+    "casefile/casefile-server/src/transport.rs": "84f397b4312fa28c01c2ba6ce332d94d00bb7e99ef2fb14ab35bafdfc46a0935",
+    "casefile/casefile-server/src/workbench/display.rs": "2805cf908d88dfffb71937ebe0ecbc56fc30699d0de4ed0f7aa508db85ebc14c",
+    "casefile/casefile-server/src/workbench/workspace.rs": "6efbe8ed44a3a1cbe93c3026b7e7cf6f9855558d6d7c42d0758c3e52de5ad574",
+    "casefile/casefile-server/src/workbench.rs": "86402f9326bf4e1e5ec40a72d5fdcce8f92b6440643966a165eb15e0fbb01dde",
+    "casefile/casefile-server/web/assets/app.css": "0afb5a42418dcc1c5bb6cd221b1854bdd271352cfd3d05a05555af2bda610651",
+    "casefile/casefile-server/web/assets/app.js": "e41d8312c7c3222daaf018d9bc82c421fc9804b8639ccbb392b62d7f53bda149",
+    "casefile/casefile-store/Cargo.toml": "8d5ad3f3faa240852535d21849c2cf5c11aab4f3759f753a80d2ab2001d941e1",
+    "casefile/casefile-store/src/activation.rs": "9b1ad5144e3c98d29881e6163cdd3e5f873a7c87e498f1f919da13704fe26c91",
+    "casefile/casefile-store/src/checking.rs": "68793eb54a3fbc404349d1c568c3eddf2635fa89447ce652da76740c81d8531c",
+    "casefile/casefile-store/src/derived/boards.rs": "38b3c2cbb943792d9c11542fbb2312a5c1fa6990e2979a179fc4806baf4c724f",
+    "casefile/casefile-store/src/derived/progress.rs": "07b37ec31d91e874debff73e2c87b1839f2a9ef28d90c4c1f6a93f0c1eb94a58",
+    "casefile/casefile-store/src/derived/records.rs": "21bb9a7f332f816331ffa875f5ff0837f5c9f15e98a7978094f1191f3d7c379e",
+    "casefile/casefile-store/src/derived.rs": "8fb8bf4ea4b449d54a7fef8f6ea7ca092b4611215d53a9522344149363a7d0bc",
+    "casefile/casefile-store/src/governance.rs": "0e4d8d198d2fe9accc1e20bec72dcad3b957e98e75276c2ddb3cb5a09cc8e569",
+    "casefile/casefile-store/src/index.rs": "da8ad3b36cc668228339e5d2af90b7d190a9abc98b74b86bebf387ab56cd6fb6",
+    "casefile/casefile-store/src/layout.rs": "7d9651b214616d139e4049e7b02db77f2ee3cce1707d0af53ec1d0745e676129",
+    "casefile/casefile-store/src/lib.rs": "4c43eb55a9b26621a18423b6a24120f5cc76e0f915aa7a2fcbc52c54997d99a8",
+    "casefile/casefile-store/src/mutation.rs": "09bb9edc247b1ad0c66926294babbaa86249ab0f5b6dda96cea5579c243dd6aa",
+    "casefile/casefile-store/src/mutation_dependencies.rs": "7d944577065ce8f6b97cc748de818e1fea67fc1606985f9b1d843b1a1591ecd1",
+    "casefile/casefile-store/src/mutation_hooks.rs": "e7ffd9ff983b33e310e13fd3486b6e55afe4cc86e5b7c9baad681ab528e2b9e5",
+    "casefile/casefile-store/src/mutation_locks.rs": "eb4bbb2ad522b6ddc67dbbe016cc364603e7c09929aac0195ce34d3cde3bd27d",
+    "casefile/casefile-store/src/mutation_metadata.rs": "50c3efe33e1aa12c9b3efadcc7bdca35799c84628930e4771936c8dc956e0fdf",
+    "casefile/casefile-store/src/mutation_projection.rs": "5c69b4d20e94f84f9c42157115672ee89792bb0feda22c4c15dc2be831db8ad5",
+    "casefile/casefile-store/src/mutation_restore.rs": "6e62d3c6f0596e11300695effa4c67a91ce69395b7f94a3f5379697d49dac53a",
+    "casefile/casefile-store/src/mutation_tests.rs": "f3f65ac22bfcfbaf51daf1a79b54dd552c7ac3d14b4542456a2c29f9e2d5f3ab",
+    "casefile/casefile-store/src/presentation/catalogue.rs": "b09c614c51984f036fa3568f7c83568b39a58e4777ce886c061403156d6c1508",
+    "casefile/casefile-store/src/presentation/content.rs": "53492c8cb103122cd5babc10a8e8500e888336f72ec7f11f1a6e378b8ed6c2f0",
+    "casefile/casefile-store/src/presentation/entries.rs": "0b3c562550651f42ff6123e9c8a61feca80260dfd57237fab009724a941acf59",
+    "casefile/casefile-store/src/presentation/facts.rs": "b6dfa861574402468c21ea291832011018378ee8b781db39b8f60e7231d4721c",
+    "casefile/casefile-store/src/presentation/loading.rs": "0497e94e2931c26f5056eb826532f3a24c9a1cae34f4c3fe02b0661211d39bcf",
+    "casefile/casefile-store/src/presentation/model.rs": "df23fb59633165c787d7977285d1d689f2d027845aa7d87b70e504fe3cb8f641",
+    "casefile/casefile-store/src/presentation/reader.rs": "54c1eb388bbd0c4788ee7d12f8cde92bd4ae2cf179e982ef088b0890a5c371f9",
+    "casefile/casefile-store/src/presentation/scope.rs": "f3a8b2c6bfa508e0f6d6c41230ad4bcb6bfcffcc75021384433eb1530702ca14",
+    "casefile/casefile-store/src/presentation/session.rs": "085e1d20f691676fea3893a26066582bb38facd505b5d1ad2de9a22793510e66",
+    "casefile/casefile-store/src/presentation/tests.rs": "fd35855427b16e7c11933b849980fbdf33b4dd6ff075be77245bc83e5bb49171",
+    "casefile/casefile-store/src/presentation.rs": "186eb0efd3718f4c296f0172842716c6fe3d864a439580637ddc77da3c45eb22",
+    "casefile/casefile-store/src/progress.rs": "a0519d1de1e32717372a292e3c2085945e67439d7c9d2cc448cc9d30c0a4d802",
+    "casefile/casefile-store/src/provider/indexed.rs": "179153c8e87e8e217639999356f671d6fcbf5d0dc6744284627d533ff583a81f",
+    "casefile/casefile-store/src/provider/outcome_tests.rs": "c5bbc69f9f3736ddd16cfee0f6e4b58ba284c7f8d75a948dc570b11d89b34ccb",
+    "casefile/casefile-store/src/provider/preview_vault.rs": "9743ac5d8d47cc2ade4e652a76bdd1e9a8cb4663ca34c6e039dddc755d14e65f",
+    "casefile/casefile-store/src/provider/review.rs": "285e25dd2fdc5cbcc78d8bd0dccf24774df40145a970af2fae03a6772313bf30",
+    "casefile/casefile-store/src/provider/watching.rs": "9bb353e1823311d39158dd3ebfd4063c7086ab7191f33ec2cbe9dc5ea5194d05",
+    "casefile/casefile-store/src/provider.rs": "51006f7d4917e434c3624c3482ef6d1598b8267bf122b07471965c155c94b55d",
+    "casefile/casefile-store/src/read_context/tokens.rs": "c9be378c514ff715f7f7559e05eac0669599e97df4acd01bf8f8801ee042e47c",
+    "casefile/casefile-store/src/read_context.rs": "25c25aa67372a1e9cb3e477289ef773c35bcee5d15e8f91792a0c9c316b19219",
+    "casefile/casefile-store/src/revision.rs": "703e6cfed119c6ec42dfcafe9d9b9e479920986836156aaf1a05eceea0d7ccd6",
+    "casefile/casefile-store/src/scanning/classification.rs": "77d19ac8ee470aa1eebf3e04c8ecdd2458c15fb2abcdeedcdbc5406bccdbb265",
+    "casefile/casefile-store/src/scanning/inventory.rs": "010236bb3974e57852f9d6a6997194cce0a9ddb66307fd57c33737f57eed0bb3",
+    "casefile/casefile-store/src/scanning/scoped.rs": "81a0f9339963174baa8c0e46d99d555df9810fac403e1e4f34848ae8fdc80505",
+    "casefile/casefile-store/src/scanning/selected.rs": "16ad229e1cb86147e9905722ada53e9a87baaad2f6ab2840f4b395670487161b",
+    "casefile/casefile-store/src/scanning.rs": "6e310fab05f89561edaa323653e65701136c11ca1b45cec3076e2fc5c5718779",
+    "casefile/casefile-store/src/store.rs": "e2c166d263e2b31198643b7a75a0dafe2e4560cf65acf91865b942cd08a7681d",
+    "casefile/casefile-store/src/validation.rs": "845f20b8ea2181037f61e37c4118376b5e8cb0085f38ac45cc070a2347725cae",
+    "casefile/casefile-store/src/writing.rs": "a6982d4fbb58efdd965a2b5b460a247fd9c626977543ff390a5f52941d38e67a",
+    "casefile/casefile-store/tests/fixtures/minimum/casefile.toml": "a6267a3333579d35f399760cd06ab8639a44dfef544ed75d8da32c70d96d3127",
+    "casefile/casefile-store/tests/fixtures/minimum/projects/demo/investigations/sample/boards/main.toml": "8680ebc27fc050a84a3db8cb053c965801488e72827f294c919e857384ab95fa",
+    "casefile/casefile-store/tests/fixtures/minimum/projects/demo/investigations/sample/decision-log/HMD-D-001-scope.md": "95d8c4219be83caac514f9a104edd0ba68c4dc2981b00704282835d256097503",
+    "casefile/casefile-store/tests/fixtures/minimum/projects/demo/investigations/sample/epics/accepted/HMD-E-001.md": "b7ab6768dec6639d30084738d4c7bc2c30cab726c524ac5d7dae5aa8559cf56c",
+    "casefile/casefile-store/tests/fixtures/minimum/projects/demo/investigations/sample/evidence/attachment.txt": "b97295be7fa8b49d8d64ec318c127eab337ffeaba23796bcaa1006352bdc149b",
+    "casefile/casefile-store/tests/fixtures/minimum/projects/demo/investigations/sample/evidence/observation.md": "0bfc2ad4717b628e0a0a17c88f648af75274e53201cf1f72a594452b8e737f27",
+    "casefile/casefile-store/tests/fixtures/minimum/projects/demo/investigations/sample/final-disposition.md": "d141dd73de560b0fefefe00e9917a28834d57231be03bf17cf6887b8cc494a89",
+    "casefile/casefile-store/tests/fixtures/minimum/projects/demo/investigations/sample/implementation-plan/PLAN.md": "76e71fcbcddc1adae185a792e3c74642a89dbff4c38ba4b0e3a4fece7ea5581b",
+    "casefile/casefile-store/tests/fixtures/minimum/projects/demo/investigations/sample/request.md": "aa4d8f84b1a3cd793d033bbd1d33298fafb0b99e2fc81b8ae9b9e4e638d50946",
+    "casefile/casefile-store/tests/fixtures/minimum/projects/demo/investigations/sample/review/round-1.md": "a1e44bcd2e0a45751c22dc653cad8362c86fbbabda39c5a2b83ec50640853014",
+    "casefile/casefile-store/tests/fixtures/minimum/projects/demo/investigations/sample/strategy/implementation.toml": "7074267d5ab5c8128dff14708bcf2954b666d869c1ed692f50eacb8f9231b537",
+    "casefile/casefile-store/tests/fixtures/minimum/projects/demo/investigations/sample/strategy/investigation.toml": "27e800866ca5eb8f6e58798fa75b075b97c76a0ddd2218b3095b05f6e9c5941d",
+    "casefile/casefile-store/tests/fixtures/minimum/projects/demo/investigations/sample/strategy/review.toml": "2d996934cdd77b476bab65483867657d33505a06754059a01dca0726079333d6",
+    "casefile/casefile-store/tests/fixtures/minimum/projects/demo/investigations/sample/tickets/accepted/HMD-011.md": "ac462ed7a42f8a919dc55f44ef9a4c18c6f23a509943a7195434e55c2871198c",
+    "casefile/casefile-store/tests/fixtures/minimum/projects.toml": "4ab8cb7ebf0923ae4d5eaee24a48664910d891e9a1290e20d0a943e2ea4fc648",
+    "casefile/casefile-store-sqlite/Cargo.toml": "ebea173be90ab46b6a553e21146eecdab298e454873335cf780e3a2a5a2b1bc2",
+    "casefile/casefile-store-sqlite/src/lib.rs": "1e59868073b90809f3815783e97673588fa08c23fd514923d94ee0c4c8de0a27",
+    "casefile/web/src/api-contract.test.ts": "470e3e2666ccfa46201ca0b298a7f4678515cbaff51541008be2d5fdbdb1f1fe",
+    "casefile/web/src/api-contract.ts": "2d27b96c3bf700e434921aebb02dee867db903c18a57beb5c3fd650703fd4250",
+    "casefile/web/src/api.ts": "28b29c667e509e510883f4714bc0bdffb79288d4cfb49da2a52484067ea21749",
+    "casefile/web/src/app/app-shell.tsx": "fcd578b1ab3bacf5b5fef16b54d6aa469f1b2caa828938c1e280d43328f0a3a9",
+    "casefile/web/src/app/app.browser.test.tsx": "49c9a84928b85ed259bfb85d44c340834d7a66bd739ff0301f12277ca02aa109",
+    "casefile/web/src/app/app.tsx": "26c56697eeaa155c98c1f44acacb99aecddd77b2e10886ecd6da0cb06fdac36f",
+    "casefile/web/src/app/use-workspace.ts": "c34513ee4a7e83bf1546c2128f025e1b83c342b25c474428e66ab030d99d9e0a",
+    "casefile/web/src/boards/boards-panel.tsx": "28696a7b5aaf0aaf9fead1a779d248a6dbc2f4b6821b01a9c2f090ad4eaeeda8",
+    "casefile/web/src/boards/use-boards.ts": "2a2ca49a8d18a6fd1e4eaf998b871f928d72dde2b6adb0f2c4e56c510f560e1e",
+    "casefile/web/src/main.tsx": "8f57ada0b5d1f95a63eb94b54a388e31910e41b2ebb64ea702626feabc350476",
+    "casefile/web/src/model.test.ts": "85212d74554902f52726fefdd7ed644642950048d22e7b18efd55820622f30f2",
+    "casefile/web/src/model.ts": "b4d481f7bd4b87ba98e8db3ca6da2e5bad9e2afc7d0e6aa4f57051a0ce24b293",
+    "casefile/web/src/navigation/sidebar.tsx": "bde9d5571f64537b5864893e77ea44e2e1dc6bcb8e1a74df9569eab36990c076",
+    "casefile/web/src/navigation/use-scope-navigation.ts": "9586bee0a80a93a7a4b8221c3801da19c189e1ac9c5a0415b3397613e5070968",
+    "casefile/web/src/record-detail/board-editor.tsx": "5cea851b22ef51f1cd0882315af4fea15728d7c0bd9a286a45b46494e57ef65c",
+    "casefile/web/src/record-detail/change-review.tsx": "76c4f06fc413815714475a7a91dc7fc6bbe884a46249db1d5584532234581ef7",
+    "casefile/web/src/record-detail/editor.tsx": "7b3fe3dd2deeb6695accfdd23e6925d182188f77bdbc8298047df5da0e3b3ebe",
+    "casefile/web/src/record-detail/record-detail.tsx": "1191d7e5173788a6d2ada3a780d13afa9ddec0776821e5916d0200baf2b3704f",
+    "casefile/web/src/record-detail/use-change-review.ts": "d8e2cd45c8d41f0539bc0de5d38570cf46360a6911e4dc9077b7563add2e1437",
+    "casefile/web/src/record-detail/use-record-selection.ts": "5be5a051f0921043b024b5cd0caf334a5d2319ee59953f16d91f0829d0c4ce00",
+    "casefile/web/src/record-detail/work-item-editor.tsx": "26fc6002adf5c5d4beff0910ca8bb63d8d2b0ed6fbf7eec4a17abefad304411b",
+    "casefile/web/src/strategy/graph-model.test.ts": "ac062e210f5d454320dc08f88d25df5783378f94dcde5fefb41c636e2da4b6b4",
+    "casefile/web/src/strategy/graph-model.ts": "68e2b1646f0be3bf15b46d5e2394da322df0613bd265fcee640eddda7a1c57cc",
+    "casefile/web/src/strategy/strategy-graph.tsx": "3292eebb9ad4cd2050454e5125df89a15cdd165322518ccd78df324e3fb24b61",
+    "casefile/web/src/strategy/strategy-panel.test.tsx": "b3da231108938177a4a93aec1de1e605572da825e0593fd42e8a550d76df352e",
+    "casefile/web/src/strategy/strategy-panel.tsx": "898f0ad440ef3ff92a6a7c88c92c5f509af7a2a9470ee55fb21c6f7424cd557b",
+    "casefile/web/src/ui/badge.tsx": "3487ee48ab6b057cd82593df9d3869f2469410968f589b306f4f810cefefc32e",
+    "casefile/web/src/ui.test.tsx": "996f627cdf4556ed5c413f6b68993e3175868b8998cee29d285bed60950867fa",
+    "casefile/web/src/work-queue/work-area.tsx": "e8fd2b0c86cf7c25935aef88827ca7be76ae5393a08ae51bfc4540cb900f9af6"
+  },
+  "binary_sha256": "b6358a3de0ad3d9981b7a152eb650a2192161388b1e69993404a98c0678dabc6",
+  "started_utc": "2026-10-01T01:11:06.962219+00:00",
+  "target_directory": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target",
+  "exit_code": 0,
+  "ended_utc": "2026-10-01T01:11:34.264144+00:00",
+  "configuration": {
+    "criterion": "0.8.2",
+    "samples": 10,
+    "warm_up_seconds": 1,
+    "measurement_target_seconds": 2,
+    "confidence_level": 0.95,
+    "noise_threshold": 0.01,
+    "mode": "release; warm filesystem; disposable synthetic Store/index; fixture/server setup outside measurement; no competing builds"
+  },
+  "fixture_probe": {
+    "binary_sha256": "b01b1188f0ecc57a03ec22054ff4b43395ab14ca58be6874cca4b0ff33ff0293",
+    "fixtures": [
+      {
+        "added_tickets": 250,
+        "actual_work_items": 252,
+        "canonical_file_count": 266,
+        "scoped_record_count": 264,
+        "workspace_record_count": 266,
+        "progress_notes": 500,
+        "search_hit_paths": [
+          "projects/demo/investigations/sample/tickets/accepted/HMD-100000.md"
+        ],
+        "search_miss_count": 0,
+        "unchanged_fields": [
+          "freshness",
+          "matching_paths",
+          "state"
+        ],
+        "diagnostic_count": 0
+      },
+      {
+        "added_tickets": 1000,
+        "actual_work_items": 1002,
+        "canonical_file_count": 1016,
+        "scoped_record_count": 1014,
+        "workspace_record_count": 1016,
+        "progress_notes": 500,
+        "search_hit_paths": [
+          "projects/demo/investigations/sample/tickets/accepted/HMD-100000.md"
+        ],
+        "search_miss_count": 0,
+        "unchanged_fields": [
+          "freshness",
+          "matching_paths",
+          "state"
+        ],
+        "diagnostic_count": 0
+      }
+    ]
+  },
+  "prior_harness_sha256": {
+    "985f30e5731275a76660bf31cfcecff60a12df70": "61f9c094d76ea311e2887a30361dfbe681c9ae190102f6227c8a66dbc3142809",
+    "8e97fc4e368361d75b0323913ed4e56e745fc259": "61f9c094d76ea311e2887a30361dfbe681c9ae190102f6227c8a66dbc3142809"
+  },
+  "scenarios": {
+    "http_loopback_records/search_hit/1000": {
+      "benchmark": {
+        "group_id": "http_loopback_records",
+        "function_id": "search_hit",
+        "value_str": "1000",
+        "throughput": null,
+        "full_id": "http_loopback_records/search_hit/1000",
+        "directory_name": "http_loopback_records/search_hit/1000",
+        "title": "http_loopback_records/search_hit/1000"
+      },
+      "before_estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 142197012.955,
+            "upper_bound": 142698583.5725
+          },
+          "point_estimate": 142450149.6,
+          "standard_error": 128975.9834929741
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 142056968.75,
+            "upper_bound": 142902358.5
+          },
+          "point_estimate": 142484745.5,
+          "standard_error": 241451.4787069825
+        },
+        "median_abs_dev": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 50109.655210375786,
+            "upper_bound": 698550.699198246
+          },
+          "point_estimate": 557817.1205967665,
+          "standard_error": 169048.56130076223
+        },
+        "slope": null,
+        "std_dev": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 283048.04913844675,
+            "upper_bound": 510023.23699323303
+          },
+          "point_estimate": 432034.30940890947,
+          "standard_error": 58705.88172327729
+        }
+      },
+      "estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 18762624.746880956,
+            "upper_bound": 19091973.359295633
+          },
+          "point_estimate": 18901078.902936507,
+          "standard_error": 86068.05565315645
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 18715044.375,
+            "upper_bound": 19005130.875
+          },
+          "point_estimate": 18811471.5,
+          "standard_error": 66100.96418320909
+        },
+        "median_abs_dev": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 27491.665986925364,
+            "upper_bound": 309831.5627243848
+          },
+          "point_estimate": 128454.9768444675,
+          "standard_error": 76830.39325237398
+        },
+        "slope": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 18770378.013785668,
+            "upper_bound": 19289808.576791808
+          },
+          "point_estimate": 18997391.32987013,
+          "standard_error": 144699.70853529498
+        },
+        "std_dev": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 66481.88174143399,
+            "upper_bound": 414559.4425813938
+          },
+          "point_estimate": 287022.6669769665,
+          "standard_error": 101670.95962855697
+        }
+      },
+      "sample": {
+        "sampling_mode": "Linear",
+        "iters": [
+          2.0,
+          4.0,
+          6.0,
+          8.0,
+          10.0,
+          12.0,
+          14.0,
+          16.0,
+          18.0,
+          20.0
+        ],
+        "times": [
+          37393003.0,
+          76568985.0,
+          112890575.0,
+          149868698.0,
+          186876447.0,
+          225694166.0,
+          262241530.0,
+          301888248.0,
+          353222851.0,
+          378096425.0
+        ]
+      },
+      "change": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": -0.868311588698676,
+            "upper_bound": -0.8659818565789119
+          },
+          "point_estimate": -0.8673144327611397,
+          "standard_error": 0.0006036187176251275
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": -0.8688120490915585,
+            "upper_bound": -0.8667827974869623
+          },
+          "point_estimate": -0.8679755405816407,
+          "standard_error": 0.0004915680687774021
+        }
+      }
+    },
+    "http_loopback_records/search_hit/250": {
+      "benchmark": {
+        "group_id": "http_loopback_records",
+        "function_id": "search_hit",
+        "value_str": "250",
+        "throughput": null,
+        "full_id": "http_loopback_records/search_hit/250",
+        "directory_name": "http_loopback_records/search_hit/250",
+        "title": "http_loopback_records/search_hit/250"
+      },
+      "before_estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 42450004.22523809,
+            "upper_bound": 42569021.64019642
+          },
+          "point_estimate": 42509070.7502381,
+          "standard_error": 30326.05558599564
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 42425584.125,
+            "upper_bound": 42595584.33333333
+          },
+          "point_estimate": 42502141.0,
+          "standard_error": 43407.40828088418
+        },
+        "median_abs_dev": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 34030.11719584465,
+            "upper_bound": 176436.98283762365
+          },
+          "point_estimate": 111915.01211310978,
+          "standard_error": 36518.82023078235
+        },
+        "slope": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 42483627.54081633,
+            "upper_bound": 42616494.39303482
+          },
+          "point_estimate": 42562226.01038961,
+          "standard_error": 34093.281418622086
+        },
+        "std_dev": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 59681.847295832304,
+            "upper_bound": 123256.58407051832
+          },
+          "point_estimate": 100640.76896777451,
+          "standard_error": 16178.853282051197
+        }
+      },
+      "estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 5791108.58,
+            "upper_bound": 5899816.801587301
+          },
+          "point_estimate": 5840672.7853968255,
+          "standard_error": 27834.458521289096
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 5778542.404761905,
+            "upper_bound": 5910967.321428571
+          },
+          "point_estimate": 5794492.773809524,
+          "standard_error": 33060.35421672383
+        },
+        "median_abs_dev": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 3021.009246366858,
+            "upper_bound": 141649.08408522606
+          },
+          "point_estimate": 33216.766380285546,
+          "standard_error": 33058.28484038363
+        },
+        "slope": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 5784583.752593775,
+            "upper_bound": 5965238.53832442
+          },
+          "point_estimate": 5893534.434508349,
+          "standard_error": 47117.697373414325
+        },
+        "std_dev": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 20265.913121967915,
+            "upper_bound": 115171.04719824644
+          },
+          "point_estimate": 93095.4690121973,
+          "standard_error": 23368.849912612444
+        }
+      },
+      "sample": {
+        "sampling_mode": "Linear",
+        "iters": [
+          7.0,
+          14.0,
+          21.0,
+          28.0,
+          35.0,
+          42.0,
+          49.0,
+          56.0,
+          63.0,
+          70.0
+        ],
+        "times": [
+          41127120.0,
+          80916666.0,
+          121459388.0,
+          162544950.0,
+          201980531.0,
+          242919968.0,
+          282891917.0,
+          325936180.0,
+          378805507.0,
+          420115200.0
+        ]
+      },
+      "change": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": -0.8637317238637103,
+            "upper_bound": -0.8611848198100128
+          },
+          "point_estimate": -0.8626017298822249,
+          "standard_error": 0.0006495589928826764
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": -0.8641930743975157,
+            "upper_bound": -0.8606372561394425
+          },
+          "point_estimate": -0.8636658615901367,
+          "standard_error": 0.000786591396750685
+        }
+      }
+    },
+    "http_loopback_records/search_miss/1000": {
+      "benchmark": {
+        "group_id": "http_loopback_records",
+        "function_id": "search_miss",
+        "value_str": "1000",
+        "throughput": null,
+        "full_id": "http_loopback_records/search_miss/1000",
+        "directory_name": "http_loopback_records/search_miss/1000",
+        "title": "http_loopback_records/search_miss/1000"
+      },
+      "before_estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 142828329.6,
+            "upper_bound": 143359283.2
+          },
+          "point_estimate": 143103509.85,
+          "standard_error": 136075.6781252279
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 142785638.5,
+            "upper_bound": 143431928.5
+          },
+          "point_estimate": 143154855.0,
+          "standard_error": 141718.22654938797
+        },
+        "median_abs_dev": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 62906.716883182526,
+            "upper_bound": 760172.0019042492
+          },
+          "point_estimate": 454151.1358872056,
+          "standard_error": 181293.10635356046
+        },
+        "slope": null,
+        "std_dev": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 218352.2420067697,
+            "upper_bound": 610187.7226226832
+          },
+          "point_estimate": 456178.4937107069,
+          "standard_error": 102798.76378648262
+        }
+      },
+      "estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 19251261.074700397,
+            "upper_bound": 19900400.24263889
+          },
+          "point_estimate": 19582546.14271825,
+          "standard_error": 166105.60742135183
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 19035224.0625,
+            "upper_bound": 19968174.8875
+          },
+          "point_estimate": 19729303.305555552,
+          "standard_error": 229949.67029290338
+        },
+        "median_abs_dev": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 60339.296449600675,
+            "upper_bound": 979926.5632486604
+          },
+          "point_estimate": 513631.26771122054,
+          "standard_error": 238723.9047178052
+        },
+        "slope": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 19036756.615786273,
+            "upper_bound": 19891372.79598625
+          },
+          "point_estimate": 19504382.054545455,
+          "standard_error": 222821.60564836243
+        },
+        "std_dev": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 308401.83092298737,
+            "upper_bound": 676993.4094704007
+          },
+          "point_estimate": 551857.9164664357,
+          "standard_error": 91666.79932265045
+        }
+      },
+      "sample": {
+        "sampling_mode": "Linear",
+        "iters": [
+          2.0,
+          4.0,
+          6.0,
+          8.0,
+          10.0,
+          12.0,
+          14.0,
+          16.0,
+          18.0,
+          20.0
+        ],
+        "times": [
+          40788674.0,
+          79729065.0,
+          118595516.0,
+          158192671.0,
+          194693868.0,
+          225141648.0,
+          263724817.0,
+          304563585.0,
+          354468371.0,
+          403245318.0
+        ]
+      },
+      "change": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": -0.8653489498534868,
+            "upper_bound": -0.8609049083075827
+          },
+          "point_estimate": -0.8631581701717552,
+          "standard_error": 0.0011269432552212643
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": -0.867016398389701,
+            "upper_bound": -0.8605838588529221
+          },
+          "point_estimate": -0.8621820873238595,
+          "standard_error": 0.001474075916497091
+        }
+      }
+    },
+    "http_loopback_records/search_miss/250": {
+      "benchmark": {
+        "group_id": "http_loopback_records",
+        "function_id": "search_miss",
+        "value_str": "250",
+        "throughput": null,
+        "full_id": "http_loopback_records/search_miss/250",
+        "directory_name": "http_loopback_records/search_miss/250",
+        "title": "http_loopback_records/search_miss/250"
+      },
+      "before_estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 42289264.4359881,
+            "upper_bound": 43460641.57444444
+          },
+          "point_estimate": 42742658.877658725,
+          "standard_error": 324906.1645616307
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 42209617.33333333,
+            "upper_bound": 42715347.38888889
+          },
+          "point_estimate": 42458883.0,
+          "standard_error": 129420.66444261497
+        },
+        "median_abs_dev": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 61298.09591174126,
+            "upper_bound": 639886.1950397529
+          },
+          "point_estimate": 197910.39870388916,
+          "standard_error": 190259.31672539405
+        },
+        "slope": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 42240911.22893773,
+            "upper_bound": 43340643.4307595
+          },
+          "point_estimate": 42661489.23116883,
+          "standard_error": 280410.372322895
+        },
+        "std_dev": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 167700.54466928676,
+            "upper_bound": 1655149.2928671958
+          },
+          "point_estimate": 1082771.6687949004,
+          "standard_error": 500413.95434490836
+        }
+      },
+      "estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 5786936.73329932,
+            "upper_bound": 5883706.98289881
+          },
+          "point_estimate": 5830111.37329932,
+          "standard_error": 24827.777039907232
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 5772570.095238095,
+            "upper_bound": 5893650.214285715
+          },
+          "point_estimate": 5792359.501020408,
+          "standard_error": 26024.667065517202
+        },
+        "median_abs_dev": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 3090.559070131707,
+            "upper_bound": 102552.4991793289
+          },
+          "point_estimate": 32430.331562104002,
+          "standard_error": 26387.20943978937
+        },
+        "slope": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 5777530.626206038,
+            "upper_bound": 5801255.11
+          },
+          "point_estimate": 5786696.412987013,
+          "standard_error": 6156.853281477645
+        },
+        "std_dev": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 19709.94876828475,
+            "upper_bound": 105434.88692019621
+          },
+          "point_estimate": 82562.33233731646,
+          "standard_error": 22851.455925522398
+        }
+      },
+      "sample": {
+        "sampling_mode": "Linear",
+        "iters": [
+          7.0,
+          14.0,
+          21.0,
+          28.0,
+          35.0,
+          42.0,
+          49.0,
+          56.0,
+          63.0,
+          70.0
+        ],
+        "times": [
+          41986194.0,
+          83479493.0,
+          122524229.0,
+          163085426.0,
+          202406341.0,
+          242327234.0,
+          283786809.0,
+          323191402.0,
+          363671916.0,
+          405520603.0
+        ]
+      },
+      "change": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": -0.8661198093896635,
+            "upper_bound": -0.8614953755871595
+          },
+          "point_estimate": -0.8635997028171152,
+          "standard_error": 0.0011877462805032816
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": -0.8643402422036769,
+            "upper_bound": -0.8611957726232038
+          },
+          "point_estimate": -0.8635772047743129,
+          "standard_error": 0.0007373695974701556
+        }
+      }
+    },
+    "http_loopback_records/unchanged/1000": {
+      "benchmark": {
+        "group_id": "http_loopback_records",
+        "function_id": "unchanged",
+        "value_str": "1000",
+        "throughput": null,
+        "full_id": "http_loopback_records/unchanged/1000",
+        "directory_name": "http_loopback_records/unchanged/1000",
+        "title": "http_loopback_records/unchanged/1000"
+      },
+      "before_estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 146707785.05,
+            "upper_bound": 147470794.925
+          },
+          "point_estimate": 147085208.7,
+          "standard_error": 194594.125524422
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 146683833.75,
+            "upper_bound": 147697515.0
+          },
+          "point_estimate": 146835769.75,
+          "standard_error": 331992.3650443858
+        },
+        "median_abs_dev": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 43202.96323299408,
+            "upper_bound": 1125849.7256621718
+          },
+          "point_estimate": 662946.0608303547,
+          "standard_error": 316834.95338111493
+        },
+        "slope": null,
+        "std_dev": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 395758.80000568595,
+            "upper_bound": 807218.6997168078
+          },
+          "point_estimate": 649535.9439503372,
+          "standard_error": 108126.037261046
+        }
+      },
+      "estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 59264978.642857134,
+            "upper_bound": 59687326.44222222
+          },
+          "point_estimate": 59460150.76468253,
+          "standard_error": 109155.3814672188
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 59185484.79166667,
+            "upper_bound": 59700235.83333333
+          },
+          "point_estimate": 59280282.80555555,
+          "standard_error": 170294.17085105286
+        },
+        "median_abs_dev": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 26695.024426075415,
+            "upper_bound": 686790.4567520365
+          },
+          "point_estimate": 207467.25078338152,
+          "standard_error": 166452.0483497901
+        },
+        "slope": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 59203430.716262974,
+            "upper_bound": 59554400.346938774
+          },
+          "point_estimate": 59371173.54285714,
+          "standard_error": 96006.44548285303
+        },
+        "std_dev": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 169924.51083801524,
+            "upper_bound": 485751.5250529633
+          },
+          "point_estimate": 364672.393524749,
+          "standard_error": 86235.20083709591
+        }
+      },
+      "sample": {
+        "sampling_mode": "Linear",
+        "iters": [
+          1.0,
+          2.0,
+          3.0,
+          4.0,
+          5.0,
+          6.0,
+          7.0,
+          8.0,
+          9.0,
+          10.0
+        ],
+        "times": [
+          59653516.0,
+          120499023.0,
+          179240867.0,
+          236920674.0,
+          295985184.0,
+          354896105.0,
+          413919417.0,
+          473772950.0,
+          533973574.0,
+          596916072.0
+        ]
+      },
+      "change": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": -0.5974834623506077,
+            "upper_bound": -0.5938156495089402
+          },
+          "point_estimate": -0.5957435061607079,
+          "standard_error": 0.0009349513292887689
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": -0.59886815873913,
+            "upper_bound": -0.5931982032635257
+          },
+          "point_estimate": -0.5962817308991868,
+          "standard_error": 0.001472868698931922
+        }
+      }
+    },
+    "http_loopback_records/unchanged/250": {
+      "benchmark": {
+        "group_id": "http_loopback_records",
+        "function_id": "unchanged",
+        "value_str": "250",
+        "throughput": null,
+        "full_id": "http_loopback_records/unchanged/250",
+        "directory_name": "http_loopback_records/unchanged/250",
+        "title": "http_loopback_records/unchanged/250"
+      },
+      "before_estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 44451477.46547619,
+            "upper_bound": 44810128.3904762
+          },
+          "point_estimate": 44633247.02380953,
+          "standard_error": 90854.05765528255
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 44297901.0,
+            "upper_bound": 44944326.333333336
+          },
+          "point_estimate": 44636492.625,
+          "standard_error": 139141.24335723897
+        },
+        "median_abs_dev": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 32791.96089282632,
+            "upper_bound": 540924.6147716708
+          },
+          "point_estimate": 479195.0910925884,
+          "standard_error": 151006.66066603753
+        },
+        "slope": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 44549214.729411766,
+            "upper_bound": 44895284.40907456
+          },
+          "point_estimate": 44731611.41818182,
+          "standard_error": 88584.546760489
+        },
+        "std_dev": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 178583.23357389623,
+            "upper_bound": 360131.1562750354
+          },
+          "point_estimate": 302068.5974661966,
+          "standard_error": 44825.59954237345
+        }
+      },
+      "estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 15562981.195555558,
+            "upper_bound": 16325854.99888889
+          },
+          "point_estimate": 15825899.509047622,
+          "standard_error": 234859.17713782904
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 15548599.138888888,
+            "upper_bound": 15623361.033333335
+          },
+          "point_estimate": 15589463.388888888,
+          "standard_error": 59278.30918023456
+        },
+        "median_abs_dev": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 11930.976188183751,
+            "upper_bound": 90055.75813452434
+          },
+          "point_estimate": 37243.47025546134,
+          "standard_error": 70655.14460283615
+        },
+        "slope": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 15548015.758313058,
+            "upper_bound": 15706949.517522028
+          },
+          "point_estimate": 15604302.915151516,
+          "standard_error": 41597.075792803684
+        },
+        "std_dev": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 25510.708758061788,
+            "upper_bound": 1193224.6745759556
+          },
+          "point_estimate": 777799.0313823551,
+          "standard_error": 430971.8381069257
+        }
+      },
+      "sample": {
+        "sampling_mode": "Linear",
+        "iters": [
+          3.0,
+          6.0,
+          9.0,
+          12.0,
+          15.0,
+          18.0,
+          21.0,
+          24.0,
+          27.0,
+          30.0
+        ],
+        "times": [
+          46746010.0,
+          108222782.0,
+          140372311.0,
+          186782830.0,
+          234074404.0,
+          281034326.0,
+          326832454.0,
+          372541184.0,
+          419362986.0,
+          469252854.0
+        ]
+      },
+      "change": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": -0.6520678270011251,
+            "upper_bound": -0.634247487340743
+          },
+          "point_estimate": -0.6454235225009437,
+          "standard_error": 0.004990470958227004
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": -0.6533043299443826,
+            "upper_bound": -0.6480515014396069
+          },
+          "point_estimate": -0.6507462286551264,
+          "standard_error": 0.0011458935186987125
+        }
+      }
+    }
+  }
+}

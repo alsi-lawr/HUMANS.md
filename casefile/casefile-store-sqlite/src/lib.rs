@@ -1,7 +1,7 @@
 use casefile_core::{Diagnostic, Revision};
 use casefile_store::{
-    DerivedBoard, DerivedIndex, DerivedRecord, DerivedRelationship, DerivedSnapshot, Indexed,
-    RecordScope, RevisionSource, ScopedIdentity, StoreError,
+    DerivedBoard, DerivedIndex, DerivedRecord, DerivedRelationship, DerivedSnapshot,
+    IndexPublicationId, Indexed, RecordScope, RevisionSource, ScopedIdentity, StoreError,
 };
 use rusqlite::{Connection, ToSql, params, params_from_iter};
 use std::{
@@ -19,6 +19,8 @@ pub enum SqliteIndexError {
     Io(#[from] std::io::Error),
     #[error("SQLite error: {0}")]
     Sql(#[from] rusqlite::Error),
+    #[error("index publication changed during read")]
+    PublicationChanged,
     #[error("serialization error: {0}")]
     Json(#[from] serde_json::Error),
     #[error("index path must be outside the planning root")]
@@ -202,6 +204,20 @@ impl DerivedIndex for SqliteIndex {
         })
     }
 
+    fn publication(
+        &self,
+        current: &Revision,
+    ) -> Result<Indexed<IndexPublicationId>, SqliteIndexError> {
+        let Some(before) = IndexPublicationId::for_file(&self.path)? else {
+            return Ok(Indexed::Missing);
+        };
+        let result = self.checked(current, |_| Ok(before.clone()))?;
+        if IndexPublicationId::for_file(&self.path)?.as_ref() != Some(&before) {
+            return Err(SqliteIndexError::PublicationChanged);
+        }
+        Ok(result)
+    }
+
     fn state(&self, current: &Revision) -> Result<Indexed<()>, SqliteIndexError> {
         self.checked(current, |_| Ok(()))
     }
@@ -231,24 +247,20 @@ impl DerivedIndex for SqliteIndex {
         search: Option<&str>,
     ) -> Result<Indexed<Vec<DerivedRecord>>, SqliteIndexError> {
         self.checked(current, |connection| {
-            let search = search.map(str::to_lowercase);
-            let mut sql = String::from("SELECT document FROM records");
-            let mut parameters: Vec<&dyn ToSql> = Vec::new();
-            if let Some(scope) = scope {
-                sql.push_str(" WHERE project = ? AND investigation IS ?");
-                parameters.extend([&scope.project as &dyn ToSql, &scope.investigation]);
-            }
-            if let Some(search) = &search {
-                sql.push_str(if scope.is_some() { " AND" } else { " WHERE" });
-                sql.push_str(" instr(search_text, ?) > 0");
-                parameters.push(search);
-            }
-            sql.push_str(" ORDER BY path");
-            let mut statement = connection.prepare(&sql)?;
-            let rows =
-                statement.query_map(params_from_iter(parameters), |row| row.get::<_, String>(0))?;
-            rows.map(|row| Ok(serde_json::from_str::<DerivedRecord>(&row?)?))
-                .collect::<Result<Vec<_>, SqliteIndexError>>()
+            record_values(connection, "document", scope, search, |row| {
+                Ok(serde_json::from_str(&row)?)
+            })
+        })
+    }
+
+    fn record_paths(
+        &self,
+        current: &Revision,
+        scope: Option<&RecordScope>,
+        search: Option<&str>,
+    ) -> Result<Indexed<Vec<String>>, SqliteIndexError> {
+        self.checked(current, |connection| {
+            record_values(connection, "path", scope, search, Ok)
         })
     }
 
@@ -288,4 +300,31 @@ impl DerivedIndex for SqliteIndex {
             rows.map(|row| Ok(serde_json::from_str(&row?)?)).collect::<Result<Vec<_>, SqliteIndexError>>()
         })
     }
+}
+
+fn record_values<T>(
+    connection: &Connection,
+    column: &str,
+    scope: Option<&RecordScope>,
+    search: Option<&str>,
+    decode: impl Fn(String) -> Result<T, SqliteIndexError>,
+) -> Result<Vec<T>, SqliteIndexError> {
+    let search = search.map(str::to_lowercase);
+    let mut sql = format!("SELECT {column} FROM records");
+    let mut parameters: Vec<&dyn ToSql> = Vec::new();
+    if let Some(scope) = scope {
+        sql.push_str(" WHERE project = ? AND investigation IS ?");
+        parameters.extend([&scope.project as &dyn ToSql, &scope.investigation]);
+    }
+    if let Some(search) = &search {
+        sql.push_str(if scope.is_some() { " AND" } else { " WHERE" });
+        sql.push_str(" instr(search_text, ?) > 0");
+        parameters.push(search);
+    }
+    sql.push_str(" ORDER BY path");
+    let mut statement = connection.prepare(&sql)?;
+    statement
+        .query_map(params_from_iter(parameters), |row| row.get::<_, String>(0))?
+        .map(|row| decode(row?))
+        .collect()
 }
