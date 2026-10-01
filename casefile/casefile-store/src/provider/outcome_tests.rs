@@ -324,10 +324,43 @@ fn native_watch_create_edit_rename_delete_reconciles_canonical_index_content() {
 #[test]
 fn events_and_rescan_require_rebuild_even_when_metadata_revision_is_unchanged() {
     use notify::event::{Flag, ModifyKind};
-    let (_temporary, provider) = configured_fixture();
+    let (temporary, provider) = configured_fixture();
     reconcile(&provider);
     provider.cache.refuse_publication.set(true);
-    let mut event = notify::Event::new(notify::EventKind::Modify(ModifyKind::Any));
+    #[cfg(windows)]
+    {
+        let inject = |path| {
+            provider
+                .watch
+                .lock()
+                .unwrap()
+                .as_ref()
+                .unwrap()
+                .inject(Ok(notify::Event::new(notify::EventKind::Modify(
+                    ModifyKind::Any,
+                ))
+                .add_path(path)));
+        };
+        inject(temporary.path().join(INVESTIGATION));
+        assert!(matches!(
+            provider.refresh_full_cache().unwrap(),
+            CacheState::Current { .. }
+        ));
+        inject(
+            temporary
+                .path()
+                .join(format!("{INVESTIGATION}/tickets/accepted/HMD-011.md")),
+        );
+        assert!(matches!(
+            provider.refresh_full_cache().unwrap(),
+            CacheState::Degraded { .. }
+        ));
+        provider.cache.refuse_publication.set(false);
+        reconcile(&provider);
+        provider.cache.refuse_publication.set(true);
+    }
+    let mut event = notify::Event::new(notify::EventKind::Modify(ModifyKind::Any))
+        .add_path(temporary.path().join(INVESTIGATION));
     event.attrs.set_flag(Flag::Rescan);
     provider
         .watch

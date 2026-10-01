@@ -108,8 +108,22 @@ fn invalidate(state: &Mutex<Invalidation>, root: &Path, event: notify::Result<Ev
             event.need_rescan()
                 || event.paths.is_empty()
                 || event.paths.iter().any(|path| {
-                    path.strip_prefix(root)
-                        .is_ok_and(|relative| !crate::is_store_path_excluded(relative))
+                    path.strip_prefix(root).is_ok_and(|relative| {
+                        if crate::is_store_path_excluded(relative) {
+                            return false;
+                        }
+                        // Windows reports delayed directory timestamps as Modify(Any).
+                        #[cfg(windows)]
+                        if matches!(
+                            event.kind,
+                            notify::EventKind::Modify(notify::event::ModifyKind::Any)
+                        ) && std::fs::symlink_metadata(path)
+                            .is_ok_and(|metadata| metadata.is_dir())
+                        {
+                            return false;
+                        }
+                        true
+                    })
                 })
         }
         Err(_) => true,
