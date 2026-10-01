@@ -270,6 +270,7 @@ fn serve_exposes_only_the_fixed_read_contract() {
         "/api/query",
         &json!({"query":"records", "scope":{"project":"demo", "investigation":"sample"}}),
     );
+    assert_eq!(records.status, 200, "{}", records.body);
     let Indexed::Current { value, .. } =
         serde_json::from_str::<Indexed<Vec<DerivedRecord>>>(&records.body).expect("record query")
     else {
@@ -360,6 +361,7 @@ fn serve_transports_derived_ticket_progress() {
         "/api/query",
         &json!({"query":"records", "scope":{"project":"demo", "investigation":"sample"}}),
     );
+    assert_eq!(records.status, 200, "{}", records.body);
     let Indexed::Current { value, .. } =
         serde_json::from_str::<Indexed<Vec<DerivedRecord>>>(&records.body).expect("record query")
     else {
@@ -379,6 +381,7 @@ fn serve_transports_derived_ticket_progress() {
         "/api/query",
         &json!({"query":"boards", "scope":{"project":"demo", "investigation":"sample"}}),
     );
+    assert_eq!(boards.status, 200, "{}", boards.body);
     let Indexed::Current { value, .. } =
         serde_json::from_str::<Indexed<Vec<DerivedBoard>>>(&boards.body).expect("board query")
     else {
