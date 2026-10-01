@@ -18,6 +18,16 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
+      - name: Trace Windows release-gate watcher events
+        if: runner.os == 'Windows'
+        shell: python
+        run: |
+          from pathlib import Path
+          path = Path("casefile/casefile-store/src/provider/watching.rs")
+          source = path.read_text()
+          marker = '    let mut state = state.lock().expect("cache invalidation");'
+          assert source.count(marker) == 1
+          path.write_text(source.replace(marker, '    eprintln!("release-gate canonical watch event: {event:?}");\n' + marker))
       - name: Run planning-path and governed-replay suites natively
         run: cargo test --no-fail-fast --manifest-path casefile/Cargo.toml -p casefile-core -p casefile-store -p casefile-tui -p casefile-cli
 
