@@ -151,12 +151,12 @@ fn canonical_relationships_follow_cross_scope_targets_without_replacing_source_b
             .is_some_and(|fields| fields.contains("relationships"))
     );
     assert!(!test_support::render(&app, 180, 40).contains("Unavailable: relationships"));
-    let relationships = app.derived.relationships.clone();
+    let relationships = app.relationships.clone();
     coordinator.request_content(Some(
         "projects/demo/investigations/sample/evidence/observation.md",
     ));
     finish(&mut coordinator, &mut app);
-    assert_eq!(app.derived.relationships, relationships);
+    assert_eq!(app.relationships, relationships);
     assert!(
         !app.unavailable
             .get("projects/demo/investigations/sample/evidence/observation.md")
@@ -339,24 +339,21 @@ fn refresh_target(coordinator: &mut Coordinator, app: &mut App) {
 }
 fn assert_canonical(store: &Store, app: &App) {
     assert_eq!(
-        app.derived.relationships,
+        app.relationships
+            .values()
+            .flatten()
+            .cloned()
+            .collect::<Vec<_>>(),
         store.derive_snapshot(&store.scan().unwrap()).relationships
     );
 }
 fn source_edges(app: &App) -> Vec<&casefile_store::DerivedRelationship> {
-    app.derived
-        .relationships
-        .iter()
+    app.relationships
+        .values()
+        .flatten()
         .filter(|edge| edge.source.identity == "HMD-011")
         .collect()
 }
 fn source_bytes(app: &App) -> *const u8 {
-    app.scan
-        .snapshot
-        .entries
-        .iter()
-        .find(|entry| entry.path == SOURCE)
-        .unwrap()
-        .original_bytes
-        .as_ptr()
+    app.body_bytes(SOURCE).unwrap().as_ptr()
 }

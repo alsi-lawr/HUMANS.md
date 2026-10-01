@@ -10,10 +10,10 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Paragraph, Widget, Wrap},
+    widgets::{Block, Borders, Paragraph, Widget},
 };
 use std::{
-    cell::Cell,
+    cell::{Cell, RefCell},
     io::{self, Stdout},
 };
 
@@ -25,7 +25,8 @@ pub enum ReviewDecision {
 }
 
 pub(crate) struct ReviewApp {
-    diff: String,
+    lines: Vec<Line<'static>>,
+    layout: RefCell<Option<crate::record_detail::layout::Layout>>,
     scroll: u16,
     rows: Cell<u16>,
     decision: Option<ReviewDecision>,
@@ -34,7 +35,8 @@ pub(crate) struct ReviewApp {
 impl ReviewApp {
     pub(crate) fn new(diff: &str) -> Self {
         Self {
-            diff: diff.into(),
+            lines: diff_lines(diff),
+            layout: RefCell::default(),
             scroll: 0,
             rows: Cell::new(1),
             decision: None,
@@ -98,17 +100,27 @@ impl ReviewApp {
         )
         .render(header, buffer);
 
-        let paragraph = Paragraph::new(diff_lines(&self.diff))
-            .block(panel(" Changes ", true))
-            .wrap(Wrap { trim: false });
-        let inner = panel("", true).inner(content);
-        let rows = paragraph
-            .line_count(inner.width)
-            .max(1)
-            .min(usize::from(u16::MAX)) as u16;
+        let block = panel(" Changes ", true);
+        let inner = block.inner(content);
+        if inner.width == 0 {
+            return;
+        }
+        let mut layout = self.layout.borrow_mut();
+        if layout
+            .as_ref()
+            .is_none_or(|layout| layout.width() != inner.width)
+        {
+            *layout = Some(crate::record_detail::layout::Layout::new(
+                &self.lines,
+                inner.width,
+            ));
+        }
+        let layout = layout.as_ref().expect("review layout");
+        let rows = layout.height();
         self.rows.set(rows);
         let scroll = self.scroll.min(rows.saturating_sub(1));
-        paragraph.scroll((scroll, 0)).render(content, buffer);
+        block.render(content, buffer);
+        layout.render(scroll, inner, buffer);
         Paragraph::new(format!(
             " line {}/{}  j/k scroll  PgUp/PgDn page  Home/End edge  a Apply  c Cancel ",
             scroll.saturating_add(1),
@@ -176,5 +188,45 @@ mod tests {
         assert_eq!(diff_style("-old").fg, Some(BAD));
         assert_eq!(diff_style("+new").fg, Some(GOOD));
         assert_eq!(diff_style("@@ -1 +1 @@").fg, Some(ACCENT));
+    }
+    #[test]
+    fn native_scroll_edge_keeps_visible_diff_lines_beyond_u16_row_count() {
+        let diff = format!(
+            "{}+tail after native row boundary\n",
+            " context\n".repeat(65_540)
+        );
+        let mut app = ReviewApp::new(&diff);
+        let mut terminal = Terminal::new(TestBackend::new(40, 24)).unwrap();
+        terminal
+            .draw(|frame| app.render(frame.area(), frame.buffer_mut()))
+            .unwrap();
+        app.handle(KeyCode::End);
+        terminal
+            .draw(|frame| app.render(frame.area(), frame.buffer_mut()))
+            .unwrap();
+        let text = terminal
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect::<String>();
+        assert!(text.contains("+tail after native row boundary"));
+        terminal.resize(Rect::new(0, 0, 30, 24)).unwrap();
+        terminal
+            .draw(|frame| app.render(frame.area(), frame.buffer_mut()))
+            .unwrap();
+        app.handle(KeyCode::Home);
+        terminal
+            .draw(|frame| app.render(frame.area(), frame.buffer_mut()))
+            .unwrap();
+        assert!(
+            terminal
+                .backend()
+                .buffer()
+                .content()
+                .iter()
+                .any(|cell| cell.symbol() == "c")
+        );
     }
 }

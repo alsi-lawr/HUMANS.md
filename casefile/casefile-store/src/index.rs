@@ -1,5 +1,6 @@
 use casefile_core::{Diagnostic, Revision};
 use serde::{Deserialize, Serialize};
+use std::path::Path;
 
 use crate::{
     derived::{
@@ -22,6 +23,16 @@ pub enum Indexed<T> {
     },
 }
 
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct IndexPublicationId(Revision);
+
+impl IndexPublicationId {
+    pub fn for_file(path: &Path) -> Result<Option<Self>, StoreError> {
+        Ok(crate::revision::target_revision(path)?.map(Self))
+    }
+}
+
 pub trait RevisionSource {
     fn current_revision(&self) -> Result<Revision, StoreError>;
 }
@@ -35,6 +46,7 @@ pub trait DerivedIndex {
         prepared: Self::Prepared,
         source: &dyn RevisionSource,
     ) -> Result<Indexed<()>, Self::Error>;
+    fn publication(&self, current: &Revision) -> Result<Indexed<IndexPublicationId>, Self::Error>;
     fn state(&self, current: &Revision) -> Result<Indexed<()>, Self::Error>;
     fn record(
         &self,
@@ -47,6 +59,12 @@ pub trait DerivedIndex {
         scope: Option<&RecordScope>,
         search: Option<&str>,
     ) -> Result<Indexed<Vec<DerivedRecord>>, Self::Error>;
+    fn record_paths(
+        &self,
+        current: &Revision,
+        scope: Option<&RecordScope>,
+        search: Option<&str>,
+    ) -> Result<Indexed<Vec<String>>, Self::Error>;
     fn relationships(
         &self,
         current: &Revision,

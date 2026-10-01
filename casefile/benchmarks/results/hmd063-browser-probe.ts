@@ -1,0 +1,67 @@
+import { apply, preview, fetchRecords } from "/home/alex/dev/HUMANS.md/casefile/web/src/api.ts";
+import { editableDraft, toChangeRequest } from "/home/alex/dev/HUMANS.md/casefile/web/src/model.ts";
+const base = process.env.CASEFILE_PROBE_BASE;
+const capability = process.env.CASEFILE_PROBE_CAPABILITY;
+if (base === undefined || capability === undefined)
+  throw new Error("synthetic host configuration missing");
+const nativeFetch = globalThis.fetch;
+let sentApply: unknown;
+globalThis.fetch = Object.assign(
+  async (
+    input: Parameters<typeof fetch>[0],
+    options?: Parameters<typeof fetch>[1],
+  ): Promise<Response> => {
+    const target = typeof input === "string" ? new URL(input, base) : input;
+    if (
+      target instanceof URL &&
+      target.pathname === "/api/apply" &&
+      typeof options?.body === "string"
+    )
+      sentApply = JSON.parse(options.body);
+    return nativeFetch(target, options);
+  },
+  { preconnect: nativeFetch.preconnect },
+);
+const signal = new AbortController().signal;
+const records = await fetchRecords(undefined, signal);
+if (records.tag !== "success") throw new Error(records.message);
+const target = records.value.value.find((record) =>
+  record.path.endsWith("tickets/accepted/HMD-011.md"),
+);
+if (target === undefined) throw new Error("synthetic ticket missing");
+const draft = editableDraft(target);
+if (draft === undefined || draft.kind !== "ticket") throw new Error("full editable ticket missing");
+const changed = { ...draft, value: { ...draft.value, title: "Native typed browser ID mutation" } };
+const reviewed = await preview(toChangeRequest(target.path, changed), signal);
+if (reviewed.tag !== "success") throw new Error(reviewed.message);
+if (!reviewed.value.diff.includes(changed.value.title) || reviewed.value.diagnostics.length !== 0)
+  throw new Error("review display mismatch");
+const obsolete = await nativeFetch(new URL("/api/apply", base), {
+  method: "POST",
+  signal,
+  headers: { "Content-Type": "application/json", "X-Casefile-Write-Capability": capability },
+  body: JSON.stringify({
+    preview_id: reviewed.value.preview_id.value,
+    request: toChangeRequest(target.path, changed),
+  }),
+});
+if (obsolete.status !== 400) throw new Error("obsolete full body was not refused");
+const applied = await apply(reviewed.value, capability, signal);
+if (applied.tag !== "success" || applied.value.result.path !== target.path)
+  throw new Error("ID-only apply failed");
+const refreshed = await fetchRecords(changed.value.title, signal);
+if (
+  refreshed.tag !== "success" ||
+  !refreshed.value.value.some((record) => record.title === changed.value.title)
+)
+  throw new Error("edited full display/search was not preserved");
+console.log(
+  JSON.stringify({
+    result: "PASS",
+    transport: "actual native loopback HTTP + unchanged editor/full-record decoder + typed API",
+    obsolete_status: obsolete.status,
+    request: sentApply,
+    diff_preserved: true,
+    editable_record_and_search_preserved: true,
+  }),
+);

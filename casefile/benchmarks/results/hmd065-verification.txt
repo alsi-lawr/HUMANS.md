@@ -1,0 +1,225 @@
+HMD-065 focused verification at final production source
+Parent efb31731365788f1ec545e937f35e1604baf6a16; actual final command exit0.
+Linux x86_64, UID1000; all Stores disposable synthetic fixtures.
+Absolute CARGO_TARGET_DIR=/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target
+Executed via nix develop --command sh -ec; set -x commands below. No tail masked the command status.
+57 distinct Rust tests PASS: Store governance12/scanning10, CLI binary6/check8/nativeMCP10/LinuxPTY11.
+All-target owned-crate Clippy -D warnings, workspace cargo fmt --check and local release CLI build PASS.
+Native CARGO_BIN_EXE_casefile is the rebuilt debug executable; release executable was build-checked, not separately runtime-probed.
+No Criterion run/new benchmark/control for this ticket; no transport latency claim.
+
+=== Final source-identical run: final-checks4.log, exit0 ===
+warning: Git tree '/home/alex/dev/HUMANS.md' is dirty
+humans-md development shell
+  Setup:  (cd casefile/web && bun install)
+  Format: scripts/format-source.sh --check|--write
+  Web:    cd casefile/web; bun install; bun run typecheck; bun run test; bun run build
+  Rust:   cd casefile; cargo fmt --check; cargo clippy --workspace --all-targets -- -D warnings; cargo test --workspace
+  CI:     act pull_request -j validate --pull=false -P ubuntu-latest=catthehacker/ubuntu:act-latest
++ cargo fmt --manifest-path casefile/Cargo.toml --all
++ cargo test --manifest-path casefile/Cargo.toml -p casefile-store --test scanning --test governance
+   Compiling casefile-store v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.69s
+     Running tests/governance.rs (.agent-workspace/20260930-speedup-implementation/writer/target/debug/deps/governance-cbe188f3cd7b473a)
+
+running 12 tests
+test strategy_preview_ids_are_local_to_the_provider_and_refuse_foreign_applies ... ok
+test selected_writer_projection_keeps_binding_states_and_progress_permission_separate ... ok
+test historical_transition_and_backup_files_remain_raw_and_untouched ... ok
+test governed_and_progress_writes_allow_a_symlinked_ancestor_above_the_store_root ... ok
+test binding_preview_ids_preserve_stale_target_checks_and_byte_exact_replay ... ok
+test progress_transition_to_in_progress_is_required_again_after_interruption ... ok
+test binding_accepts_unrelated_changes_and_refuses_invalid_schema_and_symlink_targets ... ok
+test strategy_transition_is_strict_store_visible_idempotent_and_creates_no_backup ... ok
+test first_phase_strategy_transition_creates_missing_matrix_and_refuses_later_recovery ... ok
+test strategy_replay_equates_only_line_endings_and_keeps_raw_preview_staleness ... ok
+test transition_accepts_unrelated_changes_and_preserves_collision_validation_and_rollback ... ok
+test binding_activity_is_derived_exactly_from_canonical_progress_and_spawn_requires_in_progress ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.39s
+
+     Running tests/scanning.rs (.agent-workspace/20260930-speedup-implementation/writer/target/debug/deps/scanning-23aec8dd0199aa2f)
+
+running 10 tests
+test editable_acquisition_is_exact_and_preserves_original_receipt_across_nested_owners ... ok
+test flat_project_decisions_do_not_govern_nested_archives_and_activation_errors_are_unique ... ok
+test binding_diagnostics_use_canonical_scope_despite_parent_nested_parent_order ... ok
+test deepest_activated_scope_excludes_nested_records_boards_and_progress ... ok
+test exact_detail_distinguishes_supported_records_malformed_duplicates_and_absence ... ok
+test requested_governed_containers_distinguish_missing_from_unsafe_without_following ... ok
+test typed_scope_tokens_track_only_affecting_data_and_selected_mapping_values ... ok
+test scoped_attachment_freshness_tracks_existence_type_and_containment_not_body_edits ... ok
+test consumed_attachment_types_agree_across_scan_checks_and_independent_preview ... ok
+test native_names_never_alias_and_opaque_symlinks_are_not_followed_in_deep_trees ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.35s
+
++ cargo test --manifest-path casefile/Cargo.toml -p casefile-cli --bin casefile --test mcp --test check --test tui
+   Compiling casefile-store v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store)
+   Compiling casefile-store-sqlite v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store-sqlite)
+   Compiling casefile-tui v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-tui)
+   Compiling casefile-server v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-server)
+   Compiling casefile-cli v0.8.0 (/home/alex/dev/HUMANS.md/casefile/casefile-cli)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 5.34s
+     Running unittests src/main.rs (.agent-workspace/20260930-speedup-implementation/writer/target/debug/deps/casefile-d30e74368126311a)
+
+running 6 tests
+test error_tests::rollback_failure_channel_retains_details_and_excludes_private_source_text ... ok
+test mcp::tests::fragmented_framing_preserves_complete_frames_and_refuses_partial_eof ... ok
+test mcp::tests::mcp_rejects_old_body_and_foreign_tool_ids_before_applying_retained_original ... ok
+test mcp::tests::mcp_apply_rollback_failure_keeps_error_flag_and_declared_structured_details ... ok
+test mcp::tests::same_mcp_session_dispatches_a_disjoint_apply_while_another_apply_is_active ... ok
+test json_output::tests::overflow_leaves_output_empty_including_json_escaping_expansion ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.42s
+
+     Running tests/check.rs (.agent-workspace/20260930-speedup-implementation/writer/target/debug/deps/check-469c4a3320aa95c2)
+
+running 8 tests
+test check_ignores_unlisted_history_in_an_activated_root ... ok
+test scoped_check_requires_an_exact_activated_investigation ... ok
+test writer_projection_uses_canonical_matrix_and_binding_states ... ok
+test check_has_exact_json_and_exit_contract_for_each_activation_state ... ok
+test rust_validator_accepts_every_shipped_adapter_matrix_including_solo ... ok
+test binding_cli_uses_one_provider_session_and_retains_store_governance ... ok
+test progress_session_applies_exact_preview_without_a_second_approval ... ok
+test public_scan_is_body_independent_and_oversize_json_leaves_stdout_empty ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.34s
+
+     Running tests/mcp.rs (.agent-workspace/20260930-speedup-implementation/writer/target/debug/deps/mcp-a2ad7630cb61b864)
+
+running 10 tests
+test compatibility_contract_is_machine_readable_and_complete ... ok
+test adapter_never_infers_root_or_accepts_incompatible_mcp_protocol ... ok
+test root_protocol_and_capability_refusals_happen_before_tool_service ... ok
+test native_restarted_provider_refuses_the_previous_process_id_without_mutating ... ok
+test packaged_command_internalizes_the_launcher_contract ... ok
+test fixed_root_session_negotiates_and_exposes_canonical_snapshot_and_query ... ok
+test provider_preview_and_apply_remain_one_session_exact_operations ... ok
+test framing_failure_closes_without_accepting_an_unterminated_or_oversized_request ... ok
+test escaped_detail_outer_overflow_returns_original_id_and_allows_next_request ... ok
+test unfit_correlated_id_closes_without_partial_response_or_truncation ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.92s
+
+     Running tests/tui.rs (.agent-workspace/20260930-speedup-implementation/writer/target/debug/deps/tui-2d1988ebb2c629a9)
+
+running 11 tests
+test editor_arg_requires_editor ... ok
+test quit_after_terminal_opens_restores_terminal_promptly ... ok
+test progressive_updates_and_manual_refresh_render_without_an_extra_keypress ... ok
+test default_dot_root_reports_external_disk_change_without_input ... ok
+test disk_change_warns_without_input_retains_selection_and_manual_refresh_remains_available ... ok
+test watch_degradation_keeps_store_refresh_and_quit_usable ... ok
+test edit_during_editor_preserves_external_target_and_retains_unreviewed_draft ... ok
+test stale_apply_preserves_concurrent_content_and_retains_draft ... ok
+test unchanged_editor_discards_draft_without_replacing_canonical_target ... ok
+test explicit_editor_preserves_arguments_and_applies_committed_target ... ok
+test default_opener_ignores_editor_prompts_for_enter_and_cancels ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.99s
+
++ cargo clippy --manifest-path casefile/Cargo.toml -p casefile-store -p casefile-cli --all-targets -- -D warnings
+    Checking casefile-store v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store)
+    Checking casefile-store-sqlite v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store-sqlite)
+    Checking casefile-tui v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-tui)
+    Checking casefile-server v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-server)
+    Checking casefile-cli v0.8.0 (/home/alex/dev/HUMANS.md/casefile/casefile-cli)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 3.32s
++ cargo fmt --manifest-path casefile/Cargo.toml --all --check
++ cargo build --manifest-path casefile/Cargo.toml -p casefile-cli --release
+   Compiling casefile-store v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store)
+   Compiling casefile-store-sqlite v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store-sqlite)
+   Compiling casefile-tui v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-tui)
+   Compiling casefile-server v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-server)
+   Compiling casefile-cli v0.8.0 (/home/alex/dev/HUMANS.md/casefile/casefile-cli)
+    Finished `release` profile [optimized] target(s) in 24.00s
+
+=== Transparent preliminary attempts, not final acceptance evidence ===
+
+check.log: actual exit1; cargo was outside the Nix development shell
+error: command failed: 'cargo': No such file or directory (os error 2)
+
+check-nix.log: actual exit101; selected sibling functions initially too private
+    Checking casefile-store v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store)
+error[E0603]: function `read_editable_entry` is private
+   --> casefile-store/src/store.rs:158:36
+    |
+158 |         crate::scanning::selected::read_editable_entry(&self.root, path, kind)
+    |                                    ^^^^^^^^^^^^^^^^^^^ private function
+    |
+note: the function `read_editable_entry` is defined here
+   --> casefile-store/src/scanning/selected.rs:95:1
+    |
+ 95 | / pub(super) fn read_editable_entry(
+ 96 | |     root: &Path,
+ 97 | |     path: &str,
+ 98 | |     kind: Kind,
+
+error[E0603]: function `project_writer_binding` is private
+   --> casefile-store/src/store.rs:166:36
+    |
+166 |         crate::scanning::selected::project_writer_binding(&self.root, investigation, strategy_id)
+    |                                    ^^^^^^^^^^^^^^^^^^^^^^ private function
+    |
+note: the function `project_writer_binding` is defined here
+   --> casefile-store/src/scanning/selected.rs:120:1
+    |
+120 | / pub(super) fn project_writer_binding(
+121 | |     root: &Path,
+122 | |     investigation: &str,
+123 | |     strategy_id: &str,
+For more information about this error, try `rustc --explain E0603`.
+error: could not compile `casefile-store` (lib) due to 2 previous errors
+
+first-tests.log: actual exit101; Store22 passed, CLI command mistakenly requested nonexistent --lib
+
+error: no library targets found in package `casefile-cli`
+
+final-checks.log: actual exit101; tests57 passed; clippy required octal Unix permission literals
+    Checking casefile-server v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-server)
+error: using a non-octal value to set unix file permissions
+   --> casefile-store/tests/scanning.rs:737:64
+    |
+737 |         fs::set_permissions(opaque, fs::Permissions::from_mode(0)).unwrap();
+    |                                                                ^ help: consider using an octal literal instead: `0o0`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#non_octal_unix_permissions
+    = note: `#[deny(clippy::non_octal_unix_permissions)]` on by default
+
+error: using a non-octal value to set unix file permissions
+   --> casefile-store/tests/governance.rs:982:64
+    |
+982 |         fs::set_permissions(opaque, fs::Permissions::from_mode(0)).unwrap();
+    |                                                                ^ help: consider using an octal literal instead: `0o0`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#non_octal_unix_permissions
+    = note: `#[deny(clippy::non_octal_unix_permissions)]` on by default
+
+error: could not compile `casefile-store` (test "scanning") due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `casefile-store` (test "governance") due to 1 previous error
+
+final-checks2.log: actual exit101; tests57 passed; clippy found superseded unused json_output::write_message
+    Checking casefile-cli v0.8.0 (/home/alex/dev/HUMANS.md/casefile/casefile-cli)
+error: function `write_message` is never used
+  --> casefile-cli/src/json_output.rs:45:15
+   |
+45 | pub(super) fn write_message(output: &mut impl Write, value: &impl Serialize) -> Result<()> {
+   |               ^^^^^^^^^^^^^
+   |
+   = note: `-D dead-code` implied by `-D warnings`
+   = help: to override `-D warnings` add `#[expect(dead_code)]` or `#[allow(dead_code)]`
+
+error: could not compile `casefile-cli` (bin "casefile") due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `casefile-cli` (bin "casefile" test) due to 1 previous error
+
+cli-tests.log exit0: preliminary57 tests passed before unreadable fixtures and sequential-after-error refinement.
+final-checks3.log exit0: tests57/clippy/fmt/release passed before removing repeated ScopeIndex construction per selected entry; superseded by final-checks4.
+
+=== Baseline immutability ===
+sha256sum -c writer/hmd058/before-hashes.txt: actual exit0, all4 entries OK.
+sha256sum -c writer/hmd058/native-before-hashes.txt: actual exit0, all236 entries OK.
+Original before manifests retained under root-owned writer scratch; target remains active pipeline baseline.

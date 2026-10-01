@@ -1,3 +1,4 @@
+mod projection;
 use crate::ui::{
     ACCENT, BAD, BORDER, GOOD, MUTED, SELECTED, WARN, classification_name, classification_style,
     kind_name, panel, safe_inline, status_style, summary_title, work_status,
@@ -56,6 +57,8 @@ pub(crate) struct Browser {
     selected_path: Option<String>,
     filter: String,
     entering_filter: bool,
+    projection: projection::Projection,
+    visible: std::cell::RefCell<projection::Visible>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -107,9 +110,25 @@ impl Browser {
             selected_path: None,
             filter: String::new(),
             entering_filter: false,
+            projection: projection::Projection::default(),
+            visible: std::cell::RefCell::default(),
         };
+        browser.projection.rebuild(scan);
         browser.normalise_selection(scan);
         browser
+    }
+
+    pub(crate) fn rebuild(&mut self, scan: &ScanResult) {
+        self.projection.rebuild(scan);
+    }
+
+    pub(crate) fn update(
+        &mut self,
+        scan: &ScanResult,
+        indices: &std::collections::BTreeMap<String, usize>,
+        changed: &std::collections::BTreeSet<String>,
+    ) {
+        self.projection.update(scan, indices, changed);
     }
 
     pub(crate) fn set_view(&mut self, scan: &ScanResult, view: View) {
@@ -391,15 +410,12 @@ impl Browser {
     }
 
     pub(crate) fn entries<'a>(&self, scan: &'a ScanResult) -> Vec<&'a EntrySnapshot> {
-        let mut entries = scan
-            .snapshot
-            .entries
+        self.visible()
+            .paths
             .iter()
-            .filter(|entry| self.matches_scope(scan, entry, self.view))
-            .filter(|entry| self.matches_view(entry) && self.matches_entry_filter(entry))
-            .collect::<Vec<_>>();
-        entries.sort_by(|left, right| left.path.cmp(&right.path));
-        entries
+            .filter_map(|path| self.projection.indices.get(path))
+            .map(|index| &scan.snapshot.entries[*index])
+            .collect()
     }
 
     pub(crate) fn selected<'a>(&self, scan: &'a ScanResult) -> Option<&'a EntrySnapshot> {
@@ -409,41 +425,49 @@ impl Browser {
         ) {
             return None;
         }
-        let path = self.selected_path.as_deref()?;
-        scan.snapshot
-            .entries
-            .iter()
-            .find(|entry| entry.path == path)
+        self.selected_path
+            .as_ref()
+            .and_then(|path| self.projection.indices.get(path))
+            .and_then(|index| scan.snapshot.entries.get(*index))
     }
 
     pub(crate) fn select_offset(&mut self, scan: &ScanResult, offset: isize) -> bool {
-        let changed = match self.view {
-            View::Projects => {
-                let values = self.projects(scan);
-                let changed = select_value(&mut self.selected_project, &values, offset);
-                if changed {
-                    self.selected_investigation = None;
-                    self.selected_path = None;
+        let next = {
+            let visible = self.visible();
+            let (selected, values) = match self.view {
+                View::Projects => (&self.selected_project, &visible.projects),
+                View::Investigations => (&self.selected_investigation, &visible.investigations),
+                View::Tickets | View::Files | View::Strategies | View::Boards => {
+                    (&self.selected_path, &visible.paths)
                 }
-                changed
+            };
+            next_value(selected.as_deref(), values, offset)
+        };
+        match self.view {
+            View::Projects => {
+                if self.selected_project == next {
+                    return false;
+                }
+                self.selected_project = next;
+                self.selected_investigation = None;
+                self.selected_path = None;
+                self.normalise_selection(scan);
             }
             View::Investigations => {
-                let values = self.investigations(scan);
-                select_value(&mut self.selected_investigation, &values, offset)
+                if self.selected_investigation == next {
+                    return false;
+                }
+                self.selected_investigation = next;
+                self.normalise_selection(scan);
             }
             View::Tickets | View::Files | View::Strategies | View::Boards => {
-                let values = self
-                    .entries(scan)
-                    .into_iter()
-                    .map(|entry| entry.path.clone())
-                    .collect::<Vec<_>>();
-                select_value(&mut self.selected_path, &values, offset)
+                if self.selected_path == next {
+                    return false;
+                }
+                self.selected_path = next;
             }
-        };
-        if changed {
-            self.normalise_selection(scan);
         }
-        changed
+        true
     }
 
     pub(crate) fn select_edge(&mut self, scan: &ScanResult, end: bool) -> bool {
@@ -465,15 +489,18 @@ impl Browser {
         &self,
         scan: &ScanResult,
         board_count: usize,
+        diagnostic_count: usize,
         area: Rect,
         buffer: &mut Buffer,
     ) {
+        let visible = self.visible();
+        let [tickets, files, strategies] = visible.counts;
         let counts = [
-            self.projects(scan).len(),
-            self.investigations(scan).len(),
-            self.ticket_count(scan),
-            self.file_count(scan),
-            self.strategy_count(scan),
+            visible.projects.len(),
+            visible.investigations.len(),
+            tickets,
+            files,
+            strategies,
             board_count,
         ];
         let mut tabs = vec![Span::styled(
@@ -494,7 +521,7 @@ impl Browser {
                 activation_style(scan.activation).add_modifier(Modifier::BOLD),
             ),
             Span::styled(
-                format!("  |  {} diagnostics", scan.diagnostics.len()),
+                format!("  |  {} diagnostics", diagnostic_count),
                 Style::default().fg(MUTED),
             ),
         ]);
@@ -538,10 +565,35 @@ impl Browser {
         area: Rect,
         buffer: &mut Buffer,
     ) {
-        let (items, selected) = self.list_items(scan);
+        let visible = self.visible();
+        let (total, absolute_selected) = match self.view {
+            View::Projects => (
+                visible.projects.len(),
+                selected_index(&visible.projects, self.selected_project.as_deref()),
+            ),
+            View::Investigations => (
+                visible.investigations.len(),
+                selected_index(
+                    &visible.investigations,
+                    self.selected_investigation.as_deref(),
+                ),
+            ),
+            View::Tickets | View::Files | View::Strategies => (
+                visible.paths.len(),
+                self.selected_path
+                    .as_ref()
+                    .and_then(|path| visible.positions.get(path).copied()),
+            ),
+            View::Boards => (0, None),
+        };
+        let height = usize::from(panel("", focused).inner(area).height);
+        let selected_end = absolute_selected.map_or(0, |index| visible.row_end(self.view, index));
+        let offset = visible.start_row(self.view, selected_end.saturating_sub(height));
+        let (items, _) = self.list_items(scan, offset, height);
+        let selected = absolute_selected.map(|index| index.saturating_sub(offset));
         let position = selected
-            .map(|index| format!("{} / {}", index + 1, items.len()))
-            .unwrap_or_else(|| format!("0 / {}", items.len()));
+            .map(|index| format!("{} / {}", absolute_selected.unwrap_or(index) + 1, total))
+            .unwrap_or_else(|| format!("0 / {total}"));
         let block = panel(format!(" {}  {position} ", self.view.title()), focused);
         if items.is_empty() {
             let message = if self.filter.is_empty() {
@@ -577,21 +629,23 @@ impl Browser {
         StatefulWidget::render(list, area, buffer, &mut state);
     }
 
-    fn list_items(&self, scan: &ScanResult) -> (Vec<ListItem<'static>>, Option<usize>) {
+    fn list_items(
+        &self,
+        scan: &ScanResult,
+        offset: usize,
+        height: usize,
+    ) -> (Vec<ListItem<'static>>, Option<usize>) {
         match self.view {
             View::Projects => {
-                let values = self.projects(scan);
-                let selected = selected_index(&values, self.selected_project.as_deref());
+                let visible = self.visible();
+                let values = &visible.projects;
+                let selected = selected_index(values, self.selected_project.as_deref());
                 let items = values
                     .iter()
+                    .skip(offset)
+                    .take(height)
                     .map(|project| {
-                        let investigations = all_investigations(scan, project).len();
-                        let tickets = work_entries(scan)
-                            .into_iter()
-                            .filter(|entry| {
-                                entry_scope(scan, entry).is_some_and(|scope| scope.0 == project)
-                            })
-                            .count();
+                        let (investigations, tickets) = self.projection.project_counts(project);
                         ListItem::new(Line::from(vec![
                             Span::styled(
                                 format!(" {project} "),
@@ -607,20 +661,16 @@ impl Browser {
                 (items, selected)
             }
             View::Investigations => {
-                let values = self.investigations(scan);
-                let selected = selected_index(&values, self.selected_investigation.as_deref());
+                let visible = self.visible();
+                let values = &visible.investigations;
+                let selected = selected_index(values, self.selected_investigation.as_deref());
                 let project = self.selected_project.as_deref().unwrap_or_default();
                 let items = values
                     .iter()
+                    .skip(offset)
+                    .take(height)
                     .map(|investigation| {
-                        let tickets = work_entries(scan)
-                            .into_iter()
-                            .filter(|entry| {
-                                entry_scope(scan, entry).is_some_and(|scope| {
-                                    scope.0 == project && scope.1 == Some(investigation.as_str())
-                                })
-                            })
-                            .count();
+                        let tickets = self.projection.tickets(project, investigation);
                         ListItem::new(Line::from(vec![
                             Span::styled(
                                 format!(" {investigation} "),
@@ -635,9 +685,9 @@ impl Browser {
                     .collect();
                 (items, selected)
             }
-            View::Tickets => self.entry_items(scan, false),
-            View::Files => self.entry_items(scan, true),
-            View::Strategies => self.entry_items(scan, false),
+            View::Tickets => self.entry_items(scan, false, offset, height),
+            View::Files => self.entry_items(scan, true, offset, height),
+            View::Strategies => self.entry_items(scan, false, offset, height),
             View::Boards => (Vec::new(), None),
         }
     }
@@ -646,27 +696,33 @@ impl Browser {
         &self,
         scan: &ScanResult,
         directories: bool,
+        offset: usize,
+        height: usize,
     ) -> (Vec<ListItem<'static>>, Option<usize>) {
-        let entries = self.entries(scan);
-        let selected = entries
+        let visible = self.visible();
+        let selected = self
+            .selected_path
+            .as_ref()
+            .and_then(|path| visible.positions.get(path).copied());
+        let mut used = 0;
+        let items = visible
+            .paths
             .iter()
-            .position(|entry| Some(entry.path.as_str()) == self.selected_path.as_deref());
-        let mut previous_directory = String::new();
-        let items = entries
-            .into_iter()
-            .map(|entry| {
-                let directory = relative_parent_directory(
-                    scan,
-                    entry,
-                    self.selected_project.as_deref(),
-                    self.selected_investigation.as_deref(),
-                );
-                let show_directory = directories && directory != previous_directory;
-                previous_directory = directory.clone();
+            .enumerate()
+            .skip(offset)
+            .take_while(|(index, _)| {
+                let include = used < height;
+                used += visible.row_height(*index);
+                include
+            })
+            .map(|(index, path)| {
+                let entry = &scan.snapshot.entries[self.projection.indices[path]];
+                let directory = visible.directories[index].as_deref().unwrap_or_default();
+                let show_directory = directories && visible.directories[index].is_some();
                 let mut lines = Vec::new();
                 if show_directory {
                     lines.push(
-                        Line::from(format!(" {}/", safe_inline(&directory)))
+                        Line::from(format!(" {}/", safe_inline(directory)))
                             .style(Style::default().fg(ACCENT).bold()),
                     );
                 }
@@ -677,131 +733,29 @@ impl Browser {
         (items, selected)
     }
 
-    fn projects(&self, scan: &ScanResult) -> Vec<String> {
-        all_projects(scan)
-            .into_iter()
-            .filter(|project| {
-                self.view == View::Boards
-                    || self.filter.is_empty()
-                    || project.to_lowercase().contains(&self.filter.to_lowercase())
-                    || scan.snapshot.entries.iter().any(|entry| {
-                        entry_scope(scan, entry).is_some_and(|scope| scope.0 == project)
-                            && self.matches_entry_filter(entry)
-                    })
-            })
-            .collect()
+    fn projects(&self, _scan: &ScanResult) -> Vec<String> {
+        self.visible().projects.clone()
+    }
+    fn investigations(&self, _scan: &ScanResult) -> Vec<String> {
+        self.visible().investigations.clone()
     }
 
-    fn investigations(&self, scan: &ScanResult) -> Vec<String> {
-        let Some(project) = self.selected_project.as_deref() else {
-            return Vec::new();
-        };
-        all_investigations(scan, project)
-            .into_iter()
-            .filter(|investigation| {
-                self.view == View::Boards
-                    || self.filter.is_empty()
-                    || investigation
-                        .to_lowercase()
-                        .contains(&self.filter.to_lowercase())
-                    || scan.snapshot.entries.iter().any(|entry| {
-                        entry_scope(scan, entry).is_some_and(|scope| {
-                            scope.0 == project && scope.1 == Some(investigation.as_str())
-                        }) && self.matches_entry_filter(entry)
-                    })
-            })
-            .collect()
-    }
-
-    fn ticket_count(&self, scan: &ScanResult) -> usize {
-        work_entries(scan)
-            .into_iter()
-            .filter(|entry| self.matches_scope(scan, entry, View::Tickets))
-            .count()
-    }
-
-    fn file_count(&self, scan: &ScanResult) -> usize {
-        scan.snapshot
-            .entries
-            .iter()
-            .filter(|entry| self.matches_scope(scan, entry, View::Files) && !is_work(entry))
-            .count()
-    }
-
-    fn strategy_count(&self, scan: &ScanResult) -> usize {
-        scan.snapshot
-            .entries
-            .iter()
-            .filter(|entry| self.matches_scope(scan, entry, View::Strategies) && is_strategy(entry))
-            .count()
-    }
-
-    fn matches_scope(&self, scan: &ScanResult, entry: &EntrySnapshot, view: View) -> bool {
-        let Some((project, investigation)) = entry_scope(scan, entry) else {
-            return false;
-        };
-        self.selected_project.as_deref() == Some(project)
-            && match view {
-                View::Projects | View::Investigations => true,
-                View::Tickets => self.selected_investigation.as_deref() == investigation,
-                View::Strategies => self
-                    .selected_investigation
-                    .as_deref()
-                    .is_some_and(|selected| investigation == Some(selected)),
-                View::Boards => false,
-                View::Files => {
-                    investigation.is_none()
-                        || self.selected_investigation.as_deref() == investigation
-                }
-            }
-    }
-
-    fn matches_view(&self, entry: &EntrySnapshot) -> bool {
-        match self.view {
-            View::Tickets => is_work(entry),
-            View::Files => !is_work(entry),
-            View::Strategies => is_strategy(entry),
-            View::Projects | View::Investigations => false,
-            View::Boards => false,
-        }
-    }
-
-    fn matches_entry_filter(&self, entry: &EntrySnapshot) -> bool {
-        let filter = self.filter.to_lowercase();
-        filter.is_empty()
-            || [
-                entry.path.as_str(),
-                classification_name(entry.classification),
-                entry.kind.map(kind_name).unwrap_or_default(),
-                entry.identity.as_deref().unwrap_or_default(),
-                summary_title(entry.summary.as_ref()),
-                work_status(entry.summary.as_ref()),
-                strategy_phase(entry.summary.as_ref()),
-                strategy_role(entry.summary.as_ref()),
-                strategy_model(entry.summary.as_ref()),
-                strategy_reasoning(entry.summary.as_ref()),
-            ]
-            .into_iter()
-            .any(|field| field.to_lowercase().contains(&filter))
-    }
-
-    fn normalise_selection(&mut self, scan: &ScanResult) -> bool {
+    fn normalise_selection(&mut self, _scan: &ScanResult) -> bool {
         let previous = (
             self.selected_project.clone(),
             self.selected_investigation.clone(),
             self.selected_path.clone(),
         );
-        let projects = self.projects(scan);
-        normalise_value(&mut self.selected_project, &projects);
-        let investigations = self.investigations(scan);
-        normalise_value(&mut self.selected_investigation, &investigations);
+        let project = normalised(self.selected_project.as_deref(), &self.visible().projects);
+        self.selected_project = project;
+        let investigation = normalised(
+            self.selected_investigation.as_deref(),
+            &self.visible().investigations,
+        );
+        self.selected_investigation = investigation;
         if self.view != View::Boards {
-            let paths = self
-                .entries(scan)
-                .into_iter()
-                .map(|entry| entry.path.clone())
-                .collect::<Vec<_>>();
-            normalise_value(&mut self.selected_path, &paths);
+            let path = normalised(self.selected_path.as_deref(), &self.visible().paths);
+            self.selected_path = path;
         }
         previous
             != (
@@ -864,14 +818,6 @@ fn nearest(values: &[String], old_index: Option<usize>) -> Option<String> {
     values.get(index).cloned()
 }
 
-fn work_entries(scan: &ScanResult) -> Vec<&EntrySnapshot> {
-    scan.snapshot
-        .entries
-        .iter()
-        .filter(|entry| is_work(entry))
-        .collect()
-}
-
 fn is_work(entry: &EntrySnapshot) -> bool {
     entry.classification == Classification::Governed
         && matches!(entry.summary, Some(RecordSummary::WorkItem { .. }))
@@ -917,27 +863,6 @@ fn entry_scope<'a>(
     entry: &'a EntrySnapshot,
 ) -> Option<(&'a str, Option<&'a str>)> {
     scan.scope_for_path(&entry.path)
-}
-
-fn relative_parent_directory(
-    scan: &ScanResult,
-    entry: &EntrySnapshot,
-    project: Option<&str>,
-    investigation: Option<&str>,
-) -> String {
-    let project_prefix = project.map(|project| format!("projects/{project}/"));
-    let investigation_prefix = project.zip(investigation).map(|(project, investigation)| {
-        format!("projects/{project}/investigations/{investigation}/")
-    });
-    let prefix = match entry_scope(scan, entry) {
-        Some((_, Some(_))) => investigation_prefix.as_deref(),
-        Some((_, None)) => project_prefix.as_deref(),
-        None => None,
-    };
-    let relative = prefix
-        .and_then(|prefix| entry.path.strip_prefix(prefix))
-        .unwrap_or(&entry.path);
-    parent_directory(relative)
 }
 
 fn parent_directory(path: &str) -> String {
@@ -1021,18 +946,36 @@ fn entry_label(entry: &EntrySnapshot, view: View) -> Line<'static> {
     }
 }
 
+fn next_value(selected: Option<&str>, values: &[String], offset: isize) -> Option<String> {
+    if values.is_empty() {
+        return None;
+    }
+    let index = selected.and_then(|selected| {
+        values
+            .binary_search_by(|value| value.as_str().cmp(selected))
+            .ok()
+    });
+    let next = navigation_index(index, values.len(), offset);
+    Some(values[next].clone())
+}
+
+fn normalised(selected: Option<&str>, values: &[String]) -> Option<String> {
+    selected
+        .and_then(|selected| {
+            values
+                .binary_search_by(|value| value.as_str().cmp(selected))
+                .ok()
+        })
+        .map(|index| values[index].clone())
+        .or_else(|| values.first().cloned())
+}
+
 fn select_value(selected: &mut Option<String>, values: &[String], offset: isize) -> bool {
     if values.is_empty() {
         return selected.take().is_some();
     }
-    let index = selected_index(values, selected.as_deref()).unwrap_or(0);
-    let next = if offset == isize::MAX {
-        values.len() - 1
-    } else if offset == isize::MIN {
-        0
-    } else {
-        (index as isize + offset).clamp(0, values.len() as isize - 1) as usize
-    };
+    let index = selected_index(values, selected.as_deref());
+    let next = navigation_index(index, values.len(), offset);
     if selected.as_deref() == Some(values[next].as_str()) {
         false
     } else {
@@ -1041,12 +984,13 @@ fn select_value(selected: &mut Option<String>, values: &[String], offset: isize)
     }
 }
 
-fn normalise_value(selected: &mut Option<String>, values: &[String]) {
-    if !selected
-        .as_ref()
-        .is_some_and(|current| values.contains(current))
-    {
-        *selected = values.first().cloned();
+fn navigation_index(index: Option<usize>, count: usize, offset: isize) -> usize {
+    match (index, offset) {
+        (_, isize::MAX) => count - 1,
+        (_, isize::MIN) => 0,
+        (Some(0), -1) => count - 1,
+        (Some(index), 1) if index == count - 1 => 0,
+        _ => (index.unwrap_or(0) as isize + offset).clamp(0, count as isize - 1) as usize,
     }
 }
 

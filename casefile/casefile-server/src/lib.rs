@@ -1,17 +1,18 @@
 mod api;
 mod assets;
+mod transport;
 mod workbench;
 
 use anyhow::{Context, Result};
 use casefile_store::{Provider, Store};
 use casefile_store_sqlite::SqliteIndex;
 use sha2::{Digest, Sha256};
+use std::net::TcpListener;
 use std::{
     fs,
     io::Write,
     path::{Path, PathBuf},
 };
-use tiny_http::Server;
 
 fn capability() -> Result<String> {
     let mut bytes = [0_u8; 32];
@@ -38,13 +39,8 @@ pub fn serve(root: &Path, port: u16, index: Option<&Path>, write: bool) -> Resul
         None => default_index_path(&root)?,
     };
     let provider_index = SqliteIndex::open(&index_path, &root)?;
-    let compatibility_index = SqliteIndex::open(&index_path, &root)?;
-    let server = Server::http(("127.0.0.1", port)).map_err(|error| anyhow::anyhow!(error))?;
-    let port = server
-        .server_addr()
-        .to_ip()
-        .context("server did not bind an IP socket")?
-        .port();
+    let server = TcpListener::bind(("127.0.0.1", port))?;
+    let port = server.local_addr()?.port();
     let capability = capability()?;
     println!("Casefile server: http://127.0.0.1:{port}");
     println!("Casefile root: {}", root.display());
@@ -52,12 +48,12 @@ pub fn serve(root: &Path, port: u16, index: Option<&Path>, write: bool) -> Resul
     println!("Casefile write capability: {capability}");
     std::io::stdout().flush()?;
     let provider = Provider::new(Store::open(root)?, provider_index);
-    let workbench = workbench::Workbench::new(provider, compatibility_index);
+    let workbench = workbench::Workbench::new(provider);
     let host = api::Host::new(workbench, port, write, capability);
-    for request in server.incoming_requests() {
-        if let Err(error) = host.handle(request) {
-            eprintln!("HTTP response failed: {error}");
-        }
-    }
-    Ok(())
+    let runtime = transport::runtime()?;
+    server.set_nonblocking(true)?;
+    runtime.block_on(async move {
+        let listener = tokio::net::TcpListener::from_std(server)?;
+        transport::serve(listener, std::sync::Arc::new(host)).await
+    })
 }

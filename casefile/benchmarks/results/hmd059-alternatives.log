@@ -1,0 +1,305 @@
+
+===== serial: Criterion stdout =====
+warning: Git tree '/home/alex/dev/HUMANS.md' is dirty
+humans-md development shell
+  Setup:  (cd casefile/web && bun install)
+  Format: scripts/format-source.sh --check|--write
+  Web:    cd casefile/web; bun install; bun run typecheck; bun run test; bun run build
+  Rust:   cd casefile; cargo fmt --check; cargo clippy --workspace --all-targets -- -D warnings; cargo test --workspace
+  CI:     act pull_request -j validate --pull=false -P ubuntu-latest=catthehacker/ubuntu:act-latest
+   Compiling casefile-store-sqlite v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store-sqlite)
+    Finished `bench` profile [optimized] target(s) in 2.30s
+     Running benches/priority.rs (.agent-workspace/20260930-speedup-implementation/writer/target/release/deps/priority-5c7f4db6593f9bcc)
+Gnuplot not found, using plotters backend
+Benchmarking priority_scope_500_notes/selected_record_index/2
+Benchmarking priority_scope_500_notes/selected_record_index/2: Warming up for 1.0000 s
+Benchmarking priority_scope_500_notes/selected_record_index/2: Collecting 10 samples in estimated 2.1385 s (440 iterations)
+Benchmarking priority_scope_500_notes/selected_record_index/2: Analyzing
+priority_scope_500_notes/selected_record_index/2
+                        time:   [4.8090 ms 4.8157 ms 4.8209 ms]
+Benchmarking priority_scope_500_notes/selected_record_index/250
+Benchmarking priority_scope_500_notes/selected_record_index/250: Warming up for 1.0000 s
+Benchmarking priority_scope_500_notes/selected_record_index/250: Collecting 10 samples in estimated 2.2437 s (110 iterations)
+Benchmarking priority_scope_500_notes/selected_record_index/250: Analyzing
+priority_scope_500_notes/selected_record_index/250
+                        time:   [19.397 ms 19.575 ms 19.974 ms]
+Benchmarking priority_scope_500_notes/selected_record_index/1000
+Benchmarking priority_scope_500_notes/selected_record_index/1000: Warming up for 1.0000 s
+
+Warning: Unable to complete 10 samples in 2.0s. You may wish to increase target time to 3.5s or enable flat sampling.
+Benchmarking priority_scope_500_notes/selected_record_index/1000: Collecting 10 samples in estimated 3.4797 s (55 iterations)
+Benchmarking priority_scope_500_notes/selected_record_index/1000: Analyzing
+priority_scope_500_notes/selected_record_index/1000
+                        time:   [61.411 ms 61.864 ms 62.071 ms]
+
+
+===== vec: Criterion stdout =====
+warning: Git tree '/home/alex/dev/HUMANS.md' is dirty
+humans-md development shell
+  Setup:  (cd casefile/web && bun install)
+  Format: scripts/format-source.sh --check|--write
+  Web:    cd casefile/web; bun install; bun run typecheck; bun run test; bun run build
+  Rust:   cd casefile; cargo fmt --check; cargo clippy --workspace --all-targets -- -D warnings; cargo test --workspace
+  CI:     act pull_request -j validate --pull=false -P ubuntu-latest=catthehacker/ubuntu:act-latest
+   Compiling casefile-store v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store)
+   Compiling casefile-store-sqlite v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store-sqlite)
+    Finished `bench` profile [optimized] target(s) in 14.82s
+     Running benches/priority.rs (.agent-workspace/20260930-speedup-implementation/writer/target/release/deps/priority-5c7f4db6593f9bcc)
+Gnuplot not found, using plotters backend
+Benchmarking priority_scope_500_notes/selected_record_index/2
+Benchmarking priority_scope_500_notes/selected_record_index/2: Warming up for 1.0000 s
+Benchmarking priority_scope_500_notes/selected_record_index/2: Collecting 10 samples in estimated 2.1449 s (440 iterations)
+Benchmarking priority_scope_500_notes/selected_record_index/2: Analyzing
+priority_scope_500_notes/selected_record_index/2
+                        time:   [4.7177 ms 4.7578 ms 4.8451 ms]
+                        change: [−1.2105% +0.0441% +1.0357%] (p = 0.94 > 0.05)
+                        No change in performance detected.
+Benchmarking priority_scope_500_notes/selected_record_index/250
+Benchmarking priority_scope_500_notes/selected_record_index/250: Warming up for 1.0000 s
+Benchmarking priority_scope_500_notes/selected_record_index/250: Collecting 10 samples in estimated 2.1702 s (110 iterations)
+Benchmarking priority_scope_500_notes/selected_record_index/250: Analyzing
+priority_scope_500_notes/selected_record_index/250
+                        time:   [19.405 ms 19.815 ms 20.364 ms]
+                        change: [−2.4560% −1.0239% +0.9373%] (p = 0.28 > 0.05)
+                        No change in performance detected.
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) high severe
+Benchmarking priority_scope_500_notes/selected_record_index/1000
+Benchmarking priority_scope_500_notes/selected_record_index/1000: Warming up for 1.0000 s
+
+Warning: Unable to complete 10 samples in 2.0s. You may wish to increase target time to 3.5s or enable flat sampling.
+Benchmarking priority_scope_500_notes/selected_record_index/1000: Collecting 10 samples in estimated 3.5348 s (55 iterations)
+Benchmarking priority_scope_500_notes/selected_record_index/1000: Analyzing
+priority_scope_500_notes/selected_record_index/1000
+                        time:   [60.458 ms 61.768 ms 63.394 ms]
+                        change: [−0.7409% +1.2957% +3.4115%] (p = 0.24 > 0.05)
+                        No change in performance detected.
+
+
+===== rayon: Criterion stdout =====
+warning: Git tree '/home/alex/dev/HUMANS.md' is dirty
+humans-md development shell
+  Setup:  (cd casefile/web && bun install)
+  Format: scripts/format-source.sh --check|--write
+  Web:    cd casefile/web; bun install; bun run typecheck; bun run test; bun run build
+  Rust:   cd casefile; cargo fmt --check; cargo clippy --workspace --all-targets -- -D warnings; cargo test --workspace
+  CI:     act pull_request -j validate --pull=false -P ubuntu-latest=catthehacker/ubuntu:act-latest
+   Compiling casefile-store v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store)
+   Compiling casefile-store-sqlite v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store-sqlite)
+    Finished `bench` profile [optimized] target(s) in 14.79s
+     Running benches/priority.rs (.agent-workspace/20260930-speedup-implementation/writer/target/release/deps/priority-512789b08a32ff7b)
+Gnuplot not found, using plotters backend
+Benchmarking priority_scope_500_notes/selected_record_index/2
+Benchmarking priority_scope_500_notes/selected_record_index/2: Warming up for 1.0000 s
+Benchmarking priority_scope_500_notes/selected_record_index/2: Collecting 10 samples in estimated 2.1134 s (440 iterations)
+Benchmarking priority_scope_500_notes/selected_record_index/2: Analyzing
+priority_scope_500_notes/selected_record_index/2
+                        time:   [4.7386 ms 4.7724 ms 4.7992 ms]
+                        change: [−1.5282% −1.0302% −0.5745%] (p = 0.00 < 0.05)
+                        Change within noise threshold.
+Benchmarking priority_scope_500_notes/selected_record_index/250
+Benchmarking priority_scope_500_notes/selected_record_index/250: Warming up for 1.0000 s
+Benchmarking priority_scope_500_notes/selected_record_index/250: Collecting 10 samples in estimated 2.2664 s (165 iterations)
+Benchmarking priority_scope_500_notes/selected_record_index/250: Analyzing
+priority_scope_500_notes/selected_record_index/250
+                        time:   [13.558 ms 13.747 ms 13.968 ms]
+                        change: [−31.508% −30.691% −29.710%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Found 2 outliers among 10 measurements (20.00%)
+  1 (10.00%) high mild
+  1 (10.00%) high severe
+Benchmarking priority_scope_500_notes/selected_record_index/1000
+Benchmarking priority_scope_500_notes/selected_record_index/1000: Warming up for 1.0000 s
+
+Warning: Unable to complete 10 samples in 2.0s. You may wish to increase target time to 2.1s or enable flat sampling.
+Benchmarking priority_scope_500_notes/selected_record_index/1000: Collecting 10 samples in estimated 2.1379 s (55 iterations)
+Benchmarking priority_scope_500_notes/selected_record_index/1000: Analyzing
+priority_scope_500_notes/selected_record_index/1000
+                        time:   [38.335 ms 39.241 ms 40.108 ms]
+                        change: [−36.912% −35.891% −34.817%] (p = 0.00 < 0.05)
+                        Performance has improved.
+
+
+===== minimum-serial: Criterion stdout =====
+warning: Git tree '/home/alex/dev/HUMANS.md' is dirty
+humans-md development shell
+  Setup:  (cd casefile/web && bun install)
+  Format: scripts/format-source.sh --check|--write
+  Web:    cd casefile/web; bun install; bun run typecheck; bun run test; bun run build
+  Rust:   cd casefile; cargo fmt --check; cargo clippy --workspace --all-targets -- -D warnings; cargo test --workspace
+  CI:     act pull_request -j validate --pull=false -P ubuntu-latest=catthehacker/ubuntu:act-latest
+   Compiling casefile-store v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store)
+   Compiling casefile-store-sqlite v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store-sqlite)
+    Finished `bench` profile [optimized] target(s) in 14.00s
+     Running benches/priority.rs (.agent-workspace/20260930-speedup-implementation/writer/target/release/deps/priority-512789b08a32ff7b)
+Gnuplot not found, using plotters backend
+Benchmarking priority_minimum_2_records_0_notes/selected_record_index
+Benchmarking priority_minimum_2_records_0_notes/selected_record_index: Warming up for 1.0000 s
+Benchmarking priority_minimum_2_records_0_notes/selected_record_index: Collecting 10 samples in estimated 2.0086 s (5280 iterations)
+Benchmarking priority_minimum_2_records_0_notes/selected_record_index: Analyzing
+priority_minimum_2_records_0_notes/selected_record_index
+                        time:   [359.22 µs 361.29 µs 366.68 µs]
+
+
+===== minimum-vec: Criterion stdout =====
+warning: Git tree '/home/alex/dev/HUMANS.md' is dirty
+humans-md development shell
+  Setup:  (cd casefile/web && bun install)
+  Format: scripts/format-source.sh --check|--write
+  Web:    cd casefile/web; bun install; bun run typecheck; bun run test; bun run build
+  Rust:   cd casefile; cargo fmt --check; cargo clippy --workspace --all-targets -- -D warnings; cargo test --workspace
+  CI:     act pull_request -j validate --pull=false -P ubuntu-latest=catthehacker/ubuntu:act-latest
+   Compiling casefile-store v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store)
+   Compiling casefile-store-sqlite v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store-sqlite)
+    Finished `bench` profile [optimized] target(s) in 14.06s
+     Running benches/priority.rs (.agent-workspace/20260930-speedup-implementation/writer/target/release/deps/priority-512789b08a32ff7b)
+Gnuplot not found, using plotters backend
+Benchmarking priority_minimum_2_records_0_notes/selected_record_index
+Benchmarking priority_minimum_2_records_0_notes/selected_record_index: Warming up for 1.0000 s
+Benchmarking priority_minimum_2_records_0_notes/selected_record_index: Collecting 10 samples in estimated 2.0186 s (5665 iterations)
+Benchmarking priority_minimum_2_records_0_notes/selected_record_index: Analyzing
+priority_minimum_2_records_0_notes/selected_record_index
+                        time:   [352.54 µs 353.39 µs 354.99 µs]
+                        change: [−6.5733% −4.3365% −2.1227%] (p = 0.00 < 0.05)
+                        Performance has improved.
+
+
+===== minimum-rayon: Criterion stdout =====
+warning: Git tree '/home/alex/dev/HUMANS.md' is dirty
+humans-md development shell
+  Setup:  (cd casefile/web && bun install)
+  Format: scripts/format-source.sh --check|--write
+  Web:    cd casefile/web; bun install; bun run typecheck; bun run test; bun run build
+  Rust:   cd casefile; cargo fmt --check; cargo clippy --workspace --all-targets -- -D warnings; cargo test --workspace
+  CI:     act pull_request -j validate --pull=false -P ubuntu-latest=catthehacker/ubuntu:act-latest
+   Compiling casefile-store v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store)
+   Compiling casefile-store-sqlite v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store-sqlite)
+    Finished `bench` profile [optimized] target(s) in 14.02s
+     Running benches/priority.rs (.agent-workspace/20260930-speedup-implementation/writer/target/release/deps/priority-512789b08a32ff7b)
+Gnuplot not found, using plotters backend
+Benchmarking priority_minimum_2_records_0_notes/selected_record_index
+Benchmarking priority_minimum_2_records_0_notes/selected_record_index: Warming up for 1.0000 s
+Benchmarking priority_minimum_2_records_0_notes/selected_record_index: Collecting 10 samples in estimated 2.0134 s (6160 iterations)
+Benchmarking priority_minimum_2_records_0_notes/selected_record_index: Analyzing
+priority_minimum_2_records_0_notes/selected_record_index
+                        time:   [340.71 µs 346.19 µs 348.45 µs]
+                        change: [−11.587% −8.7701% −6.0794%] (p = 0.00 < 0.05)
+                        Performance has improved.
+
+
+===== parallel-btree: Criterion stdout =====
+warning: Git tree '/home/alex/dev/HUMANS.md' is dirty
+humans-md development shell
+  Setup:  (cd casefile/web && bun install)
+  Format: scripts/format-source.sh --check|--write
+  Web:    cd casefile/web; bun install; bun run typecheck; bun run test; bun run build
+  Rust:   cd casefile; cargo fmt --check; cargo clippy --workspace --all-targets -- -D warnings; cargo test --workspace
+  CI:     act pull_request -j validate --pull=false -P ubuntu-latest=catthehacker/ubuntu:act-latest
+   Compiling casefile-store v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store)
+   Compiling casefile-store-sqlite v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store-sqlite)
+    Finished `bench` profile [optimized] target(s) in 14.45s
+     Running benches/priority.rs (.agent-workspace/20260930-speedup-implementation/writer/target/release/deps/priority-512789b08a32ff7b)
+Gnuplot not found, using plotters backend
+Benchmarking priority_scope_500_notes/selected_record_index/250
+Benchmarking priority_scope_500_notes/selected_record_index/250: Warming up for 1.0000 s
+Benchmarking priority_scope_500_notes/selected_record_index/250: Collecting 10 samples in estimated 2.2600 s (165 iterations)
+Benchmarking priority_scope_500_notes/selected_record_index/250: Analyzing
+priority_scope_500_notes/selected_record_index/250
+                        time:   [13.327 ms 13.527 ms 13.738 ms]
+Benchmarking priority_scope_500_notes/selected_record_index/1000
+Benchmarking priority_scope_500_notes/selected_record_index/1000: Warming up for 1.0000 s
+
+Warning: Unable to complete 10 samples in 2.0s. You may wish to increase target time to 2.1s or enable flat sampling.
+Benchmarking priority_scope_500_notes/selected_record_index/1000: Collecting 10 samples in estimated 2.1322 s (55 iterations)
+Benchmarking priority_scope_500_notes/selected_record_index/1000: Analyzing
+priority_scope_500_notes/selected_record_index/1000
+                        time:   [37.496 ms 37.626 ms 37.952 ms]
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) high mild
+
+Benchmarking priority_minimum_2_records_0_notes/selected_record_index
+Benchmarking priority_minimum_2_records_0_notes/selected_record_index: Warming up for 1.0000 s
+Benchmarking priority_minimum_2_records_0_notes/selected_record_index: Collecting 10 samples in estimated 2.0079 s (5775 iterations)
+Benchmarking priority_minimum_2_records_0_notes/selected_record_index: Analyzing
+priority_minimum_2_records_0_notes/selected_record_index
+                        time:   [348.13 µs 353.27 µs 359.02 µs]
+
+
+===== combined: Criterion stdout =====
+warning: Git tree '/home/alex/dev/HUMANS.md' is dirty
+humans-md development shell
+  Setup:  (cd casefile/web && bun install)
+  Format: scripts/format-source.sh --check|--write
+  Web:    cd casefile/web; bun install; bun run typecheck; bun run test; bun run build
+  Rust:   cd casefile; cargo fmt --check; cargo clippy --workspace --all-targets -- -D warnings; cargo test --workspace
+  CI:     act pull_request -j validate --pull=false -P ubuntu-latest=catthehacker/ubuntu:act-latest
+   Compiling casefile-store v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store)
+   Compiling casefile-store-sqlite v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store-sqlite)
+    Finished `bench` profile [optimized] target(s) in 14.27s
+     Running benches/priority.rs (.agent-workspace/20260930-speedup-implementation/writer/target/release/deps/priority-512789b08a32ff7b)
+Gnuplot not found, using plotters backend
+Benchmarking priority_scope_500_notes/selected_record_index/250
+Benchmarking priority_scope_500_notes/selected_record_index/250: Warming up for 1.0000 s
+Benchmarking priority_scope_500_notes/selected_record_index/250: Collecting 10 samples in estimated 2.1858 s (165 iterations)
+Benchmarking priority_scope_500_notes/selected_record_index/250: Analyzing
+priority_scope_500_notes/selected_record_index/250
+                        time:   [13.382 ms 13.497 ms 13.665 ms]
+                        change: [−1.6130% −0.2045% +1.2739%] (p = 0.80 > 0.05)
+                        No change in performance detected.
+Benchmarking priority_scope_500_notes/selected_record_index/1000
+Benchmarking priority_scope_500_notes/selected_record_index/1000: Warming up for 1.0000 s
+
+Warning: Unable to complete 10 samples in 2.0s. You may wish to increase target time to 2.1s or enable flat sampling.
+Benchmarking priority_scope_500_notes/selected_record_index/1000: Collecting 10 samples in estimated 2.0865 s (55 iterations)
+Benchmarking priority_scope_500_notes/selected_record_index/1000: Analyzing
+priority_scope_500_notes/selected_record_index/1000
+                        time:   [38.690 ms 38.944 ms 39.198 ms]
+                        change: [+0.8360% +2.2122% +3.4430%] (p = 0.01 < 0.05)
+                        Change within noise threshold.
+
+Benchmarking priority_minimum_2_records_0_notes/selected_record_index
+Benchmarking priority_minimum_2_records_0_notes/selected_record_index: Warming up for 1.0000 s
+Benchmarking priority_minimum_2_records_0_notes/selected_record_index: Collecting 10 samples in estimated 2.0088 s (6050 iterations)
+Benchmarking priority_minimum_2_records_0_notes/selected_record_index: Analyzing
+priority_minimum_2_records_0_notes/selected_record_index
+                        time:   [335.06 µs 343.05 µs 350.26 µs]
+                        change: [−6.0506% −3.6415% −1.1918%] (p = 0.01 < 0.05)
+                        Performance has improved.
+
+
+===== combined-repeat: Criterion stdout =====
+warning: Git tree '/home/alex/dev/HUMANS.md' is dirty
+humans-md development shell
+  Setup:  (cd casefile/web && bun install)
+  Format: scripts/format-source.sh --check|--write
+  Web:    cd casefile/web; bun install; bun run typecheck; bun run test; bun run build
+  Rust:   cd casefile; cargo fmt --check; cargo clippy --workspace --all-targets -- -D warnings; cargo test --workspace
+  CI:     act pull_request -j validate --pull=false -P ubuntu-latest=catthehacker/ubuntu:act-latest
+    Finished `bench` profile [optimized] target(s) in 0.10s
+     Running benches/priority.rs (.agent-workspace/20260930-speedup-implementation/writer/target/release/deps/priority-512789b08a32ff7b)
+Gnuplot not found, using plotters backend
+Benchmarking priority_scope_500_notes/selected_record_index/250
+Benchmarking priority_scope_500_notes/selected_record_index/250: Warming up for 1.0000 s
+Benchmarking priority_scope_500_notes/selected_record_index/250: Collecting 10 samples in estimated 2.1490 s (165 iterations)
+Benchmarking priority_scope_500_notes/selected_record_index/250: Analyzing
+priority_scope_500_notes/selected_record_index/250
+                        time:   [13.349 ms 13.441 ms 13.531 ms]
+                        change: [−3.8359% −2.3269% −0.7250%] (p = 0.02 < 0.05)
+                        Change within noise threshold.
+Benchmarking priority_scope_500_notes/selected_record_index/1000
+Benchmarking priority_scope_500_notes/selected_record_index/1000: Warming up for 1.0000 s
+Benchmarking priority_scope_500_notes/selected_record_index/1000: Collecting 10 samples in estimated 3.9840 s (110 iterations)
+Benchmarking priority_scope_500_notes/selected_record_index/1000: Analyzing
+priority_scope_500_notes/selected_record_index/1000
+                        time:   [36.215 ms 36.344 ms 36.438 ms]
+                        change: [−5.8881% −4.6642% −3.6033%] (p = 0.00 < 0.05)
+                        Performance has improved.
+
+Benchmarking priority_minimum_2_records_0_notes/selected_record_index
+Benchmarking priority_minimum_2_records_0_notes/selected_record_index: Warming up for 1.0000 s
+Benchmarking priority_minimum_2_records_0_notes/selected_record_index: Collecting 10 samples in estimated 2.0132 s (5830 iterations)
+Benchmarking priority_minimum_2_records_0_notes/selected_record_index: Analyzing
+priority_minimum_2_records_0_notes/selected_record_index
+                        time:   [335.25 µs 341.47 µs 346.66 µs]
+                        change: [−5.6051% −3.4102% −1.1666%] (p = 0.01 < 0.05)
+                        Performance has improved.

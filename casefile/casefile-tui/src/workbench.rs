@@ -1,3 +1,5 @@
+mod boards;
+mod facts;
 mod projection;
 
 use crate::{
@@ -9,7 +11,7 @@ use crate::{
     ui::{ACCENT, MUTED, WARN, safe_inline},
     watching::{SelectedScope, WatchCoordinator},
 };
-use casefile_store::{DerivedBoard, DerivedSnapshot, PresentationTarget, ScanResult};
+use casefile_store::{DerivedSnapshot, PresentationTarget, ScanResult};
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use ratatui::{
     Terminal,
@@ -69,6 +71,13 @@ pub(crate) struct App {
     entry_indices: BTreeMap<String, usize>,
     record_indices: BTreeMap<String, usize>,
     derived: DerivedSnapshot,
+    relationships:
+        BTreeMap<casefile_store::ScopedIdentity, Vec<casefile_store::DerivedRelationship>>,
+    board_records: BTreeMap<casefile_store::ScopedIdentity, casefile_store::DerivedBoard>,
+    facts: facts::Facts,
+    body_owners: BTreeMap<String, std::sync::Arc<casefile_store::PresentationEntry>>,
+    boards: std::cell::RefCell<boards::Cache>,
+    board_generation: u64,
     browser: Browser,
     detail: RecordDetail,
     focus: Focus,
@@ -84,12 +93,27 @@ pub(crate) struct App {
 }
 
 impl App {
-    pub(crate) fn new(mut scan: ScanResult, derived: DerivedSnapshot) -> Self {
+    pub(crate) fn new(mut scan: ScanResult, mut derived: DerivedSnapshot) -> Self {
         for roots in scan.investigation_roots.values_mut() {
             roots.sort();
             roots.dedup();
         }
         let browser = Browser::new(&scan);
+        let mut facts = facts::Facts::default();
+        facts.rebuild(&scan);
+        scan.diagnostics.clear();
+        derived.diagnostics.clear();
+        let board_records = std::mem::take(&mut derived.boards)
+            .into_iter()
+            .map(|board| (board.identity.clone(), board))
+            .collect();
+        let mut relationships: BTreeMap<_, Vec<_>> = BTreeMap::new();
+        for edge in std::mem::take(&mut derived.relationships) {
+            relationships
+                .entry(edge.source.clone())
+                .or_default()
+                .push(edge);
+        }
         Self {
             entry_indices: scan
                 .snapshot
@@ -106,6 +130,12 @@ impl App {
                 .collect(),
             scan,
             derived,
+            relationships,
+            board_records,
+            facts,
+            body_owners: BTreeMap::new(),
+            boards: std::cell::RefCell::default(),
+            board_generation: 0,
             browser,
             detail: RecordDetail::new(),
             focus: Focus::List,
@@ -126,6 +156,11 @@ impl App {
         resume: Option<WorkbenchResume>,
     ) -> Self {
         let mut app = Self::new(projection.scan, projection.derived);
+        if let Some(diagnostics) = projection.catalogue_diagnostics {
+            app.facts
+                .replace_catalogue_diagnostics(&app.scan, diagnostics);
+        }
+        app.body_owners = projection.body_owners;
         app.provisional = projection.provisional;
         app.unavailable = projection.unavailable;
         if let Some(resume) = resume {
@@ -232,15 +267,18 @@ impl App {
         watcher: &mut WatchCoordinator,
     ) -> io::Result<(Interaction, WorkbenchResume)> {
         let mut dirty = true;
+        let mut catalogue_generation = None;
         while self.interaction.is_none() {
             dirty |= watcher.drain();
             let update = coordinator.drain();
             if update.projection != ProjectionChange::None {
                 self.apply_projection(coordinator.take_projection(), update.projection);
-                if (update.projection == ProjectionChange::Complete || !watcher.has_catalogue())
+                if (catalogue_generation != Some(coordinator.catalogue_generation())
+                    || !watcher.has_catalogue())
                     && let Some(catalogue) = coordinator.catalogue()
                 {
                     watcher.rebuild(catalogue);
+                    catalogue_generation = Some(coordinator.catalogue_generation());
                 }
             }
             if update.dirty {
@@ -312,29 +350,65 @@ impl App {
     }
 
     fn apply_projection(&mut self, projection: UiProjection, change: ProjectionChange) {
-        let previous_board_paths = self.board_card_paths();
-        let anchor = self
-            .resume_anchor
-            .clone()
-            .unwrap_or_else(|| self.browser.anchor(&self.scan, &previous_board_paths));
+        let anchor = (change == ProjectionChange::Complete).then(|| {
+            self.resume_anchor
+                .clone()
+                .unwrap_or_else(|| self.browser.anchor(&self.scan, &self.board_card_paths()))
+        });
         let previous_revision = self
             .browser
             .selected(&self.scan)
             .map(|entry| entry.content_revision.clone());
+        if !projection.incremental || self.boards_affected(&projection) {
+            self.board_generation = self.board_generation.wrapping_add(1);
+        }
         self.provisional = projection.provisional;
         if projection.incremental {
-            self.merge_projection(projection);
+            if projection.catalogue_changed
+                || !projection.scan.snapshot.entries.is_empty()
+                || !projection.removed.is_empty()
+                || !projection.relationship_updates.is_empty()
+                || !projection.availability_changed.is_empty()
+                || !projection.unavailable.is_empty()
+            {
+                self.merge_projection(projection);
+            }
         } else {
             self.scan = projection.scan;
             self.derived = projection.derived;
             self.unavailable = projection.unavailable;
+            self.body_owners = projection.body_owners;
+            self.browser.rebuild(&self.scan);
+            self.facts.rebuild(&self.scan);
+            if let Some(diagnostics) = projection.catalogue_diagnostics {
+                self.facts
+                    .replace_catalogue_diagnostics(&self.scan, diagnostics);
+            }
+            self.scan.diagnostics.clear();
+            self.derived.diagnostics.clear();
+            self.relationships.clear();
+            for edge in std::mem::take(&mut self.derived.relationships) {
+                self.relationships
+                    .entry(edge.source.clone())
+                    .or_default()
+                    .push(edge);
+            }
+            self.board_records = std::mem::take(&mut self.derived.boards)
+                .into_iter()
+                .map(|board| (board.identity.clone(), board))
+                .collect();
+            self.detail.invalidate();
             self.reindex();
         }
         match change {
             ProjectionChange::Complete => {
                 self.resume_anchor = None;
                 let board_paths = self.board_card_paths();
-                self.feedback = match self.browser.promote(&self.scan, &anchor, &board_paths) {
+                self.feedback = match self.browser.promote(
+                    &self.scan,
+                    anchor.as_ref().expect("complete anchor"),
+                    &board_paths,
+                ) {
                     Some(PromotionNotice::FilteredOut) => {
                         Some("Selected item no longer matches the filter.".into())
                     }
@@ -390,7 +464,7 @@ impl App {
         }
     }
 
-    fn handle(&mut self, key: KeyCode) {
+    pub(crate) fn handle(&mut self, key: KeyCode) {
         if self.show_help {
             match key {
                 KeyCode::Char('q') => self.interaction = Some(Interaction::Quit),
@@ -427,8 +501,7 @@ impl App {
             KeyCode::Char('t') => {
                 self.browser.cycle_view(&self.scan);
                 if self.browser.view() == View::Boards {
-                    self.browser
-                        .select_board_offset(&self.board_card_paths(), 0);
+                    self.select_board(0);
                 }
                 self.detail.reset_scroll();
             }
@@ -455,8 +528,7 @@ impl App {
     fn set_view(&mut self, view: View) {
         self.browser.set_view(&self.scan, view);
         if view == View::Boards {
-            self.browser
-                .select_board_offset(&self.board_card_paths(), 0);
+            self.select_board(0);
         }
         self.detail.reset_scroll();
     }
@@ -483,8 +555,7 @@ impl App {
         match self.focus {
             Focus::List => {
                 let changed = if self.browser.view() == View::Boards {
-                    self.browser
-                        .select_board_offset(&self.board_card_paths(), offset)
+                    self.select_board(offset)
                 } else {
                     self.browser.select_offset(&self.scan, offset)
                 };
@@ -500,10 +571,7 @@ impl App {
         match self.focus {
             Focus::List => {
                 let changed = if self.browser.view() == View::Boards {
-                    self.browser.select_board_offset(
-                        &self.board_card_paths(),
-                        if end { isize::MAX } else { isize::MIN },
-                    )
+                    self.select_board(if end { isize::MAX } else { isize::MIN })
                 } else {
                     self.browser.select_edge(&self.scan, end)
                 };
@@ -536,8 +604,13 @@ impl App {
                 Constraint::Length(1),
             ])
             .areas(area);
-        self.browser
-            .render_header(&self.scan, self.board_count(), header, buffer);
+        self.browser.render_header(
+            &self.scan,
+            self.board_count(),
+            self.facts.diagnostic_count(),
+            header,
+            buffer,
+        );
         let mut status_text = self.status.clone().unwrap_or_else(|| {
             if self.provisional {
                 "Loading…".into()
@@ -614,10 +687,9 @@ impl App {
         let selected = self.browser.selected(&self.scan);
         let derived = if self.derived.source_revision == self.scan.snapshot.revision {
             selected.and_then(|entry| {
-                self.derived
-                    .records
-                    .iter()
-                    .find(|record| record.path == entry.path)
+                self.record_indices
+                    .get(&entry.path)
+                    .and_then(|index| self.derived.records.get(*index))
             })
         } else {
             None
@@ -629,273 +701,72 @@ impl App {
                 .render_list(&self.scan, self.focus == Focus::List, list, buffer);
         }
         self.detail.render(
-            selected,
-            derived,
-            &self.scan.diagnostics,
+            crate::record_detail::DetailRecord {
+                entry: selected,
+                derived,
+                bytes: self
+                    .browser
+                    .selected_path()
+                    .and_then(|path| self.body_bytes(path)),
+                diagnostics: self
+                    .facts
+                    .diagnostics(selected.map(|entry| entry.path.as_str())),
+            },
             self.focus == Focus::Detail,
             detail,
             buffer,
         );
     }
 
-    fn board_card_paths(&self) -> Vec<String> {
-        if self.derived.source_revision != self.scan.snapshot.revision {
-            return Vec::new();
+    fn body_bytes(&self, path: &str) -> Option<&[u8]> {
+        if let Some(entry) = self.body_owners.get(path) {
+            return match &entry.body {
+                casefile_store::PresentationFact::Available(bytes) => Some(bytes.as_slice()),
+                casefile_store::PresentationFact::Unavailable => None,
+            };
         }
-        let Some((project, investigation)) = self.browser.scope() else {
-            return Vec::new();
-        };
-        self.derived
-            .boards
-            .iter()
-            .filter(|board| board_matches_scope(board, project, investigation))
-            .flat_map(|board| board.columns.iter())
-            .flat_map(|column| column.cards.iter())
-            .filter_map(|card| match canonical_card_path(&self.scan, card) {
-                CardPathResolution::Resolved(path) => Some(path),
-                CardPathResolution::Missing | CardPathResolution::Ambiguous => None,
-            })
-            .collect()
+        self.entry_indices
+            .get(path)
+            .and_then(|index| self.scan.snapshot.entries.get(*index))
+            .map(|entry| entry.original_bytes.as_slice())
+    }
+
+    fn prepare_boards(&self) {
+        self.boards.borrow_mut().prepare(
+            self.board_generation,
+            self.browser.scope(),
+            &self.scan,
+            &self.derived.source_revision,
+            &self.board_records,
+            &self.facts,
+        );
+    }
+
+    fn board_card_paths(&self) -> Vec<String> {
+        self.prepare_boards();
+        self.boards.borrow().paths.clone()
+    }
+
+    fn select_board(&mut self, offset: isize) -> bool {
+        self.prepare_boards();
+        self.browser
+            .select_board_offset(&self.boards.borrow().paths, offset)
     }
 
     fn board_count(&self) -> usize {
-        if self.derived.source_revision != self.scan.snapshot.revision {
-            return 0;
-        }
-        let Some((project, investigation)) = self.browser.scope() else {
-            return 0;
-        };
-        self.derived
-            .boards
-            .iter()
-            .filter(|board| board_matches_scope(board, project, investigation))
-            .count()
+        self.prepare_boards();
+        self.boards.borrow().count
     }
 
     fn render_boards(&self, area: Rect, buffer: &mut Buffer) {
-        let block = crate::ui::panel(" Boards ", self.focus == Focus::List);
-        if self.derived.source_revision != self.scan.snapshot.revision {
-            return Paragraph::new("Boards are out of date. Press r to refresh.")
-                .style(Style::default().fg(WARN))
-                .block(block)
-                .wrap(Wrap { trim: false })
-                .render(area, buffer);
-        }
-        let Some((project, investigation)) = self.browser.scope() else {
-            return Paragraph::new("Select an investigation to inspect its boards.")
-                .style(Style::default().fg(MUTED))
-                .block(block)
-                .render(area, buffer);
-        };
-        let invalid_diagnostics = scoped_board_diagnostics(&self.scan, project, investigation);
-        if !invalid_diagnostics.is_empty() {
-            let mut lines = vec![
-                Line::from("Board definitions or the progress log are invalid.")
-                    .style(Style::default().fg(WARN).bold()),
-            ];
-            for diagnostic in invalid_diagnostics {
-                lines.push(
-                    Line::from(format!(
-                        "{}: {}",
-                        safe_inline(&diagnostic.code),
-                        safe_inline(&diagnostic.message),
-                    ))
-                    .style(Style::default().fg(WARN)),
-                );
-            }
-            return Paragraph::new(lines)
-                .block(block)
-                .wrap(Wrap { trim: false })
-                .render(area, buffer);
-        }
-        let boards = self
-            .derived
-            .boards
-            .iter()
-            .filter(|board| board_matches_scope(board, project, investigation))
-            .collect::<Vec<_>>();
-        if boards.is_empty() {
-            return Paragraph::new("This investigation has no board definitions.")
-                .style(Style::default().fg(MUTED))
-                .block(block)
-                .wrap(Wrap { trim: false })
-                .render(area, buffer);
-        }
-        let mut lines = Vec::new();
-        let mut selected_line = None;
-        for board in boards {
-            if !lines.is_empty() {
-                lines.push(Line::from(""));
-            }
-            lines.push(
-                Line::from(format!(
-                    "{}  [{:?}]",
-                    safe_inline(&board.title),
-                    board.status_source
-                ))
-                .style(Style::default().fg(ACCENT).bold()),
-            );
-            if let Some(index) = board_lines(
-                board,
-                &self.scan,
-                self.browser
-                    .selected(&self.scan)
-                    .map(|entry| entry.path.as_str()),
-                &mut lines,
-            ) {
-                selected_line = Some(index);
-            }
-        }
-        let inner = block.inner(area);
-        let scroll = board_scroll_offset(&lines, selected_line, inner.width, inner.height);
-        Paragraph::new(lines)
-            .block(block)
-            .wrap(Wrap { trim: false })
-            .scroll((scroll, 0))
-            .render(area, buffer);
-    }
-}
-
-fn board_matches_scope(board: &DerivedBoard, project: &str, investigation: &str) -> bool {
-    board.identity.scope.project == project
-        && board.identity.scope.investigation.as_deref() == Some(investigation)
-}
-
-enum CardPathResolution {
-    Resolved(String),
-    Missing,
-    Ambiguous,
-}
-
-fn canonical_card_path(
-    scan: &ScanResult,
-    card: &casefile_store::DerivedCard,
-) -> CardPathResolution {
-    let matches = scan
-        .snapshot
-        .entries
-        .iter()
-        .filter(|entry| {
-            entry.identity.as_deref() == Some(card.identity.identity.as_str())
-                && scan.scope_for_path(&entry.path).is_some_and(|scope| {
-                    scope.0 == card.identity.scope.project
-                        && scope.1 == card.identity.scope.investigation.as_deref()
-                })
-        })
-        .collect::<Vec<_>>();
-    match matches.as_slice() {
-        [entry] => CardPathResolution::Resolved(entry.path.clone()),
-        [] => CardPathResolution::Missing,
-        _ => CardPathResolution::Ambiguous,
-    }
-}
-
-fn scoped_board_diagnostics<'a>(
-    scan: &'a ScanResult,
-    project: &str,
-    investigation: &str,
-) -> Vec<&'a casefile_core::Diagnostic> {
-    let prefix = format!("projects/{project}/investigations/{investigation}/");
-    scan.diagnostics
-        .iter()
-        .filter(|diagnostic| {
-            diagnostic.path.starts_with(&format!("{prefix}boards/"))
-                || diagnostic.path == format!("{prefix}progress/log.toml")
-        })
-        .collect()
-}
-
-fn board_lines(
-    board: &DerivedBoard,
-    scan: &ScanResult,
-    selected_path: Option<&str>,
-    lines: &mut Vec<Line<'static>>,
-) -> Option<usize> {
-    let mut selected_line = None;
-    for column in &board.columns {
-        lines.push(
-            Line::from(format!(
-                "  {} ({})",
-                safe_inline(&column.name),
-                column.cards.len()
-            ))
-            .style(Style::default().fg(ACCENT)),
+        self.prepare_boards();
+        self.boards.borrow_mut().render(
+            self.browser.selected_path(),
+            self.focus == Focus::List,
+            area,
+            buffer,
         );
-        if column.cards.is_empty() {
-            lines.push(Line::from("    No cards.").style(Style::default().fg(MUTED)));
-            continue;
-        }
-        for card in &column.cards {
-            let resolution = canonical_card_path(scan, card);
-            let selected = matches!(&resolution, CardPathResolution::Resolved(path) if Some(path.as_str()) == selected_path);
-            let (marker, suffix) = match &resolution {
-                CardPathResolution::Resolved(_) if selected => (">", ""),
-                CardPathResolution::Resolved(_) => (" ", ""),
-                CardPathResolution::Missing => ("!", "  [detail unavailable: missing identity]"),
-                CardPathResolution::Ambiguous => {
-                    ("!", "  [detail unavailable: ambiguous identity]")
-                }
-            };
-            if selected {
-                selected_line = Some(lines.len());
-            }
-            lines.push(
-                Line::from(format!(
-                    "  {marker} {}  {}  {}{}",
-                    safe_inline(&card.identity.identity),
-                    safe_inline(&card.status),
-                    safe_inline(&card.title),
-                    suffix,
-                ))
-                .style(if selected {
-                    Style::default().fg(ACCENT).bold()
-                } else if !matches!(resolution, CardPathResolution::Resolved(_)) {
-                    Style::default().fg(WARN)
-                } else {
-                    Style::default()
-                }),
-            );
-        }
     }
-    selected_line
-}
-
-fn board_scroll_offset(
-    lines: &[Line<'_>],
-    selected_line: Option<usize>,
-    width: u16,
-    height: u16,
-) -> u16 {
-    let Some(selected_line) = selected_line.filter(|index| *index < lines.len()) else {
-        return 0;
-    };
-    if width == 0 || height == 0 {
-        return 0;
-    }
-
-    let mut selected_start = 0usize;
-    let mut selected_height = 1usize;
-    for (index, line) in lines.iter().enumerate() {
-        let rows = Paragraph::new(line.clone())
-            .wrap(Wrap { trim: false })
-            .line_count(width)
-            .max(1);
-        if index < selected_line {
-            selected_start = selected_start.saturating_add(rows);
-        } else if index == selected_line {
-            selected_height = rows;
-            break;
-        }
-    }
-
-    let visible_rows = usize::from(height);
-    let selected_end = selected_start.saturating_add(selected_height);
-    let scroll = if selected_height >= visible_rows {
-        selected_start
-    } else {
-        selected_end.saturating_sub(visible_rows)
-    };
-    scroll.min(usize::from(u16::MAX)) as u16
 }
 
 fn render_help(area: Rect, buffer: &mut Buffer) {
@@ -979,3 +850,9 @@ mod relationship_tests;
 
 #[cfg(test)]
 mod flow_tests;
+
+enum CardPathResolution {
+    Resolved(String),
+    Missing,
+    Ambiguous,
+}

@@ -177,14 +177,78 @@ enum Command {
 fn main() -> ExitCode {
     match run() {
         Ok(status) => status,
-        Err(error) => {
-            eprintln!("{error:#}");
-            ExitCode::FAILURE
-        }
+        Err(error) => report_error(&error, &mut std::io::stderr().lock()),
     }
 }
 
 fn run() -> Result<ExitCode> {
     let cli = Cli::parse();
     commands::execute(cli.root, cli.command)
+}
+
+fn rollback_details(error: &anyhow::Error) -> Option<&casefile_store::IncompleteRollback> {
+    for error in error.chain() {
+        let store = error
+            .downcast_ref::<casefile_store::StoreError>()
+            .or_else(
+                || match error.downcast_ref::<casefile_store::ProviderError>() {
+                    Some(casefile_store::ProviderError::Store(store)) => Some(store),
+                    _ => None,
+                },
+            );
+        if let Some(casefile_store::StoreError::IncompleteRollback { details, .. }) = store {
+            return Some(details);
+        }
+    }
+    None
+}
+
+fn report_error(error: &anyhow::Error, output: &mut impl std::io::Write) -> ExitCode {
+    if let Some(details) = rollback_details(error) {
+        writeln!(
+            output,
+            "{}",
+            serde_json::to_string(details).expect("rollback details serialize")
+        )
+        .expect("write failure channel");
+    } else {
+        writeln!(output, "{error:#}").expect("write failure channel");
+    }
+    ExitCode::FAILURE
+}
+
+#[cfg(test)]
+mod error_tests {
+    #[test]
+    fn rollback_failure_channel_retains_details_and_excludes_private_source_text() {
+        use casefile_store::*;
+        let details = IncompleteRollback {
+            code: RollbackErrorCode::IncompleteRollback,
+            operation: "progress verification".into(),
+            cause: RollbackCause::Io,
+            affected_paths: vec![RollbackPathState {
+                path: "progress/log.toml".into(),
+                remaining: RollbackRemainingState::Unknown,
+                reason: RollbackReason::ObservationFailed,
+            }],
+        };
+        let error = anyhow::Error::from(ProviderError::Store(StoreError::IncompleteRollback {
+            details: details.clone(),
+            cause: Box::new(StoreError::Invalid("PRIVATE FILE EXCERPT".into())),
+        }));
+        let mut output = Vec::new();
+        assert_eq!(
+            super::report_error(&error, &mut output),
+            std::process::ExitCode::FAILURE
+        );
+        assert_eq!(
+            serde_json::from_slice::<IncompleteRollback>(&output).unwrap(),
+            details
+        );
+        assert!(
+            !String::from_utf8(output)
+                .unwrap()
+                .contains("PRIVATE FILE EXCERPT")
+        );
+    }
 }

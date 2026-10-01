@@ -5,21 +5,16 @@
 //! admission. Canonical scans continue to read and preserve every included body.
 
 use crate::{
-    activation::{
-        Activation, ActivationState, activation, investigation_identity, project_for, scope_for,
-    },
+    activation::{Activation, ActivationState, ScopeIndex, activation, investigation_identity},
     derived::{
-        DerivedBoard, DerivedRecord, DerivedRelationship, DerivedTicketProgress,
-        derive_presentation_snapshot,
+        DerivedBoard, DerivedRecord, DerivedRelationship, DerivedTicketProgress, derive_boards,
+        fold_progress, local_record, project_binding, ticket_progress,
     },
-    layout::{kind_for_path, normalize_planning_relative},
-    scanning::{ScanResult, binding_diagnostics, classify, is_store_path_excluded},
+    layout::normalize_planning_relative,
+    scanning::{binding_diagnostics_facts, classify_facts, is_store_path_excluded},
     store::StoreError,
 };
-use casefile_core::{
-    CasefileSnapshot, Classification, Diagnostic, EntrySnapshot, Kind, RecordSummary, Revision,
-    stable,
-};
+use casefile_core::{Classification, Diagnostic, EntrySnapshot, Kind, RecordSummary, Revision};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -48,6 +43,8 @@ mod loading;
 use loading::*;
 mod scope;
 use scope::*;
+mod facts;
+use facts::*;
 mod entries;
 use entries::*;
 mod content;

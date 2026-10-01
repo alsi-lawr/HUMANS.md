@@ -1,0 +1,49 @@
+Gnuplot not found, using plotters backend
+Benchmarking sqlite_500_records/prepare_replacement
+Benchmarking sqlite_500_records/prepare_replacement: Warming up for 1.0000 s
+
+Warning: Unable to complete 10 samples in 2.0s. You may wish to increase target time to 3.7s or enable flat sampling.
+Benchmarking sqlite_500_records/prepare_replacement: Collecting 10 samples in estimated 3.6651 s (55 iterations)
+Benchmarking sqlite_500_records/prepare_replacement: Analyzing
+sqlite_500_records/prepare_replacement
+                        time:   [65.966 ms 66.824 ms 67.647 ms]
+                        change: [+0.1011% +3.7028% +7.4586%] (p = 0.09 > 0.05)
+                        No change in performance detected.
+Found 2 outliers among 10 measurements (20.00%)
+  1 (10.00%) high mild
+  1 (10.00%) high severe
+Benchmarking sqlite_500_records/records_all
+Benchmarking sqlite_500_records/records_all: Warming up for 1.0000 s
+Benchmarking sqlite_500_records/records_all: Collecting 10 samples in estimated 2.0670 s (990 iterations)
+Benchmarking sqlite_500_records/records_all: Analyzing
+sqlite_500_records/records_all
+                        time:   [2.1177 ms 2.1573 ms 2.2036 ms]
+                        change: [−38.021% −36.246% −34.613%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Benchmarking sqlite_500_records/records_search_miss
+Benchmarking sqlite_500_records/records_search_miss: Warming up for 1.0000 s
+Benchmarking sqlite_500_records/records_search_miss: Collecting 10 samples in estimated 2.0372 s (2475 iterations)
+Benchmarking sqlite_500_records/records_search_miss: Analyzing
+sqlite_500_records/records_search_miss
+                        time:   [834.06 µs 842.70 µs 850.91 µs]
+                        change: [−74.948% −74.745% −74.564%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Benchmarking sqlite_500_records/relationships_miss
+Benchmarking sqlite_500_records/relationships_miss: Warming up for 1.0000 s
+Benchmarking sqlite_500_records/relationships_miss: Collecting 10 samples in estimated 2.0050 s (15k iterations)
+Benchmarking sqlite_500_records/relationships_miss: Analyzing
+sqlite_500_records/relationships_miss
+                        time:   [125.26 µs 126.43 µs 127.86 µs]
+                        change: [−38.745% −37.853% −36.946%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Benchmarking sqlite_500_records/boards
+Benchmarking sqlite_500_records/boards: Warming up for 1.0000 s
+Benchmarking sqlite_500_records/boards: Collecting 10 samples in estimated 2.0088 s (5225 iterations)
+Benchmarking sqlite_500_records/boards: Analyzing
+sqlite_500_records/boards
+                        time:   [397.49 µs 405.27 µs 411.23 µs]
+                        change: [+17.930% +20.026% +22.144%] (p = 0.00 < 0.05)
+                        Performance has regressed.
+Found 2 outliers among 10 measurements (20.00%)
+  1 (10.00%) low mild
+  1 (10.00%) high mild

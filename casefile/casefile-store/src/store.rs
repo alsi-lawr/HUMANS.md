@@ -13,12 +13,61 @@ use crate::{
 use casefile_core::{
     ApplyResult, ChangeBatchApplyResult, ChangeBatchPreview, ChangeRequest, Preview, Revision,
 };
+use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeMap,
     fs,
     path::{Component, Path, PathBuf},
 };
 use thiserror::Error;
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct IncompleteRollback {
+    pub code: RollbackErrorCode,
+    pub operation: String,
+    pub cause: RollbackCause,
+    pub affected_paths: Vec<RollbackPathState>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RollbackErrorCode {
+    IncompleteRollback,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RollbackCause {
+    Io,
+    Invalid,
+    Stale,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct RollbackPathState {
+    pub path: String,
+    pub remaining: RollbackRemainingState,
+    pub reason: RollbackReason,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "state", rename_all = "snake_case")]
+pub enum RollbackRemainingState {
+    Absent,
+    Regular { revision: Revision },
+    Symlink,
+    Directory,
+    Other,
+    Unknown,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RollbackReason {
+    ExternalChange,
+    ObservationFailed,
+    RestoreFailed,
+}
 
 #[derive(Debug, Error)]
 pub enum StoreError {
@@ -28,6 +77,12 @@ pub enum StoreError {
     Invalid(String),
     #[error("stale target revision")]
     StaleTargetRevision,
+    #[error("incomplete rollback during {}", details.operation)]
+    IncompleteRollback {
+        details: IncompleteRollback,
+        #[source]
+        cause: Box<StoreError>,
+    },
 }
 
 pub(super) fn require_safe_target_parent(
@@ -95,13 +150,32 @@ impl Store {
         Ok(Self { root })
     }
 
+    /// Reads one locally validated editable target, retaining its original bytes and revision.
+    /// Canonical cross-record validation remains independent in preview and apply.
+    pub fn read_editable_entry(
+        &self,
+        path: &str,
+        kind: casefile_core::Kind,
+    ) -> Result<Option<casefile_core::EntrySnapshot>, StoreError> {
+        crate::scanning::selected::read_editable_entry(&self.root, path, kind)
+    }
+
+    /// Resolves the selected implementation writer without granting progress permission.
+    pub fn project_writer_binding(
+        &self,
+        investigation: &str,
+        strategy_id: &str,
+    ) -> Result<crate::WriterBindingProjection, StoreError> {
+        crate::scanning::selected::project_writer_binding(&self.root, investigation, strategy_id)
+    }
+
     pub fn scan(&self) -> Result<ScanResult, StoreError> {
         scan(&self.root, &BTreeMap::new())
     }
 
     pub fn derived_snapshot(&self) -> Result<DerivedSnapshot, StoreError> {
-        let scan = self.scan()?;
-        Ok(derive_snapshot(&scan))
+        let (scan, facts) = crate::scanning::scan_for_derivation(&self.root)?;
+        Ok(crate::derived::derive_snapshot_from_facts(&scan, facts))
     }
 
     pub fn derive_snapshot(&self, scan: &ScanResult) -> DerivedSnapshot {
@@ -120,6 +194,38 @@ impl Store {
 
     pub fn preview(&self, request: ChangeRequest) -> Result<Preview, StoreError> {
         writing::preview(&self.root, request)
+    }
+
+    pub(crate) fn apply_ref(&self, preview: &Preview) -> Result<ApplyResult, StoreError> {
+        super::writing::apply_ref(&self.root, preview)
+    }
+
+    pub(crate) fn apply_batch_ref(
+        &self,
+        preview: &ChangeBatchPreview,
+    ) -> Result<ChangeBatchApplyResult, StoreError> {
+        super::writing::apply_batch_ref(&self.root, preview)
+    }
+
+    pub(crate) fn apply_progress_ref(
+        &self,
+        preview: &ProgressPreview,
+    ) -> Result<ProgressApplyResult, StoreError> {
+        super::progress::apply_ref(&self.root, preview)
+    }
+
+    pub(crate) fn apply_strategy_transition_ref(
+        &self,
+        preview: &StrategyTransitionPreview,
+    ) -> Result<GovernedApplyResult, StoreError> {
+        super::governance::apply_strategy_transition_ref(&self.root, preview)
+    }
+
+    pub(crate) fn apply_writer_binding_ref(
+        &self,
+        preview: &WriterBindingPreview,
+    ) -> Result<GovernedApplyResult, StoreError> {
+        super::governance::apply_writer_binding_ref(&self.root, preview)
     }
 
     pub fn apply(&self, preview: Preview) -> Result<ApplyResult, StoreError> {

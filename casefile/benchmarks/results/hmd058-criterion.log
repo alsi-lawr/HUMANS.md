@@ -1,0 +1,37 @@
+warning: Git tree '/home/alex/dev/HUMANS.md' is dirty
+humans-md development shell
+  Setup:  (cd casefile/web && bun install)
+  Format: scripts/format-source.sh --check|--write
+  Web:    cd casefile/web; bun install; bun run typecheck; bun run test; bun run build
+  Rust:   cd casefile; cargo fmt --check; cargo clippy --workspace --all-targets -- -D warnings; cargo test --workspace
+  CI:     act pull_request -j validate --pull=false -P ubuntu-latest=catthehacker/ubuntu:act-latest
+    Finished `bench` profile [optimized] target(s) in 0.08s
+     Running benches/baselines.rs (/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/release/deps/baselines-1a7510471b7f44d4)
+Gnuplot not found, using plotters backend
+Benchmarking core_parsing/ticket_parse
+Benchmarking core_parsing/ticket_parse: Warming up for 1.0000 s
+Benchmarking core_parsing/ticket_parse: Collecting 10 samples in estimated 2.0014 s (73k iterations)
+Benchmarking core_parsing/ticket_parse: Analyzing
+core_parsing/ticket_parse
+                        time:   [26.736 µs 27.430 µs 28.008 µs]
+                        change: [−15.136% −13.443% −11.956%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Benchmarking core_parsing/ticket_render_roundtrip
+Benchmarking core_parsing/ticket_render_roundtrip: Warming up for 1.0000 s
+Benchmarking core_parsing/ticket_render_roundtrip: Collecting 10 samples in estimated 2.0014 s (65k iterations)
+Benchmarking core_parsing/ticket_render_roundtrip: Analyzing
+core_parsing/ticket_render_roundtrip
+                        time:   [28.885 µs 29.021 µs 29.257 µs]
+                        change: [−20.075% −19.325% −18.647%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Benchmarking core_parsing/progress_parse_500_notes
+Benchmarking core_parsing/progress_parse_500_notes: Warming up for 1.0000 s
+Benchmarking core_parsing/progress_parse_500_notes: Collecting 10 samples in estimated 2.0437 s (935 iterations)
+Benchmarking core_parsing/progress_parse_500_notes: Analyzing
+core_parsing/progress_parse_500_notes
+                        time:   [2.1438 ms 2.1559 ms 2.1656 ms]
+                        thrpt:  [230.89 Kelem/s 231.92 Kelem/s 233.23 Kelem/s]
+                 change:
+                        time:   [−0.2553% +0.4973% +1.3034%] (p = 0.27 > 0.05)
+                        thrpt:  [−1.2867% −0.4948% +0.2559%]
+                        No change in performance detected.

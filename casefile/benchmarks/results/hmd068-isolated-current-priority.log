@@ -1,0 +1,74 @@
+Gnuplot not found, using plotters backend
+Benchmarking priority_scope_500_notes/existing_detail/250
+Benchmarking priority_scope_500_notes/existing_detail/250: Warming up for 1.0000 s
+Benchmarking priority_scope_500_notes/existing_detail/250: Collecting 10 samples in estimated 2.0577 s (1430 iterations)
+Benchmarking priority_scope_500_notes/existing_detail/250: Analyzing
+priority_scope_500_notes/existing_detail/250
+                        time:   [1.4546 ms 1.4831 ms 1.5065 ms]
+                        change: [−81.483% −81.139% −80.773%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Benchmarking priority_scope_500_notes/missing_detail/250
+Benchmarking priority_scope_500_notes/missing_detail/250: Warming up for 1.0000 s
+Benchmarking priority_scope_500_notes/missing_detail/250: Collecting 10 samples in estimated 2.0019 s (9240 iterations)
+Benchmarking priority_scope_500_notes/missing_detail/250: Analyzing
+priority_scope_500_notes/missing_detail/250
+                        time:   [212.99 µs 213.56 µs 213.88 µs]
+                        change: [−96.144% −96.108% −96.063%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Benchmarking priority_scope_500_notes/selected_record_index/250
+Benchmarking priority_scope_500_notes/selected_record_index/250: Warming up for 1.0000 s
+Benchmarking priority_scope_500_notes/selected_record_index/250: Collecting 10 samples in estimated 2.4775 s (220 iterations)
+Benchmarking priority_scope_500_notes/selected_record_index/250: Analyzing
+priority_scope_500_notes/selected_record_index/250
+                        time:   [10.842 ms 11.143 ms 11.505 ms]
+                        change: [−49.217% −47.709% −46.015%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) high severe
+Benchmarking priority_scope_500_notes/existing_detail/1000
+Benchmarking priority_scope_500_notes/existing_detail/1000: Warming up for 1.0000 s
+Benchmarking priority_scope_500_notes/existing_detail/1000: Collecting 10 samples in estimated 2.0016 s (1375 iterations)
+Benchmarking priority_scope_500_notes/existing_detail/1000: Analyzing
+priority_scope_500_notes/existing_detail/1000
+                        time:   [1.4797 ms 1.4946 ms 1.5092 ms]
+                        change: [−90.378% −90.220% −90.065%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Benchmarking priority_scope_500_notes/missing_detail/1000
+Benchmarking priority_scope_500_notes/missing_detail/1000: Warming up for 1.0000 s
+Benchmarking priority_scope_500_notes/missing_detail/1000: Collecting 10 samples in estimated 2.0084 s (9515 iterations)
+Benchmarking priority_scope_500_notes/missing_detail/1000: Analyzing
+priority_scope_500_notes/missing_detail/1000
+                        time:   [209.24 µs 210.51 µs 213.36 µs]
+                        change: [−98.396% −98.367% −98.337%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Benchmarking priority_scope_500_notes/selected_record_index/1000
+Benchmarking priority_scope_500_notes/selected_record_index/1000: Warming up for 1.0000 s
+
+Warning: Unable to complete 10 samples in 2.0s. You may wish to increase target time to 2.3s or enable flat sampling.
+Benchmarking priority_scope_500_notes/selected_record_index/1000: Collecting 10 samples in estimated 2.2799 s (55 iterations)
+Benchmarking priority_scope_500_notes/selected_record_index/1000: Analyzing
+priority_scope_500_notes/selected_record_index/1000
+                        time:   [38.922 ms 39.804 ms 41.159 ms]
+                        change: [−41.261% −40.407% −39.248%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) high mild
+
+Benchmarking priority_single_record_250_records_500_notes/preview
+Benchmarking priority_single_record_250_records_500_notes/preview: Warming up for 1.0000 s
+Benchmarking priority_single_record_250_records_500_notes/preview: Collecting 10 samples in estimated 2.9383 s (110 iterations)
+Benchmarking priority_single_record_250_records_500_notes/preview: Analyzing
+priority_single_record_250_records_500_notes/preview
+                        time:   [26.954 ms 27.268 ms 27.588 ms]
+                        change: [−13.079% −11.495% −10.066%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Benchmarking priority_single_record_250_records_500_notes/apply
+Benchmarking priority_single_record_250_records_500_notes/apply: Warming up for 1.0000 s
+
+Warning: Unable to complete 10 samples in 2.0s. You may wish to increase target time to 3.0s or enable flat sampling.
+Benchmarking priority_single_record_250_records_500_notes/apply: Collecting 10 samples in estimated 3.0353 s (55 iterations)
+Benchmarking priority_single_record_250_records_500_notes/apply: Analyzing
+priority_single_record_250_records_500_notes/apply
+                        time:   [27.354 ms 28.036 ms 28.745 ms]
+                        change: [−12.777% −10.787% −8.3326%] (p = 0.00 < 0.05)
+                        Performance has improved.

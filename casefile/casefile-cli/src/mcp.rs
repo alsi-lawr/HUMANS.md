@@ -1,27 +1,28 @@
 use anyhow::{Context, Result, bail};
 use casefile_core::ChangeRequest;
 use casefile_store::{
-    ActivationState, DefaultBoardPreview, PROVIDER_PROTOCOL_VERSION, ProgressOperation, Provider,
-    ProviderApprovalPolicy, ProviderBatchPreview, ProviderCapabilities, ProviderMutationState,
-    ProviderOperation, ProviderPreview, ProviderProgressPreview, ProviderStrategyTransitionPreview,
-    ProviderWriterBindingPreview, Store, StrategyTransitionRequest, WriterBindingRequest,
+    ActivationState, PROVIDER_PROTOCOL_VERSION, ProgressOperation, Provider,
+    ProviderApprovalPolicy, ProviderCapabilities, ProviderMutationState, ProviderOperation,
+    ProviderPreview, ProviderPreviewKind, Store, StrategyTransitionRequest, WriterBindingRequest,
 };
 use serde::{Serialize, de::DeserializeOwned};
 use serde_json::{Value, json};
-use sha2::{Digest, Sha256};
 use std::{
-    collections::{BTreeMap, BTreeSet, VecDeque},
+    collections::{BTreeMap, BTreeSet},
     fs,
     io::{self, BufRead, Write},
     path::{Path, PathBuf},
-    sync::{Arc, Mutex, mpsc},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
+        mpsc,
+    },
     thread,
 };
 
 const MCP_PROTOCOL_VERSIONS: &[&str] = &["2024-11-05", "2025-03-26", "2025-06-18", "2025-11-25"];
 const MAX_MESSAGE_BYTES: usize = 8 * 1024 * 1024;
 const TOOL_WORKERS: usize = 16;
-const PREVIEW_LIMIT: usize = 256;
 const REQUIRED_PROVIDER_OPERATIONS: &[&str] = &[
     "snapshot",
     "record_index",
@@ -215,7 +216,8 @@ struct Session {
 #[derive(Clone)]
 struct ToolService {
     provider: Arc<Provider>,
-    previews: Arc<Mutex<PreviewVault>>,
+    #[cfg(test)]
+    before_dispatch: Option<tests::DispatchHook>,
 }
 
 struct QueuedToolCall {
@@ -223,20 +225,10 @@ struct QueuedToolCall {
     params: Option<Value>,
 }
 
-#[derive(Clone)]
-enum StoredPreview {
-    Record(ProviderPreview),
-    RecordBatch(ProviderBatchPreview),
-    Progress(ProviderProgressPreview),
-    Board(DefaultBoardPreview),
-    StrategyTransition(ProviderStrategyTransitionPreview),
-    WriterBinding(ProviderWriterBindingPreview),
-}
-
-#[derive(Default)]
-struct PreviewVault {
-    order: VecDeque<String>,
-    values: BTreeMap<String, StoredPreview>,
+enum SessionEvent {
+    Request(std::result::Result<Value, serde_json::Error>),
+    InputFinished(Result<()>),
+    WorkerFailed,
 }
 
 impl Session {
@@ -244,16 +236,35 @@ impl Session {
         Self {
             tools: ToolService {
                 provider: Arc::new(provider),
-                previews: Arc::new(Mutex::new(PreviewVault::default())),
+                #[cfg(test)]
+                before_dispatch: None,
             },
             initialized: false,
         }
     }
 
-    fn run(mut self) -> Result<()> {
-        let stdin = io::stdin();
-        let mut input = stdin.lock();
+    fn run(self) -> Result<()> {
         let output = Arc::new(Mutex::new(io::stdout()));
+        self.run_with_input(
+            |events, stopped| {
+                thread::spawn(move || {
+                    let stdin = io::stdin();
+                    read_session_input(&mut stdin.lock(), events, stopped);
+                });
+            },
+            output,
+        )
+    }
+
+    fn run_with_input<W: Write + Send + 'static>(
+        mut self,
+        start_input: impl FnOnce(mpsc::SyncSender<SessionEvent>, Arc<AtomicBool>),
+        output: Arc<Mutex<W>>,
+    ) -> Result<()> {
+        let (events, incoming) = mpsc::sync_channel(0);
+        let stopped = Arc::new(AtomicBool::new(false));
+        let fatal = Arc::new(Mutex::new(None));
+        start_input(events.clone(), Arc::clone(&stopped));
         let (sender, receiver) = mpsc::channel::<QueuedToolCall>();
         let receiver = Arc::new(Mutex::new(receiver));
         let workers = (0..TOOL_WORKERS)
@@ -261,70 +272,82 @@ impl Session {
                 let receiver = Arc::clone(&receiver);
                 let output = Arc::clone(&output);
                 let tools = self.tools.clone();
-                thread::spawn(move || -> Result<()> {
+                let events = events.clone();
+                let stopped = Arc::clone(&stopped);
+                let fatal = Arc::clone(&fatal);
+                thread::spawn(move || {
                     loop {
                         let call = {
                             let receiver = receiver.lock().expect("MCP tool receiver");
                             receiver.recv()
                         };
                         let Ok(call) = call else {
-                            return Ok(());
+                            return;
                         };
                         let response = tools.call_tool(call.request_id, call.params.as_ref());
-                        let mut output = output.lock().expect("MCP stdout");
-                        write_message(&mut *output, response)?;
+                        let result =
+                            write_message(&mut *output.lock().expect("MCP stdout"), response);
+                        if let Err(error) = result {
+                            fatal.lock().expect("MCP fatal output").get_or_insert(error);
+                            stopped.store(true, Ordering::Release);
+                            let _ = events.send(SessionEvent::WorkerFailed);
+                            return;
+                        }
                     }
                 })
             })
             .collect::<Vec<_>>();
-        let mut line = String::new();
-        let read_result = loop {
-            line.clear();
-            let bytes = match input.read_line(&mut line) {
-                Ok(bytes) => bytes,
-                Err(error) => break Err(error).context("read MCP stdio request"),
-            };
-            if bytes == 0 {
-                break Ok(());
-            }
-            if bytes > MAX_MESSAGE_BYTES {
-                break Err(anyhow::anyhow!(
-                    "MCP stdio request exceeds {MAX_MESSAGE_BYTES} bytes"
-                ));
-            }
-            let request: Value = match serde_json::from_str(line.trim_end()) {
-                Ok(request) => request,
-                Err(error) => {
-                    let mut output = output.lock().expect("MCP stdout");
-                    write_message(
-                        &mut *output,
-                        error_response(Value::Null, -32700, &format!("parse error: {error}")),
-                    )?;
+        drop(events);
+        let read_result = (|| {
+            loop {
+                let parsed = match incoming.recv().context("receive MCP input")? {
+                    SessionEvent::Request(parsed) if !stopped.load(Ordering::Acquire) => parsed,
+                    SessionEvent::Request(_) => continue,
+                    SessionEvent::InputFinished(result) => return result,
+                    SessionEvent::WorkerFailed => return Ok(()),
+                };
+                let request = match parsed {
+                    Ok(request) => request,
+                    Err(error) => {
+                        write_message(
+                            &mut *output.lock().expect("MCP stdout"),
+                            error_response(Value::Null, -32700, &format!("parse error: {error}")),
+                        )?;
+                        continue;
+                    }
+                };
+                if self.initialized && is_tool_call(&request) {
+                    let object = request.as_object().expect("validated tool call");
+                    sender
+                        .send(QueuedToolCall {
+                            request_id: object.get("id").cloned().expect("validated tool call"),
+                            params: object.get("params").cloned(),
+                        })
+                        .context("queue MCP tool call")?;
                     continue;
                 }
-            };
-            if self.initialized && is_tool_call(&request) {
-                let object = request.as_object().expect("validated tool call");
-                sender
-                    .send(QueuedToolCall {
-                        request_id: object.get("id").cloned().expect("validated tool call"),
-                        params: object.get("params").cloned(),
-                    })
-                    .context("queue MCP tool call")?;
-                continue;
+                if let Some(response) = self.handle(request)? {
+                    write_message(&mut *output.lock().expect("MCP stdout"), response)?;
+                }
             }
-            if let Some(response) = self.handle(request)? {
-                let mut output = output.lock().expect("MCP stdout");
-                write_message(&mut *output, response)?;
-            }
-        };
+        })();
+        stopped.store(true, Ordering::Release);
+        drop(incoming);
         drop(sender);
         for worker in workers {
-            worker
-                .join()
-                .map_err(|_| anyhow::anyhow!("MCP tool worker panicked"))??;
+            if worker.join().is_err() {
+                fatal
+                    .lock()
+                    .expect("MCP fatal output")
+                    .get_or_insert_with(|| anyhow::anyhow!("MCP tool worker panicked"));
+            }
         }
-        read_result
+        // The input-only thread can still be blocked on stdin; it owns no Store state and must
+        // not prevent cleanup of the admitted tool workers after a fatal output failure.
+        match fatal.lock().expect("MCP fatal output").take() {
+            Some(error) => Err(error),
+            None => read_result,
+        }
     }
 
     fn handle(&mut self, request: Value) -> Result<Option<Value>> {
@@ -392,7 +415,7 @@ impl Session {
                 "protocolVersion": protocol,
                 "capabilities": {"tools": {"listChanged": false}},
                 "serverInfo": {"name": "casefile", "version": env!("CARGO_PKG_VERSION")},
-                "instructions": "Casefile tools operate only on the explicit planning root. Read in order: snapshot catalogue, select one exact project and investigation, request its record_index, then request only necessary exact record_detail identities. Never request unscoped or bulk record bodies and never mix revisions. Never run casefile scan, raw/full scans or whole-document parsing on live Stores. For validation failures use the exact scope diagnostics query and its safe next query. Legacy check --investigation read the full Store; current check reads only exact scope and project support summaries. JSON responses are limited to 8 MiB before stdout. Every preview states approval_required. Request external approval only when true; apply an exact live-session preview with preview_id."
+                "instructions": "Casefile tools operate only on the explicit planning root. Read in order: snapshot catalogue, select one exact project and investigation, request its record_index, then request only necessary exact record_detail identities. Never request unscoped or bulk record bodies and compare freshness only for the same typed target; catalogue/global revisions and scoped dependencies are different domains. Never run casefile scan, raw/full scans or whole-document parsing on live Stores. For validation failures use the exact scope diagnostics query and its safe next query. Legacy check --investigation read the full Store; current check reads only exact scope and project support summaries. JSON responses are limited to 8 MiB before stdout. Every preview states approval_required. Request external approval only when true; apply an exact live-session preview with preview_id."
             }),
         )
     }
@@ -413,13 +436,27 @@ impl ToolService {
         let result = self.dispatch(name, arguments);
         match result {
             Ok(value) => success_response(request_id, tool_result(value, false)),
-            Err(error) => success_response(request_id, tool_error(&format!("{error:#}"))),
+            Err(error) => {
+                let result = match crate::rollback_details(&error) {
+                    Some(details) => tool_result(
+                        serde_json::to_value(details).expect("rollback details serialize"),
+                        true,
+                    ),
+                    None => tool_error(&format!("{error:#}")),
+                };
+                success_response(request_id, result)
+            }
         }
     }
 
     fn dispatch(&self, name: &str, arguments: Value) -> Result<Value> {
         #[cfg(test)]
-        tests::dispatch_boundary();
+        {
+            if let Some(hook) = &self.before_dispatch {
+                hook(name);
+            }
+            tests::dispatch_boundary()?;
+        }
         match name {
             "casefile_snapshot" => serialize(self.provider.snapshot()?),
             "casefile_query" => serialize(self.provider.query(parse(arguments)?)?),
@@ -431,277 +468,123 @@ impl ToolService {
                     requests: Option<Vec<ChangeRequest>>,
                 }
                 let arguments = parse::<Arguments>(arguments)?;
-                match (arguments.request, arguments.requests) {
-                    (Some(request), None) => self.publish_preview(StoredPreview::Record(
-                        self.provider.preview_record(request)?,
-                    )),
-                    (None, Some(requests)) => self.publish_preview(StoredPreview::RecordBatch(
-                        self.provider.preview_record_batch(requests)?,
-                    )),
+                let preview = match (arguments.request, arguments.requests) {
+                    (Some(request), None) => self.provider.preview_record(request)?,
+                    (None, Some(requests)) => self.provider.preview_record_batch(requests)?,
                     _ => bail!("pass exactly one of request or requests"),
+                };
+                review_envelope(&preview)
+            }
+            "casefile_apply_record" => {
+                let id = preview_id(arguments)?;
+                match self.provider.preview_kind(&id)? {
+                    ProviderPreviewKind::Record => serialize(self.provider.apply_record(&id)?),
+                    ProviderPreviewKind::RecordBatch => {
+                        serialize(self.provider.apply_record_batch(&id)?)
+                    }
+                    ProviderPreviewKind::Progress
+                    | ProviderPreviewKind::DefaultDeliveryBoard
+                    | ProviderPreviewKind::StrategyTransition
+                    | ProviderPreviewKind::WriterBinding => {
+                        bail!("preview was produced by a different Casefile tool")
+                    }
                 }
             }
-            "casefile_apply_record" => match self.preview_by_id(arguments)? {
-                StoredPreview::Record(preview) => serialize(self.provider.apply_record(preview)?),
-                StoredPreview::RecordBatch(preview) => {
-                    serialize(self.provider.apply_record_batch(preview)?)
-                }
-                _ => bail!("preview was produced by a different Casefile tool"),
-            },
             "casefile_preview_progress" => {
                 #[derive(serde::Deserialize)]
                 struct Arguments {
                     operation: ProgressOperation,
                 }
-                self.publish_preview(StoredPreview::Progress(
-                    self.provider
+                review_envelope(
+                    &self
+                        .provider
                         .preview_progress(parse::<Arguments>(arguments)?.operation)?,
-                ))
+                )
             }
             "casefile_apply_progress" => {
-                let preview = match self.preview_by_id(arguments)? {
-                    StoredPreview::Progress(preview) => preview,
-                    _ => bail!("preview was produced by a different Casefile tool"),
-                };
-                serialize(self.provider.apply_progress(preview)?)
+                serialize(self.provider.apply_progress(&preview_id(arguments)?)?)
             }
             "casefile_preview_default_delivery_board" => {
                 #[derive(serde::Deserialize)]
                 struct Arguments {
                     investigation: String,
                 }
-                self.publish_preview(StoredPreview::Board(
-                    self.provider.preview_default_delivery_board(
+                review_envelope(
+                    &self.provider.preview_default_delivery_board(
                         parse::<Arguments>(arguments)?.investigation,
                     )?,
-                ))
+                )
             }
-            "casefile_apply_default_delivery_board" => {
-                let preview = match self.preview_by_id(arguments)? {
-                    StoredPreview::Board(preview) => preview,
-                    _ => bail!("preview was produced by a different Casefile tool"),
-                };
-                serialize(self.provider.apply_default_delivery_board(preview)?)
-            }
+            "casefile_apply_default_delivery_board" => serialize(
+                self.provider
+                    .apply_default_delivery_board(&preview_id(arguments)?)?,
+            ),
             "casefile_preview_strategy_transition" => {
                 #[derive(serde::Deserialize)]
                 struct Arguments {
                     request: StrategyTransitionRequest,
                 }
-                self.publish_preview(StoredPreview::StrategyTransition(
-                    self.provider
+                review_envelope(
+                    &self
+                        .provider
                         .preview_strategy_transition(parse::<Arguments>(arguments)?.request)?,
-                ))
+                )
             }
-            "casefile_apply_strategy_transition" => {
-                let preview = match self.preview_by_id(arguments)? {
-                    StoredPreview::StrategyTransition(preview) => preview,
-                    _ => bail!("preview was produced by a different Casefile tool"),
-                };
-                serialize(self.provider.apply_strategy_transition(preview)?)
-            }
+            "casefile_apply_strategy_transition" => serialize(
+                self.provider
+                    .apply_strategy_transition(&preview_id(arguments)?)?,
+            ),
             "casefile_preview_writer_binding" => {
                 #[derive(serde::Deserialize)]
                 struct Arguments {
                     request: WriterBindingRequest,
                 }
-                self.publish_preview(StoredPreview::WriterBinding(
-                    self.provider
+                review_envelope(
+                    &self
+                        .provider
                         .preview_writer_binding(parse::<Arguments>(arguments)?.request)?,
-                ))
+                )
             }
-            "casefile_apply_writer_binding" => {
-                let preview = match self.preview_by_id(arguments)? {
-                    StoredPreview::WriterBinding(preview) => preview,
-                    _ => bail!("preview was produced by a different Casefile tool"),
-                };
-                serialize(self.provider.apply_writer_binding(preview)?)
-            }
+            "casefile_apply_writer_binding" => serialize(
+                self.provider
+                    .apply_writer_binding(&preview_id(arguments)?)?,
+            ),
             _ => bail!("unknown Casefile tool {name}"),
         }
     }
-
-    fn publish_preview(&self, internal: StoredPreview) -> Result<Value> {
-        let public = review_envelope(&internal)?;
-        let preview_id = public
-            .get("preview_id")
-            .and_then(Value::as_str)
-            .context("provider preview is missing preview_id")?
-            .to_owned();
-        let mut vault = self.previews.lock().expect("MCP preview vault");
-        vault.order.push_back(preview_id.clone());
-        vault.values.insert(preview_id, internal);
-        while vault.order.len() > PREVIEW_LIMIT {
-            if let Some(expired) = vault.order.pop_front() {
-                vault.values.remove(&expired);
-            }
-        }
-        Ok(public)
-    }
-
-    fn preview_by_id(&self, arguments: Value) -> Result<StoredPreview> {
-        #[derive(serde::Deserialize)]
-        #[serde(deny_unknown_fields)]
-        struct Arguments {
-            preview_id: String,
-        }
-        let preview_id = parse::<Arguments>(arguments)?.preview_id;
-        let vault = self.previews.lock().expect("MCP preview vault");
-        vault
-            .values
-            .get(&preview_id)
-            .cloned()
-            .context("provider preview is unknown or expired")
-    }
 }
 
-#[derive(Serialize)]
-struct ReviewOperation {
-    operation: &'static str,
-    path: String,
+fn preview_id(arguments: Value) -> Result<String> {
+    #[derive(serde::Deserialize)]
+    #[serde(deny_unknown_fields)]
+    struct Arguments {
+        preview_id: String,
+    }
+    Ok(parse::<Arguments>(arguments)?.preview_id)
 }
 
-fn review_envelope(preview: &StoredPreview) -> Result<Value> {
-    let (preview_id, approval_required, no_op, operations, diagnostics, diffs) = match preview {
-        StoredPreview::Record(preview) => (
-            preview.preview_id.as_str(),
-            preview.approval_required,
-            preview.no_op,
-            vec![record_review_operation(&preview.canonical.request)],
-            serialize(&preview.canonical.diagnostics)?,
-            vec![preview.canonical.diff.as_str()],
-        ),
-        StoredPreview::RecordBatch(preview) => (
-            preview.preview_id.as_str(),
-            preview.approval_required,
-            preview.no_op,
-            preview
-                .canonical
-                .requests
-                .iter()
-                .map(record_review_operation)
-                .collect(),
-            serialize(&preview.canonical.diagnostics)?,
-            vec![preview.canonical.diff.as_str()],
-        ),
-        StoredPreview::Progress(preview) => (
-            preview.preview_id.as_str(),
-            preview.approval_required,
-            preview.canonical.no_op,
-            vec![ReviewOperation {
-                operation: match preview.operation {
-                    ProgressOperation::Bootstrap { .. } => "bootstrap",
-                    ProgressOperation::Append { .. } => "append",
-                },
-                path: preview.canonical.path.clone(),
-            }],
-            serialize(&preview.canonical.diagnostics)?,
-            vec![preview.canonical.diff.as_str()],
-        ),
-        StoredPreview::Board(preview) => (
-            preview.preview_id.as_str(),
-            preview.approval_required,
-            preview.no_op,
-            vec![record_review_operation(&preview.canonical.request)],
-            serialize(&preview.canonical.diagnostics)?,
-            vec![preview.canonical.diff.as_str()],
-        ),
-        StoredPreview::StrategyTransition(preview) => (
-            preview.preview_id.as_str(),
-            preview.approval_required,
-            preview.canonical.no_op,
-            preview
-                .canonical
-                .changes
-                .iter()
-                .map(|change| ReviewOperation {
-                    operation: governed_review_operation(
-                        change.expected_target_revision.is_some(),
-                        change.proposed_target_revision.is_some(),
-                    ),
-                    path: change.path.clone(),
-                })
-                .collect(),
-            serialize(&preview.canonical.diagnostics)?,
-            preview
-                .canonical
-                .changes
-                .iter()
-                .map(|change| change.diff.as_str())
-                .collect(),
-        ),
-        StoredPreview::WriterBinding(preview) => (
-            preview.preview_id.as_str(),
-            preview.approval_required,
-            preview.canonical.no_op,
-            preview
-                .canonical
-                .changes
-                .iter()
-                .map(|change| ReviewOperation {
-                    operation: governed_review_operation(
-                        change.expected_target_revision.is_some(),
-                        change.proposed_target_revision.is_some(),
-                    ),
-                    path: change.path.clone(),
-                })
-                .collect(),
-            serialize(&preview.canonical.diagnostics)?,
-            preview
-                .canonical
-                .changes
-                .iter()
-                .map(|change| change.diff.as_str())
-                .collect(),
-        ),
-    };
+fn review_envelope(preview: &ProviderPreview) -> Result<Value> {
     let mut operation_counts = BTreeMap::new();
-    for operation in &operations {
+    for operation in &preview.operations {
         *operation_counts
-            .entry(operation.operation)
+            .entry(
+                serialize(operation.operation)?
+                    .as_str()
+                    .context("review operation")?
+                    .to_owned(),
+            )
             .or_insert(0_usize) += 1;
     }
     Ok(json!({
-        "preview_id": preview_id,
-        "approval_required": approval_required,
-        "no_op": no_op,
+        "preview_id": preview.preview_id,
+        "kind": preview.kind,
+        "approval_required": preview.approval_required,
+        "no_op": preview.no_op,
         "operation_counts": operation_counts,
-        "operations": operations,
-        "diagnostics": diagnostics,
-        "diff": diff_summary(&diffs),
+        "operations": preview.operations,
+        "diagnostics": preview.diagnostics,
+        "diff": { "bytes": preview.diff.len() },
     }))
-}
-
-fn record_review_operation(request: &ChangeRequest) -> ReviewOperation {
-    ReviewOperation {
-        operation: match request {
-            ChangeRequest::Create { .. } => "create",
-            ChangeRequest::Replace { .. } => "replace",
-            ChangeRequest::Delete { .. } => "delete",
-        },
-        path: request.path().to_owned(),
-    }
-}
-
-fn governed_review_operation(expected: bool, proposed: bool) -> &'static str {
-    match (expected, proposed) {
-        (false, true) => "create",
-        (true, false) => "delete",
-        _ => "replace",
-    }
-}
-
-fn diff_summary(diffs: &[&str]) -> Value {
-    let mut hasher = Sha256::new();
-    let mut bytes = 0_usize;
-    for diff in diffs {
-        bytes += diff.len();
-        hasher.update(diff.as_bytes());
-    }
-    json!({
-        "bytes": bytes,
-        "sha256": format!("sha256:{:x}", hasher.finalize()),
-    })
 }
 
 fn is_tool_call(request: &Value) -> bool {
@@ -716,12 +599,12 @@ fn tool_definitions() -> Vec<Value> {
     vec![
         tool(
             "casefile_snapshot",
-            "Read only bounded root capabilities, metadata revision, diagnostic coverage counts, and project/investigation catalogue. Then select one exact investigation before querying records.",
+            "Read only bounded root capabilities, global catalogue freshness, diagnostic coverage counts, and project/investigation catalogue. Then select one exact investigation before querying records.",
             object_schema(json!({}), &[]),
         ),
         tool(
             "casefile_query",
-            "Read one exact investigation-scoped record index, one exact record detail, scoped boards, or scoped strategy transitions. Never mix returned revisions.",
+            "Read one exact investigation-scoped record index, one exact record detail, scoped boards, or scoped strategy transitions. Compare freshness only within the same typed query target and scope; catalogue tokens are not scoped-read authority.",
             query_schema(),
         ),
         tool(
@@ -1122,7 +1005,7 @@ fn tool_output_schema(name: &str) -> Value {
             json!({
                 "capabilities": capabilities_schema(),
                 "activation": {"type": "string", "enum": ["unactivated", "active", "invalid"]},
-                "revision": non_empty_string(),
+                "freshness": object_schema(json!({"kind": {"const": "catalogue"}, "revision": non_empty_string()}), &["kind", "revision"]),
                 "diagnostic_coverage": object_schema(
                     json!({
                         "catalogue": object_schema(
@@ -1144,7 +1027,7 @@ fn tool_output_schema(name: &str) -> Value {
             &[
                 "capabilities",
                 "activation",
-                "revision",
+                "freshness",
                 "diagnostic_coverage",
                 "catalogue",
                 "cache",
@@ -1246,16 +1129,16 @@ fn query_output_schema() -> Value {
     one_of_object(vec![
         object_schema(
             json!({
-                "result": {"const": "diagnostics"}, "revision": non_empty_string(),
+                "result": {"const": "diagnostics"}, "freshness": scope_token_schema("diagnostics"),
                 "scope": scope_schema(), "diagnostics": {"type": "array", "maxItems": 128, "items": diagnostic_schema()},
                 "total_count": {"type": "integer", "minimum": 0},
             }),
-            &["result", "revision", "scope", "diagnostics", "total_count"],
+            &["result", "freshness", "scope", "diagnostics", "total_count"],
         ),
         object_schema(
             json!({
                 "result": {"const": "record_index"},
-                "revision": non_empty_string(),
+                "freshness": scope_token_schema("record_index"),
                 "scope": scope_schema(),
                 "diagnostic_coverage": object_schema(
                     json!({
@@ -1268,7 +1151,7 @@ fn query_output_schema() -> Value {
             }),
             &[
                 "result",
-                "revision",
+                "freshness",
                 "scope",
                 "diagnostic_coverage",
                 "records",
@@ -1277,31 +1160,72 @@ fn query_output_schema() -> Value {
         object_schema(
             json!({
                 "result": {"const": "record_detail"},
-                "revision": non_empty_string(),
+                "freshness": scope_token_schema("record_detail"),
                 "identity": scoped_identity_schema(),
                 "record": nullable(record_detail_schema()),
             }),
-            &["result", "revision", "identity", "record"],
+            &["result", "freshness", "identity", "record"],
         ),
         object_schema(
             json!({
                 "result": {"const": "boards"},
-                "revision": non_empty_string(),
+                "freshness": scope_token_schema("boards"),
                 "scope": scope_schema(),
                 "boards": {"type": "array", "items": board_output_schema()},
             }),
-            &["result", "revision", "scope", "boards"],
+            &["result", "freshness", "scope", "boards"],
         ),
         object_schema(
             json!({
                 "result": {"const": "strategy_transitions"},
-                "revision": non_empty_string(),
+                "freshness": scope_token_schema("strategy_transitions"),
                 "scope": scope_schema(),
                 "transitions": {"type": "array", "items": transition_output_schema()},
             }),
-            &["result", "revision", "scope", "transitions"],
+            &["result", "freshness", "scope", "transitions"],
         ),
     ])
+}
+
+fn scope_token_schema(query: &str) -> Value {
+    let target = if query == "record_detail" {
+        object_schema(
+            json!({"query": {"const": query}, "identity": scoped_identity_schema()}),
+            &["query", "identity"],
+        )
+    } else {
+        object_schema(
+            json!({"query": {"const": query}, "scope": scope_schema()}),
+            &["query", "scope"],
+        )
+    };
+    let stamped = |dependency| {
+        object_schema(
+            json!({"dependency": {"const": dependency}, "revision": non_empty_string()}),
+            &["dependency", "revision"],
+        )
+    };
+    let dependency = one_of_object(vec![
+        stamped("activation_selection"),
+        stamped("selected_records"),
+        stamped("project_support"),
+        object_schema(
+            json!({"dependency": {"const": "attachments"}, "targets": {"type": "object", "additionalProperties": {"type": "string", "enum": ["missing", "regular", "unsafe"]}}}),
+            &["dependency", "targets"],
+        ),
+        object_schema(
+            json!({"dependency": {"const": "progress"}, "path": non_empty_string(), "revision": nullable(non_empty_string())}),
+            &["dependency", "path", "revision"],
+        ),
+        object_schema(
+            json!({"dependency": {"const": "project_mapping"}, "project": non_empty_string(), "revision": non_empty_string()}),
+            &["dependency", "project", "revision"],
+        ),
+    ]);
+    object_schema(
+        json!({"kind": {"const": "scope_read"}, "target": target, "dependencies": {"type": "array", "items": dependency}, "revision": non_empty_string()}),
+        &["kind", "target", "dependencies", "revision"],
+    )
 }
 
 fn record_index_entry_schema() -> Value {
@@ -1502,6 +1426,7 @@ fn preview_output_schema() -> Value {
     object_schema(
         json!({
             "preview_id": non_empty_string(),
+            "kind": {"type":"string", "enum":["record", "record_batch", "progress", "default_delivery_board", "strategy_transition", "writer_binding"]},
             "approval_required": {"type": "boolean"},
             "no_op": {"type": "boolean"},
             "operation_counts": {
@@ -1529,13 +1454,13 @@ fn preview_output_schema() -> Value {
             "diff": object_schema(
                 json!({
                     "bytes": {"type": "integer", "minimum": 0},
-                    "sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
                 }),
-                &["bytes", "sha256"],
+                &["bytes"],
             ),
         }),
         &[
             "preview_id",
+            "kind",
             "approval_required",
             "no_op",
             "operation_counts",
@@ -1587,12 +1512,39 @@ fn apply_output_schema(name: &str) -> Value {
         "casefile_apply_strategy_transition" | "casefile_apply_writer_binding" => governed,
         _ => unreachable!("every Casefile tool has an explicit output schema"),
     };
-    object_schema(
+    let success = object_schema(
         json!({
             "result": result,
             "cache": cache_schema(),
         }),
         &["result", "cache"],
+    );
+    one_of_object(vec![success, rollback_output_schema()])
+}
+
+fn rollback_output_schema() -> Value {
+    let remaining = one_of_object(vec![
+        object_schema(
+            json!({"state": {"const": "regular"}, "revision": non_empty_string()}),
+            &["state", "revision"],
+        ),
+        object_schema(
+            json!({"state": {"enum": ["absent", "symlink", "directory", "other", "unknown"]}}),
+            &["state"],
+        ),
+    ]);
+    object_schema(
+        json!({
+            "code": {"const": "incomplete_rollback"},
+            "operation": non_empty_string(),
+            "cause": {"enum": ["io", "invalid", "stale"]},
+            "affected_paths": {"type": "array", "minItems": 1, "items": object_schema(json!({
+                "path": non_empty_string(),
+                "remaining": remaining,
+                "reason": {"enum": ["external_change", "observation_failed", "restore_failed"]},
+            }), &["path", "remaining", "reason"])},
+        }),
+        &["code", "operation", "cause", "affected_paths"],
     )
 }
 
@@ -1693,8 +1645,66 @@ fn error_response(id: Value, code: i32, message: &str) -> Value {
     json!({"jsonrpc": "2.0", "id": id, "error": {"code": code, "message": message}})
 }
 
+fn read_session_input(
+    input: &mut impl BufRead,
+    events: mpsc::SyncSender<SessionEvent>,
+    stopped: Arc<AtomicBool>,
+) {
+    let mut frame = Vec::new();
+    while !stopped.load(Ordering::Acquire) {
+        let event = match read_frame(input, &mut frame) {
+            Ok(true) => SessionEvent::Request(serde_json::from_slice(&frame)),
+            Ok(false) => SessionEvent::InputFinished(Ok(())),
+            Err(error) => SessionEvent::InputFinished(Err(error).context("read MCP stdio request")),
+        };
+        let finished = matches!(event, SessionEvent::InputFinished(_));
+        if events.send(event).is_err() || finished {
+            return;
+        }
+    }
+}
+
+fn read_frame(input: &mut impl BufRead, frame: &mut Vec<u8>) -> Result<bool> {
+    frame.clear();
+    loop {
+        let available = input.fill_buf()?;
+        if available.is_empty() {
+            if frame.is_empty() {
+                return Ok(false);
+            }
+            anyhow::bail!("MCP stdio request ended before its line delimiter");
+        }
+        let delimiter = available.iter().position(|byte| *byte == b'\n');
+        let consumed = delimiter.map_or(available.len(), |index| index + 1);
+        if consumed > MAX_MESSAGE_BYTES - frame.len() {
+            anyhow::bail!("MCP stdio request exceeds {MAX_MESSAGE_BYTES} bytes");
+        }
+        frame.extend_from_slice(&available[..consumed]);
+        input.consume(consumed);
+        if delimiter.is_some() {
+            return Ok(true);
+        }
+        if frame.len() == MAX_MESSAGE_BYTES {
+            anyhow::bail!("MCP stdio request exceeds {MAX_MESSAGE_BYTES} bytes");
+        }
+    }
+}
+
 fn write_message(output: &mut impl Write, value: Value) -> Result<()> {
-    crate::json_output::write_message(output, &value)
+    let bytes = match crate::json_output::encode(&value) {
+        Ok(bytes) => bytes,
+        Err(_) => {
+            let id = value
+                .get("id")
+                .context("oversized MCP response has no request ID")?;
+            crate::json_output::encode(&error_response(id.clone(), -32603,
+                "MCP response exceeds the complete encoded message limit; request a smaller scoped result"))
+                .context("MCP request ID cannot fit a bounded response")?
+        }
+    };
+    output.write_all(&bytes)?;
+    output.flush()?;
+    Ok(())
 }
 
 #[cfg(test)]

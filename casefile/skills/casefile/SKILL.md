@@ -15,7 +15,7 @@ never clone or mirror the planning store in task scratch. Use the session's `.ag
 for disposable, non-authoritative previews, content-hash backups, isolated output, and command logs.
 Never infer a source path or replace the root.
 
-Establish read context hierarchically through Provider protocol v3: call `casefile_snapshot`, use
+Establish read context hierarchically through Provider protocol v5: call `casefile_snapshot`, use
 its catalogue to resolve the exact project and complete investigation scope, then request that
 scope's `record_index`. Request `record_detail` only for the exact identities necessary for the
 current step. For validation failures use the exact scope's `diagnostics` query, then the returned
@@ -28,15 +28,25 @@ scope plus project support summaries, and root check discards record bodies incr
 responses have a hard 8 MiB limit including the final newline; overflow fails before any JSON is
 written. Use scoped reads instead of raising the limit or redirecting bulk output.
 
-Never request unscoped or bulk records, infer an investigation path by concatenation, or combine
-snapshot, index, detail, board, or transition results carrying different revisions.
+Never request unscoped or bulk records, infer an investigation path by concatenation, or treat
+catalogue freshness as scoped-read authority. Snapshot freshness is a tagged catalogue token
+covering the complete metadata domain; narrow results carry a tagged scope-read token naming the
+exact query target and necessary dependencies. Compare tokens only for the same query target, scope,
+and (for detail) identity. Different targets legitimately have different revisions. Re-read that
+exact target when its affecting data/dependencies change; unrelated edits do not invalidate its
+context. These observation tokens are not mutation preconditions: preview/apply independently
+capture and validate their own freshness. Provider v5 is separate from MCP's dated transport
+protocol negotiation.
 
 Route the current phase to `casefile-investigate`, `casefile-review`, `casefile-implement`, or
 `casefile-close`. Every governed phase requires an explicit compatible strategy. Present compatible
 choices and a recommendation, then wait for human selection.
 
 Review the Provider's compact preview envelope. Request confirmation only when
-`approval_required = true`, then apply its `preview_id` in the same MCP session.
+`approval_required = true`, then apply only its `preview_id` in the same MCP session. Provider v5
+retains the original once; returned review fields are not an approval payload and must not be sent
+back with the ID. Native filesystem events invalidate disposable caches, never authorize writes;
+Store applies independently revalidate canonical dependencies under their existing locks.
 
 When starting a new Casefile, activate the new investigation root, then call
 `casefile_preview_default_delivery_board`, review its envelope, and apply its `preview_id`. The

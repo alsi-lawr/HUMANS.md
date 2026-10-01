@@ -1,0 +1,123 @@
+--- a/casefile/casefile-tui/src/progressive/loading.rs
++++ b/casefile/casefile-tui/src/progressive/loading.rs
+@@ -120,9 +120,16 @@
+                     &self.entries,
+                 );
+                 self.has_complete = true;
+-                // Scoped watcher floors, not the global handoff generation, decide
+-                // whether this completed target remains stale.
+-                self.status.clear();
++                let later_observation =
++                    self.observation.generation > active.started_observation_generation;
++                self.status = if later_observation {
++                    format!(
++                        "{} changed during refresh. Refresh again.",
++                        target_name(&active.target)
++                    )
++                } else {
++                    String::new()
++                };
+                 self.report(RefreshReport::Succeeded {
+                     generation: active.generation,
+                     target: active.target,
+--- a/casefile/casefile-tui/src/progressive/tests.rs
++++ b/casefile/casefile-tui/src/progressive/tests.rs
+@@ -59,11 +59,6 @@
+     finish_active(&mut coordinator);
+ 
+     assert!(!coordinator.projection().provisional);
+-    assert_eq!(
+-        coordinator.status(),
+-        "",
+-        "global observation is not target freshness"
+-    );
+     assert!(matches!(
+         report_receiver.recv().expect("success report"),
+         RefreshReport::Succeeded {
+--- a/casefile/casefile-tui/src/workbench/facts.rs
++++ b/casefile/casefile-tui/src/workbench/facts.rs
+@@ -28,19 +28,6 @@
+             .map(|diagnostic| diagnostic.path.clone())
+             .collect();
+         self.replace_entry_diagnostics(scan, &paths, scan.diagnostics.clone());
+-    }
+-
+-    pub(super) fn reindex_scopes(&mut self, scan: &ScanResult) {
+-        self.identities.clear();
+-        self.identity_by_path.clear();
+-        for entry in &scan.snapshot.entries {
+-            self.insert_identity(scan, entry);
+-        }
+-        self.board_paths.clear();
+-        self.board_scope_by_path.clear();
+-        self.board_diagnostics.clear();
+-        let paths = self.diagnostics.keys().cloned().collect();
+-        self.update_diagnostics(scan, &paths);
+     }
+ 
+     pub(super) fn update(
+--- a/casefile/casefile-tui/src/workbench/projection.rs
++++ b/casefile/casefile-tui/src/workbench/projection.rs
+@@ -161,11 +161,7 @@
+             self.browser
+                 .update(&self.scan, &self.entry_indices, &index_changes);
+         }
+-        if projection.catalogue_changed {
+-            self.facts.reindex_scopes(&self.scan);
+-        } else {
+-            self.facts.update(&self.scan, &self.entry_indices, &changed);
+-        }
++        self.facts.update(&self.scan, &self.entry_indices, &changed);
+         self.facts
+             .replace_entry_diagnostics(&self.scan, &changed, projection.scan.diagnostics);
+         if let Some(diagnostics) = projection.catalogue_diagnostics {
+--- a/casefile/casefile-tui/src/workbench/tests.rs
++++ b/casefile/casefile-tui/src/workbench/tests.rs
+@@ -1326,47 +1326,3 @@
+     app.handle(KeyCode::Up);
+     assert!(app.browser.selected_path().unwrap().ends_with("row-18.txt"));
+ }
+-
+-#[test]
+-fn catalogue_root_change_rescopes_cached_card_identities_without_body_updates() {
+-    let mut scan = test_support::scan();
+-    let nested = "projects/demo/investigations/sample/child/tickets/accepted/HMD-013.md";
+-    scan.investigation_roots
+-        .get_mut("demo")
+-        .unwrap()
+-        .push("sample/child".into());
+-    let mut child = scan
+-        .snapshot
+-        .entries
+-        .iter()
+-        .find(|entry| entry.path == TICKET_PATH)
+-        .unwrap()
+-        .clone();
+-    child.path = nested.into();
+-    scan.snapshot.entries.push(child);
+-    let mut derived = test_support::derived(&scan);
+-    derived.boards.push(board_with_cards(
+-        "Catalogue card",
+-        vec![board_card("HMD-013", "Navigator")],
+-    ));
+-    let mut app = App::new(scan, derived);
+-    app.set_view(View::Boards);
+-    assert!(!test_support::render(&app, 140, 40).contains("ambiguous identity"));
+-    // A real catalogue-only delta can change containment without changing either body.
+-    let mut projection = ui_projection(app.scan.clone(), false);
+-    projection.incremental = true;
+-    projection.catalogue_changed = true;
+-    projection.scan.snapshot.entries.clear();
+-    projection
+-        .scan
+-        .investigation_roots
+-        .insert("demo".into(), vec!["sample".into()]);
+-    app.apply_projection(projection, ProjectionChange::Content);
+-    let output = test_support::render(&app, 140, 40);
+-    assert!(output.contains("ambiguous identity"), "{output}");
+-    assert!(app.entry_indices.contains_key(nested));
+-    assert!(
+-        output.lines().next().unwrap().contains("2 diagnostic"),
+-        "existing diagnostics lost: {output}"
+-    );
+-}

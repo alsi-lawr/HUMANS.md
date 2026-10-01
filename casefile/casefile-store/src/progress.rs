@@ -1,7 +1,5 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
-    fs,
-    io::Write,
     path::Path,
 };
 
@@ -10,14 +8,13 @@ use casefile_core::{
     validate_progress_log,
 };
 use serde::{Deserialize, Serialize};
-use tempfile::NamedTempFile;
 
 use crate::{
     activation::{ActivationState, activation},
     layout::checked_path,
     mutation::{MutationContext, Overlay},
     revision::require_target_revision,
-    store::{StoreError, require_safe_target_parent},
+    store::StoreError,
     writing::git_diff,
 };
 
@@ -65,8 +62,8 @@ pub(super) fn preview(
     request.investigation = checked_path(&request.investigation)?;
     ensure_worktree(root)?;
     let (path, scope_prefix) = progress_path(root, &request.investigation)?;
-    let context = capture(root, &request, false)?;
-    prepare(root, request, &context, path, scope_prefix)
+    let (context, log, bytes) = capture(root, &request, false)?;
+    prepare(root, request, &context, path, scope_prefix, &log, bytes)
 }
 
 fn prepare(
@@ -75,29 +72,24 @@ fn prepare(
     context: &MutationContext,
     path: String,
     scope_prefix: String,
+    proposed_log: &ProgressLog,
+    bytes: Vec<u8>,
 ) -> Result<ProgressPreview, StoreError> {
     let before = &context.before;
-    let existing = before
-        .snapshot
-        .entries
-        .iter()
-        .find(|entry| entry.path == path);
+    let existing = context.entry(&path);
     let replacing = request.replacement.is_some() || request.replacement_source.is_some();
+    let empty = ProgressLog {
+        entries: Vec::new(),
+    };
     let existing_log = if replacing {
-        ProgressLog {
-            entries: Vec::new(),
-        }
+        &empty
     } else {
         match existing {
-            Some(entry) => parse_progress_log(
-                &path,
-                std::str::from_utf8(&entry.original_bytes)
-                    .map_err(|_| StoreError::Invalid("progress log must be UTF-8".into()))?,
-            )
-            .map_err(diagnostics_error)?,
-            None => ProgressLog {
-                entries: Vec::new(),
-            },
+            Some(_) => context
+                .facts(&path)
+                .and_then(|facts| facts.progress.as_ref())
+                .ok_or_else(|| StoreError::Invalid("progress log is invalid".into()))?,
+            None => &empty,
         }
     };
     if request.bootstrap {
@@ -119,12 +111,6 @@ fn prepare(
             // Bootstrap marks a previously absent scope as adopted.  It never normalises or
             // replaces an existing log: parsing still proves that the record is valid, but the
             // original bytes and target revision remain the preview/apply result.
-            let _ = parse_progress_log(
-                &path,
-                std::str::from_utf8(&existing.original_bytes)
-                    .map_err(|_| StoreError::Invalid("progress log must be UTF-8".into()))?,
-            )
-            .map_err(diagnostics_error)?;
             let diagnostics = scoped_diagnostics(&before.diagnostics, &path);
             return Ok(ProgressPreview {
                 request,
@@ -139,7 +125,7 @@ fn prepare(
             });
         }
     }
-    let proposed_log = if replacing {
+    if replacing {
         if !request.entries.is_empty()
             || (request.replacement.is_some() && request.replacement_source.is_some())
         {
@@ -153,16 +139,11 @@ fn prepare(
                 ),
             ));
         }
-        match (&request.replacement, &request.replacement_source) {
-            (Some(replacement), None) => replacement.clone(),
-            (None, Some(source)) => parse_progress_log(&path, source).map_err(diagnostics_error)?,
-            _ => unreachable!("exclusive replacement source"),
-        }
     } else {
-        let mut entries = existing_log.entries.clone();
-        let existing_by_id = entries
+        let existing_by_id = existing_log
+            .entries
             .iter()
-            .map(|entry| (entry.id().to_owned(), entry.clone()))
+            .map(|entry| (entry.id(), entry))
             .collect::<BTreeMap<_, _>>();
         let mut requested = BTreeSet::new();
         for entry in &request.entries {
@@ -178,7 +159,7 @@ fn prepare(
                 ));
             }
             if let Some(current) = existing_by_id.get(entry.id()) {
-                if *current != *entry {
+                if **current != *entry {
                     return Ok(rejected(
                         request,
                         path,
@@ -189,20 +170,16 @@ fn prepare(
                         ),
                     ));
                 }
-            } else {
-                entries.push(entry.clone());
             }
         }
-        ProgressLog { entries }
-    };
-    if let Err(diagnostic) = validate_progress_log(&path, &proposed_log) {
+    }
+    if let Err(diagnostic) = validate_progress_log(&path, proposed_log) {
         return Ok(rejected(request, path, diagnostic));
     }
-    let bytes = render_progress_log(&proposed_log).into_bytes();
     let same = existing.is_some_and(|entry| entry.original_bytes == bytes);
     let mut overlay = BTreeMap::new();
     overlay.insert(path.clone(), Some(bytes.clone()));
-    let proposed = context.overlay(&overlay);
+    let proposed = context.overlay_progress(&overlay, &path, proposed_log);
     let diagnostics = scoped_diagnostics(&proposed.diagnostics, &path);
     let bootstrap_ticket_ids = if request.bootstrap {
         accepted_ticket_ids(before, &scope_prefix)
@@ -250,6 +227,14 @@ pub(super) fn apply(
     mut preview: ProgressPreview,
 ) -> Result<ProgressApplyResult, StoreError> {
     preview.request.investigation = checked_path(&preview.request.investigation)?;
+    apply_ref(root, &preview)
+}
+
+pub(super) fn apply_ref(
+    root: &Path,
+    preview: &ProgressPreview,
+) -> Result<ProgressApplyResult, StoreError> {
+    checked_path(&preview.request.investigation)?;
     ensure_worktree(root)?;
     if !preview.diagnostics.is_empty() {
         return Err(StoreError::Invalid(
@@ -262,13 +247,8 @@ pub(super) fn apply(
             "progress preview target does not match request".into(),
         ));
     }
-    let context = capture(root, &preview.request, true)?;
-    let current = &context.before;
-    let current_entry = current
-        .snapshot
-        .entries
-        .iter()
-        .find(|entry| entry.path == path);
+    let (context, log, bytes) = capture(root, &preview.request, true)?;
+    let current_entry = context.entry(&path);
     let stale_target =
         match require_target_revision(&root.join(&path), preview.expected_target_revision.as_ref())
         {
@@ -277,12 +257,17 @@ pub(super) fn apply(
             Err(error) => return Err(error),
         };
     if stale_target {
-        if completed_no_op(&preview.request, current_entry)? {
+        if completed_no_op(
+            &preview.request,
+            context
+                .facts(&path)
+                .and_then(|facts| facts.progress.as_ref()),
+        )? {
             return Ok(ProgressApplyResult {
                 path,
                 resulting_target_revision: current_entry
                     .map(|entry| entry.content_revision.clone()),
-                diff: preview.diff,
+                diff: preview.diff.clone(),
                 no_op: true,
             });
         }
@@ -295,6 +280,8 @@ pub(super) fn apply(
         &context,
         path.clone(),
         scope_prefix.clone(),
+        &log,
+        bytes,
     )?;
     if !checked.diagnostics.is_empty()
         || checked.proposed_bytes != preview.proposed_bytes
@@ -309,20 +296,39 @@ pub(super) fn apply(
         return Ok(ProgressApplyResult {
             path,
             resulting_target_revision: current_entry.map(|entry| entry.content_revision.clone()),
-            diff: preview.diff,
+            diff: preview.diff.clone(),
             no_op: true,
         });
     }
-    let log = materialize(&preview.request, current_entry)?;
-    validate_progress_log(&path, &log)
-        .map_err(|diagnostic| StoreError::Invalid(diagnostic.message))?;
-    let bytes = render_progress_log(&log).into_bytes();
-    atomic_write(root, &path, &bytes)?;
-    let resulting = context.resulting(&Overlay::from([(path.clone(), Some(bytes))]))?;
+    let bytes = checked
+        .proposed_bytes
+        .as_deref()
+        .ok_or_else(|| StoreError::Invalid("progress preview has no proposed bytes".into()))?;
+    let receipt = crate::mutation_restore::apply(
+        root,
+        &path,
+        current_entry.map(|entry| entry.original_bytes.as_slice()),
+        Some(bytes),
+    )?;
+    let resulting = match context.resulting(&Overlay::from([(path.clone(), Some(bytes.to_vec()))]))
+    {
+        Ok(resulting) => resulting,
+        Err(error) => {
+            return Err(crate::mutation_restore::rollback(
+                root,
+                "progress verification",
+                error,
+                &[receipt],
+            ));
+        }
+    };
     let diagnostics = scoped_diagnostics(&resulting.diagnostics, &path);
     if !diagnostics.is_empty() {
-        return Err(StoreError::Invalid(
-            "post-write progress validation failed".into(),
+        return Err(crate::mutation_restore::rollback(
+            root,
+            "progress validation",
+            StoreError::Invalid("post-write progress validation failed".into()),
+            &[receipt],
         ));
     }
     Ok(ProgressApplyResult {
@@ -333,7 +339,7 @@ pub(super) fn apply(
             .iter()
             .find(|entry| entry.path == path)
             .map(|entry| entry.content_revision.clone()),
-        diff: preview.diff,
+        diff: preview.diff.clone(),
         no_op: false,
     })
 }
@@ -357,73 +363,32 @@ pub(super) fn validate_investigation(root: &Path, investigation: &str) -> Result
     progress_path(root, investigation).map(|_| ())
 }
 
-fn materialize(
-    request: &ProgressChangeRequest,
-    current: Option<&casefile_core::EntrySnapshot>,
-) -> Result<ProgressLog, StoreError> {
-    if let Some(replacement) = &request.replacement {
-        return Ok(replacement.clone());
-    }
-    if let Some(source) = &request.replacement_source {
-        return parse_progress_log("progress/log.toml", source).map_err(diagnostics_error);
-    }
-    let mut log = match current {
-        Some(entry) => parse_progress_log(
-            "progress/log.toml",
-            std::str::from_utf8(&entry.original_bytes)
-                .map_err(|_| StoreError::Invalid("progress log must be UTF-8".into()))?,
-        )
-        .map_err(diagnostics_error)?,
-        None => ProgressLog {
-            entries: Vec::new(),
-        },
-    };
-    let ids = log
-        .entries
-        .iter()
-        .map(|entry| (entry.id().to_owned(), entry.clone()))
-        .collect::<BTreeMap<_, _>>();
-    for entry in &request.entries {
-        match ids.get(entry.id()) {
-            Some(current) if *current == *entry => {}
-            Some(_) => {
-                return Err(StoreError::Invalid(
-                    "conflicting progress operation ID".into(),
-                ));
-            }
-            None => log.entries.push(entry.clone()),
-        }
-    }
-    Ok(log)
-}
-
 fn completed_no_op(
     request: &ProgressChangeRequest,
-    current: Option<&casefile_core::EntrySnapshot>,
+    current: Option<&ProgressLog>,
 ) -> Result<bool, StoreError> {
     let Some(current) = current else {
         return Ok(false);
     };
-    let current = parse_progress_log(
-        "progress/log.toml",
-        std::str::from_utf8(&current.original_bytes)
-            .map_err(|_| StoreError::Invalid("progress log must be UTF-8".into()))?,
-    )
-    .map_err(diagnostics_error)?;
     if request.bootstrap {
         return Ok(true);
     }
     if let Some(replacement) = &request.replacement {
-        return Ok(&current == replacement);
+        return Ok(current == replacement);
     }
     if let Some(source) = &request.replacement_source {
-        return Ok(current
+        return Ok(*current
             == parse_progress_log("progress/log.toml", source).map_err(diagnostics_error)?);
     }
-    Ok(request
+    let ids = current
         .entries
         .iter()
-        .all(|entry| current.entries.iter().any(|recorded| recorded == entry)))
+        .map(|entry| (entry.id(), entry))
+        .collect::<BTreeMap<_, _>>();
+    Ok(request.entries.iter().all(|entry| {
+        ids.get(entry.id())
+            .is_some_and(|recorded| **recorded == *entry)
+    }))
 }
 
 fn accepted_ticket_ids(scan: &crate::scanning::ScanResult, scope_prefix: &str) -> Vec<String> {
@@ -531,88 +496,83 @@ fn diff(
     git_diff(root, path, before, after)
 }
 
-fn atomic_write(root: &Path, relative: &str, bytes: &[u8]) -> Result<(), StoreError> {
-    let target = root.join(relative);
-    let parent = target
-        .parent()
-        .ok_or_else(|| StoreError::Invalid("progress target has no parent".into()))?;
-    require_safe_target_parent(
-        root,
-        Path::new(relative)
-            .parent()
-            .unwrap_or_else(|| Path::new("")),
-        "progress target",
-    )?;
-    fs::create_dir_all(parent)?;
-    match fs::symlink_metadata(&target) {
-        Ok(metadata) if !metadata.file_type().is_file() || metadata.file_type().is_symlink() => {
-            return Err(StoreError::Invalid(
-                "progress target must be a regular non-symlink file".into(),
-            ));
-        }
-        Ok(_) => {}
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-        Err(error) => return Err(error.into()),
-    }
-    let mut temporary = NamedTempFile::new_in(parent)?;
-    temporary.write_all(bytes)?;
-    temporary.flush()?;
-    temporary
-        .persist(&target)
-        .map_err(|error| StoreError::Io(error.error))?;
-    Ok(())
-}
-
 fn capture(
     root: &Path,
     request: &ProgressChangeRequest,
     applying: bool,
-) -> Result<MutationContext, StoreError> {
+) -> Result<(MutationContext, ProgressLog, Vec<u8>), StoreError> {
     let (path, _) = progress_path(root, &request.investigation)?;
     let existing = super::mutation::read_entry(root, &path)?;
+    let current_log = match existing.as_ref() {
+        Some(entry) => std::str::from_utf8(&entry.original_bytes)
+            .map_err(|_| {
+                vec![Diagnostic::new(
+                    &path,
+                    "invalid_utf8",
+                    "progress log must be UTF-8",
+                )]
+            })
+            .and_then(|text| {
+                parse_progress_log(&path, text).map(|log| Some(std::sync::Arc::new(log)))
+            }),
+        None => Ok(None),
+    };
     let mut log = if request.replacement.is_some() || request.replacement_source.is_some() {
         ProgressLog {
             entries: Vec::new(),
         }
     } else {
-        existing
+        let current = current_log
             .as_ref()
-            .map(|entry| {
-                let text = std::str::from_utf8(&entry.original_bytes)
-                    .map_err(|_| StoreError::Invalid("progress log must be UTF-8".into()))?;
-                parse_progress_log(&path, text).map_err(diagnostics_error)
-            })
-            .transpose()?
-            .unwrap_or(ProgressLog {
-                entries: Vec::new(),
-            })
+            .map_err(|diagnostics| diagnostics_error(diagnostics.clone()))?;
+        ProgressLog {
+            entries: current
+                .as_ref()
+                .map(|log| log.entries.clone())
+                .unwrap_or_default(),
+        }
     };
+    let mut ids = log
+        .entries
+        .iter()
+        .map(|entry| entry.id().to_owned())
+        .collect::<BTreeSet<_>>();
     for entry in &request.entries {
-        if !log.entries.iter().any(|current| current.id() == entry.id()) {
+        if ids.insert(entry.id().to_owned()) {
             log.entries.push(entry.clone());
         }
     }
-    let log = request.replacement.clone().unwrap_or(log);
-    let bytes = request
-        .replacement_source
-        .clone()
-        .unwrap_or_else(|| render_progress_log(&log))
-        .into_bytes();
+    let log = match (&request.replacement, &request.replacement_source) {
+        (Some(replacement), _) => replacement.clone(),
+        (None, Some(source)) => parse_progress_log(&path, source).map_err(diagnostics_error)?,
+        (None, None) => log,
+    };
+    // Validation diagnostics retain the preview channel; preparation reports them after capture.
+    let bytes = render_progress_log(&log).into_bytes();
     let extra = if request.bootstrap {
         super::mutation_dependencies::accepted_paths(root, &request.investigation)?
     } else {
         Vec::new()
     };
-    let context = MutationContext::capture(
+    let expected = existing
+        .as_ref()
+        .map(|entry| entry.content_revision.clone());
+    let context = MutationContext::capture_seeded(
         root,
-        &Overlay::from([(path.clone(), Some(bytes))]),
+        &Overlay::from([(path.clone(), Some(bytes.clone()))]),
         &extra,
         applying,
+        Some((
+            path.clone(),
+            super::mutation_dependencies::ProgressInput::new(
+                existing,
+                current_log.map(|log| log.map(super::mutation_dependencies::ProgressFacts::Full)),
+            ),
+        )),
+        Some((&path, &log)),
     )?;
-    if context.revisions().get(&path).and_then(Option::as_ref)
-        != existing.as_ref().map(|entry| &entry.content_revision)
-    {
+    if context.revisions().get(&path).and_then(Option::as_ref) != expected.as_ref() {
         return Err(StoreError::StaleTargetRevision);
     }
-    Ok(context)
+    Ok((context, log, bytes))
 }

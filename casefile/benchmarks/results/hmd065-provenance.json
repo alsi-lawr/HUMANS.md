@@ -1,0 +1,82 @@
+{
+  "parent": "efb31731365788f1ec545e937f35e1604baf6a16",
+  "ticket": "HMD-065",
+  "recorded_utc": "2026-09-30T23:15:47.390107+00:00",
+  "production_and_test_source_sha256": {
+    "casefile/casefile-cli/src/commands.rs": "092db41b4c9a3196ac9c6df02dd56d6fa76739b6e3653801e0eba96e192f0a0f",
+    "casefile/casefile-cli/src/edit.rs": "dbc7cff6dfeae266486fcba9e2d9973ef68611b68271961cb745aae7ca0aafcd",
+    "casefile/casefile-cli/src/json_output.rs": "2c94d006ceb31eec426aaffdb4e44fa33dc31a4debf31d4e2556d96d8acf7ba9",
+    "casefile/casefile-cli/src/mcp.rs": "c3feb6d6d541d40dbeffe2c8d4f0db6e75754279281eb233e278649404ed03c6",
+    "casefile/casefile-cli/src/mcp_tests.rs": "37a363ed59424546163469421843ba91f0f69989c64b567fcb059144c178fb28",
+    "casefile/casefile-cli/src/tui.rs": "c0f56bf30006044f76086b7c36b050fc548446951500be38e2e6e62e1a2b86ea",
+    "casefile/casefile-cli/tests/check.rs": "334b3383353ad593821d18b86e737e822d5cb15789160953ba7fe167dfcf7362",
+    "casefile/casefile-cli/tests/mcp.rs": "6b8d0b61390637c82640927ea703845763226d2e33ddc4016164e507fcd856e4",
+    "casefile/casefile-cli/tests/tui.rs": "7373eb78669a22bfb6e1303b2a911416770f75ba0783f6829403597ba4810c05",
+    "casefile/casefile-store/src/derived.rs": "8fb8bf4ea4b449d54a7fef8f6ea7ca092b4611215d53a9522344149363a7d0bc",
+    "casefile/casefile-store/src/lib.rs": "684c32bfff761ef11f57d9630097dd11ef6ca4dc2b3f411ee0bbe7105b7d7462",
+    "casefile/casefile-store/src/read_context.rs": "25c25aa67372a1e9cb3e477289ef773c35bcee5d15e8f91792a0c9c316b19219",
+    "casefile/casefile-store/src/scanning.rs": "6e310fab05f89561edaa323653e65701136c11ca1b45cec3076e2fc5c5718779",
+    "casefile/casefile-store/src/scanning/scoped.rs": "81a0f9339963174baa8c0e46d99d555df9810fac403e1e4f34848ae8fdc80505",
+    "casefile/casefile-store/src/scanning/selected.rs": "026738e7ed6b5f98bc34f185e36dc3f0eaa6ba8c9ac55495a4a27d2a9e3338dd",
+    "casefile/casefile-store/src/store.rs": "e2c166d263e2b31198643b7a75a0dafe2e4560cf65acf91865b942cd08a7681d",
+    "casefile/casefile-store/tests/governance.rs": "13818f62ff450af4adaff3f6f1272511cb9ad57b3365329ab2954acb63282233",
+    "casefile/casefile-store/tests/scanning.rs": "da1f890b1fdff72046636343be4a75ff2397fc878e017e77f1abd8499206d437"
+  },
+  "binaries_sha256": {
+    ".agent-workspace/20260930-speedup-implementation/writer/target/debug/casefile": "3852e6c9b49617dfc3f1d145f1163a128489e8610c0f34c306e4db12eecf031b",
+    ".agent-workspace/20260930-speedup-implementation/writer/target/release/casefile": "0bc810e3978ea2e4bed0916323e0cc345fdb5ef0fb1dfcdeb4440a9873bcada1"
+  },
+  "unchanged_manifests_sha256": {
+    "casefile/Cargo.toml": "b8f0a810fc31e948296805e071f847b6701044460ecbf4782588fc3c511bba76",
+    "casefile/Cargo.lock": "745f3413832b204ac259163a084422317f096e3619b585ef52fac10c42a7b67a",
+    "casefile/casefile-cli/Cargo.toml": "715a1af1574d0eaa29561408146c3b302edbdf6649e1c49fce93e9d7d1b42e11",
+    "casefile/casefile-store/Cargo.toml": "8d5ad3f3faa240852535d21849c2cf5c11aab4f3759f753a80d2ab2001d941e1",
+    "flake.lock": "f234df1016c591310e06512fcb042ad7f7a573b38382a02b625d56ef098900b9"
+  },
+  "verification": {
+    "final_command_exit": 0,
+    "distinct_tests": 57,
+    "counts": {
+      "store_governance": 12,
+      "store_scanning": 10,
+      "cli_binary": 6,
+      "cli_check": 8,
+      "cli_mcp_native": 10,
+      "cli_tui_pty": 11
+    },
+    "log": "hmd065-verification.txt",
+    "log_sha256": "fe0003fc10e8a67d04182516e23d9b946fe268483c6002c862a419a9585477c0"
+  },
+  "performance": {
+    "measured": false,
+    "reason": "No accepted matched CLI/editor/MCP transport Criterion control; root selected structural and real-process proof only."
+  },
+  "original_before_sha256": {
+    "casefile/benchmarks/BASELINE.md": "ff1b320625f483e239acaccc5baadd98eedb2f4a90aca7a4efefb7eaefb75d68",
+    "casefile/benchmarks/results/hmd057-before.json": "10a1200da46525cf53e5b4b7fd34968a2f26e38d97a2b56dc90792ecb59f9c81",
+    "casefile/benchmarks/results/hmd057-before.log": "88b795ec018add63b9e2b570b497c7e2dcfd8e6b04fad063b6a35c3c44eaa2ba",
+    "casefile/casefile-store-sqlite/benches/baselines.rs": "364657f44bf4e1c453300105f889b24acb9309c338c168cb288633db18e350fc"
+  },
+  "native_before": {
+    "entries": 236,
+    "verified": true,
+    "verification_exit": 0,
+    "manifest": ".agent-workspace/20260930-speedup-implementation/writer/hmd058/native-before-hashes.txt",
+    "manifest_sha256": "a7663193c14a873d69852ae6b90a6441a05eaec9b75faae7d382771d41941c85"
+  },
+  "scratch_closeout": {
+    "directory": ".agent-workspace/20260930-speedup-implementation/writer/hmd065",
+    "files": [
+      "check-nix.log",
+      "check.log",
+      "cli-tests.log",
+      "final-checks.log",
+      "final-checks2.log",
+      "final-checks3.log",
+      "final-checks4.log",
+      "first-tests.log",
+      "native-before-check.log"
+    ],
+    "action": "Close ONLY this ticket directory after durable evidence/staging; retain writer/target and baseline manifests under root cleanup ownership."
+  }
+}

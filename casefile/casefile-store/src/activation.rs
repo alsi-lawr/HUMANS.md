@@ -91,9 +91,10 @@ pub(super) fn activation_content(
             "schema_version must be 1",
         ));
     }
-    let prefix_pattern = Regex::new(r"^[A-Z][A-Z0-9_]*$").expect("fixed regex");
+    static PREFIX_PATTERN: std::sync::LazyLock<Regex> =
+        std::sync::LazyLock::new(|| Regex::new(r"^[A-Z][A-Z0-9_]*$").expect("fixed regex"));
     for (slug, project) in &activation.projects {
-        if !prefix_pattern.is_match(&project.prefix) || !prefixes.insert(&project.prefix) {
+        if !PREFIX_PATTERN.is_match(&project.prefix) || !prefixes.insert(&project.prefix) {
             diagnostics.push(
                 Diagnostic::new(
                     "casefile.toml",
@@ -129,8 +130,8 @@ pub(super) fn activation_entry(
     Option<RecordSummary>,
     Vec<Diagnostic>,
 ) {
-    let mut diagnostics = activation_from_bytes(bytes);
-    if diagnostics.is_empty() {
+    let (state, _, mut diagnostics) = activation_content(Some(bytes));
+    if state == ActivationState::Active {
         (
             Classification::Governed,
             Some(Kind::Activation),
@@ -141,9 +142,9 @@ pub(super) fn activation_entry(
             diagnostics,
         )
     } else {
-        diagnostics
-            .iter_mut()
-            .for_each(|item| item.path = path.into());
+        for diagnostic in &mut diagnostics {
+            diagnostic.path = path.into();
+        }
         (
             Classification::Invalid,
             Some(Kind::Activation),
@@ -152,51 +153,6 @@ pub(super) fn activation_entry(
             diagnostics,
         )
     }
-}
-fn activation_from_bytes(bytes: &[u8]) -> Vec<Diagnostic> {
-    let text = match std::str::from_utf8(bytes) {
-        Ok(text) => text,
-        Err(_) => {
-            return vec![Diagnostic::new(
-                "casefile.toml",
-                "invalid_activation",
-                "activation must be UTF-8 TOML",
-            )];
-        }
-    };
-    let activation: Activation = match toml::from_str(text) {
-        Ok(activation) => activation,
-        Err(error) => {
-            return vec![Diagnostic::new(
-                "casefile.toml",
-                "invalid_activation",
-                error.to_string(),
-            )];
-        }
-    };
-    let mut prefixes = BTreeSet::new();
-    let mut diagnostics = Vec::new();
-    if activation.schema_version != Some(i64::from(SCHEMA_VERSION)) {
-        diagnostics.push(Diagnostic::new(
-            "casefile.toml",
-            "invalid_schema_version",
-            "schema_version must be 1",
-        ));
-    }
-    let prefix_pattern = Regex::new(r"^[A-Z][A-Z0-9_]*$").expect("fixed regex");
-    for (slug, project) in activation.projects {
-        if !prefix_pattern.is_match(&project.prefix) || !prefixes.insert(project.prefix) {
-            diagnostics.push(
-                Diagnostic::new(
-                    "casefile.toml",
-                    "invalid_project_prefix",
-                    "project prefixes must be unique uppercase identifiers",
-                )
-                .field(&slug),
-            );
-        }
-    }
-    diagnostics
 }
 
 pub(super) fn scope_for<'a>(path: &str, active: &'a Activation) -> Option<&'a str> {
@@ -229,4 +185,79 @@ pub(super) fn project_for<'a>(path: &str, active: &'a Activation) -> Option<&'a 
                 .is_some_and(|rest| rest.starts_with('/'))
         })
         .map(String::as_str)
+}
+
+pub(super) fn contains_path(scope: &str, path: &str) -> bool {
+    path == scope
+        || path
+            .strip_prefix(scope)
+            .is_some_and(|rest| rest.starts_with('/'))
+}
+
+pub(super) struct ScopeIndex<'a> {
+    roots: BTreeMap<&'a str, &'a str>,
+    active: &'a Activation,
+}
+
+#[derive(Clone, Copy)]
+pub(super) struct PathFacts<'a> {
+    pub project: Option<&'a str>,
+    pub scope: Option<&'a str>,
+    pub kind: Option<Kind>,
+}
+
+impl<'a> ScopeIndex<'a> {
+    pub fn new(active: &'a Activation) -> Self {
+        Self {
+            roots: active
+                .projects
+                .iter()
+                .flat_map(|(project, config)| {
+                    config
+                        .investigations
+                        .iter()
+                        .map(move |root| (root.as_str(), project.as_str()))
+                })
+                .collect(),
+            active,
+        }
+    }
+
+    pub fn resolve(&self, path: &str) -> PathFacts<'a> {
+        let project = path
+            .strip_prefix("projects/")
+            .and_then(|rest| rest.split_once('/'))
+            .and_then(|(project, _)| {
+                self.active
+                    .projects
+                    .get_key_value(project)
+                    .map(|(project, _)| project.as_str())
+            });
+        let mut ancestor = path;
+        let mut scope = self.roots.get_key_value(path).map(|(root, _)| *root);
+        while scope.is_none() {
+            let Some((parent, _)) = ancestor.rsplit_once('/') else {
+                break;
+            };
+            if let Some((root, _)) = self.roots.get_key_value(parent) {
+                scope = Some(*root);
+                break;
+            }
+            ancestor = parent;
+        }
+        let kind = if path == "casefile.toml" {
+            Some(Kind::Activation)
+        } else if path == "projects.toml" {
+            Some(Kind::ProjectMap)
+        } else if project.is_some_and(|project| crate::layout::project_decision(path, project)) {
+            Some(Kind::Decision)
+        } else {
+            scope.and_then(|scope| crate::layout::kind_in_scope(path, scope))
+        };
+        PathFacts {
+            project,
+            scope,
+            kind,
+        }
+    }
 }

@@ -1,0 +1,41 @@
+{
+  "binary_sha256": "b01b1188f0ecc57a03ec22054ff4b43395ab14ca58be6874cca4b0ff33ff0293",
+  "fixtures": [
+    {
+      "added_tickets": 250,
+      "actual_work_items": 252,
+      "canonical_file_count": 266,
+      "scoped_record_count": 264,
+      "workspace_record_count": 266,
+      "progress_notes": 500,
+      "search_hit_paths": [
+        "projects/demo/investigations/sample/tickets/accepted/HMD-100000.md"
+      ],
+      "search_miss_count": 0,
+      "unchanged_fields": [
+        "freshness",
+        "matching_paths",
+        "state"
+      ],
+      "diagnostic_count": 0
+    },
+    {
+      "added_tickets": 1000,
+      "actual_work_items": 1002,
+      "canonical_file_count": 1016,
+      "scoped_record_count": 1014,
+      "workspace_record_count": 1016,
+      "progress_notes": 500,
+      "search_hit_paths": [
+        "projects/demo/investigations/sample/tickets/accepted/HMD-100000.md"
+      ],
+      "search_miss_count": 0,
+      "unchanged_fields": [
+        "freshness",
+        "matching_paths",
+        "state"
+      ],
+      "diagnostic_count": 0
+    }
+  ]
+}

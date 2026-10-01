@@ -39,7 +39,7 @@ fn command(root: &Path) -> Command {
         .arg(root)
         .arg("--expected-root")
         .arg(root)
-        .args(["--expected-provider-protocol", "3"])
+        .args(["--expected-provider-protocol", "5"])
         .args(["--required-provider-operations", OPERATIONS]);
     command
 }
@@ -81,7 +81,7 @@ fn compatibility_contract_is_machine_readable_and_complete() {
     );
     let value: Value = serde_json::from_slice(&output.stdout).expect("JSON");
     assert_eq!(value["identity"], "casefile");
-    assert_eq!(value["provider_protocol_version"], 3);
+    assert_eq!(value["provider_protocol_version"], 5);
     assert_eq!(
         value["required_provider_operations"]
             .as_array()
@@ -196,7 +196,7 @@ fn fixed_root_session_negotiates_and_exposes_canonical_snapshot_and_query() {
         false
     );
     assert_eq!(
-        output_schema("casefile_apply_progress")["required"],
+        output_schema("casefile_apply_progress")["oneOf"][0]["required"],
         json!(["result", "cache"])
     );
     let project_schema = &output_schema("casefile_snapshot")["properties"]["catalogue"]["properties"]
@@ -217,7 +217,7 @@ fn fixed_root_session_negotiates_and_exposes_canonical_snapshot_and_query() {
     };
     let snapshot = &response(3)["result"]["structuredContent"];
     assert_eq!(snapshot["activation"], "active");
-    assert_eq!(snapshot["capabilities"]["protocol_version"], 3);
+    assert_eq!(snapshot["capabilities"]["protocol_version"], 5);
     assert_eq!(snapshot["catalogue"]["projects"][0]["name"], "demo");
     assert!(snapshot.get("projections").is_none());
     let query = &response(4)["result"]["structuredContent"];
@@ -229,7 +229,13 @@ fn fixed_root_session_negotiates_and_exposes_canonical_snapshot_and_query() {
     );
     let diagnostics = &response(7)["result"]["structuredContent"];
     assert_eq!(diagnostics["result"], "diagnostics");
-    assert_eq!(diagnostics["revision"], snapshot["revision"]);
+    assert_eq!(snapshot["freshness"]["kind"], "catalogue");
+    assert_eq!(diagnostics["freshness"]["kind"], "scope_read");
+    assert_eq!(diagnostics["freshness"]["target"]["query"], "diagnostics");
+    assert_eq!(
+        diagnostics["freshness"]["target"]["scope"],
+        diagnostics["scope"]
+    );
     assert_eq!(
         diagnostics["scope"],
         json!({"project":"demo", "investigation":"sample"})
@@ -271,8 +277,8 @@ fn root_protocol_and_capability_refusals_happen_before_tool_service() {
     for (flag, value, diagnostic) in [
         (
             "--expected-provider-protocol",
-            "2",
-            "requires provider protocol 2",
+            "4",
+            "requires provider protocol 4",
         ),
         (
             "--required-provider-operations",
@@ -457,11 +463,8 @@ fn provider_preview_and_apply_remain_one_session_exact_operations() {
         }])
     );
     assert!(preview.get("canonical").is_none());
-    assert!(
-        preview["diff"]["sha256"]
-            .as_str()
-            .is_some_and(|digest| digest.starts_with("sha256:"))
-    );
+    assert_eq!(preview["diff"].as_object().unwrap().len(), 1);
+    assert!(preview["diff"]["bytes"].as_u64().is_some());
     assert!(
         !preview_response["result"]["content"][0]["text"]
             .as_str()
@@ -517,4 +520,217 @@ fn directory_state(root: &Path) -> Vec<(String, Vec<u8>)> {
     visit(root, root, &mut files);
     files.sort_by(|left, right| left.0.cmp(&right.0));
     files
+}
+
+#[test]
+fn native_restarted_provider_refuses_the_previous_process_id_without_mutating() {
+    let root = fixture();
+    assert!(
+        Command::new("git")
+            .args(["init", "-q"])
+            .current_dir(root.path())
+            .status()
+            .unwrap()
+            .success()
+    );
+    let initialize = json!({"jsonrpc":"2.0", "id":1, "method":"initialize", "params":{"protocolVersion":"2025-06-18"}});
+    let path = "projects/demo/investigations/sample/boards/restart.toml";
+    let preview = json!({"jsonrpc":"2.0", "id":2, "method":"tools/call", "params":{"name":"casefile_preview_record", "arguments":{"request":{
+        "operation":"create", "path":path, "draft":{"kind":"board", "id":"HMD-restart", "title":"Restart preview", "status_source":"disposition", "columns":[{"name":"Accepted", "statuses":["accepted"]}]}
+    }}}});
+    let responses = |output: std::process::Output| {
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        output
+            .stdout
+            .split(|byte| *byte == b'\n')
+            .filter(|line| !line.is_empty())
+            .map(|line| serde_json::from_slice::<Value>(line).unwrap())
+            .collect::<Vec<_>>()
+    };
+    let first = responses(session(root.path(), &[initialize.clone(), preview.clone()]));
+    let old_id = first.iter().find(|value| value["id"] == 2).unwrap()["result"]["structuredContent"]["preview_id"].clone();
+    assert!(old_id.as_str().is_some());
+    let second = responses(session(
+        root.path(),
+        &[
+            initialize,
+            preview,
+            json!({"jsonrpc":"2.0", "id":3, "method":"tools/call", "params":{"name":"casefile_apply_record", "arguments":{"preview_id":old_id}}}),
+        ],
+    ));
+    let new_id = &second.iter().find(|value| value["id"] == 2).unwrap()["result"]["structuredContent"]
+        ["preview_id"];
+    assert_ne!(&old_id, new_id);
+    assert_eq!(
+        second.iter().find(|value| value["id"] == 3).unwrap()["result"]["isError"],
+        true
+    );
+    assert!(!root.path().join(path).exists());
+}
+
+#[test]
+fn framing_failure_closes_without_accepting_an_unterminated_or_oversized_request() {
+    let root = fixture();
+    for bytes in [
+        serde_json::to_vec(&json!({"jsonrpc":"2.0","id":71,"method":"initialize","params":{"protocolVersion":"2025-11-25"}})).unwrap(),
+        vec![b' '; 8 * 1024 * 1024 + 1],
+    ] {
+        let mut child = command(root.path()).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().unwrap();
+        let _ = child.stdin.take().unwrap().write_all(&bytes);
+        let output = child.wait_with_output().unwrap();
+        assert!(!output.status.success());
+        assert!(output.stdout.is_empty());
+    }
+}
+
+#[test]
+fn escaped_detail_outer_overflow_returns_original_id_and_allows_next_request() {
+    let root = fixture();
+    let ticket = root
+        .path()
+        .join("projects/demo/investigations/sample/tickets/accepted/HMD-011.md");
+    let source = fs::read_to_string(&ticket)
+        .unwrap()
+        .replace("Required.", &"\\\"".repeat(750_000));
+    fs::write(ticket, source).unwrap();
+    let request_id = json!("escaped-\"\\-detail");
+    let mut child = command(root.path())
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut input = child.stdin.take().unwrap();
+    let mut output = BufReader::new(child.stdout.take().unwrap());
+    let mut exchange = |request: Value| {
+        serde_json::to_writer(&mut input, &request).unwrap();
+        input.write_all(b"\n").unwrap();
+        input.flush().unwrap();
+        let mut line = String::new();
+        assert!(output.read_line(&mut line).unwrap() > 0);
+        assert!(line.len() <= 8 * 1024 * 1024);
+        serde_json::from_str::<Value>(&line).unwrap()
+    };
+    assert_eq!(
+        exchange(
+            json!({"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25"}})
+        )["id"],
+        1
+    );
+    let overflow = exchange(
+        json!({"jsonrpc":"2.0","id":request_id,"method":"tools/call","params":{"name":"casefile_query","arguments":{"query":"record_detail","identity":{"scope":{"project":"demo","investigation":"sample"},"identity":"HMD-011"}}}}),
+    );
+    assert_eq!(overflow["id"], request_id);
+    assert_eq!(overflow["error"]["code"], -32603);
+    assert!(overflow.get("result").is_none());
+    let following = exchange(json!({"jsonrpc":"2.0","id":3,"method":"ping"}));
+    assert_eq!(following["id"], 3);
+    assert_eq!(following["result"], json!({}));
+    drop(input);
+    use std::io::Read;
+    let mut remainder = Vec::new();
+    output.read_to_end(&mut remainder).unwrap();
+    let result = child.wait_with_output().unwrap();
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    assert!(remainder.is_empty());
+}
+
+#[test]
+fn unfit_correlated_id_closes_without_partial_response_or_truncation() {
+    let root = fixture();
+    let mut child = command(root.path())
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut input = child.stdin.take().unwrap();
+    let mut output = BufReader::new(child.stdout.take().unwrap());
+    serde_json::to_writer(&mut input, &json!({"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25"}})).unwrap();
+    input.write_all(b"\n").unwrap();
+    input.flush().unwrap();
+    let mut line = String::new();
+    output.read_line(&mut line).unwrap();
+    assert_eq!(serde_json::from_str::<Value>(&line).unwrap()["id"], 1);
+    let request =
+        json!({"jsonrpc":"2.0","id":"a".repeat(8 * 1024 * 1024 - 90),"method":"tools/list"});
+    let mut bytes = serde_json::to_vec(&request).unwrap();
+    bytes.push(b'\n');
+    assert!(bytes.len() < 8 * 1024 * 1024);
+    input.write_all(&bytes).unwrap();
+    drop(input);
+    use std::io::Read;
+    let mut remainder = Vec::new();
+    output.read_to_end(&mut remainder).unwrap();
+    let result = child.wait_with_output().unwrap();
+    assert!(!result.status.success());
+    assert!(remainder.is_empty());
+    assert!(String::from_utf8_lossy(&result.stderr).contains("cannot fit a bounded response"));
+}
+
+#[test]
+fn unfit_worker_id_closes_with_stdin_open_without_accepting_following_ping() {
+    let root = fixture();
+    let mut child = command(root.path())
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut input = child.stdin.take().unwrap();
+    let mut output = BufReader::new(child.stdout.take().unwrap());
+    serde_json::to_writer(&mut input, &json!({"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25"}})).unwrap();
+    input.write_all(b"\n").unwrap();
+    input.flush().unwrap();
+    let mut line = String::new();
+    output.read_line(&mut line).unwrap();
+    assert_eq!(serde_json::from_str::<Value>(&line).unwrap()["id"], 1);
+    let mut request = json!({"jsonrpc":"2.0","id":"","method":"tools/call","params":{"name":"casefile_snapshot","arguments":{}}});
+    let frame_length = 8 * 1024 * 1024 - 24;
+    let id_length = frame_length - serde_json::to_vec(&request).unwrap().len() - 1;
+    request["id"] = json!("a".repeat(id_length));
+    let mut bytes = serde_json::to_vec(&request).unwrap();
+    bytes.push(b'\n');
+    assert_eq!(bytes.len(), frame_length);
+    input.write_all(&bytes).unwrap();
+    input.flush().unwrap();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    let closed = loop {
+        if child.try_wait().unwrap().is_some() {
+            break true;
+        }
+        if std::time::Instant::now() >= deadline {
+            break false;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    };
+    // Watchdog cleanup is test-only: the session must close itself while stdin stays open.
+    if !closed {
+        child.kill().unwrap();
+    }
+    let following = input.write_all(b"{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"ping\"}\n");
+    drop(input);
+    use std::io::Read;
+    let mut remainder = Vec::new();
+    output.read_to_end(&mut remainder).unwrap();
+    let result = child.wait_with_output().unwrap();
+    assert!(closed, "worker fatal output waited for EOF");
+    assert!(
+        following.is_err(),
+        "closed session accepted another request"
+    );
+    assert!(!result.status.success());
+    assert!(
+        remainder.is_empty(),
+        "partial or unexpected following response"
+    );
+    assert!(String::from_utf8_lossy(&result.stderr).contains("cannot fit a bounded response"));
 }

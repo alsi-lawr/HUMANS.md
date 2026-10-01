@@ -7,18 +7,59 @@ use crate::{
 };
 use casefile_core::Kind;
 use std::{
-    collections::{BTreeMap, BTreeSet},
-    fs,
+    collections::{BTreeMap, BTreeSet, VecDeque},
     path::Path,
+    sync::Arc,
 };
 
 pub(super) struct Dependencies {
     pub(super) paths: BTreeSet<String>,
     pub(super) existence: BTreeSet<String>,
     pub(super) validation_paths: BTreeSet<String>,
+    pub(super) progress_inputs: BTreeMap<String, ProgressInput>,
     identities: BTreeSet<String>,
     written_identities: BTreeSet<String>,
 }
+pub(super) enum ProgressFacts {
+    Full(Arc<casefile_core::ProgressLog>),
+    Operations(Vec<(String, String)>),
+}
+pub(super) struct ProgressInput {
+    pub(super) entry: Option<casefile_core::EntrySnapshot>,
+    pub(super) log: Result<Option<ProgressFacts>, Vec<casefile_core::Diagnostic>>,
+    references: BTreeSet<String>,
+}
+impl ProgressInput {
+    pub(super) fn new(
+        entry: Option<casefile_core::EntrySnapshot>,
+        log: Result<Option<ProgressFacts>, Vec<casefile_core::Diagnostic>>,
+    ) -> Self {
+        let references = match log.as_ref().ok().and_then(Option::as_ref) {
+            Some(ProgressFacts::Full(log)) => log
+                .entries
+                .iter()
+                .map(|entry| entry.ticket_id())
+                .collect::<BTreeSet<_>>()
+                .into_iter()
+                .map(str::to_owned)
+                .collect(),
+            Some(ProgressFacts::Operations(operations)) => operations
+                .iter()
+                .map(|(_, ticket)| ticket.as_str())
+                .collect::<BTreeSet<_>>()
+                .into_iter()
+                .map(str::to_owned)
+                .collect(),
+            None => BTreeSet::new(),
+        };
+        Self {
+            entry,
+            log,
+            references,
+        }
+    }
+}
+
 impl Dependencies {
     pub(super) fn locks(&self, changes: &Overlay, applying: bool) -> BTreeMap<String, bool> {
         self.paths
@@ -43,6 +84,8 @@ pub(super) fn discover(
     root: &Path,
     changes: &Overlay,
     extra: &[String],
+    initial_progress: Option<(String, ProgressInput)>,
+    proposed_progress: Option<(&str, &casefile_core::ProgressLog)>,
 ) -> Result<Dependencies, StoreError> {
     let (_, active, _) = activation(root)?;
     let mut paths = changes
@@ -59,6 +102,11 @@ pub(super) fn discover(
                 .map(|(p, _)| p.to_owned())
         })
         .collect::<BTreeSet<_>>();
+    let scopes = paths
+        .iter()
+        .filter_map(|path| scope_for(path, &active))
+        .map(str::to_owned)
+        .collect::<BTreeSet<_>>();
     let mut candidates = BTreeMap::<String, Header>::new();
     for (project, config) in &active.projects {
         let mut directories = vec![format!("projects/{project}/decision-log")];
@@ -70,7 +118,7 @@ pub(super) fn discover(
                     directories.push(format!("{base}/{kind}/{status}"));
                 }
             }
-            if projects.contains(project) {
+            if scopes.contains(base) {
                 directories.extend([format!("{base}/evidence"), format!("{base}/review")]);
             }
         }
@@ -121,6 +169,13 @@ pub(super) fn discover(
     }
     // Progress and binding validation needs the log and its accepted-ticket membership, not all
     // investigation bodies. A ticket change also checks the reverse progress reference.
+    let full_progress = paths.iter().any(|path| {
+        matches!(
+            kind_for_path(path, &active),
+            Some(Kind::Progress | Kind::StrategyBinding)
+        )
+    });
+    let mut progress_inputs = initial_progress.into_iter().collect::<BTreeMap<_, _>>();
     let initial = paths.clone();
     for path in initial {
         let Some(base) = scope_for(&path, &active) else {
@@ -129,24 +184,21 @@ pub(super) fn discover(
         match kind_for_path(&path, &active) {
             Some(Kind::Ticket | Kind::Epic) => {
                 let log_path = format!("{base}/progress/log.toml");
-                let mut log_header = Header::default();
-                if let Some(entry) = super::mutation::read_entry(root, &log_path)? {
-                    if let Ok(text) = std::str::from_utf8(&entry.original_bytes) {
-                        if let Ok(log) = casefile_core::parse_progress_log(&log_path, text) {
-                            log_header
-                                .refs
-                                .extend(log.entries.iter().map(|e| e.ticket_id().to_owned()));
-                        }
-                    }
+                if !progress_inputs.contains_key(&log_path) {
+                    progress_inputs.insert(
+                        log_path.clone(),
+                        progress_input(root, &log_path, full_progress)?,
+                    );
                 }
-                if log_header
-                    .refs
-                    .iter()
-                    .any(|id| written_identities.contains(id))
-                {
+                let references = &progress_inputs.get(&log_path).unwrap().references;
+                if references.iter().any(|id| written_identities.contains(id)) {
                     paths.insert(log_path.clone());
                 }
-                candidates.insert(log_path, log_header);
+                candidates
+                    .entry(log_path.clone())
+                    .or_default()
+                    .refs
+                    .extend(references.iter().cloned());
             }
             Some(Kind::StrategyBinding) => {
                 paths.insert(format!("{base}/strategy/implementation.toml"));
@@ -176,28 +228,35 @@ pub(super) fn discover(
             _ => {}
         }
     }
+    let mut accepted = BTreeMap::<(String, String), Vec<String>>::new();
+    for (path, header) in &candidates {
+        if let Some((base, filename)) = path.split_once("/tickets/accepted/") {
+            if !filename.contains('/') {
+                if let Some(id) = &header.id {
+                    accepted
+                        .entry((base.into(), id.clone()))
+                        .or_default()
+                        .push(path.clone());
+                }
+            }
+        }
+    }
     for path in paths.clone() {
         if kind_for_path(&path, &active) != Some(Kind::Progress) {
             continue;
         }
-        let existing = fs::read(root.join(&path)).or_else(|e| {
-            if e.kind() == std::io::ErrorKind::NotFound {
-                Ok(Vec::new())
-            } else {
-                Err(e)
-            }
-        })?;
-        let mut refs = BTreeSet::new();
-        for bytes in [
-            Some(existing.as_slice()),
-            changes.get(&path).and_then(Option::as_deref),
-        ]
-        .into_iter()
-        .flatten()
+        if !progress_inputs.contains_key(&path) {
+            progress_inputs.insert(path.clone(), progress_input(root, &path, full_progress)?);
+        }
+        let mut refs = progress_inputs.get(&path).unwrap().references.clone();
+        if let Some((_, log)) =
+            proposed_progress.filter(|(proposed_path, _)| *proposed_path == path)
         {
+            refs.extend(log.entries.iter().map(|entry| entry.ticket_id().into()));
+        } else if let Some(bytes) = changes.get(&path).and_then(Option::as_deref) {
             if let Ok(text) = std::str::from_utf8(bytes) {
                 if let Ok(log) = casefile_core::parse_progress_log(&path, text) {
-                    refs.extend(log.entries.iter().map(|e| e.ticket_id().to_owned()));
+                    refs.extend(log.entries.iter().map(|entry| entry.ticket_id().into()));
                 }
             }
         }
@@ -207,13 +266,11 @@ pub(super) fn discover(
             .refs
             .extend(refs.iter().cloned());
         let base = path
-            .strip_suffix("progress/log.toml")
+            .strip_suffix("/progress/log.toml")
             .expect("progress path");
-        for (candidate, header) in &candidates {
-            if candidate.starts_with(&format!("{base}tickets/accepted/"))
-                && header.id.as_ref().is_some_and(|id| refs.contains(id))
-            {
-                paths.insert(candidate.clone());
+        for id in &refs {
+            if let Some(matching) = accepted.get(&(base.into(), id.clone())) {
+                paths.extend(matching.iter().cloned());
             }
         }
     }
@@ -251,26 +308,39 @@ pub(super) fn discover(
             }
         }
     }
-    loop {
-        let count = (paths.len(), identities.len());
-        for (path, header) in &candidates {
-            let selected = header.id.as_ref().is_some_and(|id| identities.contains(id))
-                || (kind_for_path(path, &active) == Some(Kind::Decision)
-                    && identities
-                        .iter()
-                        .any(|id| stem(path).starts_with(&format!("{id}-"))));
-            if selected {
-                paths.insert(path.clone());
-                // Only supersession reachability is transitive. Related and decision references
-                // on an unchanged supporting record do not expand another record's read set.
-                if header.id.as_ref().is_some_and(|id| cycle_ids.contains(id)) {
-                    cycle_ids.extend(header.supersedes.iter().cloned());
-                    identities.extend(header.supersedes.iter().cloned());
-                }
+    let mut by_identity = BTreeMap::<&str, Vec<&str>>::new();
+    for (path, header) in &candidates {
+        if let Some(id) = &header.id {
+            by_identity.entry(id).or_default().push(path);
+        }
+        if kind_for_path(path, &active) == Some(Kind::Decision) {
+            let stem = stem(path);
+            for (index, _) in stem.match_indices('-') {
+                by_identity.entry(&stem[..index]).or_default().push(path);
             }
         }
-        if count == (paths.len(), identities.len()) {
-            break;
+    }
+    let mut frontier = identities
+        .iter()
+        .map(|id| (id.clone(), cycle_ids.contains(id)))
+        .collect::<VecDeque<_>>();
+    let mut visited = BTreeSet::new();
+    while let Some((id, cycle)) = frontier.pop_front() {
+        if !visited.insert((id.clone(), cycle)) {
+            continue;
+        }
+        if let Some(matching) = by_identity.get(id.as_str()) {
+            for path in matching {
+                paths.insert((*path).into());
+                let header = &candidates[*path];
+                if cycle && header.id.as_ref().is_some_and(|id| cycle_ids.contains(id)) {
+                    for next in &header.supersedes {
+                        identities.insert(next.clone());
+                        cycle_ids.insert(next.clone());
+                        frontier.push_back((next.clone(), true));
+                    }
+                }
+            }
         }
     }
     let mut existence = BTreeSet::new();
@@ -293,6 +363,7 @@ pub(super) fn discover(
         paths,
         existence,
         validation_paths,
+        progress_inputs,
         identities,
         written_identities,
     })
@@ -300,4 +371,29 @@ pub(super) fn discover(
 
 pub(super) fn accepted_paths(root: &Path, investigation: &str) -> Result<Vec<String>, StoreError> {
     list(root, &format!("{investigation}/tickets/accepted"), false)
+}
+
+fn progress_input(root: &Path, path: &str, full: bool) -> Result<ProgressInput, StoreError> {
+    let entry = super::mutation::read_entry(root, path)?;
+    let log = match &entry {
+        None => Ok(None),
+        Some(entry) => std::str::from_utf8(&entry.original_bytes)
+            .map_err(|_| {
+                vec![casefile_core::Diagnostic::new(
+                    path,
+                    "invalid_utf8",
+                    "governed text must be UTF-8",
+                )]
+            })
+            .and_then(|text| {
+                if full {
+                    casefile_core::parse_progress_log(path, text)
+                        .map(|log| Some(ProgressFacts::Full(Arc::new(log))))
+                } else {
+                    casefile_core::parse_progress_operations(path, text)
+                        .map(|operations| Some(ProgressFacts::Operations(operations)))
+                }
+            }),
+    };
+    Ok(ProgressInput::new(entry, log))
 }

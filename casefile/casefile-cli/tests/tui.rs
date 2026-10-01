@@ -382,7 +382,7 @@ fn quit_after_terminal_opens_restores_terminal_promptly() {
 }
 
 #[test]
-fn explicit_editor_preserves_arguments_applies_and_rescans() {
+fn explicit_editor_preserves_arguments_and_applies_committed_target() {
     let fixture = fixture();
     let editor = fixture.temporary.path().join("editor");
     let log = fixture.temporary.path().join("editor.log");
@@ -414,7 +414,7 @@ fn explicit_editor_preserves_arguments_applies_and_rescans() {
             .expect("epic")
             .contains("Edited epic")
     );
-    assert!(String::from_utf8_lossy(&transcript).contains("rescanned revision"));
+
     assert!(restored(&transcript));
 }
 
@@ -450,4 +450,65 @@ fn stale_apply_preserves_concurrent_content_and_retains_draft() {
     let transcript = String::from_utf8_lossy(&transcript);
     assert!(transcript.contains("stale target revision"));
     assert!(transcript.contains("canonical files unchanged; draft retained at"));
+}
+
+#[test]
+fn edit_during_editor_preserves_external_target_and_retains_unreviewed_draft() {
+    let fixture = fixture();
+    let editor = fixture.temporary.path().join("editor");
+    let log = fixture.temporary.path().join("editor.log");
+    executable(
+        &editor,
+        "#!/bin/sh\nprintf '%s' \"$1\" > \"$CASEFILE_LOG\"\nsed -i 's/Minimum epic/Edited epic/' \"$1\"\nsed -i 's/Minimum epic/Concurrent epic/' \"$CASEFILE_CANONICAL\"\n",
+    );
+    let canonical = fixture.root.join(EPIC);
+    let environment = [
+        ("CASEFILE_LOG", log.as_os_str().to_owned()),
+        ("CASEFILE_CANONICAL", canonical.as_os_str().to_owned()),
+    ];
+    let mut pty = Pty::start(&fixture, &editor_args(&editor, &[]), &environment);
+    begin_edit(&mut pty);
+    let transcript = pty.finish(false);
+    assert!(
+        fs::read_to_string(canonical)
+            .unwrap()
+            .contains("Concurrent epic")
+    );
+    let draft = fs::read_to_string(log).unwrap();
+    assert!(fs::read_to_string(draft).unwrap().contains("Edited epic"));
+    let transcript = String::from_utf8_lossy(&transcript);
+    assert!(transcript.contains("stale target revision"));
+    assert!(!transcript.contains("REVIEW CHANGES"));
+}
+
+#[test]
+fn unchanged_editor_discards_draft_without_replacing_canonical_target() {
+    let fixture = fixture();
+    let editor = fixture.temporary.path().join("editor");
+    let log = fixture.temporary.path().join("editor.log");
+    executable(
+        &editor,
+        "#!/bin/sh\nprintf '%s' \"$1\" > \"$CASEFILE_LOG\"\n",
+    );
+    let environment = [("CASEFILE_LOG", log.as_os_str().to_owned())];
+    let store = casefile_store::Store::open(&fixture.root).unwrap();
+    let before = store
+        .read_editable_entry(EPIC, casefile_core::Kind::Epic)
+        .unwrap()
+        .unwrap();
+    let mut pty = Pty::start(&fixture, &editor_args(&editor, &[]), &environment);
+    begin_edit(&mut pty);
+    pty.wait_for("No changes");
+    pty.wait_for("\"HMD-E-001\"");
+    pty.send(b"q");
+    let transcript = pty.finish(true);
+    let after = store
+        .read_editable_entry(EPIC, casefile_core::Kind::Epic)
+        .unwrap()
+        .unwrap();
+    assert_eq!(before.content_revision, after.content_revision);
+    assert_eq!(before.original_bytes, after.original_bytes);
+    assert!(!Path::new(&fs::read_to_string(log).unwrap()).exists());
+    assert!(!String::from_utf8_lossy(&transcript).contains("REVIEW CHANGES"));
+    assert!(restored(&transcript));
 }

@@ -1,0 +1,148 @@
+HMD-058 focused verification (2026-09-30)
+Source baseline: 8e97fc4e368361d75b0323913ed4e56e745fc259
+All Cargo/rustc commands use the repository nix develop shell and retained absolute writer/target.
+
+cargo test -p casefile-core --lib
+test rendering::tests::renders_common_markdown_without_trusting_embedded_html_or_script_urls ... ok
+test decision::tests::filename_identity_cannot_be_satisfied_by_prefixes_or_longer_heading_tokens ... ok
+test strategy::tests::binding_requires_the_writer_role_and_resolution_metadata ... ok
+test metadata::tests::parses_crlf_frontmatter_without_normalizing_metadata ... ok
+test progress::tests::round_trips_a_declaration_ordered_log ... ok
+test work_item::tests::extracts_sections_after_a_nested_heading_with_the_same_text ... ok
+test decision::tests::heading_shape_cannot_bypass_present_malformed_frontmatter ... ok
+test progress::tests::rejects_mixed_fields_duplicate_ids_and_stale_or_no_op_transitions ... ok
+test strategy_transition::tests::strict_transition_round_trips_and_rejects_unknown_fields ... ok
+test strategy::tests::complete_and_legacy_strategies_are_both_governed_shapes ... ok
+test strategy_transition::tests::ownership_distinguishes_exact_conflicts_from_same_owner_and_disjoint_subtrees ... ok
+test strategy::tests::workflow_matrix_validation_rejects_incomplete_pipeline ... ok
+test strategy::tests::worker_minimum_sum_overflow_is_a_capacity_diagnostic ... ok
+test strategy_transition::tests::same_owner_descendants_cannot_hide_cross_owner_ancestor_conflicts ... ok
+test work_item::tests::fenced_headings_and_inline_heading_markup_preserve_work_item_sections ... ok
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+cargo test -p casefile-core --release --lib
+test decision::tests::filename_identity_cannot_be_satisfied_by_prefixes_or_longer_heading_tokens ... ok
+test metadata::tests::parses_crlf_frontmatter_without_normalizing_metadata ... ok
+test rendering::tests::renders_common_markdown_without_trusting_embedded_html_or_script_urls ... ok
+test progress::tests::rejects_mixed_fields_duplicate_ids_and_stale_or_no_op_transitions ... ok
+test progress::tests::round_trips_a_declaration_ordered_log ... ok
+test decision::tests::heading_shape_cannot_bypass_present_malformed_frontmatter ... ok
+test strategy::tests::binding_requires_the_writer_role_and_resolution_metadata ... ok
+test strategy::tests::complete_and_legacy_strategies_are_both_governed_shapes ... ok
+test strategy::tests::worker_minimum_sum_overflow_is_a_capacity_diagnostic ... ok
+test work_item::tests::extracts_sections_after_a_nested_heading_with_the_same_text ... ok
+test strategy_transition::tests::strict_transition_round_trips_and_rejects_unknown_fields ... ok
+test strategy_transition::tests::same_owner_descendants_cannot_hide_cross_owner_ancestor_conflicts ... ok
+test strategy_transition::tests::ownership_distinguishes_exact_conflicts_from_same_owner_and_disjoint_subtrees ... ok
+test strategy::tests::workflow_matrix_validation_rejects_incomplete_pipeline ... ok
+test work_item::tests::fenced_headings_and_inline_heading_markup_preserve_work_item_sections ... ok
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+cargo test -p casefile-store --test v1 board
+test semantic_invalid_progress_suppresses_unknown_and_progress_board_cards ... ok
+test accepted_tickets_project_unknown_and_a_valid_log_folds_progress_notes_and_progress_boards ... ok
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 27 filtered out; finished in 0.03s
+
+cargo test -p casefile-store --test v1 table_rows_and_review_faults_are_structural
+test table_rows_and_review_faults_are_structural ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 28 filtered out; finished in 0.29s
+
+cargo test -p casefile-store --test v1 project_decisions_resolve_within_the_project_only
+test project_decisions_resolve_within_the_project_only ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 28 filtered out; finished in 0.03s
+
+cargo clippy -p casefile-core --all-targets -- -D warnings: passed
+cargo clippy -p casefile-store --test v1 -- -D warnings: passed
+cargo fmt --all --check: passed
+cargo bench -p casefile-store-sqlite --bench baselines --no-run: passed
+
+Before preservation hashes:
+ff1b320625f483e239acaccc5baadd98eedb2f4a90aca7a4efefb7eaefb75d68  casefile/benchmarks/BASELINE.md
+10a1200da46525cf53e5b4b7fd34968a2f26e38d97a2b56dc90792ecb59f9c81  casefile/benchmarks/results/hmd057-before.json
+88b795ec018add63b9e2b570b497c7e2dcfd8e6b04fad063b6a35c3c44eaa2ba  casefile/benchmarks/results/hmd057-before.log
+364657f44bf4e1c453300105f889b24acb9309c338c168cb288633db18e350fc  casefile/casefile-store-sqlite/benches/baselines.rs
+All 236 native hmd057-before JSON files separately checked OK after measurement.
+
+One-off public-operation probe (not a new automated unit-test suite):
+After cargo build -p casefile-core, compile with:
+nix develop . --command rustc --edition=2024 <probe.rs> --extern casefile_core=<absolute-target>/debug/libcasefile_core.rlib -L dependency=<absolute-target>/debug/deps -o <disposable-probe>
+
+Performed probe source:
+use casefile_core::{BoardDraft, Kind, RecordDraft, parse_draft, parse_project_map, parse_project_map_values, render_draft};
+
+fn main() {
+    let offline = std::env::temp_dir().join(format!("casefile-offline-probe-{}", std::process::id()));
+    assert!(!offline.exists());
+    let offline = offline.to_str().unwrap();
+    for (source, accepted) in [
+        ("", false), ("relative/source", false), ("C:relative", false),
+        ("/casefile-offline-source", cfg!(unix)),
+        (r"C:\casefile-offline-source", cfg!(windows)),
+        (r"\\server\share\offline", cfg!(windows)), (offline, true),
+    ] {
+        let text = format!("[projects]\ndemo = {source:?}\n");
+        let values = parse_project_map_values("projects.toml", text.as_bytes());
+        let summary = parse_project_map("projects.toml", text.as_bytes(), &["demo"]);
+        assert_eq!(values.is_ok(), accepted, "{source:?}");
+        assert_eq!(summary.is_ok(), accepted, "{source:?}");
+        if accepted {
+            assert_eq!(values.unwrap()["demo"], source);
+            println!("020 root={source:?} => retained in values and governed summary");
+        } else {
+            assert_eq!(values.unwrap_err()[0].code, "invalid_project_map");
+            assert_eq!(summary.unwrap_err()[0].code, "invalid_project_map");
+            println!("020 root={source:?} => invalid_project_map at both public boundaries");
+        }
+    }
+    let base = "schema_version = 1\nid = 'board'\ntitle = 'Probe'\nfilter_kinds = ['ticket', 'epic']\nfilter_statuses = ['provisional', 'accepted', 'rejected']\n[[columns]]\nname = 'All'\nstatuses = ['accepted']\n";
+    let path = "boards/probe.toml";
+    let draft = parse_draft(path, Kind::Board, base).unwrap();
+    let RecordDraft::Board(mut board): RecordDraft = draft.clone() else { panic!("board") };
+    assert!(render_draft(path, &draft).is_ok());
+    println!("021 disposition supported filters => parse/render accepted");
+    for (text, field) in [
+        (base.replace("'ticket'", "'tickte'"), "filter_kinds"),
+        (base.replace("'accepted',", "'accpeted',"), "filter_statuses"),
+        (base.replace("'provisional', 'accepted', 'rejected'", "'unknown'"), "filter_statuses"),
+    ] {
+        let errors = parse_draft(path, Kind::Board, &text).unwrap_err();
+        assert_eq!(errors[0].code, "invalid_board_filter");
+        assert_eq!(errors[0].field.as_deref(), Some(field));
+        println!("021 malformed/mismatched {field} => explicit invalid_board_filter");
+    }
+    board.filter_kinds = Some(vec!["tickte".into()]);
+    let error = render_draft(path, &RecordDraft::Board(board)).unwrap_err();
+    assert_eq!(error.code, "invalid_board_filter");
+    println!("021 independently constructed malformed draft => render refuses bytes");
+    let progress = base.replace("filter_statuses = ['provisional', 'accepted', 'rejected']", "status_source = 'progress'\nfilter_statuses = ['unknown', 'in_progress', 'in_review', 'verifying', 'blocked', 'complete']");
+    let draft = parse_draft(path, Kind::Board, &progress).unwrap();
+    assert!(render_draft(path, &draft).is_ok());
+    println!("021 progress supported filters including unknown => parse/render accepted");
+    let mismatch = progress.replace("'unknown', 'in_progress', 'in_review', 'verifying', 'blocked', 'complete'", "'accepted'");
+    assert_eq!(parse_draft(path, Kind::Board, &mismatch).unwrap_err()[0].code, "invalid_board_filter");
+    let RecordDraft::Board(BoardDraft {filter_statuses, filter_kinds, ..}) = draft else {panic!("board")};
+    assert!(filter_statuses.unwrap().contains(&"unknown".to_owned()));
+    assert!(filter_kinds.unwrap().contains(&"epic".to_owned()));
+    println!("021 disposition token in progress filter => explicit invalid_board_filter");
+    println!("Host-native fixtures only; Windows-specific absolute-root acceptance is not executed on Unix.");
+}
+
+Observed stdout:
+020 root="" => invalid_project_map at both public boundaries
+020 root="relative/source" => invalid_project_map at both public boundaries
+020 root="C:relative" => invalid_project_map at both public boundaries
+020 root="/casefile-offline-source" => retained in values and governed summary
+020 root="C:\\casefile-offline-source" => invalid_project_map at both public boundaries
+020 root="\\\\server\\share\\offline" => invalid_project_map at both public boundaries
+020 root="/tmp/casefile-offline-probe-981815" => retained in values and governed summary
+021 disposition supported filters => parse/render accepted
+021 malformed/mismatched filter_kinds => explicit invalid_board_filter
+021 malformed/mismatched filter_statuses => explicit invalid_board_filter
+021 malformed/mismatched filter_statuses => explicit invalid_board_filter
+021 independently constructed malformed draft => render refuses bytes
+021 progress supported filters including unknown => parse/render accepted
+021 disposition token in progress filter => explicit invalid_board_filter
+Host-native fixtures only; Windows-specific absolute-root acceptance is not executed on Unix.
+
+The original relative-root success-tail fixture failed under accepted020; approved native absolute offline fixture correction passed the final set-e rerun. This final record supersedes the earlier premature structural-fault PASS checkpoint.
+Windows-native root acceptance is unexecuted on this Linux host.

@@ -1,0 +1,182 @@
+[
+  {
+    "name": "release-cli",
+    "command": "cd casefile && cargo build --locked --release -p casefile-cli",
+    "cwd": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/isolated/verification-root",
+    "CARGO_TARGET_DIR": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/boards-diagnostic/matched-reader/current/target",
+    "exit_code": 0,
+    "elapsed_seconds": 37.1279411315918
+  },
+  {
+    "name": "bun-install",
+    "command": "cd casefile/web && bun install --frozen-lockfile",
+    "cwd": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/isolated/verification-root",
+    "CARGO_TARGET_DIR": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/boards-diagnostic/matched-reader/current/target",
+    "exit_code": 0,
+    "elapsed_seconds": 2.2541420459747314
+  },
+  {
+    "name": "format-source",
+    "command": "scripts/format-source.sh --check",
+    "cwd": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/isolated/verification-root",
+    "CARGO_TARGET_DIR": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/boards-diagnostic/matched-reader/current/target",
+    "exit_code": 126,
+    "elapsed_seconds": 0.002647876739501953
+  },
+  {
+    "name": "ascii",
+    "command": "python scripts/strip-non-ascii.py --check .",
+    "cwd": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/isolated/verification-root",
+    "CARGO_TARGET_DIR": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/boards-diagnostic/matched-reader/current/target",
+    "exit_code": 0,
+    "elapsed_seconds": 0.21105432510375977
+  },
+  {
+    "name": "package-roots",
+    "command": "python scripts/validate-package-roots.py",
+    "cwd": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/isolated/verification-root",
+    "CARGO_TARGET_DIR": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/boards-diagnostic/matched-reader/current/target",
+    "exit_code": 0,
+    "elapsed_seconds": 0.04418158531188965
+  },
+  {
+    "name": "python-tests",
+    "command": "python scripts/test-all.py",
+    "cwd": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/isolated/verification-root",
+    "CARGO_TARGET_DIR": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/boards-diagnostic/matched-reader/current/target",
+    "exit_code": 0,
+    "elapsed_seconds": 44.22909951210022
+  },
+  {
+    "name": "web-typecheck",
+    "command": "cd casefile/web && bun run typecheck",
+    "cwd": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/isolated/verification-root",
+    "CARGO_TARGET_DIR": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/boards-diagnostic/matched-reader/current/target",
+    "exit_code": 0,
+    "elapsed_seconds": 1.3301222324371338
+  },
+  {
+    "name": "web-tests",
+    "command": "cd casefile/web && bun run test",
+    "cwd": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/isolated/verification-root",
+    "CARGO_TARGET_DIR": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/boards-diagnostic/matched-reader/current/target",
+    "exit_code": 0,
+    "elapsed_seconds": 12.333522081375122
+  },
+  {
+    "name": "web-build",
+    "command": "cd casefile/web && bun run build",
+    "cwd": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/isolated/verification-root",
+    "CARGO_TARGET_DIR": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/boards-diagnostic/matched-reader/current/target",
+    "exit_code": 0,
+    "elapsed_seconds": 0.3377385139465332
+  },
+  {
+    "name": "rust-fmt",
+    "command": "cd casefile && cargo fmt --all --check",
+    "cwd": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/isolated/verification-root",
+    "CARGO_TARGET_DIR": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/boards-diagnostic/matched-reader/current/target",
+    "exit_code": 0,
+    "elapsed_seconds": 0.7299537658691406
+  },
+  {
+    "name": "rust-clippy",
+    "command": "cd casefile && cargo clippy --locked --workspace --all-targets -- -D warnings",
+    "cwd": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/isolated/verification-root",
+    "CARGO_TARGET_DIR": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/boards-diagnostic/matched-reader/current/target",
+    "exit_code": 0,
+    "elapsed_seconds": 10.630146503448486
+  },
+  {
+    "name": "rust-tests",
+    "command": "cd casefile && cargo test --locked --workspace",
+    "cwd": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/isolated/verification-root",
+    "CARGO_TARGET_DIR": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/boards-diagnostic/matched-reader/current/target",
+    "exit_code": 0,
+    "elapsed_seconds": 78.74613428115845
+  },
+  {
+    "name": "casefile-validator",
+    "command": "python casefile/scripts/validate-casefile.py --source casefile",
+    "cwd": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/isolated/verification-root",
+    "CARGO_TARGET_DIR": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/boards-diagnostic/matched-reader/current/target",
+    "exit_code": 0,
+    "elapsed_seconds": 0.1009666919708252
+  },
+  {
+    "name": "coding-validator",
+    "command": "python coding/scripts/validate-skill.py --all --root coding",
+    "cwd": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/isolated/verification-root",
+    "CARGO_TARGET_DIR": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/boards-diagnostic/matched-reader/current/target",
+    "exit_code": 0,
+    "elapsed_seconds": 0.23691225051879883
+  },
+  {
+    "name": "humans-md-build",
+    "command": "python scripts/package-plugin.py build --root /home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/isolated/verification-root --manifest /home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/isolated/verification-root/humans-md/packaging/plugin.toml",
+    "cwd": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/isolated/verification-root",
+    "CARGO_TARGET_DIR": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/boards-diagnostic/matched-reader/current/target",
+    "exit_code": 0,
+    "elapsed_seconds": 0.07190680503845215
+  },
+  {
+    "name": "humans-md-check",
+    "command": "python scripts/package-plugin.py check --root /home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/isolated/verification-root --manifest /home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/isolated/verification-root/humans-md/packaging/plugin.toml",
+    "cwd": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/isolated/verification-root",
+    "CARGO_TARGET_DIR": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/boards-diagnostic/matched-reader/current/target",
+    "exit_code": 0,
+    "elapsed_seconds": 0.06746459007263184
+  },
+  {
+    "name": "coding-build",
+    "command": "python scripts/package-plugin.py build --root /home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/isolated/verification-root --manifest /home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/isolated/verification-root/coding/packaging/plugin.toml",
+    "cwd": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/isolated/verification-root",
+    "CARGO_TARGET_DIR": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/boards-diagnostic/matched-reader/current/target",
+    "exit_code": 0,
+    "elapsed_seconds": 0.08081388473510742
+  },
+  {
+    "name": "coding-check",
+    "command": "python scripts/package-plugin.py check --root /home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/isolated/verification-root --manifest /home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/isolated/verification-root/coding/packaging/plugin.toml",
+    "cwd": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/isolated/verification-root",
+    "CARGO_TARGET_DIR": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/boards-diagnostic/matched-reader/current/target",
+    "exit_code": 0,
+    "elapsed_seconds": 0.07236695289611816
+  },
+  {
+    "name": "copy-mode-corrected-formatter-and-packages",
+    "command": "set -euo pipefail; cd /home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/isolated/verification-root; scripts/format-source.sh --check; for p in humans-md coding; do python scripts/package-plugin.py build --root \"$PWD\" --manifest \"$PWD/$p/packaging/plugin.toml\"; python scripts/package-plugin.py check --root \"$PWD\" --manifest \"$PWD/$p/packaging/plugin.toml\"; done",
+    "launcher": "nix develop --command bash -c",
+    "exit_code": 0,
+    "receipt_kind": "actual aggregate set-e exit; individual durations not captured",
+    "log": "final-copy-mode-correction.log"
+  },
+  {
+    "name": "final-authored-report-and-source-checks",
+    "command": "set -euo pipefail; cd casefile/web; bun run prettier --write ../benchmarks/HMD-068-RESULTS.md; cd ../..; scripts/format-source.sh --check; python scripts/strip-non-ascii.py --check .; python casefile/scripts/validate-casefile.py --source casefile; git diff --check",
+    "launcher": "nix develop --command bash -c",
+    "cwd": "/home/alex/dev/HUMANS.md",
+    "exit_code": 0,
+    "receipt_kind": "actual aggregate set-e exit; individual durations not captured",
+    "log": "final-authored-checks.log"
+  },
+  {
+    "name": "first-immutable-whitespace-check",
+    "command": "git show --format= --check 78b5b73344fb4d37c541a1c74a6285f713df4d31",
+    "exit_code": 2,
+    "receipt_kind": "actual failure; outer shell missing set-e committed after checked Python raised",
+    "log": "first immutable commit cached-check failure block in final-verification.txt"
+  },
+  {
+    "name": "evidence-only-correction-gates",
+    "commands": [
+      "scripts/format-source.sh --check",
+      "python scripts/strip-non-ascii.py --check .",
+      "python casefile/scripts/validate-casefile.py --source casefile",
+      "git diff --cached --check",
+      "git diff --cached 18b71c8bbd70db48b1f12832e41084c0e918a237 --check"
+    ],
+    "exit_code": 0,
+    "receipt_kind": "actual set-e checks; individual durations not captured"
+  }
+]

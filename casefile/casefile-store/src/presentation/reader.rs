@@ -7,9 +7,9 @@ pub(super) struct ReaderMetadata {
 
 pub(super) trait PresentationReader: Send + Sync {
     fn activation(&self) -> Result<(ActivationState, Activation, Vec<Diagnostic>), StoreError>;
-    fn read_dir(&self, relative: &str) -> Result<Vec<String>, StoreError>;
+    fn read_dir(&self, relative: &str, cancelled: &AtomicBool) -> Result<Vec<String>, StoreError>;
     fn metadata(&self, relative: &str) -> Result<ReaderMetadata, StoreError>;
-    fn read(&self, relative: &str) -> Result<Vec<u8>, StoreError>;
+    fn read(&self, relative: &str, cancelled: &AtomicBool) -> Result<Vec<u8>, StoreError>;
 }
 
 pub(super) struct FsPresentationReader {
@@ -67,7 +67,8 @@ impl PresentationReader for FsPresentationReader {
         activation(&self.root)
     }
 
-    fn read_dir(&self, relative: &str) -> Result<Vec<String>, StoreError> {
+    fn read_dir(&self, relative: &str, cancelled: &AtomicBool) -> Result<Vec<String>, StoreError> {
+        check_cancelled(cancelled)?;
         let directory = self.target(relative)?;
         let metadata = match fs::symlink_metadata(&directory) {
             Ok(metadata) => metadata,
@@ -85,8 +86,11 @@ impl PresentationReader for FsPresentationReader {
         match fs::read_dir(directory) {
             Ok(values) => {
                 for value in values {
+                    check_cancelled(cancelled)?;
                     let value = value?;
-                    let name = value.file_name().to_string_lossy().into_owned();
+                    let name = value.file_name().into_string().map_err(|_| {
+                        StoreError::Invalid("presentation entry name is not UTF-8".into())
+                    })?;
                     entries.push(if relative.is_empty() {
                         name
                     } else {
@@ -97,7 +101,6 @@ impl PresentationReader for FsPresentationReader {
             Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(Vec::new()),
             Err(error) => return Err(error.into()),
         }
-        entries.sort();
         Ok(entries)
     }
 
@@ -130,7 +133,8 @@ impl PresentationReader for FsPresentationReader {
         })
     }
 
-    fn read(&self, relative: &str) -> Result<Vec<u8>, StoreError> {
+    fn read(&self, relative: &str, cancelled: &AtomicBool) -> Result<Vec<u8>, StoreError> {
+        check_cancelled(cancelled)?;
         self.validate_ancestors(relative)?;
         let target = self.target(relative)?;
         let metadata = fs::symlink_metadata(&target)?;
@@ -159,9 +163,7 @@ impl PresentationReader for FsPresentationReader {
                 "presentation content must remain a regular file".into(),
             ));
         }
-        let mut bytes = Vec::with_capacity(opened_metadata.len() as usize);
-        file.read_to_end(&mut bytes)?;
-        Ok(bytes)
+        read_cancellable(&mut file, cancelled)
     }
 }
 
@@ -190,5 +192,33 @@ pub(super) fn display_revision(metadata: &fs::Metadata) -> Revision {
             metadata.len(),
             metadata.created().ok()
         ))
+    }
+}
+
+pub(super) fn check_cancelled(cancelled: &AtomicBool) -> Result<(), StoreError> {
+    if cancelled.load(Ordering::Acquire) {
+        Err(StoreError::Invalid("presentation load cancelled".into()))
+    } else {
+        Ok(())
+    }
+}
+
+pub(super) fn read_cancellable(
+    reader: &mut impl Read,
+    cancelled: &AtomicBool,
+) -> Result<Vec<u8>, StoreError> {
+    let mut bytes = Vec::new();
+    let mut chunk = [0; 64 * 1024];
+    loop {
+        check_cancelled(cancelled)?;
+        let size = match reader.read(&mut chunk) {
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+            result => result?,
+        };
+        check_cancelled(cancelled)?;
+        if size == 0 {
+            return Ok(bytes);
+        }
+        bytes.extend_from_slice(&chunk[..size]);
     }
 }

@@ -1,34 +1,29 @@
 import {
   type Decoder,
+  type HostFailure,
+  decodeWorkspaceResponse,
   type Indexed,
   decodeApplyResponse,
   decodeBoards,
   decodeIndexed,
-  decodeDiagnostics,
   decodeHostFailure,
   decodePreview,
-  decodeRecords,
   decodeRelationships,
 } from "./api-contract";
 import {
   type ApplyResponse,
+  type WorkspaceResponse,
+  type WorkspaceContext,
   type Board,
   type ChangeRequest,
-  type Diagnostic,
   type Identity,
   type Preview,
-  type Record,
   type Relationship,
   type Scope,
 } from "./model";
 
 export type ApiResult<T> =
-  | Readonly<{ tag: "success"; value: T }>
-  | Readonly<{
-      tag: "failure";
-      message: string;
-      code: "stale_revision" | undefined;
-    }>;
+  Readonly<{ tag: "success"; value: T }> | (Readonly<{ tag: "failure" }> & HostFailure);
 type Endpoint = "/api/query" | "/api/preview" | "/api/apply";
 
 const json = async (response: Response): Promise<unknown> => await response.json();
@@ -52,7 +47,7 @@ const post = async <T>(
     const payload = await json(response).catch(() => undefined);
     if (!response.ok) {
       const failure = decodeHostFailure(payload, response.status);
-      return { tag: "failure", message: failure.message, code: failure.code };
+      return { tag: "failure", ...failure };
     }
     return { tag: "success", value: decode(payload) };
   } catch (error: unknown) {
@@ -73,15 +68,17 @@ const query = <T>(
 ): Promise<ApiResult<Indexed<T>>> =>
   post("/api/query", body, signal, undefined, (value) => decodeIndexed(value, decode));
 
-export const fetchRecords = (
-  search: string | undefined,
+export const fetchWorkspace = (
+  context: WorkspaceContext,
   signal: AbortSignal,
-): Promise<ApiResult<Indexed<ReadonlyArray<Record>>>> =>
-  query({ query: "records", search }, signal, decodeRecords);
-export const fetchDiagnostics = (
-  signal: AbortSignal,
-): Promise<ApiResult<Indexed<ReadonlyArray<Diagnostic>>>> =>
-  query({ query: "diagnostics" }, signal, decodeDiagnostics);
+): Promise<ApiResult<WorkspaceResponse>> =>
+  post(
+    "/api/query",
+    { query: "workspace", known_token: context.knownToken, search: context.search },
+    signal,
+    undefined,
+    decodeWorkspaceResponse,
+  );
 export const fetchBoards = (
   scope: Scope,
   signal: AbortSignal,
@@ -96,7 +93,15 @@ export const preview = (change: ChangeRequest, signal: AbortSignal): Promise<Api
   post("/api/preview", change, signal, undefined, decodePreview);
 export const apply = (
   value: Preview,
-  capability: string,
-  signal: AbortSignal,
+  options: Readonly<{ capability: string; signal: AbortSignal; context: WorkspaceContext }>,
 ): Promise<ApiResult<ApplyResponse>> =>
-  post("/api/apply", value, signal, capability, decodeApplyResponse);
+  post(
+    "/api/apply",
+    {
+      preview_id: value.preview_id.value,
+      context: { known_token: options.context.knownToken, search: options.context.search },
+    },
+    options.signal,
+    options.capability,
+    decodeApplyResponse,
+  );

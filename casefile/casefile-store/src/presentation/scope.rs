@@ -2,10 +2,22 @@ use super::*;
 
 pub(super) struct LoadedScope {
     pub(super) descriptors: Vec<Descriptor>,
-    pub(super) snapshots: Vec<EntrySnapshot>,
+    pub(super) files: BTreeMap<String, Arc<LoadedFile>>,
     pub(super) entries: Vec<Arc<PresentationEntry>>,
-    pub(super) diagnostics: Vec<Diagnostic>,
+    pub(super) facts: ScopeFacts,
     pub(super) reusable: bool,
+    pub(super) project_context: Vec<String>,
+}
+
+pub(super) fn project_context(active: &Activation, descriptors: &[Descriptor]) -> Vec<String> {
+    if descriptors
+        .iter()
+        .any(|descriptor| descriptor.kind == Some(Kind::ProjectMap))
+    {
+        active.projects.keys().cloned().collect()
+    } else {
+        Vec::new()
+    }
 }
 
 pub(super) fn load_scope(
@@ -15,132 +27,139 @@ pub(super) fn load_scope(
     previous: Option<&LoadedScope>,
     cancelled: &AtomicBool,
 ) -> Result<LoadedScope, StoreError> {
-    let previous_entries = previous
+    let project_context = project_context(active, descriptors);
+    let old_descriptors = previous
         .into_iter()
-        .flat_map(|scope| scope.snapshots.iter())
+        .flat_map(|scope| scope.descriptors.iter())
+        .map(|descriptor| (descriptor.path.as_str(), descriptor))
+        .collect::<BTreeMap<_, _>>();
+    let old_entries = previous
+        .into_iter()
+        .flat_map(|scope| scope.entries.iter())
         .map(|entry| (entry.path.as_str(), entry))
         .collect::<BTreeMap<_, _>>();
-    let mut snapshots = Vec::new();
+    let mut files = BTreeMap::new();
+    let mut lazy = BTreeMap::new();
     let mut kept = Vec::new();
-    let mut diagnostics = Vec::new();
     let mut reusable = true;
     for descriptor in descriptors {
-        if cancelled.load(Ordering::Acquire) {
-            return Err(StoreError::Invalid("presentation load cancelled".into()));
-        }
-        let mut descriptor = descriptor.clone();
+        check_cancelled(cancelled)?;
+        let old = old_descriptors.get(descriptor.path.as_str()).filter(|old| {
+            old.metadata == descriptor.metadata
+                && old.kind == descriptor.kind
+                && old.scope == descriptor.scope
+                && (descriptor.kind != Some(Kind::ProjectMap)
+                    || previous.is_some_and(|scope| scope.project_context == project_context))
+        });
         if descriptor.lazy {
-            kept.push(descriptor);
+            let cached = old.and_then(|_| old_entries.get(descriptor.path.as_str()).copied());
+            lazy.insert(
+                descriptor.path.clone(),
+                cached
+                    .cloned()
+                    .unwrap_or_else(|| Arc::new(catalogue_entry(descriptor))),
+            );
+            kept.push(descriptor.clone());
             continue;
         }
-        let mut snapshot = EntrySnapshot {
-            path: descriptor.path.clone(),
-            classification: Classification::Raw,
-            kind: descriptor.kind,
-            identity: None,
-            content_revision: descriptor.metadata.public.revision.clone(),
-            summary: None,
-            original_bytes: Vec::new(),
-        };
-        if descriptor.metadata.public.kind == PresentationFileKind::Symlink {
-            snapshot.classification = Classification::Invalid;
-            diagnostics.push(Diagnostic::new(
-                &descriptor.path,
-                "unsafe_path",
-                "governed paths cannot be symlinks",
-            ));
-        } else if let Some(cached) =
-            previous_entries
-                .get(descriptor.path.as_str())
-                .filter(|cached| {
-                    cached.content_revision == descriptor.metadata.public.revision
-                        && !previous.is_some_and(|scope| {
-                            scope.diagnostics.iter().any(|diagnostic| {
-                                diagnostic.path == descriptor.path
-                                    && diagnostic.code == "presentation_read"
-                            })
-                        })
-                })
-        {
-            snapshot = (*cached).clone();
-            diagnostics.extend(
-                previous
-                    .into_iter()
-                    .flat_map(|scope| scope.diagnostics.iter())
-                    .filter(|d| d.path == descriptor.path)
-                    .cloned(),
-            );
+        let cached = previous.and_then(|scope| scope.files.get(&descriptor.path));
+        if old.is_some() && cached.is_some_and(|file| !file.retry) {
+            files.insert(descriptor.path.clone(), cached.unwrap().clone());
+            kept.push(descriptor.clone());
+            continue;
+        }
+        let mut descriptor = descriptor.clone();
+        let file = if descriptor.metadata.public.kind == PresentationFileKind::Symlink {
+            parsed_file(
+                &descriptor,
+                Vec::new(),
+                crate::scanning::classification::Classified {
+                    classification: (
+                        Classification::Invalid,
+                        descriptor.kind,
+                        None,
+                        None,
+                        vec![Diagnostic::new(
+                            &descriptor.path,
+                            "unsafe_path",
+                            "governed paths cannot be symlinks",
+                        )],
+                    ),
+                    facts: Default::default(),
+                },
+                false,
+            )
         } else {
-            match inner.reader.read(&descriptor.path) {
+            match inner.reader.read(&descriptor.path, cancelled) {
                 Ok(bytes) => {
-                    let (classification, kind, identity, summary, local) =
-                        classify(&descriptor.path, &bytes, active);
-                    snapshot.classification = classification;
-                    snapshot.kind = kind;
-                    snapshot.identity = identity;
-                    snapshot.summary = summary;
-                    snapshot.original_bytes = bytes;
-                    diagnostics.extend(local);
-                    // A save during the read is reconciled again on the next refresh, never rejected globally.
+                    check_cancelled(cancelled)?;
+                    let classified =
+                        classify_facts(&descriptor.path, &bytes, active, descriptor.kind);
+                    let mut raced = false;
                     if let Ok(metadata) = inner.reader.metadata(&descriptor.path) {
-                        if metadata == descriptor.metadata {
-                            snapshot.content_revision = metadata.public.revision.clone();
-                        } else {
-                            reusable = false;
-                            snapshot.content_revision = Revision("display-read-raced".into());
-                        }
+                        raced = metadata != descriptor.metadata;
                         descriptor.metadata = metadata;
                     }
+                    reusable &= !raced;
+                    parsed_file(&descriptor, bytes, classified, raced)
                 }
                 Err(StoreError::Io(error)) if error.kind() == io::ErrorKind::NotFound => continue,
                 Err(error) => {
+                    check_cancelled(cancelled)?;
                     reusable = false;
-                    if let Some(cached) = previous_entries.get(descriptor.path.as_str()) {
-                        snapshot = (*cached).clone();
+                    let diagnostic =
+                        Diagnostic::new(&descriptor.path, "presentation_read", error.to_string());
+                    let mut file = if let Some(cached) = cached {
+                        LoadedFile {
+                            snapshot: cached.snapshot.clone(),
+                            entry: cached.entry.clone(),
+                            local: cached.local.clone(),
+                            diagnostics: cached.diagnostics.clone(),
+                            progress: cached.progress.clone(),
+                            retry: true,
+                        }
                     } else {
-                        snapshot.classification = Classification::Invalid;
-                    }
-                    diagnostics.push(Diagnostic::new(
-                        &descriptor.path,
-                        "presentation_read",
-                        error.to_string(),
-                    ));
+                        parsed_file(
+                            &descriptor,
+                            Vec::new(),
+                            crate::scanning::classification::Classified {
+                                classification: (
+                                    Classification::Invalid,
+                                    descriptor.kind,
+                                    None,
+                                    None,
+                                    Vec::new(),
+                                ),
+                                facts: Default::default(),
+                            },
+                            true,
+                        )
+                    };
+                    file.diagnostics.push(diagnostic);
+                    file
                 }
             }
-        }
-        snapshots.push(snapshot);
+        };
+        files.insert(descriptor.path.clone(), Arc::new(file));
         kept.push(descriptor);
     }
-    // These facts depend only on this complete scope, not on other loaded investigations.
-    let local_diagnostics = diagnostics.clone();
-    diagnostics.extend(binding_diagnostics(&snapshots));
-    diagnostics.extend(crate::validation::progress_diagnostics(&snapshots, active));
-    let scan = ScanResult {
-        activation: ActivationState::Active,
-        investigation_roots: investigation_roots(active),
-        snapshot: CasefileSnapshot {
-            revision: Revision("presentation".into()),
-            entries: snapshots,
-        },
-        diagnostics: stable(diagnostics),
-    };
-    let derived = derive_presentation_snapshot(&scan);
-    let indexes = PresentationIndexes::new(&scan, &derived);
+    check_cancelled(cancelled)?;
+    let facts = project_scope(active, &mut files, previous, cancelled)?;
+    check_cancelled(cancelled)?;
     let entries = kept
         .iter()
         .map(|descriptor| {
-            Arc::new(if descriptor.lazy {
-                catalogue_entry(descriptor)
-            } else {
-                presentation_entry(descriptor, &indexes)
-            })
+            lazy.get(&descriptor.path)
+                .cloned()
+                .unwrap_or_else(|| files[&descriptor.path].entry.clone())
         })
         .collect();
     Ok(LoadedScope {
         descriptors: kept,
-        snapshots: scan.snapshot.entries,
+        files,
         entries,
-        diagnostics: local_diagnostics,
+        facts,
         reusable,
+        project_context,
     })
 }

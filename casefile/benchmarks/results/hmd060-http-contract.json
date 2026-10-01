@@ -1,0 +1,104 @@
+{
+  "Current": {
+    "source_revision": "fsmeta-tree-v1:a06a66467e4b0de431aa9dde7a34e05b69daa830ca8fca419ee4ab87504594f2",
+    "value": [
+      {
+        "path": "projects/demo/investigations/sample/epics/accepted/HMD-E-001.md",
+        "scope": {
+          "project": "demo",
+          "investigation": "sample"
+        },
+        "classification": "governed",
+        "kind": "epic",
+        "identity": {
+          "scope": {
+            "project": "demo",
+            "investigation": "sample"
+          },
+          "identity": "HMD-E-001"
+        },
+        "title": "Minimum epic",
+        "content": "---\nid: HMD-E-001\ntitle: \"Minimum epic\"\nproject: \"demo\"\ninvestigation: \"sample\"\nstatus: accepted\nreported_by_role: \"inspector\"\nreported_by_agent: \"agent\"\nsource_commit: \"abc\"\ncreated_at: 2026-07-18T10:00:00Z\nupdated_at: 2026-07-18T10:00:00Z\nconfidence: high\ndecision_refs: [HMD-D-001]\nrelated_tickets: []\nsupersedes: []\nsuperseded_by: []\n---\n\n# HMD-E-001\n\n## Requirement and evidence\n\nRequired.\n\n## Impact\n\nImpact.\n\n## Resolution boundary\n\nBoundary.\n\n## Acceptance criteria\n\nCriteria.\n\n## Verification\n\nTests.\n\n## Relationships and duplicate analysis\n\nNone.\n\n## Review and disposition history\n\nAccepted.\n",
+        "rendered_markdown": "<h1>HMD-E-001</h1>\n<h2>Requirement and evidence</h2>\n<p>Required.</p>\n<h2>Impact</h2>\n<p>Impact.</p>\n<h2>Resolution boundary</h2>\n<p>Boundary.</p>\n<h2>Acceptance criteria</h2>\n<p>Criteria.</p>\n<h2>Verification</h2>\n<p>Tests.</p>\n<h2>Relationships and duplicate analysis</h2>\n<p>None.</p>\n<h2>Review and disposition history</h2>\n<p>Accepted.</p>\n",
+        "search_text": "Minimum epic\n---\nid: HMD-E-001\ntitle: \"Minimum epic\"\nproject: \"demo\"\ninvestigation: \"sample\"\nstatus: accepted\nreported_by_role: \"inspector\"\nreported_by_agent: \"agent\"\nsource_commit: \"abc\"\ncreated_at: 2026-07-18T10:00:00Z\nupdated_at: 2026-07-18T10:00:00Z\nconfidence: high\ndecision_refs: [HMD-D-001]\nrelated_tickets: []\nsupersedes: []\nsuperseded_by: []\n---\n\n# HMD-E-001\n\n## Requirement and evidence\n\nRequired.\n\n## Impact\n\nImpact.\n\n## Resolution boundary\n\nBoundary.\n\n## Acceptance criteria\n\nCriteria.\n\n## Verification\n\nTests.\n\n## Relationships and duplicate analysis\n\nNone.\n\n## Review and disposition history\n\nAccepted.\n",
+        "work_item": {
+          "id": "HMD-E-001",
+          "title": "Minimum epic",
+          "project": "demo",
+          "investigation": "sample",
+          "status": "accepted",
+          "reported_by_role": "inspector",
+          "reported_by_agent": "agent",
+          "source_commit": "abc",
+          "created_at": "2026-07-18T10:00:00Z",
+          "updated_at": "2026-07-18T10:00:00Z",
+          "confidence": "high",
+          "decision_refs": [
+            "HMD-D-001"
+          ],
+          "related_tickets": [],
+          "supersedes": [],
+          "superseded_by": [],
+          "requirement_and_evidence": "Required.",
+          "impact": "Impact.",
+          "resolution_boundary": "Boundary.",
+          "acceptance_criteria": "Criteria.",
+          "verification": "Tests.",
+          "relationships_and_duplicate_analysis": "None.",
+          "review_and_disposition_history": "Accepted."
+        }
+      },
+      {
+        "path": "projects/demo/investigations/sample/tickets/accepted/HMD-011.md",
+        "scope": {
+          "project": "demo",
+          "investigation": "sample"
+        },
+        "classification": "governed",
+        "kind": "ticket",
+        "identity": {
+          "scope": {
+            "project": "demo",
+            "investigation": "sample"
+          },
+          "identity": "HMD-011"
+        },
+        "title": "Minimum ticket",
+        "content": "---\nid: HMD-011\ntitle: \"Minimum ticket\"\nproject: \"demo\"\ninvestigation: \"sample\"\nstatus: accepted\nreported_by_role: \"inspector\"\nreported_by_agent: \"agent\"\nsource_commit: \"abc\"\ncreated_at: 2026-07-18T10:00:00Z\nupdated_at: 2026-07-18T10:00:00Z\nconfidence: high\ndecision_refs: [HMD-D-001]\nrelated_tickets: []\nsupersedes: []\nsuperseded_by: []\nrank: 1\n---\n\n# HMD-011\n\n## Requirement and evidence\n\nRequired.\n\n## Impact\n\nImpact.\n\n## Resolution boundary\n\nBoundary.\n\n## Acceptance criteria\n\nCriteria.\n\n## Verification\n\nTests.\n\n## Relationships and duplicate analysis\n\nNone.\n\n## Review and disposition history\n\nAccepted.\n",
+        "progress": {
+          "status": "unknown",
+          "notes": []
+        },
+        "rendered_markdown": "<h1>HMD-011</h1>\n<h2>Requirement and evidence</h2>\n<p>Required.</p>\n<h2>Impact</h2>\n<p>Impact.</p>\n<h2>Resolution boundary</h2>\n<p>Boundary.</p>\n<h2>Acceptance criteria</h2>\n<p>Criteria.</p>\n<h2>Verification</h2>\n<p>Tests.</p>\n<h2>Relationships and duplicate analysis</h2>\n<p>None.</p>\n<h2>Review and disposition history</h2>\n<p>Accepted.</p>\n",
+        "search_text": "Minimum ticket\n---\nid: HMD-011\ntitle: \"Minimum ticket\"\nproject: \"demo\"\ninvestigation: \"sample\"\nstatus: accepted\nreported_by_role: \"inspector\"\nreported_by_agent: \"agent\"\nsource_commit: \"abc\"\ncreated_at: 2026-07-18T10:00:00Z\nupdated_at: 2026-07-18T10:00:00Z\nconfidence: high\ndecision_refs: [HMD-D-001]\nrelated_tickets: []\nsupersedes: []\nsuperseded_by: []\nrank: 1\n---\n\n# HMD-011\n\n## Requirement and evidence\n\nRequired.\n\n## Impact\n\nImpact.\n\n## Resolution boundary\n\nBoundary.\n\n## Acceptance criteria\n\nCriteria.\n\n## Verification\n\nTests.\n\n## Relationships and duplicate analysis\n\nNone.\n\n## Review and disposition history\n\nAccepted.\n",
+        "work_item": {
+          "id": "HMD-011",
+          "title": "Minimum ticket",
+          "project": "demo",
+          "investigation": "sample",
+          "status": "accepted",
+          "reported_by_role": "inspector",
+          "reported_by_agent": "agent",
+          "source_commit": "abc",
+          "created_at": "2026-07-18T10:00:00Z",
+          "updated_at": "2026-07-18T10:00:00Z",
+          "confidence": "high",
+          "decision_refs": [
+            "HMD-D-001"
+          ],
+          "related_tickets": [],
+          "supersedes": [],
+          "superseded_by": [],
+          "rank": 1,
+          "requirement_and_evidence": "Required.",
+          "impact": "Impact.",
+          "resolution_boundary": "Boundary.",
+          "acceptance_criteria": "Criteria.",
+          "verification": "Tests.",
+          "relationships_and_duplicate_analysis": "None.",
+          "review_and_disposition_history": "Accepted."
+        }
+      }
+    ]
+  }
+}

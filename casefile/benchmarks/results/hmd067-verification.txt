@@ -1,0 +1,2186 @@
+HMD-067 actual verification evidence
+Parent: 27ca531f7ab8fc19a9c6a17684269c2743f4f791
+Final check chain exit: 0 (captured by executing wrapper)
+Final command: nix develop --command sh -ec "export CARGO_TARGET_DIR=/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target; cd casefile; cargo fmt -p casefile-tui; cargo test -p casefile-tui --lib; cargo clippy -p casefile-tui --all-targets -- -D warnings; cargo build -p casefile-tui; cargo check -p casefile-cli; cargo fmt --all --check; cargo bench -p casefile-tui --bench interactions --no-run"
+Final measurement command: ['/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/release/deps/interactions-cee69abf78b7fcec', '^tui_250_records_500_notes/', '--bench', '--baseline', 'hmd057-before']
+Final measurement exit: 0
+before-hashes.txt: PASS 4 SHA256 objects unchanged
+native-before-hashes.txt: PASS 236 SHA256 objects unchanged
+All 68 parent benchmark/evidence paths equal parent bytes
+Historical reverse patch hmd067-pre-board-identity-source.patch: PASS reconstructs all 117 hmd067-pre-board-identity-after.json source hashes
+Historical reverse patch hmd067-pre-rescope-source.patch: PASS reconstructs all 117 hmd067-pre-rescope-after.json source hashes
+Final measured source and binary SHA256: PASS unchanged
+
+=== FINAL SOURCE CHECKS (exit 0) ===
+warning: Git tree '/home/alex/dev/HUMANS.md' is dirty
+humans-md development shell
+  Setup:  (cd casefile/web && bun install)
+  Format: scripts/format-source.sh --check|--write
+  Web:    cd casefile/web; bun install; bun run typecheck; bun run test; bun run build
+  Rust:   cd casefile; cargo fmt --check; cargo clippy --workspace --all-targets -- -D warnings; cargo test --workspace
+  CI:     act pull_request -j validate --pull=false -P ubuntu-latest=catthehacker/ubuntu:act-latest
+   Compiling casefile-tui v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-tui)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 4.74s
+     Running unittests src/lib.rs (/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/debug/deps/casefile_tui-26658e30d7cccb93)
+
+running 67 tests
+test interaction::tests::edit_selection_yields_only_supported_governed_records ... ok
+test markdown::tests::renders_headings_lists_code_and_terminal_safe_html ... ok
+test record_detail::tests::metadata_and_board_columns_escape_controls_and_remain_bounded ... ok
+test record_detail::tests::source_keeps_text_beyond_the_display_limit ... ok
+test record_detail::layout::tests::scrolling_and_resize_preserve_supported_unicode_wrap_and_styles ... ok
+test strategy_flow::tests::batching_compatibility_tracks_the_work_group_that_the_chart_will_actually_render ... ok
+test record_detail::tests::content_keeps_lines_and_escapes_only_unsafe_controls ... ok
+test record_detail::tests::metadata_and_diagnostics_cannot_inject_terminal_controls ... ok
+test progressive::tests::catalogue_resolves_full_nested_investigation_target ... ok
+test strategy_flow::tests::a_lost_writer_binding_clears_the_cached_identifier_without_rebinding_other_roles ... ok
+test watching::tests::classifier_models_windows_case_and_backslash_equivalence ... ok
+test watching::tests::classifier_keeps_dot_root_relative_and_absolute_namespaces_distinct ... ok
+test watching::tests::classifier_preserves_posix_filesystem_root_namespace ... ok
+test watching::tests::first_catalogue_rebuild_changes_events_from_store_wide_to_scoped ... ok
+test watching::tests::investigation_change_is_direct_without_invalidating_a_sibling ... ok
+test watching::tests::investigation_refresh_suppresses_exact_warning_but_retains_broader_visibility ... ok
+test watching::tests::classifier_is_lexical_longest_root_and_exact_root_exclusions ... ok
+test watching::tests::reducer_preserves_later_observation_and_failure_never_clears ... ok
+test strategy_flow::tests::selected_cache_refreshes_on_binding_only_change_scope_change_and_resize ... ok
+test strategy_flow::tests::optional_preflight_does_not_change_the_execution_diagram ... ok
+test progressive::tests::obsolete_generation_is_discarded_and_refresh_failure_keeps_complete_data ... ok
+test watching::tests::unrelated_project_observation_does_not_invalidate_scoped_refresh_success ... ok
+test watching::tests::restored_health_does_not_claim_freshness ... ok
+test progressive::tests::catalogue_is_navigable_before_completion_and_post_start_observation_is_reported ... ok
+test progressive::tests::status_only_content_events_redraw_and_selection_cancellation_rejects_late_delivery ... ok
+test watching::tests::refresh_window_ignores_sibling_bursts_but_preserves_nested_floors_and_clears ... ok
+test strategy_flow::tests::declaration_refresh_revokes_contradictory_flows_without_rejecting_runtime_variants ... ok
+test strategy_flow::tests::selected_membership_not_declaration_order_controls_optional_review_and_correction_routing ... ok
+test progressive::tests::store_minimum_scope_allows_contextual_refresh_and_reports_its_exact_coverage ... ok
+test strategy_flow::layout::tests::wide_model_identifiers_wrap_inside_closed_nonoverlapping_boxes ... ok
+test review::tests::review_scrolls_store_diff_and_colours_additions_and_removals ... ok
+test strategy_flow::tests::resize_keeps_every_chart_cell_inside_the_pane_and_recovers_after_too_narrow ... ok
+test progressive::tests::selected_lazy_content_exposes_loaded_and_fresh_failure_states ... ok
+test workbench::tests::board_card_selection_survives_complete_projection_with_deletion_and_ambiguity_controls ... ok
+test watching::tests::native_recursive_subscription_reports_a_disk_change_and_tears_down ... ok
+test workbench::progressive_tests::parent_scope_refresh_keeps_nested_body_and_removes_only_parent_members ... ok
+test workbench::tests::board_keyboard_selection_marks_the_card_changes_detail_and_skips_unresolved_identities ... ok
+test workbench::tests::detail_scroll_resets_only_when_selected_content_revision_changes ... ok
+test workbench::tests::catalogue_root_change_rescopes_cached_card_identities_without_body_updates ... ok
+test workbench::tests::boards_are_read_only_unfiltered_and_open_a_canonical_ticket_detail ... ok
+test workbench::tests::files_are_grouped_relative_to_the_selected_scope_and_include_project_files ... ok
+test workbench::tests::diagnostics_and_editing_remain_governed_path_only ... ok
+test workbench::tests::boards_distinguish_no_definition_invalid_and_empty ... ok
+test workbench::tests::project_and_investigation_deletions_use_following_then_preceding_fallback ... ok
+test workbench::tests::refresh_target_matrix_uses_project_full_investigation_and_store_fallback ... ok
+test workbench::flow_tests::changing_investigation_replaces_the_chart_even_when_source_revisions_match ... ok
+test workbench::flow_tests::binding_refresh_updates_chart_and_overview_without_changing_selection ... ok
+test workbench::progressive_tests::eager_and_lazy_detail_survive_promotion_refresh_and_external_edit ... ok
+test workbench::tests::promotion_preserves_pending_exact_and_semantic_anchors_and_handles_deletion ... ok
+test workbench::tests::filtering_and_empty_hierarchy_states_remain_predictable ... ok
+test workbench::tests::unchanged_filter_exact_disappearance_is_explained_and_resume_is_round_tripped ... ok
+test workbench::tests::strategy_key_and_tab_cycle_preserve_existing_view_targets ... ok
+test workbench::tests::project_investigation_ticket_drill_down_selects_a_canonical_path ... ok
+test workbench::tests::nested_investigations_with_the_same_leaf_are_selectable_independently ... ok
+test workbench::tests::rendered_and_source_tabs_keep_markdown_readable_and_exact ... ok
+test workbench::relationship_tests::relationship_availability_tracks_project_coverage_not_a_stale_store_complete_flag ... ok
+test workbench::tests::focus_navigation_help_and_go_up_are_visible ... ok
+test workbench::tests::strategies_are_scoped_by_full_nested_investigation_identity ... ok
+test workbench::tests::strategies_filter_remain_in_files_and_are_read_only ... ok
+test workbench::tests::viewport_navigation_keeps_last_group_selected_across_resize_and_filter ... ok
+test workbench::progressive_tests::scoped_refresh_updates_rendered_boards_and_progress_without_losing_selection_or_other_rows ... ok
+test workbench::tests::strategy_records_expose_typed_overview_exact_source_and_diagnostics ... ok
+test workbench::flow_tests::chart_navigation_reaches_tail_resizes_and_files_preserves_selected_source ... ok
+test workbench::relationship_tests::canonical_relationships_follow_cross_scope_targets_without_replacing_source_bodies ... ok
+test workbench::progressive_tests::section_header_counts_keep_their_scope_across_views_filters_and_scoped_refresh ... ok
+test watching::tests::fake_watcher_covers_rename_overflow_coalescing_and_teardown ... ok
+test review::tests::native_scroll_edge_keeps_visible_diff_lines_beyond_u16_row_count ... ok
+
+test result: ok. 67 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.28s
+
+    Checking casefile-tui v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-tui)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.26s
+   Compiling casefile-tui v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-tui)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.34s
+    Checking casefile-tui v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-tui)
+    Checking casefile-cli v0.8.0 (/home/alex/dev/HUMANS.md/casefile/casefile-cli)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.56s
+   Compiling casefile-tui v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-tui)
+    Finished `bench` profile [optimized] target(s) in 12.43s
+  Executable src/benchmark.rs (/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/release/deps/interactions-cee69abf78b7fcec)
+
+=== FINAL ORIGINAL CONTROL DISCOVERY (exit 0) ===
+Gnuplot not found, using plotters backend
+tui_250_records_500_notes/selected_scope_navigation: benchmark
+tui_250_records_500_notes/list_scroll_20_frames: benchmark
+tui_250_records_500_notes/detail_scroll_20_frames: benchmark
+
+
+=== FINAL ORIGINAL CONTROL SMOKE (exit 0) ===
+Gnuplot not found, using plotters backend
+Testing tui_250_records_500_notes/selected_scope_navigation
+Success
+Testing tui_250_records_500_notes/list_scroll_20_frames
+Success
+Testing tui_250_records_500_notes/detail_scroll_20_frames
+Success
+
+
+=== EARLIER EXPLORATORY/FAILED/SUPERSEDED OUTPUTS; NOT FINAL SOURCE ACCEPTANCE ===
+=== board-identity-checks.log ===
+warning: Git tree '/home/alex/dev/HUMANS.md' is dirty
+humans-md development shell
+  Setup:  (cd casefile/web && bun install)
+  Format: scripts/format-source.sh --check|--write
+  Web:    cd casefile/web; bun install; bun run typecheck; bun run test; bun run build
+  Rust:   cd casefile; cargo fmt --check; cargo clippy --workspace --all-targets -- -D warnings; cargo test --workspace
+  CI:     act pull_request -j validate --pull=false -P ubuntu-latest=catthehacker/ubuntu:act-latest
+   Compiling casefile-tui v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-tui)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.03s
+     Running unittests src/lib.rs (/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/debug/deps/casefile_tui-26658e30d7cccb93)
+
+running 67 tests
+test interaction::tests::edit_selection_yields_only_supported_governed_records ... ok
+test markdown::tests::renders_headings_lists_code_and_terminal_safe_html ... ok
+test record_detail::tests::metadata_and_board_columns_escape_controls_and_remain_bounded ... ok
+test record_detail::tests::source_keeps_text_beyond_the_display_limit ... ok
+test record_detail::layout::tests::scrolling_and_resize_preserve_supported_unicode_wrap_and_styles ... ok
+test strategy_flow::tests::batching_compatibility_tracks_the_work_group_that_the_chart_will_actually_render ... ok
+test record_detail::tests::content_keeps_lines_and_escapes_only_unsafe_controls ... ok
+test progressive::tests::catalogue_resolves_full_nested_investigation_target ... ok
+test watching::tests::classifier_is_lexical_longest_root_and_exact_root_exclusions ... ok
+test watching::tests::classifier_keeps_dot_root_relative_and_absolute_namespaces_distinct ... ok
+test watching::tests::classifier_models_windows_case_and_backslash_equivalence ... ok
+test watching::tests::classifier_preserves_posix_filesystem_root_namespace ... ok
+test record_detail::tests::metadata_and_diagnostics_cannot_inject_terminal_controls ... ok
+test watching::tests::first_catalogue_rebuild_changes_events_from_store_wide_to_scoped ... ok
+test watching::tests::investigation_change_is_direct_without_invalidating_a_sibling ... ok
+test watching::tests::investigation_refresh_suppresses_exact_warning_but_retains_broader_visibility ... ok
+test strategy_flow::tests::a_lost_writer_binding_clears_the_cached_identifier_without_rebinding_other_roles ... ok
+test watching::tests::reducer_preserves_later_observation_and_failure_never_clears ... ok
+test progressive::tests::status_only_content_events_redraw_and_selection_cancellation_rejects_late_delivery ... ok
+test review::tests::review_scrolls_store_diff_and_colours_additions_and_removals ... ok
+test progressive::tests::obsolete_generation_is_discarded_and_refresh_failure_keeps_complete_data ... ok
+test watching::tests::restored_health_does_not_claim_freshness ... ok
+test watching::tests::unrelated_project_observation_does_not_invalidate_scoped_refresh_success ... ok
+test strategy_flow::tests::selected_cache_refreshes_on_binding_only_change_scope_change_and_resize ... ok
+test progressive::tests::catalogue_is_navigable_before_completion_and_post_start_observation_is_reported ... ok
+test strategy_flow::tests::selected_membership_not_declaration_order_controls_optional_review_and_correction_routing ... ok
+test strategy_flow::tests::declaration_refresh_revokes_contradictory_flows_without_rejecting_runtime_variants ... ok
+test watching::tests::refresh_window_ignores_sibling_bursts_but_preserves_nested_floors_and_clears ... ok
+test strategy_flow::tests::optional_preflight_does_not_change_the_execution_diagram ... ok
+test progressive::tests::store_minimum_scope_allows_contextual_refresh_and_reports_its_exact_coverage ... ok
+test strategy_flow::layout::tests::wide_model_identifiers_wrap_inside_closed_nonoverlapping_boxes ... ok
+test strategy_flow::tests::resize_keeps_every_chart_cell_inside_the_pane_and_recovers_after_too_narrow ... ok
+test progressive::tests::selected_lazy_content_exposes_loaded_and_fresh_failure_states ... ok
+test workbench::tests::board_card_selection_survives_complete_projection_with_deletion_and_ambiguity_controls ... ok
+test watching::tests::native_recursive_subscription_reports_a_disk_change_and_tears_down ... ok
+test workbench::progressive_tests::parent_scope_refresh_keeps_nested_body_and_removes_only_parent_members ... ok
+test workbench::tests::board_keyboard_selection_marks_the_card_changes_detail_and_skips_unresolved_identities ... ok
+test workbench::tests::catalogue_root_change_rescopes_cached_card_identities_without_body_updates ... ok
+test workbench::tests::boards_are_read_only_unfiltered_and_open_a_canonical_ticket_detail ... ok
+test workbench::tests::boards_distinguish_no_definition_invalid_and_empty ... ok
+test workbench::flow_tests::changing_investigation_replaces_the_chart_even_when_source_revisions_match ... ok
+test workbench::tests::project_and_investigation_deletions_use_following_then_preceding_fallback ... ok
+test workbench::tests::files_are_grouped_relative_to_the_selected_scope_and_include_project_files ... ok
+test workbench::tests::diagnostics_and_editing_remain_governed_path_only ... ok
+test workbench::flow_tests::binding_refresh_updates_chart_and_overview_without_changing_selection ... ok
+test workbench::progressive_tests::eager_and_lazy_detail_survive_promotion_refresh_and_external_edit ... ok
+test workbench::tests::detail_scroll_resets_only_when_selected_content_revision_changes ... ok
+test workbench::tests::refresh_target_matrix_uses_project_full_investigation_and_store_fallback ... ok
+test workbench::tests::filtering_and_empty_hierarchy_states_remain_predictable ... ok
+test workbench::tests::promotion_preserves_pending_exact_and_semantic_anchors_and_handles_deletion ... ok
+test workbench::tests::unchanged_filter_exact_disappearance_is_explained_and_resume_is_round_tripped ... ok
+test workbench::tests::strategy_key_and_tab_cycle_preserve_existing_view_targets ... ok
+test workbench::tests::nested_investigations_with_the_same_leaf_are_selectable_independently ... ok
+test workbench::tests::project_investigation_ticket_drill_down_selects_a_canonical_path ... ok
+test workbench::tests::rendered_and_source_tabs_keep_markdown_readable_and_exact ... ok
+test workbench::relationship_tests::relationship_availability_tracks_project_coverage_not_a_stale_store_complete_flag ... ok
+test workbench::tests::focus_navigation_help_and_go_up_are_visible ... ok
+test workbench::progressive_tests::scoped_refresh_updates_rendered_boards_and_progress_without_losing_selection_or_other_rows ... ok
+test workbench::tests::strategies_are_scoped_by_full_nested_investigation_identity ... ok
+test workbench::tests::strategies_filter_remain_in_files_and_are_read_only ... ok
+test workbench::tests::viewport_navigation_keeps_last_group_selected_across_resize_and_filter ... ok
+test workbench::tests::strategy_records_expose_typed_overview_exact_source_and_diagnostics ... ok
+test workbench::flow_tests::chart_navigation_reaches_tail_resizes_and_files_preserves_selected_source ... ok
+test workbench::relationship_tests::canonical_relationships_follow_cross_scope_targets_without_replacing_source_bodies ... ok
+test workbench::progressive_tests::section_header_counts_keep_their_scope_across_views_filters_and_scoped_refresh ... ok
+test watching::tests::fake_watcher_covers_rename_overflow_coalescing_and_teardown ... ok
+test review::tests::native_scroll_edge_keeps_visible_diff_lines_beyond_u16_row_count ... ok
+
+test result: ok. 67 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.24s
+
+    Checking casefile-tui v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-tui)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.26s
+   Compiling casefile-tui v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-tui)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.63s
+    Checking casefile-tui v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-tui)
+    Checking casefile-cli v0.8.0 (/home/alex/dev/HUMANS.md/casefile/casefile-cli)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.57s
+   Compiling casefile-tui v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-tui)
+    Finished `bench` profile [optimized] target(s) in 12.52s
+  Executable src/benchmark.rs (/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/release/deps/interactions-cee69abf78b7fcec)
+
+=== discovery.log ===
+Gnuplot not found, using plotters backend
+tui_250_records_500_notes/selected_scope_navigation: benchmark
+tui_250_records_500_notes/list_scroll_20_frames: benchmark
+tui_250_records_500_notes/detail_scroll_20_frames: benchmark
+
+
+=== eighth-checks.log ===
+warning: Git tree '/home/alex/dev/HUMANS.md' is dirty
+humans-md development shell
+  Setup:  (cd casefile/web && bun install)
+  Format: scripts/format-source.sh --check|--write
+  Web:    cd casefile/web; bun install; bun run typecheck; bun run test; bun run build
+  Rust:   cd casefile; cargo fmt --check; cargo clippy --workspace --all-targets -- -D warnings; cargo test --workspace
+  CI:     act pull_request -j validate --pull=false -P ubuntu-latest=catthehacker/ubuntu:act-latest
+   Compiling casefile-tui v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-tui)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.67s
+     Running unittests src/lib.rs (/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/debug/deps/casefile_tui-26658e30d7cccb93)
+
+running 63 tests
+test interaction::tests::edit_selection_yields_only_supported_governed_records ... ok
+test markdown::tests::renders_headings_lists_code_and_terminal_safe_html ... ok
+test record_detail::tests::metadata_and_board_columns_escape_controls_and_remain_bounded ... ok
+test record_detail::tests::source_keeps_text_beyond_the_display_limit ... ok
+test record_detail::layout::tests::scrolling_and_resize_preserve_supported_unicode_wrap_and_styles ... ok
+test record_detail::tests::content_keeps_lines_and_escapes_only_unsafe_controls ... ok
+test record_detail::tests::metadata_and_diagnostics_cannot_inject_terminal_controls ... ok
+test watching::tests::classifier_is_lexical_longest_root_and_exact_root_exclusions ... ok
+test strategy_flow::tests::a_lost_writer_binding_clears_the_cached_identifier_without_rebinding_other_roles ... ok
+test progressive::tests::catalogue_resolves_full_nested_investigation_target ... ok
+test watching::tests::classifier_keeps_dot_root_relative_and_absolute_namespaces_distinct ... ok
+test watching::tests::classifier_models_windows_case_and_backslash_equivalence ... ok
+test watching::tests::classifier_preserves_posix_filesystem_root_namespace ... ok
+test watching::tests::investigation_change_is_direct_without_invalidating_a_sibling ... ok
+test watching::tests::first_catalogue_rebuild_changes_events_from_store_wide_to_scoped ... ok
+test watching::tests::investigation_refresh_suppresses_exact_warning_but_retains_broader_visibility ... ok
+test watching::tests::reducer_preserves_later_observation_and_failure_never_clears ... ok
+test strategy_flow::tests::batching_compatibility_tracks_the_work_group_that_the_chart_will_actually_render ... ok
+test watching::tests::restored_health_does_not_claim_freshness ... ok
+test watching::tests::unrelated_project_observation_does_not_invalidate_scoped_refresh_success ... ok
+test strategy_flow::tests::selected_membership_not_declaration_order_controls_optional_review_and_correction_routing ... ok
+test strategy_flow::tests::selected_cache_refreshes_on_binding_only_change_scope_change_and_resize ... ok
+test watching::tests::refresh_window_ignores_sibling_bursts_but_preserves_nested_floors_and_clears ... ok
+test strategy_flow::tests::optional_preflight_does_not_change_the_execution_diagram ... ok
+test progressive::tests::obsolete_generation_is_discarded_and_refresh_failure_keeps_complete_data ... ok
+test strategy_flow::tests::declaration_refresh_revokes_contradictory_flows_without_rejecting_runtime_variants ... ok
+test progressive::tests::catalogue_is_navigable_before_completion_and_post_start_observation_is_reported ... ok
+test review::tests::review_scrolls_store_diff_and_colours_additions_and_removals ... ok
+test progressive::tests::store_minimum_scope_allows_contextual_refresh_and_reports_its_exact_coverage ... ok
+test strategy_flow::layout::tests::wide_model_identifiers_wrap_inside_closed_nonoverlapping_boxes ... ok
+test strategy_flow::tests::resize_keeps_every_chart_cell_inside_the_pane_and_recovers_after_too_narrow ... ok
+test progressive::tests::selected_lazy_content_exposes_loaded_and_fresh_failure_states ... ok
+test workbench::tests::board_card_selection_survives_complete_projection_with_deletion_and_ambiguity_controls ... ok
+test workbench::progressive_tests::detail_promotion_and_unchanged_refresh_leave_unrelated_record_payloads_in_place ... ok
+test workbench::tests::detail_scroll_resets_only_when_selected_content_revision_changes ... ok
+test workbench::tests::diagnostics_and_editing_remain_governed_path_only ... ok
+test watching::tests::native_recursive_subscription_reports_a_disk_change_and_tears_down ... ok
+test workbench::tests::files_are_grouped_relative_to_the_selected_scope_and_include_project_files ... ok
+test workbench::tests::project_and_investigation_deletions_use_following_then_preceding_fallback ... ok
+test workbench::tests::boards_are_read_only_unfiltered_and_open_a_canonical_ticket_detail ... ok
+test workbench::tests::board_keyboard_selection_marks_the_card_changes_detail_and_skips_unresolved_identities ... ok
+test workbench::tests::boards_distinguish_no_definition_invalid_and_empty ... ok
+test workbench::tests::filtering_and_empty_hierarchy_states_remain_predictable ... ok
+test workbench::tests::refresh_target_matrix_uses_project_full_investigation_and_store_fallback ... ok
+test workbench::tests::promotion_preserves_pending_exact_and_semantic_anchors_and_handles_deletion ... ok
+test workbench::flow_tests::changing_investigation_replaces_the_chart_even_when_source_revisions_match ... ok
+test workbench::flow_tests::binding_refresh_updates_chart_and_overview_without_changing_selection ... ok
+test workbench::tests::unchanged_filter_exact_disappearance_is_explained_and_resume_is_round_tripped ... ok
+test workbench::tests::rendered_and_source_tabs_keep_markdown_readable_and_exact ... ok
+test workbench::progressive_tests::scoped_refresh_updates_rendered_boards_and_progress_without_losing_selection_or_other_rows ... ok
+test workbench::tests::strategy_key_and_tab_cycle_preserve_existing_view_targets ... ok
+test workbench::tests::nested_investigations_with_the_same_leaf_are_selectable_independently ... ok
+test workbench::tests::project_investigation_ticket_drill_down_selects_a_canonical_path ... ok
+test workbench::tests::strategies_are_scoped_by_full_nested_investigation_identity ... ok
+test workbench::tests::focus_navigation_help_and_go_up_are_visible ... ok
+test workbench::relationship_tests::relationship_availability_tracks_project_coverage_not_a_stale_store_complete_flag ... ok
+test workbench::tests::strategies_filter_remain_in_files_and_are_read_only ... ok
+test workbench::tests::strategy_records_expose_typed_overview_exact_source_and_diagnostics ... ok
+test workbench::flow_tests::chart_navigation_reaches_tail_resizes_and_files_preserves_selected_source ... ok
+test workbench::relationship_tests::canonical_relationships_follow_cross_scope_targets_without_replacing_source_bodies ... ok
+test watching::tests::fake_watcher_covers_rename_overflow_coalescing_and_teardown ... ok
+test workbench::progressive_tests::section_header_counts_keep_their_scope_across_views_filters_and_scoped_refresh ... ok
+test review::tests::native_scroll_edge_keeps_visible_diff_lines_beyond_u16_row_count ... ok
+
+test result: ok. 63 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.24s
+
+    Checking casefile-tui v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-tui)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.55s
+
+=== eleventh-checks.log ===
+warning: Git tree '/home/alex/dev/HUMANS.md' is dirty
+humans-md development shell
+  Setup:  (cd casefile/web && bun install)
+  Format: scripts/format-source.sh --check|--write
+  Web:    cd casefile/web; bun install; bun run typecheck; bun run test; bun run build
+  Rust:   cd casefile; cargo fmt --check; cargo clippy --workspace --all-targets -- -D warnings; cargo test --workspace
+  CI:     act pull_request -j validate --pull=false -P ubuntu-latest=catthehacker/ubuntu:act-latest
+   Compiling casefile-tui v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-tui)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.09s
+     Running unittests src/lib.rs (/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/debug/deps/casefile_tui-26658e30d7cccb93)
+
+running 65 tests
+test interaction::tests::edit_selection_yields_only_supported_governed_records ... ok
+test markdown::tests::renders_headings_lists_code_and_terminal_safe_html ... ok
+test record_detail::tests::metadata_and_board_columns_escape_controls_and_remain_bounded ... ok
+test record_detail::tests::source_keeps_text_beyond_the_display_limit ... ok
+test record_detail::layout::tests::scrolling_and_resize_preserve_supported_unicode_wrap_and_styles ... ok
+test strategy_flow::tests::batching_compatibility_tracks_the_work_group_that_the_chart_will_actually_render ... ok
+test record_detail::tests::content_keeps_lines_and_escapes_only_unsafe_controls ... ok
+test progressive::tests::catalogue_resolves_full_nested_investigation_target ... ok
+test watching::tests::classifier_is_lexical_longest_root_and_exact_root_exclusions ... ok
+test watching::tests::classifier_keeps_dot_root_relative_and_absolute_namespaces_distinct ... ok
+test watching::tests::classifier_models_windows_case_and_backslash_equivalence ... ok
+test record_detail::tests::metadata_and_diagnostics_cannot_inject_terminal_controls ... ok
+test watching::tests::classifier_preserves_posix_filesystem_root_namespace ... ok
+test watching::tests::first_catalogue_rebuild_changes_events_from_store_wide_to_scoped ... ok
+test watching::tests::investigation_change_is_direct_without_invalidating_a_sibling ... ok
+test watching::tests::investigation_refresh_suppresses_exact_warning_but_retains_broader_visibility ... ok
+test strategy_flow::tests::declaration_refresh_revokes_contradictory_flows_without_rejecting_runtime_variants ... ok
+test strategy_flow::tests::selected_membership_not_declaration_order_controls_optional_review_and_correction_routing ... ok
+test watching::tests::reducer_preserves_later_observation_and_failure_never_clears ... ok
+test watching::tests::restored_health_does_not_claim_freshness ... ok
+test watching::tests::unrelated_project_observation_does_not_invalidate_scoped_refresh_success ... ok
+test strategy_flow::tests::optional_preflight_does_not_change_the_execution_diagram ... ok
+test strategy_flow::tests::selected_cache_refreshes_on_binding_only_change_scope_change_and_resize ... ok
+test watching::tests::refresh_window_ignores_sibling_bursts_but_preserves_nested_floors_and_clears ... ok
+test progressive::tests::catalogue_is_navigable_before_completion_and_post_start_observation_is_reported ... ok
+test progressive::tests::status_only_content_events_redraw_and_selection_cancellation_rejects_late_delivery ... ok
+test progressive::tests::obsolete_generation_is_discarded_and_refresh_failure_keeps_complete_data ... ok
+test strategy_flow::tests::a_lost_writer_binding_clears_the_cached_identifier_without_rebinding_other_roles ... ok
+test progressive::tests::store_minimum_scope_allows_contextual_refresh_and_reports_its_exact_coverage ... ok
+test review::tests::review_scrolls_store_diff_and_colours_additions_and_removals ... ok
+test strategy_flow::tests::resize_keeps_every_chart_cell_inside_the_pane_and_recovers_after_too_narrow ... ok
+test progressive::tests::selected_lazy_content_exposes_loaded_and_fresh_failure_states ... ok
+test strategy_flow::layout::tests::wide_model_identifiers_wrap_inside_closed_nonoverlapping_boxes ... ok
+test workbench::tests::board_card_selection_survives_complete_projection_with_deletion_and_ambiguity_controls ... ok
+test watching::tests::native_recursive_subscription_reports_a_disk_change_and_tears_down ... ok
+test workbench::tests::detail_scroll_resets_only_when_selected_content_revision_changes ... ok
+test workbench::progressive_tests::parent_scope_refresh_keeps_nested_body_and_removes_only_parent_members ... ok
+test workbench::tests::board_keyboard_selection_marks_the_card_changes_detail_and_skips_unresolved_identities ... ok
+test workbench::tests::boards_are_read_only_unfiltered_and_open_a_canonical_ticket_detail ... ok
+test workbench::tests::diagnostics_and_editing_remain_governed_path_only ... ok
+test workbench::tests::project_and_investigation_deletions_use_following_then_preceding_fallback ... ok
+test workbench::tests::files_are_grouped_relative_to_the_selected_scope_and_include_project_files ... ok
+test workbench::flow_tests::binding_refresh_updates_chart_and_overview_without_changing_selection ... ok
+test workbench::flow_tests::changing_investigation_replaces_the_chart_even_when_source_revisions_match ... ok
+test workbench::tests::boards_distinguish_no_definition_invalid_and_empty ... ok
+test workbench::tests::refresh_target_matrix_uses_project_full_investigation_and_store_fallback ... ok
+test workbench::progressive_tests::eager_and_lazy_detail_survive_promotion_refresh_and_external_edit ... ok
+test workbench::tests::promotion_preserves_pending_exact_and_semantic_anchors_and_handles_deletion ... ok
+test workbench::tests::filtering_and_empty_hierarchy_states_remain_predictable ... ok
+test workbench::tests::unchanged_filter_exact_disappearance_is_explained_and_resume_is_round_tripped ... ok
+test workbench::progressive_tests::scoped_refresh_updates_rendered_boards_and_progress_without_losing_selection_or_other_rows ... ok
+test workbench::tests::strategy_key_and_tab_cycle_preserve_existing_view_targets ... ok
+test workbench::tests::rendered_and_source_tabs_keep_markdown_readable_and_exact ... ok
+test workbench::tests::nested_investigations_with_the_same_leaf_are_selectable_independently ... ok
+test workbench::tests::project_investigation_ticket_drill_down_selects_a_canonical_path ... ok
+test workbench::tests::focus_navigation_help_and_go_up_are_visible ... ok
+test workbench::relationship_tests::relationship_availability_tracks_project_coverage_not_a_stale_store_complete_flag ... ok
+test workbench::tests::strategies_are_scoped_by_full_nested_investigation_identity ... ok
+test workbench::tests::strategies_filter_remain_in_files_and_are_read_only ... ok
+test workbench::flow_tests::chart_navigation_reaches_tail_resizes_and_files_preserves_selected_source ... ok
+test workbench::tests::strategy_records_expose_typed_overview_exact_source_and_diagnostics ... ok
+test workbench::relationship_tests::canonical_relationships_follow_cross_scope_targets_without_replacing_source_bodies ... ok
+test watching::tests::fake_watcher_covers_rename_overflow_coalescing_and_teardown ... ok
+test workbench::progressive_tests::section_header_counts_keep_their_scope_across_views_filters_and_scoped_refresh ... ok
+test review::tests::native_scroll_edge_keeps_visible_diff_lines_beyond_u16_row_count ... ok
+
+test result: ok. 65 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.25s
+
+    Checking casefile-tui v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-tui)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.37s
+   Compiling casefile-core v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-core)
+   Compiling casefile-store v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store)
+   Compiling casefile-tui v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-tui)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 12.32s
+    Checking serde-saphyr v0.0.29
+    Checking casefile-core v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-core)
+    Checking casefile-store v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store)
+    Checking casefile-store-sqlite v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store-sqlite)
+    Checking casefile-tui v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-tui)
+    Checking casefile-server v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-server)
+    Checking casefile-cli v0.8.0 (/home/alex/dev/HUMANS.md/casefile/casefile-cli)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 8.51s
+
+=== fifth-checks.log ===
+warning: Git tree '/home/alex/dev/HUMANS.md' is dirty
+humans-md development shell
+  Setup:  (cd casefile/web && bun install)
+  Format: scripts/format-source.sh --check|--write
+  Web:    cd casefile/web; bun install; bun run typecheck; bun run test; bun run build
+  Rust:   cd casefile; cargo fmt --check; cargo clippy --workspace --all-targets -- -D warnings; cargo test --workspace
+  CI:     act pull_request -j validate --pull=false -P ubuntu-latest=catthehacker/ubuntu:act-latest
+   Compiling casefile-tui v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-tui)
+error[E0308]: mismatched types
+   --> casefile-tui/src/review.rs:114:17
+    |
+113 |             *layout = Some(crate::record_detail::layout::Layout::new(
+    |                            ----------------------------------------- arguments to this function are incorrect
+114 |                 self.lines.clone(),
+    |                 ^^^^^^^^^^^^^^^^^^ expected `&[Line<'_>]`, found `Vec<Line<'_>>`
+    |
+    = note: expected reference `&[ratatui::prelude::Line<'_>]`
+                  found struct `Vec<ratatui::prelude::Line<'_>>`
+note: associated function defined here
+   --> casefile-tui/src/record_detail/layout.rs:16:19
+    |
+ 16 |     pub(crate) fn new(lines: &[Line<'_>], width: u16) -> Self {
+    |                   ^^^ ------------------
+help: consider borrowing here
+    |
+114 |                 &self.lines.clone(),
+    |                 +
+
+For more information about this error, try `rustc --explain E0308`.
+error: could not compile `casefile-tui` (lib test) due to 1 previous error
+
+=== final-report-format.log ===
+warning: Git tree '/home/alex/dev/HUMANS.md' is dirty
+humans-md development shell
+  Setup:  (cd casefile/web && bun install)
+  Format: scripts/format-source.sh --check|--write
+  Web:    cd casefile/web; bun install; bun run typecheck; bun run test; bun run build
+  Rust:   cd casefile; cargo fmt --check; cargo clippy --workspace --all-targets -- -D warnings; cargo test --workspace
+  CI:     act pull_request -j validate --pull=false -P ubuntu-latest=catthehacker/ubuntu:act-latest
+../benchmarks/HMD-067-RESULTS.md 83ms
+Checking formatting...
+All matched files use Prettier code style!
+
+=== final-rescope-checks.log ===
+warning: Git tree '/home/alex/dev/HUMANS.md' is dirty
+humans-md development shell
+  Setup:  (cd casefile/web && bun install)
+  Format: scripts/format-source.sh --check|--write
+  Web:    cd casefile/web; bun install; bun run typecheck; bun run test; bun run build
+  Rust:   cd casefile; cargo fmt --check; cargo clippy --workspace --all-targets -- -D warnings; cargo test --workspace
+  CI:     act pull_request -j validate --pull=false -P ubuntu-latest=catthehacker/ubuntu:act-latest
+   Compiling casefile-tui v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-tui)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.01s
+     Running unittests src/lib.rs (/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/debug/deps/casefile_tui-26658e30d7cccb93)
+
+running 67 tests
+test interaction::tests::edit_selection_yields_only_supported_governed_records ... ok
+test markdown::tests::renders_headings_lists_code_and_terminal_safe_html ... ok
+test record_detail::tests::metadata_and_board_columns_escape_controls_and_remain_bounded ... ok
+test record_detail::tests::source_keeps_text_beyond_the_display_limit ... ok
+test record_detail::layout::tests::scrolling_and_resize_preserve_supported_unicode_wrap_and_styles ... ok
+test strategy_flow::tests::batching_compatibility_tracks_the_work_group_that_the_chart_will_actually_render ... ok
+test record_detail::tests::content_keeps_lines_and_escapes_only_unsafe_controls ... ok
+test record_detail::tests::metadata_and_diagnostics_cannot_inject_terminal_controls ... ok
+test watching::tests::classifier_is_lexical_longest_root_and_exact_root_exclusions ... ok
+test strategy_flow::tests::selected_membership_not_declaration_order_controls_optional_review_and_correction_routing ... ok
+test watching::tests::classifier_keeps_dot_root_relative_and_absolute_namespaces_distinct ... ok
+test watching::tests::classifier_models_windows_case_and_backslash_equivalence ... ok
+test watching::tests::classifier_preserves_posix_filesystem_root_namespace ... ok
+test watching::tests::first_catalogue_rebuild_changes_events_from_store_wide_to_scoped ... ok
+test watching::tests::investigation_change_is_direct_without_invalidating_a_sibling ... ok
+test watching::tests::investigation_refresh_suppresses_exact_warning_but_retains_broader_visibility ... ok
+test strategy_flow::tests::a_lost_writer_binding_clears_the_cached_identifier_without_rebinding_other_roles ... ok
+test watching::tests::reducer_preserves_later_observation_and_failure_never_clears ... ok
+test watching::tests::refresh_window_ignores_sibling_bursts_but_preserves_nested_floors_and_clears ... ok
+test watching::tests::restored_health_does_not_claim_freshness ... ok
+test strategy_flow::tests::declaration_refresh_revokes_contradictory_flows_without_rejecting_runtime_variants ... ok
+test strategy_flow::tests::selected_cache_refreshes_on_binding_only_change_scope_change_and_resize ... ok
+test watching::tests::unrelated_project_observation_does_not_invalidate_scoped_refresh_success ... ok
+test progressive::tests::catalogue_resolves_full_nested_investigation_target ... ok
+test progressive::tests::catalogue_is_navigable_before_completion_and_post_start_observation_is_reported ... ok
+test progressive::tests::obsolete_generation_is_discarded_and_refresh_failure_keeps_complete_data ... ok
+test review::tests::review_scrolls_store_diff_and_colours_additions_and_removals ... ok
+test strategy_flow::tests::optional_preflight_does_not_change_the_execution_diagram ... ok
+test progressive::tests::store_minimum_scope_allows_contextual_refresh_and_reports_its_exact_coverage ... ok
+test progressive::tests::status_only_content_events_redraw_and_selection_cancellation_rejects_late_delivery ... ok
+test strategy_flow::layout::tests::wide_model_identifiers_wrap_inside_closed_nonoverlapping_boxes ... ok
+test strategy_flow::tests::resize_keeps_every_chart_cell_inside_the_pane_and_recovers_after_too_narrow ... ok
+test progressive::tests::selected_lazy_content_exposes_loaded_and_fresh_failure_states ... ok
+test workbench::tests::board_card_selection_survives_complete_projection_with_deletion_and_ambiguity_controls ... ok
+test watching::tests::native_recursive_subscription_reports_a_disk_change_and_tears_down ... ok
+test workbench::tests::board_keyboard_selection_marks_the_card_changes_detail_and_skips_unresolved_identities ... ok
+test workbench::progressive_tests::parent_scope_refresh_keeps_nested_body_and_removes_only_parent_members ... ok
+test workbench::tests::detail_scroll_resets_only_when_selected_content_revision_changes ... ok
+test workbench::tests::boards_are_read_only_unfiltered_and_open_a_canonical_ticket_detail ... ok
+test workbench::flow_tests::changing_investigation_replaces_the_chart_even_when_source_revisions_match ... ok
+test workbench::tests::catalogue_root_change_rescopes_cached_card_identities_without_body_updates ... ok
+test workbench::tests::project_and_investigation_deletions_use_following_then_preceding_fallback ... ok
+test workbench::tests::diagnostics_and_editing_remain_governed_path_only ... ok
+test workbench::tests::files_are_grouped_relative_to_the_selected_scope_and_include_project_files ... ok
+test workbench::tests::boards_distinguish_no_definition_invalid_and_empty ... ok
+test workbench::flow_tests::binding_refresh_updates_chart_and_overview_without_changing_selection ... ok
+test workbench::tests::refresh_target_matrix_uses_project_full_investigation_and_store_fallback ... ok
+test workbench::tests::promotion_preserves_pending_exact_and_semantic_anchors_and_handles_deletion ... ok
+test workbench::progressive_tests::eager_and_lazy_detail_survive_promotion_refresh_and_external_edit ... ok
+test workbench::tests::filtering_and_empty_hierarchy_states_remain_predictable ... ok
+test workbench::tests::unchanged_filter_exact_disappearance_is_explained_and_resume_is_round_tripped ... ok
+test workbench::progressive_tests::scoped_refresh_updates_rendered_boards_and_progress_without_losing_selection_or_other_rows ... ok
+test workbench::tests::strategy_key_and_tab_cycle_preserve_existing_view_targets ... ok
+test workbench::tests::nested_investigations_with_the_same_leaf_are_selectable_independently ... ok
+test workbench::tests::rendered_and_source_tabs_keep_markdown_readable_and_exact ... ok
+test workbench::tests::project_investigation_ticket_drill_down_selects_a_canonical_path ... ok
+test workbench::relationship_tests::relationship_availability_tracks_project_coverage_not_a_stale_store_complete_flag ... ok
+test workbench::tests::focus_navigation_help_and_go_up_are_visible ... ok
+test workbench::tests::strategies_are_scoped_by_full_nested_investigation_identity ... ok
+test workbench::tests::strategies_filter_remain_in_files_and_are_read_only ... ok
+test workbench::tests::viewport_navigation_keeps_last_group_selected_across_resize_and_filter ... ok
+test workbench::tests::strategy_records_expose_typed_overview_exact_source_and_diagnostics ... ok
+test workbench::flow_tests::chart_navigation_reaches_tail_resizes_and_files_preserves_selected_source ... ok
+test workbench::relationship_tests::canonical_relationships_follow_cross_scope_targets_without_replacing_source_bodies ... ok
+test watching::tests::fake_watcher_covers_rename_overflow_coalescing_and_teardown ... ok
+test workbench::progressive_tests::section_header_counts_keep_their_scope_across_views_filters_and_scoped_refresh ... ok
+test review::tests::native_scroll_edge_keeps_visible_diff_lines_beyond_u16_row_count ... ok
+
+test result: ok. 67 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.24s
+
+    Checking casefile-tui v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-tui)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.35s
+   Compiling casefile-tui v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-tui)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.81s
+    Checking casefile-tui v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-tui)
+    Checking casefile-cli v0.8.0 (/home/alex/dev/HUMANS.md/casefile/casefile-cli)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.62s
+   Compiling casefile-tui v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-tui)
+    Finished `bench` profile [optimized] target(s) in 12.31s
+  Executable src/benchmark.rs (/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/release/deps/interactions-cee69abf78b7fcec)
+
+=== fourth-check.log ===
+warning: Git tree '/home/alex/dev/HUMANS.md' is dirty
+humans-md development shell
+  Setup:  (cd casefile/web && bun install)
+  Format: scripts/format-source.sh --check|--write
+  Web:    cd casefile/web; bun install; bun run typecheck; bun run test; bun run build
+  Rust:   cd casefile; cargo fmt --check; cargo clippy --workspace --all-targets -- -D warnings; cargo test --workspace
+  CI:     act pull_request -j validate --pull=false -P ubuntu-latest=catthehacker/ubuntu:act-latest
+    Checking casefile-tui v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-tui)
+error: expected identifier, found `:`
+    --> casefile-tui/src/workbench/tests.rs:1229:24
+     |
+1229 |             body_owners: BTreeMap::new(),
+     |                        ^ expected identifier
+
+warning: unused import: `DerivedBoard`
+  --> casefile-tui/src/workbench.rs:14:22
+   |
+14 | use casefile_store::{DerivedBoard, DerivedSnapshot, PresentationTarget, ScanResult};
+   |                      ^^^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused imports: `Block`, `BorderType`, `Borders`, `Clear`, `Span`, and `Wrap`
+  --> casefile-tui/src/workbench.rs:22:18
+   |
+22 |     text::{Line, Span},
+   |                  ^^^^
+23 |     widgets::{Block, BorderType, Borders, Clear, Paragraph, Widget, Wrap},
+   |               ^^^^^  ^^^^^^^^^^  ^^^^^^^  ^^^^^                     ^^^^
+
+error[E0308]: mismatched types
+   --> casefile-tui/src/progressive/content.rs:102:40
+    |
+102 |                 let entry = Arc::clone(entry);
+    |                             ---------- ^^^^^ expected `&Arc<_, _>`, found `&Box<PresentationEntry>`
+    |                             |
+    |                             arguments to this function are incorrect
+    |
+    = note: expected reference `&std::sync::Arc<_, _>`
+               found reference `&Box<casefile_store::PresentationEntry>`
+note: method defined here
+   --> /rustc/59807616e1fa2540724bfbac14d7976d7e4a3860/library/core/src/clone.rs:236:7
+
+error[E0061]: this function takes 5 arguments but 4 arguments were supplied
+   --> casefile-tui/src/record_detail.rs:671:23
+    |
+671 |         let visible = detail_lines(&entry, None, &[], DetailTab::Source)
+    |                       ^^^^^^^^^^^^-------------------------------------- argument #5 of type `&[u8]` is missing
+    |
+note: function defined here
+   --> casefile-tui/src/record_detail.rs:205:4
+    |
+205 | fn detail_lines(
+    |    ^^^^^^^^^^^^
+...
+210 |     bytes: &[u8],
+    |     ------------
+help: provide the argument
+    |
+671 |         let visible = detail_lines(&entry, None, &[], DetailTab::Source, /* &[u8] */)
+    |                                                                        +++++++++++++
+
+error[E0425]: cannot find function `render_help` in this scope
+   --> casefile-tui/src/workbench.rs:618:13
+    |
+618 |             render_help(area, buffer);
+    |             ^^^^^^^^^^^ not found in this scope
+
+Some errors have detailed explanations: E0308, E0425.
+For more information about an error, try `rustc --explain E0308`.
+warning: `casefile-tui` (lib) generated 2 warnings
+error: could not compile `casefile-tui` (lib) due to 2 previous errors; 2 warnings emitted
+warning: build failed, waiting for other jobs to finish...
+Some errors have detailed explanations: E0061, E0308, E0425.
+For more information about an error, try `rustc --explain E0061`.
+warning: `casefile-tui` (lib test) generated 2 warnings (2 duplicates)
+error: could not compile `casefile-tui` (lib test) due to 4 previous errors; 2 warnings emitted
+
+=== fourth-tests.log ===
+warning: Git tree '/home/alex/dev/HUMANS.md' is dirty
+humans-md development shell
+  Setup:  (cd casefile/web && bun install)
+  Format: scripts/format-source.sh --check|--write
+  Web:    cd casefile/web; bun install; bun run typecheck; bun run test; bun run build
+  Rust:   cd casefile; cargo fmt --check; cargo clippy --workspace --all-targets -- -D warnings; cargo test --workspace
+  CI:     act pull_request -j validate --pull=false -P ubuntu-latest=catthehacker/ubuntu:act-latest
+   Compiling casefile-tui v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-tui)
+warning: function `target_contains` is never used
+   --> casefile-tui/src/progressive.rs:443:4
+    |
+443 | fn target_contains(target: &PresentationTarget, path: &str) -> bool {
+    |    ^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `casefile-tui` (lib test) generated 1 warning
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 5.73s
+     Running unittests src/lib.rs (/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/debug/deps/casefile_tui-26658e30d7cccb93)
+
+running 60 tests
+test interaction::tests::edit_selection_yields_only_supported_governed_records ... ok
+test markdown::tests::renders_headings_lists_code_and_terminal_safe_html ... ok
+test record_detail::tests::metadata_and_board_columns_escape_controls_and_remain_bounded ... ok
+test record_detail::tests::source_keeps_text_beyond_the_display_limit ... ok
+test strategy_flow::tests::batching_compatibility_tracks_the_work_group_that_the_chart_will_actually_render ... ok
+test watching::tests::classifier_is_lexical_longest_root_and_exact_root_exclusions ... ok
+test watching::tests::classifier_keeps_dot_root_relative_and_absolute_namespaces_distinct ... ok
+test watching::tests::classifier_models_windows_case_and_backslash_equivalence ... ok
+test watching::tests::classifier_preserves_posix_filesystem_root_namespace ... ok
+test record_detail::tests::content_keeps_lines_and_escapes_only_unsafe_controls ... ok
+test record_detail::tests::metadata_and_diagnostics_cannot_inject_terminal_controls ... ok
+test watching::tests::first_catalogue_rebuild_changes_events_from_store_wide_to_scoped ... ok
+test watching::tests::investigation_change_is_direct_without_invalidating_a_sibling ... ok
+test progressive::tests::catalogue_resolves_full_nested_investigation_target ... ok
+test watching::tests::investigation_refresh_suppresses_exact_warning_but_retains_broader_visibility ... ok
+test watching::tests::reducer_preserves_later_observation_and_failure_never_clears ... ok
+test watching::tests::restored_health_does_not_claim_freshness ... ok
+test strategy_flow::tests::selected_membership_not_declaration_order_controls_optional_review_and_correction_routing ... ok
+test watching::tests::unrelated_project_observation_does_not_invalidate_scoped_refresh_success ... ok
+test strategy_flow::tests::a_lost_writer_binding_clears_the_cached_identifier_without_rebinding_other_roles ... ok
+test strategy_flow::tests::declaration_refresh_revokes_contradictory_flows_without_rejecting_runtime_variants ... ok
+test strategy_flow::tests::optional_preflight_does_not_change_the_execution_diagram ... ok
+test progressive::tests::obsolete_generation_is_discarded_and_refresh_failure_keeps_complete_data ... ok
+test progressive::tests::catalogue_is_navigable_before_completion_and_post_start_observation_is_reported ... ok
+test review::tests::review_scrolls_store_diff_and_colours_additions_and_removals ... ok
+test progressive::tests::store_minimum_scope_allows_contextual_refresh_and_reports_its_exact_coverage ... ok
+test strategy_flow::layout::tests::wide_model_identifiers_wrap_inside_closed_nonoverlapping_boxes ... ok
+test strategy_flow::tests::selected_cache_refreshes_on_binding_only_change_scope_change_and_resize ... ok
+test strategy_flow::tests::resize_keeps_every_chart_cell_inside_the_pane_and_recovers_after_too_narrow ... ok
+test progressive::tests::selected_lazy_content_exposes_loaded_and_fresh_failure_states ... ok
+test workbench::tests::board_card_selection_survives_complete_projection_with_deletion_and_ambiguity_controls ... ok
+test workbench::progressive_tests::detail_promotion_and_unchanged_refresh_leave_unrelated_record_payloads_in_place ... ok
+test workbench::tests::detail_scroll_resets_only_when_selected_content_revision_changes ... ok
+test workbench::tests::diagnostics_and_editing_remain_governed_path_only ... ok
+test watching::tests::native_recursive_subscription_reports_a_disk_change_and_tears_down ... ok
+test workbench::tests::files_are_grouped_relative_to_the_selected_scope_and_include_project_files ... ok
+test workbench::tests::project_and_investigation_deletions_use_following_then_preceding_fallback ... ok
+test workbench::tests::filtering_and_empty_hierarchy_states_remain_predictable ... ok
+test workbench::tests::boards_are_read_only_unfiltered_and_open_a_canonical_ticket_detail ... ok
+test workbench::tests::promotion_preserves_pending_exact_and_semantic_anchors_and_handles_deletion ... ok
+test workbench::tests::boards_distinguish_no_definition_invalid_and_empty ... ok
+test workbench::tests::board_keyboard_selection_marks_the_card_changes_detail_and_skips_unresolved_identities ... ok
+test workbench::tests::refresh_target_matrix_uses_project_full_investigation_and_store_fallback ... ok
+test workbench::flow_tests::changing_investigation_replaces_the_chart_even_when_source_revisions_match ... ok
+test workbench::tests::unchanged_filter_exact_disappearance_is_explained_and_resume_is_round_tripped ... ok
+test workbench::flow_tests::binding_refresh_updates_chart_and_overview_without_changing_selection ... ok
+test workbench::tests::strategy_key_and_tab_cycle_preserve_existing_view_targets ... ok
+test workbench::tests::nested_investigations_with_the_same_leaf_are_selectable_independently ... ok
+test workbench::tests::rendered_and_source_tabs_keep_markdown_readable_and_exact ... ok
+test workbench::tests::project_investigation_ticket_drill_down_selects_a_canonical_path ... ok
+test workbench::tests::strategies_are_scoped_by_full_nested_investigation_identity ... ok
+test workbench::progressive_tests::scoped_refresh_updates_rendered_boards_and_progress_without_losing_selection_or_other_rows ... ok
+test workbench::tests::focus_navigation_help_and_go_up_are_visible ... ok
+test workbench::tests::strategies_filter_remain_in_files_and_are_read_only ... ok
+test workbench::relationship_tests::relationship_availability_tracks_project_coverage_not_a_stale_store_complete_flag ... ok
+test workbench::tests::strategy_records_expose_typed_overview_exact_source_and_diagnostics ... ok
+test workbench::flow_tests::chart_navigation_reaches_tail_resizes_and_files_preserves_selected_source ... ok
+test workbench::relationship_tests::canonical_relationships_follow_cross_scope_targets_without_replacing_source_bodies ... ok
+test workbench::progressive_tests::section_header_counts_keep_their_scope_across_views_filters_and_scoped_refresh ... ok
+test watching::tests::fake_watcher_covers_rename_overflow_coalescing_and_teardown ... ok
+
+test result: ok. 60 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.17s
+
+
+=== initial-check.log ===
+warning: Git tree '/home/alex/dev/HUMANS.md' is dirty
+humans-md development shell
+  Setup:  (cd casefile/web && bun install)
+  Format: scripts/format-source.sh --check|--write
+  Web:    cd casefile/web; bun install; bun run typecheck; bun run test; bun run build
+  Rust:   cd casefile; cargo fmt --check; cargo clippy --workspace --all-targets -- -D warnings; cargo test --workspace
+  CI:     act pull_request -j validate --pull=false -P ubuntu-latest=catthehacker/ubuntu:act-latest
+    Checking casefile-core v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-core)
+    Checking casefile-store v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store)
+    Checking casefile-tui v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-tui)
+warning: methods `rebuild` and `update` are never used
+   --> casefile-tui/src/browsing.rs:121:19
+    |
+104 | impl Browser {
+    | ------------ methods in this implementation
+...
+121 |     pub(crate) fn rebuild(&mut self, scan: &ScanResult) { self.projection.rebuild(scan); }
+    |                   ^^^^^^^
+122 |
+123 |     pub(crate) fn update(&mut self, scan: &ScanResult, indices: &std::collections::BTreeMap<String,usize>, changed: &std::collectio...
+    |                   ^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `work_entries` is never used
+   --> casefile-tui/src/browsing.rs:747:4
+    |
+747 | fn work_entries(scan: &ScanResult) -> Vec<&EntrySnapshot> {
+    |    ^^^^^^^^^^^^
+
+warning: function `relative_parent_directory` is never used
+   --> casefile-tui/src/browsing.rs:802:4
+    |
+802 | fn relative_parent_directory(
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: method `update` is never used
+  --> casefile-tui/src/browsing/projection.rs:29:19
+   |
+21 | impl Projection {
+   | --------------- method in this implementation
+...
+29 |     pub(super) fn update(&mut self, scan: &ScanResult, indices: &BTreeMap<String, usize>, changed: &BTreeSet<String>) {
+   |                   ^^^^^^
+
+warning: method `invalidate` is never used
+   --> casefile-tui/src/record_detail.rs:112:19
+    |
+ 84 | impl RecordDetail {
+    | ----------------- method in this implementation
+...
+112 |     pub(crate) fn invalidate(&self) { self.layout.borrow_mut().take(); }
+    |                   ^^^^^^^^^^
+
+warning: `casefile-tui` (lib) generated 5 warnings
+warning: `casefile-tui` (lib test) generated 5 warnings (5 duplicates)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 7.28s
+
+=== initial-tests.log ===
+warning: Git tree '/home/alex/dev/HUMANS.md' is dirty
+humans-md development shell
+  Setup:  (cd casefile/web && bun install)
+  Format: scripts/format-source.sh --check|--write
+  Web:    cd casefile/web; bun install; bun run typecheck; bun run test; bun run build
+  Rust:   cd casefile; cargo fmt --check; cargo clippy --workspace --all-targets -- -D warnings; cargo test --workspace
+  CI:     act pull_request -j validate --pull=false -P ubuntu-latest=catthehacker/ubuntu:act-latest
+   Compiling casefile-store v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store)
+   Compiling casefile-tui v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-tui)
+warning: function `canonical_card_path` is never used
+   --> casefile-tui/src/workbench.rs:772:4
+    |
+772 | fn canonical_card_path(
+    |    ^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `scoped_board_diagnostics` is never used
+   --> casefile-tui/src/workbench.rs:795:4
+    |
+795 | fn scoped_board_diagnostics<'a>(
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `casefile-tui` (lib test) generated 2 warnings
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 11.92s
+     Running unittests src/lib.rs (/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/debug/deps/casefile_tui-26658e30d7cccb93)
+
+running 60 tests
+test interaction::tests::edit_selection_yields_only_supported_governed_records ... ok
+test markdown::tests::renders_headings_lists_code_and_terminal_safe_html ... ok
+test record_detail::tests::metadata_and_board_columns_escape_controls_and_remain_bounded ... ok
+test record_detail::tests::source_keeps_text_beyond_the_display_limit ... ok
+test strategy_flow::tests::batching_compatibility_tracks_the_work_group_that_the_chart_will_actually_render ... ok
+test watching::tests::classifier_is_lexical_longest_root_and_exact_root_exclusions ... ok
+test record_detail::tests::content_keeps_lines_and_escapes_only_unsafe_controls ... ok
+test watching::tests::classifier_models_windows_case_and_backslash_equivalence ... ok
+test watching::tests::classifier_keeps_dot_root_relative_and_absolute_namespaces_distinct ... ok
+test watching::tests::classifier_preserves_posix_filesystem_root_namespace ... ok
+test record_detail::tests::metadata_and_diagnostics_cannot_inject_terminal_controls ... ok
+test progressive::tests::catalogue_resolves_full_nested_investigation_target ... ok
+test watching::tests::first_catalogue_rebuild_changes_events_from_store_wide_to_scoped ... ok
+test watching::tests::investigation_refresh_suppresses_exact_warning_but_retains_broader_visibility ... ok
+test strategy_flow::tests::selected_membership_not_declaration_order_controls_optional_review_and_correction_routing ... ok
+test watching::tests::project_change_is_direct_for_one_investigation_and_inherited_for_sibling ... ok
+test watching::tests::reducer_preserves_later_observation_and_failure_never_clears ... ok
+test strategy_flow::tests::a_lost_writer_binding_clears_the_cached_identifier_without_rebinding_other_roles ... ok
+test watching::tests::unrelated_project_observation_does_not_invalidate_scoped_refresh_success ... ok
+test watching::tests::restored_health_does_not_claim_freshness ... ok
+test strategy_flow::tests::declaration_refresh_revokes_contradictory_flows_without_rejecting_runtime_variants ... ok
+test strategy_flow::tests::selected_cache_refreshes_on_binding_only_change_scope_change_and_resize ... ok
+test strategy_flow::tests::optional_preflight_does_not_change_the_execution_diagram ... ok
+test progressive::tests::catalogue_is_navigable_before_completion_and_post_start_observation_is_reported ... ok
+test progressive::tests::obsolete_generation_is_discarded_and_refresh_failure_keeps_complete_data ... ok
+test review::tests::review_scrolls_store_diff_and_colours_additions_and_removals ... ok
+test progressive::tests::store_minimum_scope_allows_contextual_refresh_and_reports_its_exact_coverage ... ok
+test strategy_flow::layout::tests::wide_model_identifiers_wrap_inside_closed_nonoverlapping_boxes ... ok
+test strategy_flow::tests::resize_keeps_every_chart_cell_inside_the_pane_and_recovers_after_too_narrow ... ok
+test workbench::tests::detail_scroll_resets_only_when_selected_content_revision_changes ... ok
+test workbench::tests::board_card_selection_survives_complete_projection_with_deletion_and_ambiguity_controls ... ok
+test progressive::tests::selected_lazy_content_exposes_loaded_and_fresh_failure_states ... ok
+test workbench::progressive_tests::detail_promotion_and_unchanged_refresh_leave_unrelated_record_payloads_in_place ... ok
+test workbench::tests::diagnostics_and_editing_remain_governed_path_only ... ok
+test workbench::tests::files_are_grouped_relative_to_the_selected_scope_and_include_project_files ... ok
+test workbench::tests::project_and_investigation_deletions_use_following_then_preceding_fallback ... ok
+test watching::tests::native_recursive_subscription_reports_a_disk_change_and_tears_down ... ok
+test workbench::flow_tests::changing_investigation_replaces_the_chart_even_when_source_revisions_match ... FAILED
+test workbench::tests::boards_distinguish_no_definition_invalid_and_empty ... ok
+test workbench::tests::refresh_target_matrix_uses_project_full_investigation_and_store_fallback ... ok
+test workbench::tests::board_keyboard_selection_marks_the_card_changes_detail_and_skips_unresolved_identities ... ok
+test workbench::tests::filtering_and_empty_hierarchy_states_remain_predictable ... ok
+test workbench::tests::boards_are_read_only_unfiltered_and_open_a_canonical_ticket_detail ... ok
+test workbench::tests::promotion_preserves_pending_exact_and_semantic_anchors_and_handles_deletion ... ok
+test workbench::tests::unchanged_filter_exact_disappearance_is_explained_and_resume_is_round_tripped ... ok
+test workbench::tests::strategy_key_and_tab_cycle_preserve_existing_view_targets ... ok
+test workbench::flow_tests::binding_refresh_updates_chart_and_overview_without_changing_selection ... ok
+test workbench::tests::nested_investigations_with_the_same_leaf_are_selectable_independently ... ok
+test workbench::tests::rendered_and_source_tabs_keep_markdown_readable_and_exact ... ok
+test workbench::tests::focus_navigation_help_and_go_up_are_visible ... ok
+test workbench::progressive_tests::scoped_refresh_updates_rendered_boards_and_progress_without_losing_selection_or_other_rows ... ok
+test workbench::tests::project_investigation_ticket_drill_down_selects_a_canonical_path ... ok
+test workbench::tests::strategies_are_scoped_by_full_nested_investigation_identity ... ok
+test workbench::relationship_tests::relationship_availability_tracks_project_coverage_not_a_stale_store_complete_flag ... ok
+test workbench::tests::strategies_filter_remain_in_files_and_are_read_only ... ok
+test workbench::tests::strategy_records_expose_typed_overview_exact_source_and_diagnostics ... ok
+test workbench::flow_tests::chart_navigation_reaches_tail_resizes_and_files_preserves_selected_source ... ok
+test workbench::relationship_tests::canonical_relationships_follow_cross_scope_targets_without_replacing_source_bodies ... ok
+test workbench::progressive_tests::section_header_counts_keep_their_scope_across_views_filters_and_scoped_refresh ... ok
+test watching::tests::fake_watcher_covers_rename_overflow_coalescing_and_teardown ... ok
+
+failures:
+
+---- workbench::flow_tests::changing_investigation_replaces_the_chart_even_when_source_revisions_match stdout ----
+
+thread 'workbench::flow_tests::changing_investigation_replaces_the_chart_even_when_source_revisions_match' (1931241) panicked at casefile-tui/src/workbench/flow_tests.rs:144:5:
+assertion failed: app.detail.scroll_position() < original_end
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    workbench::flow_tests::changing_investigation_replaces_the_chart_even_when_source_revisions_match
+
+test result: FAILED. 59 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.18s
+
+error: test failed, to rerun pass `-p casefile-tui --lib`
+
+=== nested-probe.log ===
+warning: Git tree '/home/alex/dev/HUMANS.md' is dirty
+humans-md development shell
+  Setup:  (cd casefile/web && bun install)
+  Format: scripts/format-source.sh --check|--write
+  Web:    cd casefile/web; bun install; bun run typecheck; bun run test; bun run build
+  Rust:   cd casefile; cargo fmt --check; cargo clippy --workspace --all-targets -- -D warnings; cargo test --workspace
+  CI:     act pull_request -j validate --pull=false -P ubuntu-latest=catthehacker/ubuntu:act-latest
+   Compiling casefile-tui v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-tui)
+error[E0616]: field `entries` of struct `progressive::Coordinator` is private
+   --> casefile-tui/src/workbench/progressive_tests.rs:250:48
+    |
+250 |     eprintln!("child BEFORE {:?}", coordinator.entries.get(&child));
+    |                                                ^^^^^^^ private field
+
+error[E0616]: field `entries` of struct `progressive::Coordinator` is private
+   --> casefile-tui/src/workbench/progressive_tests.rs:259:60
+    |
+259 |     eprintln!("child AFTER {:?} removed {:?}", coordinator.entries.get(&child), app.body_owners.get(&child));
+    |                                                            ^^^^^^^ private field
+
+For more information about this error, try `rustc --explain E0616`.
+error: could not compile `casefile-tui` (lib test) due to 2 previous errors
+
+=== nested-probe2.log ===
+warning: Git tree '/home/alex/dev/HUMANS.md' is dirty
+humans-md development shell
+  Setup:  (cd casefile/web && bun install)
+  Format: scripts/format-source.sh --check|--write
+  Web:    cd casefile/web; bun install; bun run typecheck; bun run test; bun run build
+  Rust:   cd casefile; cargo fmt --check; cargo clippy --workspace --all-targets -- -D warnings; cargo test --workspace
+  CI:     act pull_request -j validate --pull=false -P ubuntu-latest=catthehacker/ubuntu:act-latest
+   Compiling casefile-tui v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-tui)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.01s
+     Running unittests src/lib.rs (/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/debug/deps/casefile_tui-26658e30d7cccb93)
+
+running 1 test
+child BEFORE Some(PresentationEntry { path: "projects/demo/investigations/sample/child/evidence/observation.md", scope: Some(PresentationScope { project: "demo", investigation: Some("sample/child") }), kind: Some(Evidence), metadata: PresentationFileMetadata { kind: Regular, length: 71, modified_unix_nanos: Some(1790821119854042152), revision: Revision("display:66307:7877168:71:Some(1790821119854042152):1790821119:854042152") }, content_handle: Some(PresentationContentHandle { session: 1, id: 1, path: "projects/demo/investigations/sample/child/evidence/observation.md" }), classification: Available(Governed), identity: Available(None), summary: Available(Some(PresentationSummary { title: "Observation", record: Markdown { title: "Observation" } })), diagnostics: Available([]), progress: Unavailable, relationships: Available([]), boards: Unavailable, body: Available([45, 45, 45, 10, 114, 101, 102, 115, 58, 32, 91, 72, 77, 68, 45, 68, 45, 48, 48, 49, 93, 10, 97, 116, 116, 97, 99, 104, 109, 101, 110, 116, 115, 58, 32, 91, 97, 116, 116, 97, 99, 104, 109, 101, 110, 116, 46, 116, 120, 116, 93, 10, 45, 45, 45, 10, 10, 35, 32, 79, 98, 115, 101, 114, 118, 97, 116, 105, 111, 110, 10]), derived: Some(DerivedRecord { path: "projects/demo/investigations/sample/child/evidence/observation.md", scope: Some(RecordScope { project: "demo", investigation: Some("sample/child") }), classification: Governed, kind: Some(Evidence), identity: None, title: "Observation", content: None, work_item: None, progress: None, board: None, strategy: None, strategy_binding: None }) })
+child AFTER Some(PresentationEntry { path: "projects/demo/investigations/sample/child/evidence/observation.md", scope: Some(PresentationScope { project: "demo", investigation: Some("sample/child") }), kind: Some(Evidence), metadata: PresentationFileMetadata { kind: Regular, length: 71, modified_unix_nanos: Some(1790821119854042152), revision: Revision("display:66307:7877168:71:Some(1790821119854042152):1790821119:854042152") }, content_handle: Some(PresentationContentHandle { session: 1, id: 1, path: "projects/demo/investigations/sample/child/evidence/observation.md" }), classification: Unavailable, identity: Available(None), summary: Unavailable, diagnostics: Unavailable, progress: Unavailable, relationships: Available([]), boards: Unavailable, body: Unavailable, derived: None }) removed Some(PresentationEntry { path: "projects/demo/investigations/sample/child/evidence/observation.md", scope: Some(PresentationScope { project: "demo", investigation: Some("sample/child") }), kind: Some(Evidence), metadata: PresentationFileMetadata { kind: Regular, length: 71, modified_unix_nanos: Some(1790821119854042152), revision: Revision("display:66307:7877168:71:Some(1790821119854042152):1790821119:854042152") }, content_handle: Some(PresentationContentHandle { session: 1, id: 1, path: "projects/demo/investigations/sample/child/evidence/observation.md" }), classification: Unavailable, identity: Available(None), summary: Unavailable, diagnostics: Unavailable, progress: Unavailable, relationships: Available([]), boards: Unavailable, body: Unavailable, derived: None })
+
+thread 'workbench::progressive_tests::parent_scope_refresh_keeps_nested_body_and_removes_only_parent_members' (1937762) panicked at casefile-tui/src/workbench/progressive_tests.rs:261:39:
+called `Option::unwrap()` on a `None` value
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test workbench::progressive_tests::parent_scope_refresh_keeps_nested_body_and_removes_only_parent_members ... FAILED
+
+failures:
+
+failures:
+    workbench::progressive_tests::parent_scope_refresh_keeps_nested_body_and_removes_only_parent_members
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 64 filtered out; finished in 0.02s
+
+error: test failed, to rerun pass `-p casefile-tui --lib`
+
+=== ninth-checks.log ===
+warning: Git tree '/home/alex/dev/HUMANS.md' is dirty
+humans-md development shell
+  Setup:  (cd casefile/web && bun install)
+  Format: scripts/format-source.sh --check|--write
+  Web:    cd casefile/web; bun install; bun run typecheck; bun run test; bun run build
+  Rust:   cd casefile; cargo fmt --check; cargo clippy --workspace --all-targets -- -D warnings; cargo test --workspace
+  CI:     act pull_request -j validate --pull=false -P ubuntu-latest=catthehacker/ubuntu:act-latest
+   Compiling casefile-tui v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-tui)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 4.54s
+     Running unittests src/lib.rs (/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/debug/deps/casefile_tui-26658e30d7cccb93)
+
+running 63 tests
+test interaction::tests::edit_selection_yields_only_supported_governed_records ... ok
+test markdown::tests::renders_headings_lists_code_and_terminal_safe_html ... ok
+test record_detail::tests::metadata_and_board_columns_escape_controls_and_remain_bounded ... ok
+test record_detail::tests::source_keeps_text_beyond_the_display_limit ... ok
+test record_detail::layout::tests::scrolling_and_resize_preserve_supported_unicode_wrap_and_styles ... ok
+test record_detail::tests::content_keeps_lines_and_escapes_only_unsafe_controls ... ok
+test strategy_flow::tests::batching_compatibility_tracks_the_work_group_that_the_chart_will_actually_render ... ok
+test record_detail::tests::metadata_and_diagnostics_cannot_inject_terminal_controls ... ok
+test strategy_flow::tests::a_lost_writer_binding_clears_the_cached_identifier_without_rebinding_other_roles ... ok
+test watching::tests::classifier_is_lexical_longest_root_and_exact_root_exclusions ... ok
+test watching::tests::classifier_models_windows_case_and_backslash_equivalence ... ok
+test watching::tests::classifier_keeps_dot_root_relative_and_absolute_namespaces_distinct ... ok
+test watching::tests::classifier_preserves_posix_filesystem_root_namespace ... ok
+test watching::tests::investigation_change_is_direct_without_invalidating_a_sibling ... ok
+test watching::tests::first_catalogue_rebuild_changes_events_from_store_wide_to_scoped ... ok
+test watching::tests::investigation_refresh_suppresses_exact_warning_but_retains_broader_visibility ... ok
+test progressive::tests::catalogue_resolves_full_nested_investigation_target ... ok
+test strategy_flow::tests::selected_membership_not_declaration_order_controls_optional_review_and_correction_routing ... ok
+test watching::tests::restored_health_does_not_claim_freshness ... ok
+test watching::tests::unrelated_project_observation_does_not_invalidate_scoped_refresh_success ... ok
+test watching::tests::refresh_window_ignores_sibling_bursts_but_preserves_nested_floors_and_clears ... ok
+test strategy_flow::tests::declaration_refresh_revokes_contradictory_flows_without_rejecting_runtime_variants ... ok
+test watching::tests::reducer_preserves_later_observation_and_failure_never_clears ... ok
+test strategy_flow::tests::selected_cache_refreshes_on_binding_only_change_scope_change_and_resize ... ok
+test progressive::tests::obsolete_generation_is_discarded_and_refresh_failure_keeps_complete_data ... ok
+test progressive::tests::catalogue_is_navigable_before_completion_and_post_start_observation_is_reported ... ok
+test strategy_flow::tests::optional_preflight_does_not_change_the_execution_diagram ... ok
+test review::tests::review_scrolls_store_diff_and_colours_additions_and_removals ... ok
+test progressive::tests::store_minimum_scope_allows_contextual_refresh_and_reports_its_exact_coverage ... ok
+test strategy_flow::layout::tests::wide_model_identifiers_wrap_inside_closed_nonoverlapping_boxes ... ok
+test strategy_flow::tests::resize_keeps_every_chart_cell_inside_the_pane_and_recovers_after_too_narrow ... ok
+test workbench::tests::board_card_selection_survives_complete_projection_with_deletion_and_ambiguity_controls ... ok
+test progressive::tests::selected_lazy_content_exposes_loaded_and_fresh_failure_states ... ok
+test workbench::progressive_tests::detail_promotion_and_unchanged_refresh_leave_unrelated_record_payloads_in_place ... ok
+test workbench::tests::detail_scroll_resets_only_when_selected_content_revision_changes ... ok
+test workbench::tests::diagnostics_and_editing_remain_governed_path_only ... ok
+test workbench::tests::board_keyboard_selection_marks_the_card_changes_detail_and_skips_unresolved_identities ... ok
+test workbench::tests::files_are_grouped_relative_to_the_selected_scope_and_include_project_files ... ok
+test watching::tests::native_recursive_subscription_reports_a_disk_change_and_tears_down ... ok
+test workbench::tests::project_and_investigation_deletions_use_following_then_preceding_fallback ... ok
+test workbench::tests::boards_are_read_only_unfiltered_and_open_a_canonical_ticket_detail ... ok
+test workbench::tests::boards_distinguish_no_definition_invalid_and_empty ... ok
+test workbench::tests::refresh_target_matrix_uses_project_full_investigation_and_store_fallback ... ok
+test workbench::tests::promotion_preserves_pending_exact_and_semantic_anchors_and_handles_deletion ... ok
+test workbench::tests::filtering_and_empty_hierarchy_states_remain_predictable ... ok
+test workbench::flow_tests::changing_investigation_replaces_the_chart_even_when_source_revisions_match ... ok
+test workbench::flow_tests::binding_refresh_updates_chart_and_overview_without_changing_selection ... ok
+test workbench::tests::unchanged_filter_exact_disappearance_is_explained_and_resume_is_round_tripped ... ok
+test workbench::tests::strategy_key_and_tab_cycle_preserve_existing_view_targets ... ok
+test workbench::tests::rendered_and_source_tabs_keep_markdown_readable_and_exact ... ok
+test workbench::tests::nested_investigations_with_the_same_leaf_are_selectable_independently ... ok
+test workbench::tests::project_investigation_ticket_drill_down_selects_a_canonical_path ... ok
+test workbench::progressive_tests::scoped_refresh_updates_rendered_boards_and_progress_without_losing_selection_or_other_rows ... ok
+test workbench::tests::focus_navigation_help_and_go_up_are_visible ... ok
+test workbench::tests::strategies_are_scoped_by_full_nested_investigation_identity ... ok
+test workbench::tests::strategies_filter_remain_in_files_and_are_read_only ... ok
+test workbench::relationship_tests::relationship_availability_tracks_project_coverage_not_a_stale_store_complete_flag ... ok
+test workbench::flow_tests::chart_navigation_reaches_tail_resizes_and_files_preserves_selected_source ... ok
+test workbench::tests::strategy_records_expose_typed_overview_exact_source_and_diagnostics ... ok
+test workbench::relationship_tests::canonical_relationships_follow_cross_scope_targets_without_replacing_source_bodies ... ok
+test workbench::progressive_tests::section_header_counts_keep_their_scope_across_views_filters_and_scoped_refresh ... ok
+test watching::tests::fake_watcher_covers_rename_overflow_coalescing_and_teardown ... ok
+test review::tests::native_scroll_edge_keeps_visible_diff_lines_beyond_u16_row_count ... ok
+
+test result: ok. 63 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.23s
+
+    Checking casefile-tui v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-tui)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.35s
+
+=== pre-board-identity-checks.log ===
+warning: Git tree '/home/alex/dev/HUMANS.md' is dirty
+humans-md development shell
+  Setup:  (cd casefile/web && bun install)
+  Format: scripts/format-source.sh --check|--write
+  Web:    cd casefile/web; bun install; bun run typecheck; bun run test; bun run build
+  Rust:   cd casefile; cargo fmt --check; cargo clippy --workspace --all-targets -- -D warnings; cargo test --workspace
+  CI:     act pull_request -j validate --pull=false -P ubuntu-latest=catthehacker/ubuntu:act-latest
+   Compiling casefile-tui v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-tui)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.99s
+     Running unittests src/lib.rs (/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/debug/deps/casefile_tui-26658e30d7cccb93)
+
+running 67 tests
+test interaction::tests::edit_selection_yields_only_supported_governed_records ... ok
+test markdown::tests::renders_headings_lists_code_and_terminal_safe_html ... ok
+test record_detail::tests::metadata_and_board_columns_escape_controls_and_remain_bounded ... ok
+test record_detail::tests::source_keeps_text_beyond_the_display_limit ... ok
+test record_detail::layout::tests::scrolling_and_resize_preserve_supported_unicode_wrap_and_styles ... ok
+test record_detail::tests::content_keeps_lines_and_escapes_only_unsafe_controls ... ok
+test progressive::tests::catalogue_resolves_full_nested_investigation_target ... ok
+test record_detail::tests::metadata_and_diagnostics_cannot_inject_terminal_controls ... ok
+test watching::tests::classifier_is_lexical_longest_root_and_exact_root_exclusions ... ok
+test watching::tests::classifier_keeps_dot_root_relative_and_absolute_namespaces_distinct ... ok
+test strategy_flow::tests::a_lost_writer_binding_clears_the_cached_identifier_without_rebinding_other_roles ... ok
+test watching::tests::classifier_models_windows_case_and_backslash_equivalence ... ok
+test watching::tests::classifier_preserves_posix_filesystem_root_namespace ... ok
+test watching::tests::first_catalogue_rebuild_changes_events_from_store_wide_to_scoped ... ok
+test watching::tests::investigation_change_is_direct_without_invalidating_a_sibling ... ok
+test watching::tests::investigation_refresh_suppresses_exact_warning_but_retains_broader_visibility ... ok
+test strategy_flow::tests::batching_compatibility_tracks_the_work_group_that_the_chart_will_actually_render ... ok
+test watching::tests::reducer_preserves_later_observation_and_failure_never_clears ... ok
+test review::tests::review_scrolls_store_diff_and_colours_additions_and_removals ... ok
+test watching::tests::refresh_window_ignores_sibling_bursts_but_preserves_nested_floors_and_clears ... ok
+test watching::tests::restored_health_does_not_claim_freshness ... ok
+test progressive::tests::status_only_content_events_redraw_and_selection_cancellation_rejects_late_delivery ... ok
+test progressive::tests::obsolete_generation_is_discarded_and_refresh_failure_keeps_complete_data ... ok
+test watching::tests::unrelated_project_observation_does_not_invalidate_scoped_refresh_success ... ok
+test progressive::tests::catalogue_is_navigable_before_completion_and_post_start_observation_is_reported ... ok
+test strategy_flow::tests::declaration_refresh_revokes_contradictory_flows_without_rejecting_runtime_variants ... ok
+test strategy_flow::tests::selected_membership_not_declaration_order_controls_optional_review_and_correction_routing ... ok
+test strategy_flow::tests::selected_cache_refreshes_on_binding_only_change_scope_change_and_resize ... ok
+test strategy_flow::layout::tests::wide_model_identifiers_wrap_inside_closed_nonoverlapping_boxes ... ok
+test strategy_flow::tests::optional_preflight_does_not_change_the_execution_diagram ... ok
+test progressive::tests::store_minimum_scope_allows_contextual_refresh_and_reports_its_exact_coverage ... ok
+test strategy_flow::tests::resize_keeps_every_chart_cell_inside_the_pane_and_recovers_after_too_narrow ... ok
+test progressive::tests::selected_lazy_content_exposes_loaded_and_fresh_failure_states ... ok
+test workbench::tests::board_card_selection_survives_complete_projection_with_deletion_and_ambiguity_controls ... ok
+test watching::tests::native_recursive_subscription_reports_a_disk_change_and_tears_down ... ok
+test workbench::tests::board_keyboard_selection_marks_the_card_changes_detail_and_skips_unresolved_identities ... ok
+test workbench::progressive_tests::parent_scope_refresh_keeps_nested_body_and_removes_only_parent_members ... ok
+test workbench::tests::catalogue_root_change_rescopes_cached_card_identities_without_body_updates ... ok
+test workbench::tests::boards_distinguish_no_definition_invalid_and_empty ... ok
+test workbench::tests::boards_are_read_only_unfiltered_and_open_a_canonical_ticket_detail ... ok
+test workbench::tests::detail_scroll_resets_only_when_selected_content_revision_changes ... ok
+test workbench::tests::project_and_investigation_deletions_use_following_then_preceding_fallback ... ok
+test workbench::tests::diagnostics_and_editing_remain_governed_path_only ... ok
+test workbench::tests::files_are_grouped_relative_to_the_selected_scope_and_include_project_files ... ok
+test workbench::flow_tests::changing_investigation_replaces_the_chart_even_when_source_revisions_match ... ok
+test workbench::tests::refresh_target_matrix_uses_project_full_investigation_and_store_fallback ... ok
+test workbench::flow_tests::binding_refresh_updates_chart_and_overview_without_changing_selection ... ok
+test workbench::progressive_tests::eager_and_lazy_detail_survive_promotion_refresh_and_external_edit ... ok
+test workbench::tests::promotion_preserves_pending_exact_and_semantic_anchors_and_handles_deletion ... ok
+test workbench::tests::filtering_and_empty_hierarchy_states_remain_predictable ... ok
+test workbench::tests::unchanged_filter_exact_disappearance_is_explained_and_resume_is_round_tripped ... ok
+test workbench::tests::strategy_key_and_tab_cycle_preserve_existing_view_targets ... ok
+test workbench::progressive_tests::scoped_refresh_updates_rendered_boards_and_progress_without_losing_selection_or_other_rows ... ok
+test workbench::tests::rendered_and_source_tabs_keep_markdown_readable_and_exact ... ok
+test workbench::tests::nested_investigations_with_the_same_leaf_are_selectable_independently ... ok
+test workbench::tests::project_investigation_ticket_drill_down_selects_a_canonical_path ... ok
+test workbench::tests::focus_navigation_help_and_go_up_are_visible ... ok
+test workbench::relationship_tests::relationship_availability_tracks_project_coverage_not_a_stale_store_complete_flag ... ok
+test workbench::tests::strategies_are_scoped_by_full_nested_investigation_identity ... ok
+test workbench::tests::strategies_filter_remain_in_files_and_are_read_only ... ok
+test workbench::tests::viewport_navigation_keeps_last_group_selected_across_resize_and_filter ... ok
+test workbench::tests::strategy_records_expose_typed_overview_exact_source_and_diagnostics ... ok
+test workbench::flow_tests::chart_navigation_reaches_tail_resizes_and_files_preserves_selected_source ... ok
+test workbench::relationship_tests::canonical_relationships_follow_cross_scope_targets_without_replacing_source_bodies ... ok
+test workbench::progressive_tests::section_header_counts_keep_their_scope_across_views_filters_and_scoped_refresh ... ok
+test watching::tests::fake_watcher_covers_rename_overflow_coalescing_and_teardown ... ok
+test review::tests::native_scroll_edge_keeps_visible_diff_lines_beyond_u16_row_count ... ok
+
+test result: ok. 67 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.25s
+
+    Checking casefile-tui v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-tui)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.27s
+   Compiling casefile-tui v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-tui)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.62s
+    Checking casefile-tui v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-tui)
+    Checking casefile-cli v0.8.0 (/home/alex/dev/HUMANS.md/casefile/casefile-cli)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.57s
+   Compiling casefile-tui v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-tui)
+    Finished `bench` profile [optimized] target(s) in 12.46s
+  Executable src/benchmark.rs (/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/release/deps/interactions-cee69abf78b7fcec)
+
+=== pre-rescope-final-checks.log ===
+warning: Git tree '/home/alex/dev/HUMANS.md' is dirty
+humans-md development shell
+  Setup:  (cd casefile/web && bun install)
+  Format: scripts/format-source.sh --check|--write
+  Web:    cd casefile/web; bun install; bun run typecheck; bun run test; bun run build
+  Rust:   cd casefile; cargo fmt --check; cargo clippy --workspace --all-targets -- -D warnings; cargo test --workspace
+  CI:     act pull_request -j validate --pull=false -P ubuntu-latest=catthehacker/ubuntu:act-latest
+   Compiling casefile-tui v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-tui)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.81s
+     Running unittests src/lib.rs (/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/debug/deps/casefile_tui-26658e30d7cccb93)
+
+running 66 tests
+test interaction::tests::edit_selection_yields_only_supported_governed_records ... ok
+test markdown::tests::renders_headings_lists_code_and_terminal_safe_html ... ok
+test record_detail::tests::metadata_and_board_columns_escape_controls_and_remain_bounded ... ok
+test record_detail::tests::source_keeps_text_beyond_the_display_limit ... ok
+test record_detail::layout::tests::scrolling_and_resize_preserve_supported_unicode_wrap_and_styles ... ok
+test strategy_flow::tests::batching_compatibility_tracks_the_work_group_that_the_chart_will_actually_render ... ok
+test strategy_flow::tests::a_lost_writer_binding_clears_the_cached_identifier_without_rebinding_other_roles ... ok
+test strategy_flow::tests::optional_preflight_does_not_change_the_execution_diagram ... ok
+test record_detail::tests::metadata_and_diagnostics_cannot_inject_terminal_controls ... ok
+test strategy_flow::tests::declaration_refresh_revokes_contradictory_flows_without_rejecting_runtime_variants ... ok
+test record_detail::tests::content_keeps_lines_and_escapes_only_unsafe_controls ... ok
+test progressive::tests::catalogue_resolves_full_nested_investigation_target ... ok
+test watching::tests::classifier_is_lexical_longest_root_and_exact_root_exclusions ... ok
+test watching::tests::classifier_models_windows_case_and_backslash_equivalence ... ok
+test watching::tests::classifier_preserves_posix_filesystem_root_namespace ... ok
+test watching::tests::classifier_keeps_dot_root_relative_and_absolute_namespaces_distinct ... ok
+test progressive::tests::status_only_content_events_redraw_and_selection_cancellation_rejects_late_delivery ... ok
+test watching::tests::investigation_change_is_direct_without_invalidating_a_sibling ... ok
+test watching::tests::first_catalogue_rebuild_changes_events_from_store_wide_to_scoped ... ok
+test watching::tests::investigation_refresh_suppresses_exact_warning_but_retains_broader_visibility ... ok
+test watching::tests::reducer_preserves_later_observation_and_failure_never_clears ... ok
+test watching::tests::restored_health_does_not_claim_freshness ... ok
+test watching::tests::unrelated_project_observation_does_not_invalidate_scoped_refresh_success ... ok
+test progressive::tests::obsolete_generation_is_discarded_and_refresh_failure_keeps_complete_data ... ok
+test progressive::tests::store_minimum_scope_allows_contextual_refresh_and_reports_its_exact_coverage ... ok
+test strategy_flow::tests::selected_membership_not_declaration_order_controls_optional_review_and_correction_routing ... ok
+test watching::tests::refresh_window_ignores_sibling_bursts_but_preserves_nested_floors_and_clears ... ok
+test progressive::tests::catalogue_is_navigable_before_completion_and_post_start_observation_is_reported ... ok
+test strategy_flow::tests::selected_cache_refreshes_on_binding_only_change_scope_change_and_resize ... ok
+test strategy_flow::tests::resize_keeps_every_chart_cell_inside_the_pane_and_recovers_after_too_narrow ... ok
+test review::tests::review_scrolls_store_diff_and_colours_additions_and_removals ... ok
+test strategy_flow::layout::tests::wide_model_identifiers_wrap_inside_closed_nonoverlapping_boxes ... ok
+test progressive::tests::selected_lazy_content_exposes_loaded_and_fresh_failure_states ... ok
+test workbench::tests::board_card_selection_survives_complete_projection_with_deletion_and_ambiguity_controls ... ok
+test workbench::tests::detail_scroll_resets_only_when_selected_content_revision_changes ... ok
+test workbench::progressive_tests::parent_scope_refresh_keeps_nested_body_and_removes_only_parent_members ... ok
+test watching::tests::native_recursive_subscription_reports_a_disk_change_and_tears_down ... ok
+test workbench::tests::board_keyboard_selection_marks_the_card_changes_detail_and_skips_unresolved_identities ... ok
+test workbench::tests::diagnostics_and_editing_remain_governed_path_only ... ok
+test workbench::tests::files_are_grouped_relative_to_the_selected_scope_and_include_project_files ... ok
+test workbench::tests::boards_distinguish_no_definition_invalid_and_empty ... ok
+test workbench::tests::project_and_investigation_deletions_use_following_then_preceding_fallback ... ok
+test workbench::tests::boards_are_read_only_unfiltered_and_open_a_canonical_ticket_detail ... ok
+test workbench::progressive_tests::eager_and_lazy_detail_survive_promotion_refresh_and_external_edit ... ok
+test workbench::flow_tests::changing_investigation_replaces_the_chart_even_when_source_revisions_match ... ok
+test workbench::tests::refresh_target_matrix_uses_project_full_investigation_and_store_fallback ... ok
+test workbench::flow_tests::binding_refresh_updates_chart_and_overview_without_changing_selection ... ok
+test workbench::tests::promotion_preserves_pending_exact_and_semantic_anchors_and_handles_deletion ... ok
+test workbench::tests::filtering_and_empty_hierarchy_states_remain_predictable ... ok
+test workbench::tests::unchanged_filter_exact_disappearance_is_explained_and_resume_is_round_tripped ... ok
+test workbench::progressive_tests::scoped_refresh_updates_rendered_boards_and_progress_without_losing_selection_or_other_rows ... ok
+test workbench::tests::strategy_key_and_tab_cycle_preserve_existing_view_targets ... ok
+test workbench::tests::project_investigation_ticket_drill_down_selects_a_canonical_path ... ok
+test workbench::tests::rendered_and_source_tabs_keep_markdown_readable_and_exact ... ok
+test workbench::tests::nested_investigations_with_the_same_leaf_are_selectable_independently ... ok
+test workbench::tests::focus_navigation_help_and_go_up_are_visible ... ok
+test workbench::relationship_tests::relationship_availability_tracks_project_coverage_not_a_stale_store_complete_flag ... ok
+test workbench::tests::strategies_are_scoped_by_full_nested_investigation_identity ... ok
+test workbench::tests::strategies_filter_remain_in_files_and_are_read_only ... ok
+test workbench::tests::viewport_navigation_keeps_last_group_selected_across_resize_and_filter ... ok
+test workbench::tests::strategy_records_expose_typed_overview_exact_source_and_diagnostics ... ok
+test workbench::flow_tests::chart_navigation_reaches_tail_resizes_and_files_preserves_selected_source ... ok
+test workbench::relationship_tests::canonical_relationships_follow_cross_scope_targets_without_replacing_source_bodies ... ok
+test workbench::progressive_tests::section_header_counts_keep_their_scope_across_views_filters_and_scoped_refresh ... ok
+test watching::tests::fake_watcher_covers_rename_overflow_coalescing_and_teardown ... ok
+test review::tests::native_scroll_edge_keeps_visible_diff_lines_beyond_u16_row_count ... ok
+
+test result: ok. 66 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.22s
+
+    Checking casefile-tui v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-tui)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.37s
+   Compiling casefile-tui v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-tui)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.27s
+    Checking casefile-tui v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-tui)
+    Checking casefile-cli v0.8.0 (/home/alex/dev/HUMANS.md/casefile/casefile-cli)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.60s
+   Compiling casefile-core v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-core)
+   Compiling casefile-store v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store)
+   Compiling casefile-tui v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-tui)
+    Finished `bench` profile [optimized] target(s) in 24.73s
+  Executable src/benchmark.rs (/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/release/deps/interactions-cee69abf78b7fcec)
+
+=== report-format.log ===
+warning: Git tree '/home/alex/dev/HUMANS.md' is dirty
+humans-md development shell
+  Setup:  (cd casefile/web && bun install)
+  Format: scripts/format-source.sh --check|--write
+  Web:    cd casefile/web; bun install; bun run typecheck; bun run test; bun run build
+  Rust:   cd casefile; cargo fmt --check; cargo clippy --workspace --all-targets -- -D warnings; cargo test --workspace
+  CI:     act pull_request -j validate --pull=false -P ubuntu-latest=catthehacker/ubuntu:act-latest
+../benchmarks/HMD-067-RESULTS.md 75ms
+Checking formatting...
+All matched files use Prettier code style!
+
+=== rescope-fixture-checks.log ===
+warning: Git tree '/home/alex/dev/HUMANS.md' is dirty
+humans-md development shell
+  Setup:  (cd casefile/web && bun install)
+  Format: scripts/format-source.sh --check|--write
+  Web:    cd casefile/web; bun install; bun run typecheck; bun run test; bun run build
+  Rust:   cd casefile; cargo fmt --check; cargo clippy --workspace --all-targets -- -D warnings; cargo test --workspace
+  CI:     act pull_request -j validate --pull=false -P ubuntu-latest=catthehacker/ubuntu:act-latest
+   Compiling casefile-tui v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-tui)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.53s
+     Running unittests src/lib.rs (/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/debug/deps/casefile_tui-26658e30d7cccb93)
+
+running 67 tests
+test interaction::tests::edit_selection_yields_only_supported_governed_records ... ok
+test markdown::tests::renders_headings_lists_code_and_terminal_safe_html ... ok
+test record_detail::tests::metadata_and_board_columns_escape_controls_and_remain_bounded ... ok
+test record_detail::tests::source_keeps_text_beyond_the_display_limit ... ok
+test record_detail::layout::tests::scrolling_and_resize_preserve_supported_unicode_wrap_and_styles ... ok
+test record_detail::tests::content_keeps_lines_and_escapes_only_unsafe_controls ... ok
+test strategy_flow::tests::batching_compatibility_tracks_the_work_group_that_the_chart_will_actually_render ... ok
+test record_detail::tests::metadata_and_diagnostics_cannot_inject_terminal_controls ... ok
+test progressive::tests::catalogue_resolves_full_nested_investigation_target ... ok
+test strategy_flow::tests::declaration_refresh_revokes_contradictory_flows_without_rejecting_runtime_variants ... ok
+test watching::tests::classifier_keeps_dot_root_relative_and_absolute_namespaces_distinct ... ok
+test watching::tests::classifier_models_windows_case_and_backslash_equivalence ... ok
+test watching::tests::classifier_preserves_posix_filesystem_root_namespace ... ok
+test strategy_flow::tests::a_lost_writer_binding_clears_the_cached_identifier_without_rebinding_other_roles ... ok
+test watching::tests::investigation_change_is_direct_without_invalidating_a_sibling ... ok
+test watching::tests::first_catalogue_rebuild_changes_events_from_store_wide_to_scoped ... ok
+test watching::tests::classifier_is_lexical_longest_root_and_exact_root_exclusions ... ok
+test watching::tests::reducer_preserves_later_observation_and_failure_never_clears ... ok
+test watching::tests::investigation_refresh_suppresses_exact_warning_but_retains_broader_visibility ... ok
+test watching::tests::restored_health_does_not_claim_freshness ... ok
+test watching::tests::unrelated_project_observation_does_not_invalidate_scoped_refresh_success ... ok
+test watching::tests::refresh_window_ignores_sibling_bursts_but_preserves_nested_floors_and_clears ... ok
+test progressive::tests::obsolete_generation_is_discarded_and_refresh_failure_keeps_complete_data ... ok
+test review::tests::review_scrolls_store_diff_and_colours_additions_and_removals ... ok
+test strategy_flow::tests::selected_membership_not_declaration_order_controls_optional_review_and_correction_routing ... ok
+test strategy_flow::tests::selected_cache_refreshes_on_binding_only_change_scope_change_and_resize ... ok
+test progressive::tests::status_only_content_events_redraw_and_selection_cancellation_rejects_late_delivery ... ok
+test strategy_flow::tests::optional_preflight_does_not_change_the_execution_diagram ... ok
+test progressive::tests::catalogue_is_navigable_before_completion_and_post_start_observation_is_reported ... ok
+test progressive::tests::store_minimum_scope_allows_contextual_refresh_and_reports_its_exact_coverage ... ok
+test strategy_flow::layout::tests::wide_model_identifiers_wrap_inside_closed_nonoverlapping_boxes ... ok
+test strategy_flow::tests::resize_keeps_every_chart_cell_inside_the_pane_and_recovers_after_too_narrow ... ok
+test workbench::tests::board_card_selection_survives_complete_projection_with_deletion_and_ambiguity_controls ... ok
+test progressive::tests::selected_lazy_content_exposes_loaded_and_fresh_failure_states ... ok
+test workbench::tests::board_keyboard_selection_marks_the_card_changes_detail_and_skips_unresolved_identities ... ok
+test watching::tests::native_recursive_subscription_reports_a_disk_change_and_tears_down ... ok
+test workbench::progressive_tests::parent_scope_refresh_keeps_nested_body_and_removes_only_parent_members ... ok
+test workbench::tests::detail_scroll_resets_only_when_selected_content_revision_changes ... ok
+test workbench::tests::boards_are_read_only_unfiltered_and_open_a_canonical_ticket_detail ... ok
+test workbench::tests::files_are_grouped_relative_to_the_selected_scope_and_include_project_files ... ok
+test workbench::tests::catalogue_root_change_rescopes_cached_card_identities_without_body_updates ... FAILED
+test workbench::tests::diagnostics_and_editing_remain_governed_path_only ... ok
+test workbench::tests::project_and_investigation_deletions_use_following_then_preceding_fallback ... ok
+test workbench::tests::boards_distinguish_no_definition_invalid_and_empty ... ok
+test workbench::tests::refresh_target_matrix_uses_project_full_investigation_and_store_fallback ... ok
+test workbench::flow_tests::binding_refresh_updates_chart_and_overview_without_changing_selection ... ok
+test workbench::flow_tests::changing_investigation_replaces_the_chart_even_when_source_revisions_match ... ok
+test workbench::tests::promotion_preserves_pending_exact_and_semantic_anchors_and_handles_deletion ... ok
+test workbench::progressive_tests::eager_and_lazy_detail_survive_promotion_refresh_and_external_edit ... ok
+test workbench::progressive_tests::scoped_refresh_updates_rendered_boards_and_progress_without_losing_selection_or_other_rows ... ok
+test workbench::tests::filtering_and_empty_hierarchy_states_remain_predictable ... ok
+test workbench::tests::unchanged_filter_exact_disappearance_is_explained_and_resume_is_round_tripped ... ok
+test workbench::tests::strategy_key_and_tab_cycle_preserve_existing_view_targets ... ok
+test workbench::tests::project_investigation_ticket_drill_down_selects_a_canonical_path ... ok
+test workbench::tests::nested_investigations_with_the_same_leaf_are_selectable_independently ... ok
+test workbench::tests::rendered_and_source_tabs_keep_markdown_readable_and_exact ... ok
+test workbench::relationship_tests::relationship_availability_tracks_project_coverage_not_a_stale_store_complete_flag ... ok
+test workbench::tests::strategies_are_scoped_by_full_nested_investigation_identity ... ok
+test workbench::tests::focus_navigation_help_and_go_up_are_visible ... ok
+test workbench::tests::strategies_filter_remain_in_files_and_are_read_only ... ok
+test workbench::tests::viewport_navigation_keeps_last_group_selected_across_resize_and_filter ... ok
+test workbench::tests::strategy_records_expose_typed_overview_exact_source_and_diagnostics ... ok
+test workbench::flow_tests::chart_navigation_reaches_tail_resizes_and_files_preserves_selected_source ... ok
+test workbench::relationship_tests::canonical_relationships_follow_cross_scope_targets_without_replacing_source_bodies ... ok
+test watching::tests::fake_watcher_covers_rename_overflow_coalescing_and_teardown ... ok
+test workbench::progressive_tests::section_header_counts_keep_their_scope_across_views_filters_and_scoped_refresh ... ok
+test review::tests::native_scroll_edge_keeps_visible_diff_lines_beyond_u16_row_count ... ok
+
+failures:
+
+---- workbench::tests::catalogue_root_change_rescopes_cached_card_identities_without_body_updates stdout ----
+
+thread 'workbench::tests::catalogue_root_change_rescopes_cached_card_identities_without_body_updates' (1941302) panicked at casefile-tui/src/workbench/tests.rs:1368:5:
+existing diagnostics lost:  CASEFILE   [1] PROJECTS 1   [2] INVESTIGATIONS 1   [3] TICKETS 2   [4] FILES 4   [5] STRATEGIES 0   [6] BOARDS 1    ACTIVE  |  2 diagnostic
+ Scope demo / sample  |  Filter none                                                                                                        
+                                                                                                                                            
+\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+                                                                                                                                            
+\u256d Boards \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256e\u256d HMD-013  |  line 1/8 \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256e
+\u2502Catalogue card  [Progress]                                    \u2502\u2502  Overview     Rendered     Source     Diagnostics                        \u2502
+\u2502  TODO (1)                                                    \u2502\u2502                                                                          \u2502
+\u2502  ! HMD-013  unknown  Navigator  [detail unavailable:         \u2502\u2502HMD-013   ACCEPTED   rank #3                                              \u2502
+\u2502ambiguous identity]                                           \u2502\u2502Navigator                                                                 \u2502
+\u2502                                                              \u2502\u2502                                                                          \u2502
+\u2502                                                              \u2502\u2502Path  projects/demo/investigations/sample/tickets/accepted/HMD-013.md     \u2502
+\u2502                                                              \u2502\u2502Classification  governed                                                  \u2502
+\u2502                                                              \u2502\u2502Kind  ticket                                                              \u2502
+\u2502                                                              \u2502\u2502Identity  HMD-013                                                         \u2502
+\u2502                                                              \u2502\u2502Diagnostics  1                                                            \u2502
+\u2502                                                              \u2502\u2502                                                                          \u2502
+\u2502                                                              \u2502\u2502                                                                          \u2502
+\u2502                                                              \u2502\u2502                                                                          \u2502
+\u2502                                                              \u2502\u2502                                                                          \u2502
+\u2502                                                              \u2502\u2502                                                                          \u2502
+\u2502                                                              \u2502\u2502                                                                          \u2502
+\u2502                                                              \u2502\u2502                                                                          \u2502
+\u2502                                                              \u2502\u2502                                                                          \u2502
+\u2502                                                              \u2502\u2502                                                                          \u2502
+\u2502                                                              \u2502\u2502                                                                          \u2502
+\u2502                                                              \u2502\u2502                                                                          \u2502
+\u2502                                                              \u2502\u2502                                                                          \u2502
+\u2502                                                              \u2502\u2502                                                                          \u2502
+\u2502                                                              \u2502\u2502                                                                          \u2502
+\u2502                                                              \u2502\u2502                                                                          \u2502
+\u2502                                                              \u2502\u2502                                                                          \u2502
+\u2502                                                              \u2502\u2502                                                                          \u2502
+\u2502                                                              \u2502\u2502                                                                          \u2502
+\u2502                                                              \u2502\u2502                                                                          \u2502
+\u2502                                                              \u2502\u2502                                                                          \u2502
+\u2502                                                              \u2502\u2502                                                                          \u2502
+\u2502                                                              \u2502\u2502                                                                          \u2502
+\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256f\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256f
+ 1-6 views  Enter open  Backspace up  Tab focus  j/k move  h/l detail  e edit  r/R refresh  / filter  ? help  q quit                        
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    workbench::tests::catalogue_root_change_rescopes_cached_card_identities_without_body_updates
+
+test result: FAILED. 66 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.22s
+
+error: test failed, to rerun pass `-p casefile-tui --lib`
+
+=== second-check.log ===
+warning: Git tree '/home/alex/dev/HUMANS.md' is dirty
+humans-md development shell
+  Setup:  (cd casefile/web && bun install)
+  Format: scripts/format-source.sh --check|--write
+  Web:    cd casefile/web; bun install; bun run typecheck; bun run test; bun run build
+  Rust:   cd casefile; cargo fmt --check; cargo clippy --workspace --all-targets -- -D warnings; cargo test --workspace
+  CI:     act pull_request -j validate --pull=false -P ubuntu-latest=catthehacker/ubuntu:act-latest
+    Checking casefile-tui v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-tui)
+error[E0308]: mismatched types
+  --> casefile-tui/src/workbench/projection.rs:65:58
+   |
+65 |             .any(|path| self.record_indices.contains_key(*path) && !new_records.contains(path))
+   |                                             ------------ ^^^^^ expected `&_`, found `String`
+   |                                             |
+   |                                             arguments to this method are incorrect
+   |
+   = note: expected reference `&_`
+                 found struct `String`
+note: method defined here
+  --> /rustc/59807616e1fa2540724bfbac14d7976d7e4a3860/library/alloc/src/collections/btree/map.rs:980:11
+help: consider removing deref here
+   |
+65 -             .any(|path| self.record_indices.contains_key(*path) && !new_records.contains(path))
+65 +             .any(|path| self.record_indices.contains_key(path) && !new_records.contains(path))
+   |
+
+error[E0277]: the trait bound `&str: Borrow<String>` is not satisfied
+  --> casefile-tui/src/workbench/projection.rs:65:90
+   |
+65 |             .any(|path| self.record_indices.contains_key(*path) && !new_records.contains(path))
+   |                                                                                 -------- ^^^^ the trait `Borrow<String>` is not implemented for `&str`
+   |                                                                                 |
+   |                                                                                 required by a bound introduced by this call
+   |
+help: the trait `Borrow<str>` is implemented for `String`
+  --> /rustc/59807616e1fa2540724bfbac14d7976d7e4a3860/library/alloc/src/str.rs:189:0
+note: required by a bound in `std::collections::BTreeSet::<T, A>::contains`
+  --> /rustc/59807616e1fa2540724bfbac14d7976d7e4a3860/library/alloc/src/collections/btree/set.rs:604:4
+
+Some errors have detailed explanations: E0277, E0308.
+For more information about an error, try `rustc --explain E0277`.
+error: could not compile `casefile-tui` (lib) due to 2 previous errors
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `casefile-tui` (lib test) due to 2 previous errors
+
+=== second-tests.log ===
+warning: Git tree '/home/alex/dev/HUMANS.md' is dirty
+humans-md development shell
+  Setup:  (cd casefile/web && bun install)
+  Format: scripts/format-source.sh --check|--write
+  Web:    cd casefile/web; bun install; bun run typecheck; bun run test; bun run build
+  Rust:   cd casefile; cargo fmt --check; cargo clippy --workspace --all-targets -- -D warnings; cargo test --workspace
+  CI:     act pull_request -j validate --pull=false -P ubuntu-latest=catthehacker/ubuntu:act-latest
+   Compiling casefile-tui v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-tui)
+warning: function `target_contains` is never used
+   --> casefile-tui/src/progressive.rs:440:4
+    |
+440 | fn target_contains(target: &PresentationTarget, path: &str) -> bool {
+    |    ^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `casefile-tui` (lib test) generated 1 warning
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 5.85s
+     Running unittests src/lib.rs (/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/debug/deps/casefile_tui-26658e30d7cccb93)
+
+running 60 tests
+test interaction::tests::edit_selection_yields_only_supported_governed_records ... ok
+test markdown::tests::renders_headings_lists_code_and_terminal_safe_html ... ok
+test record_detail::tests::metadata_and_board_columns_escape_controls_and_remain_bounded ... ok
+test record_detail::tests::source_keeps_text_beyond_the_display_limit ... ok
+test strategy_flow::tests::batching_compatibility_tracks_the_work_group_that_the_chart_will_actually_render ... ok
+test watching::tests::classifier_is_lexical_longest_root_and_exact_root_exclusions ... ok
+test watching::tests::classifier_keeps_dot_root_relative_and_absolute_namespaces_distinct ... ok
+test watching::tests::classifier_models_windows_case_and_backslash_equivalence ... ok
+test watching::tests::classifier_preserves_posix_filesystem_root_namespace ... ok
+test record_detail::tests::content_keeps_lines_and_escapes_only_unsafe_controls ... ok
+test watching::tests::first_catalogue_rebuild_changes_events_from_store_wide_to_scoped ... ok
+test watching::tests::investigation_refresh_suppresses_exact_warning_but_retains_broader_visibility ... ok
+test record_detail::tests::metadata_and_diagnostics_cannot_inject_terminal_controls ... ok
+test watching::tests::project_change_is_direct_for_one_investigation_and_inherited_for_sibling ... FAILED
+test watching::tests::reducer_preserves_later_observation_and_failure_never_clears ... FAILED
+test watching::tests::restored_health_does_not_claim_freshness ... ok
+test watching::tests::unrelated_project_observation_does_not_invalidate_scoped_refresh_success ... ok
+test strategy_flow::tests::selected_cache_refreshes_on_binding_only_change_scope_change_and_resize ... ok
+test strategy_flow::tests::a_lost_writer_binding_clears_the_cached_identifier_without_rebinding_other_roles ... ok
+test progressive::tests::catalogue_resolves_full_nested_investigation_target ... ok
+test strategy_flow::tests::selected_membership_not_declaration_order_controls_optional_review_and_correction_routing ... ok
+test strategy_flow::tests::declaration_refresh_revokes_contradictory_flows_without_rejecting_runtime_variants ... ok
+test strategy_flow::tests::optional_preflight_does_not_change_the_execution_diagram ... ok
+test review::tests::review_scrolls_store_diff_and_colours_additions_and_removals ... ok
+test strategy_flow::tests::resize_keeps_every_chart_cell_inside_the_pane_and_recovers_after_too_narrow ... ok
+test progressive::tests::obsolete_generation_is_discarded_and_refresh_failure_keeps_complete_data ... ok
+test strategy_flow::layout::tests::wide_model_identifiers_wrap_inside_closed_nonoverlapping_boxes ... ok
+test progressive::tests::catalogue_is_navigable_before_completion_and_post_start_observation_is_reported ... ok
+test progressive::tests::store_minimum_scope_allows_contextual_refresh_and_reports_its_exact_coverage ... ok
+test progressive::tests::selected_lazy_content_exposes_loaded_and_fresh_failure_states ... FAILED
+test workbench::progressive_tests::detail_promotion_and_unchanged_refresh_leave_unrelated_record_payloads_in_place ... FAILED
+test workbench::tests::detail_scroll_resets_only_when_selected_content_revision_changes ... ok
+test workbench::tests::board_card_selection_survives_complete_projection_with_deletion_and_ambiguity_controls ... FAILED
+test workbench::progressive_tests::scoped_refresh_updates_rendered_boards_and_progress_without_losing_selection_or_other_rows ... FAILED
+test workbench::tests::diagnostics_and_editing_remain_governed_path_only ... ok
+test workbench::tests::project_and_investigation_deletions_use_following_then_preceding_fallback ... ok
+test workbench::tests::files_are_grouped_relative_to_the_selected_scope_and_include_project_files ... ok
+test workbench::tests::board_keyboard_selection_marks_the_card_changes_detail_and_skips_unresolved_identities ... ok
+test watching::tests::native_recursive_subscription_reports_a_disk_change_and_tears_down ... ok
+test workbench::tests::boards_distinguish_no_definition_invalid_and_empty ... ok
+test workbench::tests::refresh_target_matrix_uses_project_full_investigation_and_store_fallback ... ok
+test workbench::tests::promotion_preserves_pending_exact_and_semantic_anchors_and_handles_deletion ... ok
+test workbench::tests::filtering_and_empty_hierarchy_states_remain_predictable ... ok
+test workbench::tests::boards_are_read_only_unfiltered_and_open_a_canonical_ticket_detail ... ok
+test workbench::tests::unchanged_filter_exact_disappearance_is_explained_and_resume_is_round_tripped ... ok
+test workbench::tests::strategy_key_and_tab_cycle_preserve_existing_view_targets ... ok
+test workbench::flow_tests::binding_refresh_updates_chart_and_overview_without_changing_selection ... ok
+test workbench::flow_tests::changing_investigation_replaces_the_chart_even_when_source_revisions_match ... ok
+test workbench::tests::nested_investigations_with_the_same_leaf_are_selectable_independently ... ok
+test workbench::tests::focus_navigation_help_and_go_up_are_visible ... ok
+test workbench::tests::project_investigation_ticket_drill_down_selects_a_canonical_path ... ok
+test workbench::tests::rendered_and_source_tabs_keep_markdown_readable_and_exact ... ok
+test workbench::tests::strategies_filter_remain_in_files_and_are_read_only ... ok
+test workbench::tests::strategies_are_scoped_by_full_nested_investigation_identity ... ok
+test workbench::relationship_tests::relationship_availability_tracks_project_coverage_not_a_stale_store_complete_flag ... ok
+test workbench::tests::strategy_records_expose_typed_overview_exact_source_and_diagnostics ... ok
+test workbench::flow_tests::chart_navigation_reaches_tail_resizes_and_files_preserves_selected_source ... ok
+test workbench::progressive_tests::section_header_counts_keep_their_scope_across_views_filters_and_scoped_refresh ... FAILED
+test workbench::relationship_tests::canonical_relationships_follow_cross_scope_targets_without_replacing_source_bodies ... ok
+test watching::tests::fake_watcher_covers_rename_overflow_coalescing_and_teardown ... ok
+
+failures:
+
+---- watching::tests::project_change_is_direct_for_one_investigation_and_inherited_for_sibling stdout ----
+
+thread 'watching::tests::project_change_is_direct_for_one_investigation_and_inherited_for_sibling' (1932556) panicked at casefile-tui/src/watching.rs:1127:18:
+called `Option::unwrap()` on a `None` value
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- watching::tests::reducer_preserves_later_observation_and_failure_never_clears stdout ----
+
+thread 'watching::tests::reducer_preserves_later_observation_and_failure_never_clears' (1932558) panicked at casefile-tui/src/watching.rs:1079:9:
+assertion `left == right` failed
+  left: 1
+ right: 2
+
+---- progressive::tests::selected_lazy_content_exposes_loaded_and_fresh_failure_states stdout ----
+
+thread 'progressive::tests::selected_lazy_content_exposes_loaded_and_fresh_failure_states' (1932526) panicked at casefile-tui/src/progressive/tests.rs:212:5:
+assertion failed: !loaded.original_bytes.is_empty()
+
+---- workbench::progressive_tests::detail_promotion_and_unchanged_refresh_leave_unrelated_record_payloads_in_place stdout ----
+
+thread 'workbench::progressive_tests::detail_promotion_and_unchanged_refresh_leave_unrelated_record_payloads_in_place' (1932565) panicked at casefile-tui/src/workbench/progressive_tests.rs:200:5:
+assertion failed: !app.scan.snapshot.entries.iter().find(|entry|
+                        entry.path == evidence).unwrap().original_bytes.is_empty()
+
+---- workbench::tests::board_card_selection_survives_complete_projection_with_deletion_and_ambiguity_controls stdout ----
+
+thread 'workbench::tests::board_card_selection_survives_complete_projection_with_deletion_and_ambiguity_controls' (1932577) panicked at casefile-tui/src/workbench/tests.rs:765:5:
+assertion `left == right` failed
+  left: Some("projects/demo/investigations/sample/tickets/accepted/HMD-014.md")
+ right: Some("projects/demo/investigations/sample/tickets/accepted/HMD-013.md")
+
+---- workbench::progressive_tests::scoped_refresh_updates_rendered_boards_and_progress_without_losing_selection_or_other_rows stdout ----
+
+thread 'workbench::progressive_tests::scoped_refresh_updates_rendered_boards_and_progress_without_losing_selection_or_other_rows' (1932566) panicked at casefile-tui/src/workbench/progressive_tests.rs:110:5:
+assertion failed: test_support::render(&app, 180, 40).contains("HMD-011")
+
+---- workbench::progressive_tests::section_header_counts_keep_their_scope_across_views_filters_and_scoped_refresh stdout ----
+
+thread 'workbench::progressive_tests::section_header_counts_keep_their_scope_across_views_filters_and_scoped_refresh' (1932567) panicked at casefile-tui/src/workbench/progressive_tests.rs:93:13:
+Projects:  CASEFILE   [1] PROJECTS 1   [2] INVESTIGATIONS 2   [3] TICKETS 3   [4] FILES 11   [5] STRATEGIES 2   [6] BOARDS 1    ACTIVE  |  0 diagnostics                                                          
+
+
+failures:
+    progressive::tests::selected_lazy_content_exposes_loaded_and_fresh_failure_states
+    watching::tests::project_change_is_direct_for_one_investigation_and_inherited_for_sibling
+    watching::tests::reducer_preserves_later_observation_and_failure_never_clears
+    workbench::progressive_tests::detail_promotion_and_unchanged_refresh_leave_unrelated_record_payloads_in_place
+    workbench::progressive_tests::scoped_refresh_updates_rendered_boards_and_progress_without_losing_selection_or_other_rows
+    workbench::progressive_tests::section_header_counts_keep_their_scope_across_views_filters_and_scoped_refresh
+    workbench::tests::board_card_selection_survives_complete_projection_with_deletion_and_ambiguity_controls
+
+test result: FAILED. 53 passed; 7 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.17s
+
+error: test failed, to rerun pass `-p casefile-tui --lib`
+
+=== seventh-checks.log ===
+warning: Git tree '/home/alex/dev/HUMANS.md' is dirty
+humans-md development shell
+  Setup:  (cd casefile/web && bun install)
+  Format: scripts/format-source.sh --check|--write
+  Web:    cd casefile/web; bun install; bun run typecheck; bun run test; bun run build
+  Rust:   cd casefile; cargo fmt --check; cargo clippy --workspace --all-targets -- -D warnings; cargo test --workspace
+  CI:     act pull_request -j validate --pull=false -P ubuntu-latest=catthehacker/ubuntu:act-latest
+   Compiling casefile-tui v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-tui)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 5.64s
+     Running unittests src/lib.rs (/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/debug/deps/casefile_tui-26658e30d7cccb93)
+
+running 63 tests
+test interaction::tests::edit_selection_yields_only_supported_governed_records ... ok
+test markdown::tests::renders_headings_lists_code_and_terminal_safe_html ... ok
+test record_detail::tests::metadata_and_board_columns_escape_controls_and_remain_bounded ... ok
+test record_detail::tests::source_keeps_text_beyond_the_display_limit ... ok
+test record_detail::layout::tests::scrolling_and_resize_preserve_supported_unicode_wrap_and_styles ... ok
+test strategy_flow::tests::batching_compatibility_tracks_the_work_group_that_the_chart_will_actually_render ... ok
+test record_detail::tests::content_keeps_lines_and_escapes_only_unsafe_controls ... ok
+test watching::tests::classifier_is_lexical_longest_root_and_exact_root_exclusions ... ok
+test watching::tests::classifier_keeps_dot_root_relative_and_absolute_namespaces_distinct ... ok
+test watching::tests::classifier_models_windows_case_and_backslash_equivalence ... ok
+test watching::tests::classifier_preserves_posix_filesystem_root_namespace ... ok
+test record_detail::tests::metadata_and_diagnostics_cannot_inject_terminal_controls ... ok
+test watching::tests::first_catalogue_rebuild_changes_events_from_store_wide_to_scoped ... ok
+test watching::tests::investigation_change_is_direct_without_invalidating_a_sibling ... ok
+test watching::tests::investigation_refresh_suppresses_exact_warning_but_retains_broader_visibility ... ok
+test strategy_flow::tests::selected_cache_refreshes_on_binding_only_change_scope_change_and_resize ... ok
+test strategy_flow::tests::a_lost_writer_binding_clears_the_cached_identifier_without_rebinding_other_roles ... ok
+test watching::tests::reducer_preserves_later_observation_and_failure_never_clears ... ok
+test strategy_flow::tests::selected_membership_not_declaration_order_controls_optional_review_and_correction_routing ... ok
+test watching::tests::restored_health_does_not_claim_freshness ... ok
+test watching::tests::unrelated_project_observation_does_not_invalidate_scoped_refresh_success ... ok
+test strategy_flow::tests::declaration_refresh_revokes_contradictory_flows_without_rejecting_runtime_variants ... ok
+test progressive::tests::catalogue_resolves_full_nested_investigation_target ... ok
+test watching::tests::refresh_window_ignores_sibling_bursts_but_preserves_nested_floors_and_clears ... ok
+test strategy_flow::tests::optional_preflight_does_not_change_the_execution_diagram ... ok
+test progressive::tests::catalogue_is_navigable_before_completion_and_post_start_observation_is_reported ... ok
+test strategy_flow::layout::tests::wide_model_identifiers_wrap_inside_closed_nonoverlapping_boxes ... ok
+test review::tests::review_scrolls_store_diff_and_colours_additions_and_removals ... ok
+test progressive::tests::store_minimum_scope_allows_contextual_refresh_and_reports_its_exact_coverage ... ok
+test progressive::tests::obsolete_generation_is_discarded_and_refresh_failure_keeps_complete_data ... ok
+test strategy_flow::tests::resize_keeps_every_chart_cell_inside_the_pane_and_recovers_after_too_narrow ... ok
+test progressive::tests::selected_lazy_content_exposes_loaded_and_fresh_failure_states ... ok
+test workbench::tests::board_card_selection_survives_complete_projection_with_deletion_and_ambiguity_controls ... ok
+test workbench::progressive_tests::detail_promotion_and_unchanged_refresh_leave_unrelated_record_payloads_in_place ... ok
+test workbench::tests::detail_scroll_resets_only_when_selected_content_revision_changes ... ok
+test workbench::tests::diagnostics_and_editing_remain_governed_path_only ... ok
+test workbench::tests::files_are_grouped_relative_to_the_selected_scope_and_include_project_files ... ok
+test workbench::tests::boards_distinguish_no_definition_invalid_and_empty ... ok
+test watching::tests::native_recursive_subscription_reports_a_disk_change_and_tears_down ... ok
+test workbench::tests::board_keyboard_selection_marks_the_card_changes_detail_and_skips_unresolved_identities ... ok
+test workbench::tests::boards_are_read_only_unfiltered_and_open_a_canonical_ticket_detail ... ok
+test workbench::tests::project_and_investigation_deletions_use_following_then_preceding_fallback ... ok
+test workbench::tests::filtering_and_empty_hierarchy_states_remain_predictable ... ok
+test workbench::tests::refresh_target_matrix_uses_project_full_investigation_and_store_fallback ... ok
+test workbench::flow_tests::changing_investigation_replaces_the_chart_even_when_source_revisions_match ... ok
+test workbench::flow_tests::binding_refresh_updates_chart_and_overview_without_changing_selection ... ok
+test workbench::tests::promotion_preserves_pending_exact_and_semantic_anchors_and_handles_deletion ... ok
+test workbench::progressive_tests::scoped_refresh_updates_rendered_boards_and_progress_without_losing_selection_or_other_rows ... ok
+test workbench::tests::strategy_key_and_tab_cycle_preserve_existing_view_targets ... ok
+test workbench::tests::rendered_and_source_tabs_keep_markdown_readable_and_exact ... ok
+test workbench::tests::unchanged_filter_exact_disappearance_is_explained_and_resume_is_round_tripped ... ok
+test workbench::tests::project_investigation_ticket_drill_down_selects_a_canonical_path ... ok
+test workbench::tests::nested_investigations_with_the_same_leaf_are_selectable_independently ... ok
+test workbench::tests::focus_navigation_help_and_go_up_are_visible ... ok
+test workbench::tests::strategies_are_scoped_by_full_nested_investigation_identity ... ok
+test workbench::relationship_tests::relationship_availability_tracks_project_coverage_not_a_stale_store_complete_flag ... ok
+test workbench::tests::strategies_filter_remain_in_files_and_are_read_only ... ok
+test workbench::tests::strategy_records_expose_typed_overview_exact_source_and_diagnostics ... ok
+test workbench::flow_tests::chart_navigation_reaches_tail_resizes_and_files_preserves_selected_source ... ok
+test workbench::relationship_tests::canonical_relationships_follow_cross_scope_targets_without_replacing_source_bodies ... ok
+test watching::tests::fake_watcher_covers_rename_overflow_coalescing_and_teardown ... ok
+test workbench::progressive_tests::section_header_counts_keep_their_scope_across_views_filters_and_scoped_refresh ... ok
+test review::tests::native_scroll_edge_keeps_visible_diff_lines_beyond_u16_row_count ... ok
+
+test result: ok. 63 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.26s
+
+    Checking casefile-core v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-core)
+    Checking casefile-store v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store)
+    Checking casefile-tui v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-tui)
+error: this `if` statement can be collapsed
+  --> casefile-tui/src/browsing/projection.rs:62:17
+   |
+62 | /                 if let Some(scope) = &old.scope {
+63 | |                     if let Some(paths) = self.scopes.get_mut(scope) {
+64 | |                         paths.remove(path);
+65 | |                     }
+66 | |                 }
+   | |_________________^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#collapsible_if
+   = note: `-D clippy::collapsible-if` implied by `-D warnings`
+   = help: to override `-D warnings` add `#[allow(clippy::collapsible_if)]`
+help: collapse nested if block
+   |
+62 ~                 if let Some(scope) = &old.scope
+63 ~                     && let Some(paths) = self.scopes.get_mut(scope) {
+64 |                         paths.remove(path);
+65 ~                     }
+   |
+
+error: very complex type used. Consider factoring parts into `type` definitions
+   --> casefile-tui/src/browsing/projection.rs:321:10
+    |
+321 |     key: Option<(u64, View, Option<String>, Option<String>, String)>,
+    |          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#type_complexity
+    = note: `-D clippy::type-complexity` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(clippy::type_complexity)]`
+
+error: very complex type used. Consider factoring parts into `type` definitions
+   --> casefile-tui/src/browsing/projection.rs:359:10
+    |
+359 |     ) -> Option<(u64, View, Option<String>, Option<String>, String)> {
+    |          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#type_complexity
+
+error: this `if` statement can be collapsed
+   --> casefile-tui/src/browsing/projection.rs:405:9
+    |
+405 | /         if self.paths.remove(path) {
+406 | |             if let Some(scope) = &fact.scope {
+407 | |                 decrement(&mut self.projects, &scope.0);
+408 | |                 decrement(&mut self.scopes, scope);
+409 | |             }
+410 | |         }
+    | |_________^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#collapsible_if
+help: collapse nested if block
+    |
+405 ~         if self.paths.remove(path)
+406 ~             && let Some(scope) = &fact.scope {
+407 |                 decrement(&mut self.projects, &scope.0);
+408 |                 decrement(&mut self.scopes, scope);
+409 ~             }
+    |
+
+error: this expression creates a reference which is immediately dereferenced by the compiler
+   --> casefile-tui/src/browsing.rs:642:47
+    |
+642 |                 let selected = selected_index(&values, self.selected_project.as_deref());
+    |                                               ^^^^^^^ help: change this to: `values`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#needless_borrow
+    = note: `-D clippy::needless-borrow` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(clippy::needless_borrow)]`
+
+error: this expression creates a reference which is immediately dereferenced by the compiler
+   --> casefile-tui/src/browsing.rs:666:47
+    |
+666 |                 let selected = selected_index(&values, self.selected_investigation.as_deref());
+    |                                               ^^^^^^^ help: change this to: `values`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#needless_borrow
+
+error: this expression creates a reference which is immediately dereferenced by the compiler
+   --> casefile-tui/src/browsing.rs:725:64
+    |
+725 |                         Line::from(format!(" {}/", safe_inline(&directory)))
+    |                                                                ^^^^^^^^^^ help: change this to: `directory`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#needless_borrow
+
+error: this function has too many arguments (8/7)
+   --> casefile-tui/src/record_detail.rs:128:5
+    |
+128 | /     pub(crate) fn render(
+129 | |         &self,
+130 | |         entry: Option<&EntrySnapshot>,
+131 | |         derived: Option<&DerivedRecord>,
+...   |
+136 | |         buffer: &mut Buffer,
+137 | |     ) {
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#too_many_arguments
+    = note: `-D clippy::too-many-arguments` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(clippy::too_many_arguments)]`
+
+error: this `if` statement can be collapsed
+  --> casefile-tui/src/workbench/facts.rs:40:13
+   |
+40 | /             if let Some(identity) = self.identity_by_path.remove(path) {
+41 | |                 if let Some(paths) = self.identities.get_mut(&identity) {
+42 | |                     paths.remove(path);
+43 | |                     if paths.is_empty() {
+...  |
+47 | |             }
+   | |_____________^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#collapsible_if
+help: collapse nested if block
+   |
+40 ~             if let Some(identity) = self.identity_by_path.remove(path)
+41 ~                 && let Some(paths) = self.identities.get_mut(&identity) {
+42 |                     paths.remove(path);
+...
+45 |                     }
+46 ~                 }
+   |
+
+error: this `if` statement can be collapsed
+   --> casefile-tui/src/workbench/facts.rs:119:13
+    |
+119 | /             if self.diagnostics.contains_key(path) {
+120 | |                 if let Some((project, Some(investigation))) = scan.scope_for_path(path) {
+121 | |                     let prefix = format!("projects/{project}/investigations/{investigation}/");
+122 | |                     if path.strip_prefix(&prefix).is_some_and(|relative| {
+...   |
+134 | |             }
+    | |_____________^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#collapsible_if
+help: collapse nested if block
+    |
+119 ~             if self.diagnostics.contains_key(path)
+120 ~                 && let Some((project, Some(investigation))) = scan.scope_for_path(path) {
+121 |                     let prefix = format!("projects/{project}/investigations/{investigation}/");
+...
+132 |                     }
+133 ~                 }
+    |
+
+error: this `if` statement can be collapsed
+  --> casefile-tui/src/workbench/projection.rs:41:13
+   |
+41 | /             if !new_records.contains(path.as_str()) {
+42 | |                 if let Some(index) = self.record_indices.remove(path) {
+43 | |                     if let Some(identity) = &self.derived.records[index].identity {
+44 | |                         self.board_records.remove(identity);
+...  |
+51 | |             }
+   | |_____________^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#collapsible_if
+help: collapse nested if block
+   |
+41 ~             if !new_records.contains(path.as_str())
+42 ~                 && let Some(index) = self.record_indices.remove(path) {
+43 |                     if let Some(identity) = &self.derived.records[index].identity {
+...
+49 |                     }
+50 ~                 }
+   |
+
+error: could not compile `casefile-tui` (lib) due to 11 previous errors
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `casefile-tui` (lib test) due to 11 previous errors
+
+=== sixth-checks.log ===
+warning: Git tree '/home/alex/dev/HUMANS.md' is dirty
+humans-md development shell
+  Setup:  (cd casefile/web && bun install)
+  Format: scripts/format-source.sh --check|--write
+  Web:    cd casefile/web; bun install; bun run typecheck; bun run test; bun run build
+  Rust:   cd casefile; cargo fmt --check; cargo clippy --workspace --all-targets -- -D warnings; cargo test --workspace
+  CI:     act pull_request -j validate --pull=false -P ubuntu-latest=catthehacker/ubuntu:act-latest
+   Compiling casefile-tui v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-tui)
+error[E0308]: mismatched types
+   --> casefile-tui/src/review.rs:114:17
+    |
+113 |             *layout = Some(crate::record_detail::layout::Layout::new(
+    |                            ----------------------------------------- arguments to this function are incorrect
+114 |                 self.lines.clone(),
+    |                 ^^^^^^^^^^^^^^^^^^ expected `&[Line<'_>]`, found `Vec<Line<'_>>`
+    |
+    = note: expected reference `&[ratatui::prelude::Line<'_>]`
+                  found struct `Vec<ratatui::prelude::Line<'_>>`
+note: associated function defined here
+   --> casefile-tui/src/record_detail/layout.rs:16:19
+    |
+ 16 |     pub(crate) fn new(lines: &[Line<'_>], width: u16) -> Self {
+    |                   ^^^ ------------------
+help: consider borrowing here
+    |
+114 |                 &self.lines.clone(),
+    |                 +
+
+For more information about this error, try `rustc --explain E0308`.
+error: could not compile `casefile-tui` (lib test) due to 1 previous error
+
+=== smoke.log ===
+Gnuplot not found, using plotters backend
+Testing tui_250_records_500_notes/selected_scope_navigation
+Success
+Testing tui_250_records_500_notes/list_scroll_20_frames
+Success
+Testing tui_250_records_500_notes/detail_scroll_20_frames
+Success
+
+
+=== staged-report-format.log ===
+warning: Git tree '/home/alex/dev/HUMANS.md' is dirty
+humans-md development shell
+  Setup:  (cd casefile/web && bun install)
+  Format: scripts/format-source.sh --check|--write
+  Web:    cd casefile/web; bun install; bun run typecheck; bun run test; bun run build
+  Rust:   cd casefile; cargo fmt --check; cargo clippy --workspace --all-targets -- -D warnings; cargo test --workspace
+  CI:     act pull_request -j validate --pull=false -P ubuntu-latest=catthehacker/ubuntu:act-latest
+../benchmarks/HMD-067-RESULTS.md 88ms
+Checking formatting...
+All matched files use Prettier code style!
+
+=== tenth-checks.log ===
+warning: Git tree '/home/alex/dev/HUMANS.md' is dirty
+humans-md development shell
+  Setup:  (cd casefile/web && bun install)
+  Format: scripts/format-source.sh --check|--write
+  Web:    cd casefile/web; bun install; bun run typecheck; bun run test; bun run build
+  Rust:   cd casefile; cargo fmt --check; cargo clippy --workspace --all-targets -- -D warnings; cargo test --workspace
+  CI:     act pull_request -j validate --pull=false -P ubuntu-latest=catthehacker/ubuntu:act-latest
+   Compiling casefile-tui v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-tui)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.42s
+     Running unittests src/lib.rs (/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/debug/deps/casefile_tui-26658e30d7cccb93)
+
+running 65 tests
+test interaction::tests::edit_selection_yields_only_supported_governed_records ... ok
+test markdown::tests::renders_headings_lists_code_and_terminal_safe_html ... ok
+test record_detail::tests::metadata_and_board_columns_escape_controls_and_remain_bounded ... ok
+test record_detail::tests::source_keeps_text_beyond_the_display_limit ... ok
+test record_detail::layout::tests::scrolling_and_resize_preserve_supported_unicode_wrap_and_styles ... ok
+test strategy_flow::tests::a_lost_writer_binding_clears_the_cached_identifier_without_rebinding_other_roles ... ok
+test record_detail::tests::metadata_and_diagnostics_cannot_inject_terminal_controls ... ok
+test strategy_flow::tests::batching_compatibility_tracks_the_work_group_that_the_chart_will_actually_render ... ok
+test watching::tests::classifier_is_lexical_longest_root_and_exact_root_exclusions ... ok
+test watching::tests::classifier_keeps_dot_root_relative_and_absolute_namespaces_distinct ... ok
+test watching::tests::classifier_models_windows_case_and_backslash_equivalence ... ok
+test watching::tests::classifier_preserves_posix_filesystem_root_namespace ... ok
+test progressive::tests::catalogue_resolves_full_nested_investigation_target ... ok
+test record_detail::tests::content_keeps_lines_and_escapes_only_unsafe_controls ... ok
+test strategy_flow::tests::selected_membership_not_declaration_order_controls_optional_review_and_correction_routing ... ok
+test watching::tests::first_catalogue_rebuild_changes_events_from_store_wide_to_scoped ... ok
+test watching::tests::investigation_change_is_direct_without_invalidating_a_sibling ... ok
+test watching::tests::reducer_preserves_later_observation_and_failure_never_clears ... ok
+test watching::tests::investigation_refresh_suppresses_exact_warning_but_retains_broader_visibility ... ok
+test watching::tests::restored_health_does_not_claim_freshness ... ok
+test watching::tests::unrelated_project_observation_does_not_invalidate_scoped_refresh_success ... ok
+test review::tests::review_scrolls_store_diff_and_colours_additions_and_removals ... ok
+test progressive::tests::catalogue_is_navigable_before_completion_and_post_start_observation_is_reported ... ok
+test progressive::tests::obsolete_generation_is_discarded_and_refresh_failure_keeps_complete_data ... ok
+test watching::tests::refresh_window_ignores_sibling_bursts_but_preserves_nested_floors_and_clears ... ok
+test strategy_flow::tests::optional_preflight_does_not_change_the_execution_diagram ... ok
+test strategy_flow::layout::tests::wide_model_identifiers_wrap_inside_closed_nonoverlapping_boxes ... ok
+test progressive::tests::status_only_content_events_redraw_and_selection_cancellation_rejects_late_delivery ... ok
+test strategy_flow::tests::declaration_refresh_revokes_contradictory_flows_without_rejecting_runtime_variants ... ok
+test strategy_flow::tests::selected_cache_refreshes_on_binding_only_change_scope_change_and_resize ... ok
+test progressive::tests::store_minimum_scope_allows_contextual_refresh_and_reports_its_exact_coverage ... ok
+test progressive::tests::selected_lazy_content_exposes_loaded_and_fresh_failure_states ... ok
+test strategy_flow::tests::resize_keeps_every_chart_cell_inside_the_pane_and_recovers_after_too_narrow ... ok
+test workbench::tests::board_card_selection_survives_complete_projection_with_deletion_and_ambiguity_controls ... ok
+test workbench::tests::detail_scroll_resets_only_when_selected_content_revision_changes ... ok
+test watching::tests::native_recursive_subscription_reports_a_disk_change_and_tears_down ... ok
+test workbench::progressive_tests::eager_and_lazy_detail_survive_promotion_refresh_and_external_edit ... FAILED
+test workbench::tests::board_keyboard_selection_marks_the_card_changes_detail_and_skips_unresolved_identities ... ok
+test workbench::progressive_tests::parent_scope_refresh_keeps_nested_body_and_removes_only_parent_members ... FAILED
+test workbench::tests::boards_distinguish_no_definition_invalid_and_empty ... ok
+test workbench::tests::project_and_investigation_deletions_use_following_then_preceding_fallback ... ok
+test workbench::tests::files_are_grouped_relative_to_the_selected_scope_and_include_project_files ... ok
+test workbench::tests::boards_are_read_only_unfiltered_and_open_a_canonical_ticket_detail ... ok
+test workbench::tests::diagnostics_and_editing_remain_governed_path_only ... ok
+test workbench::flow_tests::binding_refresh_updates_chart_and_overview_without_changing_selection ... ok
+test workbench::flow_tests::changing_investigation_replaces_the_chart_even_when_source_revisions_match ... ok
+test workbench::tests::refresh_target_matrix_uses_project_full_investigation_and_store_fallback ... ok
+test workbench::tests::filtering_and_empty_hierarchy_states_remain_predictable ... ok
+test workbench::tests::promotion_preserves_pending_exact_and_semantic_anchors_and_handles_deletion ... ok
+test workbench::tests::unchanged_filter_exact_disappearance_is_explained_and_resume_is_round_tripped ... ok
+test workbench::tests::strategy_key_and_tab_cycle_preserve_existing_view_targets ... ok
+test workbench::tests::project_investigation_ticket_drill_down_selects_a_canonical_path ... ok
+test workbench::progressive_tests::scoped_refresh_updates_rendered_boards_and_progress_without_losing_selection_or_other_rows ... ok
+test workbench::tests::rendered_and_source_tabs_keep_markdown_readable_and_exact ... ok
+test workbench::tests::focus_navigation_help_and_go_up_are_visible ... ok
+test workbench::tests::nested_investigations_with_the_same_leaf_are_selectable_independently ... ok
+test workbench::tests::strategies_filter_remain_in_files_and_are_read_only ... ok
+test workbench::tests::strategies_are_scoped_by_full_nested_investigation_identity ... ok
+test workbench::relationship_tests::relationship_availability_tracks_project_coverage_not_a_stale_store_complete_flag ... ok
+test workbench::tests::strategy_records_expose_typed_overview_exact_source_and_diagnostics ... ok
+test workbench::flow_tests::chart_navigation_reaches_tail_resizes_and_files_preserves_selected_source ... ok
+test workbench::relationship_tests::canonical_relationships_follow_cross_scope_targets_without_replacing_source_bodies ... ok
+test workbench::progressive_tests::section_header_counts_keep_their_scope_across_views_filters_and_scoped_refresh ... ok
+test watching::tests::fake_watcher_covers_rename_overflow_coalescing_and_teardown ... ok
+test review::tests::native_scroll_edge_keeps_visible_diff_lines_beyond_u16_row_count ... ok
+
+failures:
+
+---- workbench::progressive_tests::eager_and_lazy_detail_survive_promotion_refresh_and_external_edit stdout ----
+
+thread 'workbench::progressive_tests::eager_and_lazy_detail_survive_promotion_refresh_and_external_edit' (1937233) panicked at casefile-tui/src/workbench/progressive_tests.rs:203:5:
+assertion failed: !test_support::render(&app, 120, 40).contains("Flow unavailable")
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- workbench::progressive_tests::parent_scope_refresh_keeps_nested_body_and_removes_only_parent_members stdout ----
+
+thread 'workbench::progressive_tests::parent_scope_refresh_keeps_nested_body_and_removes_only_parent_members' (1937235) panicked at casefile-tui/src/workbench/progressive_tests.rs:259:39:
+called `Option::unwrap()` on a `None` value
+
+
+failures:
+    workbench::progressive_tests::eager_and_lazy_detail_survive_promotion_refresh_and_external_edit
+    workbench::progressive_tests::parent_scope_refresh_keeps_nested_body_and_removes_only_parent_members
+
+test result: FAILED. 63 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.29s
+
+error: test failed, to rerun pass `-p casefile-tui --lib`
+
+=== third-check.log ===
+warning: Git tree '/home/alex/dev/HUMANS.md' is dirty
+humans-md development shell
+  Setup:  (cd casefile/web && bun install)
+  Format: scripts/format-source.sh --check|--write
+  Web:    cd casefile/web; bun install; bun run typecheck; bun run test; bun run build
+  Rust:   cd casefile; cargo fmt --check; cargo clippy --workspace --all-targets -- -D warnings; cargo test --workspace
+  CI:     act pull_request -j validate --pull=false -P ubuntu-latest=catthehacker/ubuntu:act-latest
+    Checking casefile-tui v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-tui)
+warning: unused import: `DerivedBoard`
+  --> casefile-tui/src/workbench.rs:14:22
+   |
+14 | use casefile_store::{DerivedBoard, DerivedSnapshot, PresentationTarget, ScanResult};
+   |                      ^^^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused imports: `Block`, `BorderType`, `Borders`, `Clear`, `Span`, and `Wrap`
+  --> casefile-tui/src/workbench.rs:22:18
+   |
+22 |     text::{Line, Span},
+   |                  ^^^^
+23 |     widgets::{Block, BorderType, Borders, Clear, Paragraph, Widget, Wrap},
+   |               ^^^^^  ^^^^^^^^^^  ^^^^^^^  ^^^^^                     ^^^^
+
+error[E0425]: cannot find function `render_help` in this scope
+   --> casefile-tui/src/workbench.rs:614:13
+    |
+614 |             render_help(area, buffer);
+    |             ^^^^^^^^^^^ not found in this scope
+
+For more information about this error, try `rustc --explain E0425`.
+warning: `casefile-tui` (lib) generated 2 warnings
+error: could not compile `casefile-tui` (lib) due to 1 previous error; 2 warnings emitted
+warning: build failed, waiting for other jobs to finish...
+warning: `casefile-tui` (lib test) generated 2 warnings (2 duplicates)
+error: could not compile `casefile-tui` (lib test) due to 1 previous error; 2 warnings emitted
+
+=== third-tests.log ===
+warning: Git tree '/home/alex/dev/HUMANS.md' is dirty
+humans-md development shell
+  Setup:  (cd casefile/web && bun install)
+  Format: scripts/format-source.sh --check|--write
+  Web:    cd casefile/web; bun install; bun run typecheck; bun run test; bun run build
+  Rust:   cd casefile; cargo fmt --check; cargo clippy --workspace --all-targets -- -D warnings; cargo test --workspace
+  CI:     act pull_request -j validate --pull=false -P ubuntu-latest=catthehacker/ubuntu:act-latest
+   Compiling casefile-tui v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-tui)
+error[E0506]: cannot assign to `self.selected_project` because it is borrowed
+   --> casefile-tui/src/browsing.rs:669:9
+    |
+669 |         self.selected_project = normalised(self.selected_project.as_deref(),&self.visible().projects);
+    |         ^^^^^^^^^^^^^^^^^^^^^                                                --------------          - ... and the borrow might be used here, when that temporary is dropped and runs the destructor for type `Ref<'_, Visible>`
+    |         |                                                                    |
+    |         |                                                                    `self.selected_project` is borrowed here
+    |         |                                                                    a temporary with access to the borrow is created here ...
+    |         `self.selected_project` is assigned to here but it was already borrowed
+
+error[E0506]: cannot assign to `self.selected_investigation` because it is borrowed
+   --> casefile-tui/src/browsing.rs:670:9
+    |
+670 |         self.selected_investigation = normalised(self.selected_investigation.as_deref(),&self.visible().investigations);
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^                                                      --------------                - ... and the borrow might be used here, when that temporary is dropped and runs the destructor for type `Ref<'_, Visible>`
+    |         |                                                                                |
+    |         |                                                                                `self.selected_investigation` is borrowed here
+    |         |                                                                                a temporary with access to the borrow is created here ...
+    |         `self.selected_investigation` is assigned to here but it was already borrowed
+
+error[E0506]: cannot assign to `self.selected_path` because it is borrowed
+   --> casefile-tui/src/browsing.rs:671:39
+    |
+671 |         if self.view != View::Boards {self.selected_path = normalised(self.selected_path.as_deref(),&self.visible().paths);}
+    |                                       ^^^^^^^^^^^^^^^^^^                                             --------------       - ... and the borrow might be used here, when that temporary is dropped and runs the destructor for type `Ref<'_, Visible>`
+    |                                       |                                                              |
+    |                                       |                                                              `self.selected_path` is borrowed here
+    |                                       |                                                              a temporary with access to the borrow is created here ...
+    |                                       `self.selected_path` is assigned to here but it was already borrowed
+
+warning: unused variable: `scan`
+   --> casefile-tui/src/browsing.rs:667:39
+    |
+667 |     fn normalise_selection(&mut self, scan: &ScanResult) -> bool {
+    |                                       ^^^^ help: if this is intentional, prefix it with an underscore: `_scan`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+For more information about this error, try `rustc --explain E0506`.
+warning: `casefile-tui` (lib test) generated 1 warning
+error: could not compile `casefile-tui` (lib test) due to 3 previous errors; 1 warning emitted
+
+=== FINAL EVIDENCE AUDIT; NO NEW SOURCE/WORKLOAD CHANGE ===
+Source inspection: unchanged Tickets/Home/Right/Tab selects lexically first work-item path, projects/demo/investigations/sample/epics/accepted/HMD-E-001.md. The fixture contains HMD-011 extended by 80 paragraphs and 500 notes, but original detail_scroll_20_frames does not select that ticket. This is source-derived workload clarification, not a new runtime probe or long-progress detail measurement. Original harness, fixture, key loop and distributions are unchanged.
+
+Selection source proof chain (current file SHA256 already in hmd067-after.json):
+
+casefile/casefile-tui/benches/interactions.rs:58-67
+58:     app.handle(KeyCode::Home);
+59:     app.handle(KeyCode::Right);
+60:     app.handle(KeyCode::Tab);
+61:     terminal
+62:         .draw(|frame| app.render(frame.area(), frame.buffer_mut()))
+63:         .unwrap();
+64:     let before_detail_scroll = app.resume();
+65:     app.handle(KeyCode::Down);
+66:     assert_ne!(app.resume(), before_detail_scroll);
+67:     app.handle(KeyCode::Up);
+
+casefile/casefile-tui/src/workbench.rs:514-520
+514:             KeyCode::Right | KeyCode::Char('l') => self.detail.select_tab(1),
+515:             KeyCode::Down | KeyCode::Char('j') => self.move_focus(1),
+516:             KeyCode::Up | KeyCode::Char('k') => self.move_focus(-1),
+517:             KeyCode::PageDown => self.move_focus(PAGE_SIZE),
+518:             KeyCode::PageUp => self.move_focus(-PAGE_SIZE),
+519:             KeyCode::Home => self.move_to_edge(false),
+520:             KeyCode::End => self.move_to_edge(true),
+
+casefile/casefile-tui/src/workbench.rs:570-583
+570:     fn move_to_edge(&mut self, end: bool) {
+571:         match self.focus {
+572:             Focus::List => {
+573:                 let changed = if self.browser.view() == View::Boards {
+574:                     self.select_board(if end { isize::MAX } else { isize::MIN })
+575:                 } else {
+576:                     self.browser.select_edge(&self.scan, end)
+577:                 };
+578:                 if changed {
+579:                     self.detail.reset_scroll();
+580:                 }
+581:             }
+582:             Focus::Detail => self.detail.move_to_edge(end),
+583:         }
+
+casefile/casefile-tui/src/browsing.rs:434-444
+434:     pub(crate) fn select_offset(&mut self, scan: &ScanResult, offset: isize) -> bool {
+435:         let next = {
+436:             let visible = self.visible();
+437:             let (selected, values) = match self.view {
+438:                 View::Projects => (&self.selected_project, &visible.projects),
+439:                 View::Investigations => (&self.selected_investigation, &visible.investigations),
+440:                 View::Tickets | View::Files | View::Strategies | View::Boards => {
+441:                     (&self.selected_path, &visible.paths)
+442:                 }
+443:             };
+444:             next_value(selected.as_deref(), values, offset)
+
+casefile/casefile-tui/src/browsing.rs:473-476
+473:     pub(crate) fn select_edge(&mut self, scan: &ScanResult, end: bool) -> bool {
+474:         let offset = if end { isize::MAX } else { isize::MIN };
+475:         self.select_offset(scan, offset)
+476:     }
+
+casefile/casefile-tui/src/browsing.rs:959-969
+959:         .unwrap_or(0);
+960:     let next = if offset == isize::MAX {
+961:         values.len() - 1
+962:     } else if offset == isize::MIN {
+963:         0
+964:     } else {
+965:         (index as isize + offset).clamp(0, values.len() as isize - 1) as usize
+966:     };
+967:     Some(values[next].clone())
+968: }
+969: 
+
+casefile/casefile-tui/src/browsing.rs:821-825
+821: fn is_work(entry: &EntrySnapshot) -> bool {
+822:     entry.classification == Classification::Governed
+823:         && matches!(entry.summary, Some(RecordSummary::WorkItem { .. }))
+824: }
+825: 
+
+casefile/casefile-tui/src/browsing/projection.rs:180-211
+180:                     .get(&(project.clone(), browser.selected_investigation.clone()))
+181:             })
+182:             .unwrap_or(&empty);
+183:         let project = scoped
+184:             .filter(|_| browser.view == View::Files)
+185:             .and_then(|project| self.scopes.get(&(project.clone(), None)))
+186:             .unwrap_or(&empty);
+187:         let paths = exact
+188:             .union(project)
+189:             .filter(|path| {
+190:                 (ignore_filter
+191:                     || cached
+192:                         .as_ref()
+193:                         .is_some_and(|filter| filter.paths.contains(*path)))
+194:                     && match browser.view {
+195:                         View::Tickets => self.facts[*path].work,
+196:                         View::Files => !self.facts[*path].work,
+197:                         View::Strategies => {
+198:                             self.facts[*path].strategy && browser.selected_investigation.is_some()
+199:                         }
+200:                         View::Projects | View::Investigations | View::Boards => false,
+201:                     }
+202:             })
+203:             .cloned()
+204:             .collect::<Vec<_>>();
+205:         let projects = self
+206:             .roots
+207:             .keys()
+208:             .filter(|project| {
+209:                 ignore_filter
+210:                     || project.to_lowercase().contains(&filter)
+211:                     || cached
+
+casefile/benchmarks/support/mod.rs:80-100
+80:         let directory = self.root.path().join(INVESTIGATION).join("progress");
+81:         fs::create_dir_all(&directory).expect("progress directory");
+82:         let mut log = String::from("schema_version = 1\n");
+83:         for number in 0..count {
+84:             let ticket = if missing_targets {
+85:                 format!("HMD-{:06}", number + 800_000)
+86:             } else {
+87:                 "HMD-011".to_owned()
+88:             };
+89:             log.push_str(&format!("\n[[entries]]\nid = \"note-{number:06}\"\nrecorded_at = \"2026-07-26T10:01:00Z\"\nrecorded_by = \"benchmark\"\nticket_id = \"{ticket}\"\nkind = \"note\"\ncategory = \"quirk\"\nmessage = \"Synthetic benchmark note.\"\n"));
+90:         }
+91:         fs::write(directory.join("log.toml"), log).expect("progress log");
+92:         self
+93:     }
+94: 
+95:     pub fn long_ticket_body(self, paragraphs: usize) -> Self {
+96:         let path = self
+97:             .root
+98:             .path()
+99:             .join(INVESTIGATION)
+100:             .join("tickets/accepted/HMD-011.md");
+
+=== FINAL REPORT PRETTIER CHECK (exit 0) ===
+warning: Git tree '/home/alex/dev/HUMANS.md' is dirty
+humans-md development shell
+  Setup:  (cd casefile/web && bun install)
+  Format: scripts/format-source.sh --check|--write
+  Web:    cd casefile/web; bun install; bun run typecheck; bun run test; bun run build
+  Rust:   cd casefile; cargo fmt --check; cargo clippy --workspace --all-targets -- -D warnings; cargo test --workspace
+  CI:     act pull_request -j validate --pull=false -P ubuntu-latest=catthehacker/ubuntu:act-latest
+../benchmarks/HMD-067-RESULTS.md 86ms
+Checking formatting...
+All matched files use Prettier code style!
+
+=== FINAL HANDOFF PRESERVATION AUDIT ===
+PASS final source 117 hashes and executable match measured provenance
+PASS before-hashes.txt: 4 preserved SHA256 objects
+PASS native-before-hashes.txt: 236 preserved SHA256 objects
+PASS 68 parent benchmark/evidence paths byte-identical
+PASS TUI harness/root/shared fixture bytes match parent and HMD057 commit
+PASS report ASCII and all 17 individual outcome rows; final three Criterion controls

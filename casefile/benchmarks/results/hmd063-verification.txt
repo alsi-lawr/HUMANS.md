@@ -1,0 +1,687 @@
+HMD-063 final focused verification
+Parent: f3f2df036aaf8f677b5e7858d95804bfb0dc48df
+All reported final commands returned actual exit0 under set -e; no tail/log command masked failure.
+
+Absolute CARGO_TARGET_DIR=/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target
+Final test commands printed below: Store128 + Server2 + CLI15 =145 Rust tests.
+Additional final commands:
+nix develop . --command cargo clippy --manifest-path casefile/Cargo.toml -p casefile-store -p casefile-cli -p casefile-server -p casefile-store-sqlite --all-targets -- -D warnings
+nix develop . --command cargo fmt --manifest-path casefile/Cargo.toml --all --check
+nix develop . --command sh -ec 'cd casefile/web; bun run typecheck; bun run test; bun run build; bunx prettier --check src/model.ts src/api.ts src/api-contract.ts src/api-contract.test.ts'
+nix develop . --command cargo bench --manifest-path casefile/Cargo.toml -p casefile-store-sqlite --bench priority --no-run
+nix shell --impure --expr 'let pkgs = import (builtins.getFlake "github:NixOS/nixpkgs/597283ad8aa0b331c788e97c4c262d58877074ef").outPath {}; in pkgs.python3.withPackages (ps: [ps.jsonschema])' --command python3 .agent-workspace/20260930-speedup-implementation/writer/hmd063/schema-probe.py
+python3 scripts/smoke-casefile-mcp.py --executable .agent-workspace/20260930-speedup-implementation/writer/target/debug/casefile --version 0.8.0
+python3 .agent-workspace/20260930-speedup-implementation/writer/hmd063/browser-probe.py
+
+Proof sources are preserved exactly in hmd063-{browser-probe.py,browser-probe.ts,schema-probe.py}. They executed from the now-disposable absolute scratch path referenced inside them, importing actual repository TS modules. To replay, copy the three proof files back to that scratch path with original basenames; no live planning root is used.
+Temporary repo-pinned Nix Python/jsonschema tooling used no nix profile, project dependency, flake/lock/config mutation, install or activation.
+
+=== final-exact-tests.log: final actual exit0 ===
+warning: Git tree '/home/alex/dev/HUMANS.md' is dirty
+humans-md development shell
+  Setup:  (cd casefile/web && bun install)
+  Format: scripts/format-source.sh --check|--write
+  Web:    cd casefile/web; bun install; bun run typecheck; bun run test; bun run build
+  Rust:   cd casefile; cargo fmt --check; cargo clippy --workspace --all-targets -- -D warnings; cargo test --workspace
+  CI:     act pull_request -j validate --pull=false -P ubuntu-latest=catthehacker/ubuntu:act-latest
++ cargo test --manifest-path casefile/Cargo.toml -p casefile-store --lib --test provider --test governance --test v1 --test diff_paths
+   Compiling casefile-store v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 8.42s
+     Running unittests src/lib.rs (.agent-workspace/20260930-speedup-implementation/writer/target/debug/deps/casefile_store-35dd4c6b7f743430)
+
+running 70 tests
+test layout::tests::persisted_paths_remain_strictly_slash_canonical ... ok
+test mutation_tests::process_writer ... ok
+test layout::tests::portable_planning_relative_grammar_is_host_independent ... ok
+test mutation_tests::progress_absent_publication_does_not_clobber_an_intervening_creator ... ok
+test mutation_tests::governed_mid_transaction_failure_restores_the_matrix ... ok
+test mutation_tests::governed_write_failure_does_not_republish_an_unchanged_matrix ... ok
+test checking::tests::scoped_check_discards_each_canonical_support_body_before_opening_the_next ... ok
+test checking::tests::parent_checks_and_provider_diagnostics_exclude_activated_nested_scope_bodies ... ok
+test mutation_tests::governed_post_write_cleanup_leaves_external_matrix_and_removes_own_transition ... ok
+test mutation_tests::record_batch_failure_restores_prior_targets_without_touching_unrelated_data ... ok
+test mutation_tests::global_identity_phantoms_and_multiline_board_metadata_remain_conflicts ... ok
+test mutation_tests::rollback_preserves_external_symlink_and_does_not_touch_its_outside_target ... ok
+test mutation_tests::reverse_ordered_supersession_closure_rejects_a_new_cycle_without_writing ... ok
+test mutation_tests::contested_batch_cleanup_continues_and_never_rewrites_noop_or_unwritten_targets ... ok
+test presentation::tests::activation_project_membership_invalidates_map_facts_not_unrelated_entries_or_handles ... ok
+test presentation::tests::interrupted_reads_retry_but_cancellation_never_returns_partial_content ... ok
+test presentation::tests::cancellation_after_the_final_read_does_not_publish_or_cache_that_scope ... ok
+test presentation::tests::disjoint_target_loads_do_not_cancel_each_other_or_invalidate_received_handles ... ok
+test presentation::tests::lazy_handles_survive_unrelated_edits_but_changed_and_deleted_paths_are_invalidated ... ok
+test presentation::tests::live_save_replacement_and_deletion_are_reconciled_per_entry ... ok
+test presentation::tests::lazy_content_rejects_non_emitted_escaping_and_excluded_paths ... ok
+test presentation::tests::nested_activation_uses_deepest_scope_and_membership_change_reclassifies_cached_paths ... ok
+test presentation::tests::newer_nonmonotonic_load_wins_and_late_old_events_cannot_replace_handles ... ok
+test presentation::tests::full_refresh_after_ancestor_replacement_reacquires_descriptors_without_an_anchoring_promise ... ok
+test presentation::tests::note_only_edit_shares_board_entry_but_transition_updates_cards ... ok
+test presentation::tests::loaded_presentation_facts_match_complete_canonical_inputs ... ok
+test presentation::tests::per_entry_read_failure_is_visible_and_retried_without_a_metadata_change ... ok
+test presentation::tests::one_ticket_membership_edit_updates_progress_diagnostics_and_shares_unrelated_entries ... ok
+test presentation::tests::scoped_load_keeps_untouched_target_content_handles_usable ... ok
+test presentation::tests::production_catalogue_and_fetch_reject_a_root_renamed_to_a_symlink ... ok
+test presentation::tests::unactivated_and_invalid_activation_complete_before_filesystem_catalogue_reads ... ok
+test mutation_tests::reverse_evidence_uses_canonical_metadata_and_aliases_cannot_bypass_it ... ok
+test presentation::tests::scoped_targets_emit_only_their_deterministic_activated_subtrees ... ok
+test presentation::tests::unchanged_refresh_reuses_records_without_reading_bodies_and_detail_reads_only_selection ... ok
+test presentation::tests::unrepresentable_native_names_fail_explicitly_instead_of_aliasing_a_replacement_name ... ok
+test presentation::tests::production_fetch_rejects_a_catalogued_path_whose_parent_becomes_a_symlink ... ok
+test provider::hierarchy_tests::snapshot_and_index_observe_cache_without_refreshing_it ... ok
+test mutation_tests::progress_post_write_failure_restores_owned_bytes_but_discards_external_restoration ... ok
+test presentation::tests::production_saves_atomic_replacements_and_deletions_after_enumeration_stay_local ... ok
+test provider::outcome_tests::current_cache_survives_publication_failure_but_required_external_changes_do_not ... ok
+test provider::outcome_tests::events_and_rescan_require_rebuild_even_when_metadata_revision_is_unchanged ... ok
+test read_context::tests::scope_observation_rejects_affecting_changes_but_admits_unrelated_edits ... ok
+test revision::tests::controlled_same_identity_size_and_timestamps_edit_is_admitted ... ok
+test provider::outcome_tests::observation_window_external_edit_cannot_claim_the_old_index_is_current ... ok
+test revision::tests::revision_covers_type_native_identity_size_and_both_timestamps ... ok
+test scanning::scoped::tests::parallel_scope_read_reports_first_path_failure_and_retries_without_partial_results ... ok
+test scanning::tests::attachment_overlay_uses_proposed_regular_presence_not_original_opaque_membership ... ok
+test scanning::tests::selected_descriptor_and_global_membership_observations_refuse_races ... ok
+test scanning::tests::store_path_exclusion_is_exactly_direct_root_implementation_metadata ... ok
+test store::safety_tests::current_revision_uses_metadata_inventory_without_body_reads ... ok
+test store::safety_tests::safe_target_parent_rejects_the_root_and_in_store_descendant_symlinks ... ok
+test validation::tests::attachment_targets_keep_canonical_store_separators ... ok
+test writing::diff_argument_tests::contained_temporary_git_arguments_are_relative_and_keep_canonical_headers ... ok
+test writing::diff_argument_tests::literal_hunk_lines_are_not_rewritten_as_canonical_file_headers ... ok
+test writing::diff_argument_tests::terminated_and_failed_diff_processes_cannot_publish_partial_approval_output ... ok
+test provider::outcome_tests::native_watch_create_edit_rename_delete_reconciles_canonical_index_content ... ok
+test provider::outcome_tests::unconfigured_outcomes_do_not_read_the_store_after_commit_or_replay ... ok
+test provider::outcome_tests::cache_preparation_failure_preserves_committed_receipt_bytes_and_supported_replay ... ok
+test mutation_tests::shared_reference_changes_and_reverse_progress_membership_cannot_write_skew ... ok
+test checking::tests::scoped_check_never_opens_foreign_evidence_and_root_matches_canonical_validation ... ok
+test mutation_tests::progress_bootstrap_append_replay_and_record_batch_have_narrow_result_windows ... ok
+test mutation_tests::governed_multi_file_and_binding_results_and_legacy_replay_are_independent ... ok
+test revision::tests::metadata_revision_detects_ordinary_edits_replacements_types_and_existence ... ok
+test mutation_tests::growth_and_nontransitive_neighbors_do_not_expand_body_reads_or_conflicts ... ok
+test mutation_tests::record_delete_no_op_and_default_board_receipts_survive_disjoint_result_changes ... ok
+test presentation::tests::batches_and_channels_are_bounded_and_cancellation_stops_backpressure ... ok
+test mutation_tests::independent_processes_coordinate_disjoint_targets_replacement_creation_and_identity_claims ... ok
+test mutation_tests::provider_same_session_writes_survive_locked_validation_and_result_windows ... ok
+test provider::outcome_tests::native_watch_keeps_opaque_symlink_descendant_changes_outside_canonical_cache ... ok
+test checking::tests::root_check_retains_one_evidence_body_as_scope_count_grows ... ok
+
+test result: ok. 70 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.50s
+
+     Running tests/diff_paths.rs (.agent-workspace/20260930-speedup-implementation/writer/target/debug/deps/diff_paths-8f8035ba4b8da143)
+
+running 1 test
+test relative_store_roots_create_real_git_diffs_with_relative_temp_arguments ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running tests/governance.rs (.agent-workspace/20260930-speedup-implementation/writer/target/debug/deps/governance-cbe188f3cd7b473a)
+
+running 11 tests
+test strategy_preview_ids_are_local_to_the_provider_and_refuse_foreign_applies ... ok
+test historical_transition_and_backup_files_remain_raw_and_untouched ... ok
+test governed_and_progress_writes_allow_a_symlinked_ancestor_above_the_store_root ... ok
+test binding_preview_ids_preserve_stale_target_checks_and_byte_exact_replay ... ok
+test progress_transition_to_in_progress_is_required_again_after_interruption ... ok
+test binding_accepts_unrelated_changes_and_refuses_invalid_schema_and_symlink_targets ... ok
+test first_phase_strategy_transition_creates_missing_matrix_and_refuses_later_recovery ... ok
+test strategy_transition_is_strict_store_visible_idempotent_and_creates_no_backup ... ok
+test strategy_replay_equates_only_line_endings_and_keeps_raw_preview_staleness ... ok
+test transition_accepts_unrelated_changes_and_preserves_collision_validation_and_rollback ... ok
+test binding_activity_is_derived_exactly_from_canonical_progress_and_spawn_requires_in_progress ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.37s
+
+     Running tests/provider.rs (.agent-workspace/20260930-speedup-implementation/writer/target/debug/deps/provider-64cbf6142fa47848)
+
+running 17 tests
+test catalogue_union_keeps_mapping_only_and_governed_missing_mapping_projects ... ok
+test record_preview_rejects_win32_special_components_without_writing ... ok
+test default_board_refuses_missing_and_ambiguous_activation_mappings_before_preview ... ok
+test index_summaries_and_requested_detail_decode_only_selected_notes_consistently ... ok
+test board_progress_dependency_is_demanded_and_malformed_required_logs_are_explicit ... ok
+test hierarchical_reads_are_selective_bounded_and_exact ... ok
+test cache_refresh_failure_after_a_confirmed_write_is_degraded_not_authoritative ... ok
+test invalid_unactivated_and_legacy_activation_fail_closed_without_conversion ... ok
+test record_ids_bind_original_authority_and_foreign_or_unknown_ids_preserve_the_store ... ok
+test default_board_ignores_unrelated_diagnostics_within_and_across_investigations ... ok
+test snapshot_and_exact_scoped_reads_are_bounded_protocol_v5 ... ok
+test default_board_is_named_exact_preview_with_preflight_collision_and_byte_preserving_no_op ... ok
+test record_batch_promotes_mutually_related_tickets_as_one_valid_change ... ok
+test every_provider_apply_family_accepts_unrelated_store_changes ... ok
+test progress_preview_integrity_covers_bootstrap_transition_replay_no_op_and_conflict ... ok
+test scoped_diagnostics_report_exact_progress_target_and_bounded_follow_up ... ok
+test preview_count_eviction_is_oldest_first_and_newest_id_still_applies_original ... ok
+
+test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.57s
+
+     Running tests/v1.rs (.agent-workspace/20260930-speedup-implementation/writer/target/debug/deps/v1-32902e2ea4c31afb)
+
+running 29 tests
+test derived_relationships_are_unique_and_directed ... ok
+test activation_state_distinguishes_unactivated_and_invalid_roots ... ok
+test nested_investigation_roots_have_distinct_scoped_identities ... ok
+test binary_delete_preview_has_canonical_paths ... ok
+test accepted_tickets_project_unknown_and_a_valid_log_folds_progress_notes_and_progress_boards ... ok
+test canonical_scan_excludes_only_direct_root_implementation_metadata ... ok
+test progress_apply_refuses_unsafe_paths_without_replacing_existing_bytes ... ok
+test atomic_progress_write_failure_preserves_the_previous_log ... ok
+test nested_active_investigations_use_the_most_specific_binding_scope ... ok
+test scans_each_v1_kind_and_preserves_raw_material ... ok
+test project_decisions_resolve_within_the_project_only ... ok
+test scans_the_current_v1_fixture_with_windows_line_endings ... ok
+test progress_target_paths_must_remain_contained ... ok
+test bootstrap_creates_only_an_absent_empty_log_and_existing_valid_log_is_byte_preserving_no_op ... ok
+test semantic_invalid_progress_suppresses_unknown_and_progress_board_cards ... ok
+test structural_faults_are_deterministic_and_drafts_round_trip ... ok
+test strategy_binding_is_pending_without_implementation_and_unresolved_without_exact_writer ... ok
+test strategy_binding_projection_keeps_legacy_and_failure_states_distinct ... ok
+test progress_mutations_require_active_activation_but_ignore_unrelated_diagnostics ... ok
+test generic_preview_preserves_baseline_diagnostics_but_rejects_introduced_diagnostics ... ok
+test malformed_and_cross_scope_progress_never_become_unknown_and_store_writer_is_preview_first_and_idempotent ... ok
+test strategy_bindings_are_isolated_by_active_investigation_scope ... ok
+test reference_cycle_attachment_prefix_symlink_and_json_diagnostics_are_checked ... ok
+test binding_replacement_is_guarded_single_file_and_atomic ... ok
+test work_item_references_may_cross_investigations_within_one_project_only ... ok
+test previews_and_applies_one_path_without_touching_index ... ok
+test progress_rejections_preserve_precise_same_scope_ticket_facts ... ok
+test atomic_multi_ticket_continuations_capture_the_complete_proposal ... ok
+test table_rows_and_review_faults_are_structural ... ok
+
+test result: ok. 29 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.35s
+
++ cargo test --manifest-path casefile/Cargo.toml -p casefile-server --lib
+   Compiling casefile-core v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-core)
+   Compiling casefile-store v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store)
+   Compiling casefile-store-sqlite v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store-sqlite)
+   Compiling casefile-server v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-server)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 14.89s
+     Running unittests src/lib.rs (.agent-workspace/20260930-speedup-implementation/writer/target/debug/deps/casefile_server-06dd12b7df655a71)
+
+running 2 tests
+test api::tests::rollback_error_crosses_the_http_failure_channel_as_409_without_private_source_contents ... ok
+test api::tests::records_query_preserves_full_editable_draft_rendered_html_and_body_search ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
+
++ cargo test --manifest-path casefile/Cargo.toml -p casefile-cli --bin casefile --test mcp --test serve
+   Compiling casefile-store v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store)
+   Compiling casefile-store-sqlite v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store-sqlite)
+   Compiling casefile-tui v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-tui)
+   Compiling casefile-server v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-server)
+   Compiling casefile-cli v0.8.0 (/home/alex/dev/HUMANS.md/casefile/casefile-cli)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 10.67s
+     Running unittests src/main.rs (.agent-workspace/20260930-speedup-implementation/writer/target/debug/deps/casefile-d30e74368126311a)
+
+running 5 tests
+test error_tests::rollback_failure_channel_retains_details_and_excludes_private_source_text ... ok
+test mcp::tests::mcp_rejects_old_body_and_foreign_tool_ids_before_applying_retained_original ... ok
+test mcp::tests::mcp_apply_rollback_failure_keeps_error_flag_and_declared_structured_details ... ok
+test mcp::tests::same_mcp_session_dispatches_a_disjoint_apply_while_another_apply_is_active ... ok
+test json_output::tests::overflow_leaves_output_empty_including_json_escaping_expansion ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.42s
+
+     Running tests/mcp.rs (.agent-workspace/20260930-speedup-implementation/writer/target/debug/deps/mcp-a2ad7630cb61b864)
+
+running 7 tests
+test compatibility_contract_is_machine_readable_and_complete ... ok
+test adapter_never_infers_root_or_accepts_incompatible_mcp_protocol ... ok
+test root_protocol_and_capability_refusals_happen_before_tool_service ... ok
+test native_restarted_provider_refuses_the_previous_process_id_without_mutating ... ok
+test provider_preview_and_apply_remain_one_session_exact_operations ... ok
+test packaged_command_internalizes_the_launcher_contract ... ok
+test fixed_root_session_negotiates_and_exposes_canonical_snapshot_and_query ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+
+     Running tests/serve.rs (.agent-workspace/20260930-speedup-implementation/writer/target/debug/deps/serve-e5812c367c3d99b8)
+
+running 3 tests
+test serve_transports_derived_ticket_progress ... ok
+test serve_preserves_preview_and_gates_apply_with_capability ... ok
+test serve_exposes_only_the_fixed_read_contract ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.22s
+
+
+=== final-clippy.log: final actual exit0 ===
+warning: Git tree '/home/alex/dev/HUMANS.md' is dirty
+humans-md development shell
+  Setup:  (cd casefile/web && bun install)
+  Format: scripts/format-source.sh --check|--write
+  Web:    cd casefile/web; bun install; bun run typecheck; bun run test; bun run build
+  Rust:   cd casefile; cargo fmt --check; cargo clippy --workspace --all-targets -- -D warnings; cargo test --workspace
+  CI:     act pull_request -j validate --pull=false -P ubuntu-latest=catthehacker/ubuntu:act-latest
+    Checking casefile-store v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store)
+    Checking casefile-store-sqlite v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store-sqlite)
+    Checking casefile-tui v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-tui)
+    Checking casefile-server v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-server)
+    Checking casefile-cli v0.8.0 (/home/alex/dev/HUMANS.md/casefile/casefile-cli)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 3.62s
+
+=== final-fmt2.log: final actual exit0 ===
+warning: Git tree '/home/alex/dev/HUMANS.md' is dirty
+humans-md development shell
+  Setup:  (cd casefile/web && bun install)
+  Format: scripts/format-source.sh --check|--write
+  Web:    cd casefile/web; bun install; bun run typecheck; bun run test; bun run build
+  Rust:   cd casefile; cargo fmt --check; cargo clippy --workspace --all-targets -- -D warnings; cargo test --workspace
+  CI:     act pull_request -j validate --pull=false -P ubuntu-latest=catthehacker/ubuntu:act-latest
+
+=== final-web.log: final actual exit0 ===
+warning: Git tree '/home/alex/dev/HUMANS.md' is dirty
+humans-md development shell
+  Setup:  (cd casefile/web && bun install)
+  Format: scripts/format-source.sh --check|--write
+  Web:    cd casefile/web; bun install; bun run typecheck; bun run test; bun run build
+  Rust:   cd casefile; cargo fmt --check; cargo clippy --workspace --all-targets -- -D warnings; cargo test --workspace
+  CI:     act pull_request -j validate --pull=false -P ubuntu-latest=catthehacker/ubuntu:act-latest
+$ tsc --noEmit
+$ bun test src/api-contract.test.ts
+bun test v1.3.13 (bf2e2cec)
+
+src/api-contract.test.ts:
+(pass) decodes the owned project-scope wire shape without a null investigation
+(pass) accepts the canonical progress record kind and rejects future kinds
+(pass) accepts the canonical strategy transition record kind
+(pass) preserves the host stale-revision failure code
+(pass) decodes both canonical board status sources and rejects malformed selectors [1.00ms]
+(pass) strictly decodes typed strategy and binding projections
+(pass) rejects malformed strategy runtime pairs and impossible effective sources [1.00ms]
+(pass) accepts target-only mutation receipts but rejects a missing target result
+(pass) compact record review rejects obsolete authority fields and applies only its live ID [1.00ms]
+
+ 9 pass
+ 0 fail
+ 25 expect() calls
+Ran 9 tests across 1 file. [15.00ms]
+$ bun run build.ts
+approximately tailwindcss v4.3.3
+
+Done in 59ms
+Checking formatting...
+All matched files use Prettier code style!
+
+=== final-bench-build2.log: final actual exit0 ===
+warning: Git tree '/home/alex/dev/HUMANS.md' is dirty
+humans-md development shell
+  Setup:  (cd casefile/web && bun install)
+  Format: scripts/format-source.sh --check|--write
+  Web:    cd casefile/web; bun install; bun run typecheck; bun run test; bun run build
+  Rust:   cd casefile; cargo fmt --check; cargo clippy --workspace --all-targets -- -D warnings; cargo test --workspace
+  CI:     act pull_request -j validate --pull=false -P ubuntu-latest=catthehacker/ubuntu:act-latest
+   Compiling casefile-store v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store)
+   Compiling casefile-store-sqlite v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store-sqlite)
+    Finished `bench` profile [optimized] target(s) in 19.23s
+  Executable benches/priority.rs (.agent-workspace/20260930-speedup-implementation/writer/target/release/deps/priority-93bc18bb50e3d15c)
+
+=== bench-discovery.log: final actual exit0 ===
+Gnuplot not found, using plotters backend
+priority_single_record_250_records_500_notes/preview: benchmark
+priority_single_record_250_records_500_notes/apply: benchmark
+
+
+=== final-schema2.log: final actual exit0 ===
+native MCP tools/list + compact preview/apply schema validation PASS; obsolete body refused; dated transport 2025-06-18 unchanged
+
+=== final-smoke2.log: final actual exit0 ===
+{"identity": "casefile", "tools": 12, "version": "0.8.0"}
+
+=== final-browser2.log: final actual exit0 ===
+{"result":"PASS","transport":"actual native loopback HTTP + unchanged editor/full-record decoder + typed API","obsolete_status":400,"request":{"preview_id":"provider-preview-1776128-1790805333116369529-1-1"},"diff_preserved":true,"editable_record_and_search_preserved":true}
+
+=== Failed/exploratory attempts (superseded, not PASS) ===
+Initial Cow borrow inference compile error (E0282); explicit borrowed type fixed. The initial shell also used reserved zsh status variable and failed after the command; no success reported.
+Test compile attempts missed removed full-preview API calls/imports; all necessary consumers were updated. New fixture initially dropped TempDir too early and mismatched Option content; corrected.
+Initial root-rename cache fixture expected immediate Current despite a legitimate delayed native event; final fixture explicitly reconciles before fresh replay, retaining committed bytes, result/failure assertions. Final private refresh-count pin removed; public correctness retained.
+First transport run still requested Provider4; corrected5. HTTP test still pinned obsolete minified source bytes and anticipated a new error code; obsolete source pin removed, actual400 plus unchanged Store asserted.
+Bun typed fetch mock lacked native preconnect member (TS2741); retained native property without assertions/any. Clippy type complexity fixed with concrete BorrowedPreflight, no warning suppression.
+Initial fmt command omitted virtual workspace --all and failed to find targets. Final test attempt duplicated --lib and failed before execution; corrected final printed commands. Earlier successful tests/build/transport proofs predated final symlink-follow option and were superseded. No failed Criterion attempt or performance variant in this ticket.
+
+=== Historical failed attempt: check-initial.log ===
+warning: Git tree '/home/alex/dev/HUMANS.md' is dirty
+humans-md development shell
+  Setup:  (cd casefile/web && bun install)
+  Format: scripts/format-source.sh --check|--write
+  Web:    cd casefile/web; bun install; bun run typecheck; bun run test; bun run build
+  Rust:   cd casefile; cargo fmt --check; cargo clippy --workspace --all-targets -- -D warnings; cargo test --workspace
+  CI:     act pull_request -j validate --pull=false -P ubuntu-latest=catthehacker/ubuntu:act-latest
+    Checking mio v1.2.2
+    Checking casefile-core v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-core)
+    Checking notify v9.0.0-rc.4
+    Checking casefile-store v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store)
+error[E0282]: type annotations needed for `&_`
+   --> casefile-store/src/writing.rs:297:13
+    |
+297 |         let request = request.borrow();
+    |             ^^^^^^^
+298 |         let path = checked_path(request.path())?;
+    |                                 ------- type must be known at this point
+    |
+help: consider giving `request` an explicit type, where the placeholders `_` are specified
+    |
+297 |         let request: &Borrowed = request.borrow();
+    |                    +++++++++++
+
+For more information about this error, try `rustc --explain E0282`.
+error: could not compile `casefile-store` (lib) due to 1 previous error
+
+=== Historical failed attempt: provider-unit1.log ===
+warning: Git tree '/home/alex/dev/HUMANS.md' is dirty
+humans-md development shell
+  Setup:  (cd casefile/web && bun install)
+  Format: scripts/format-source.sh --check|--write
+  Web:    cd casefile/web; bun install; bun run typecheck; bun run test; bun run build
+  Rust:   cd casefile; cargo fmt --check; cargo clippy --workspace --all-targets -- -D warnings; cargo test --workspace
+  CI:     act pull_request -j validate --pull=false -P ubuntu-latest=catthehacker/ubuntu:act-latest
+   Compiling casefile-store v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store)
+error[E0308]: mismatched types
+   --> casefile-store/src/provider/outcome_tests.rs:217:142
+    |
+217 | ...th == "native.md").unwrap().content, "second body");
+    |                                         ^^^^^^^^^^^^^ expected `Option<String>`, found `&str`
+    |
+    = note:   expected enum `std::option::Option<std::string::String>`
+            found reference `&str`
+
+error[E0382]: borrow of moved value: `temporary`
+   --> casefile-store/src/provider/outcome_tests.rs:173:43
+    |
+171 |     let temporary = TempDir::new().unwrap();
+    |         --------- move occurs because `temporary` has type `TempDir`, which does not implement the `Copy` trait
+172 |     copy_tree(&Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/minimum"), temporary.path());
+173 |     (temporary, Provider::new(Store::open(temporary.path()).unwrap(), RetainedCache::default()))
+    |      --------- value moved here           ^^^^^^^^^ value borrowed here after move
+
+Some errors have detailed explanations: E0308, E0382.
+For more information about an error, try `rustc --explain E0308`.
+error: could not compile `casefile-store` (lib test) due to 2 previous errors
+
+=== Historical failed attempt: store-tests1.log ===
+warning: Git tree '/home/alex/dev/HUMANS.md' is dirty
+humans-md development shell
+  Setup:  (cd casefile/web && bun install)
+  Format: scripts/format-source.sh --check|--write
+  Web:    cd casefile/web; bun install; bun run typecheck; bun run test; bun run build
+  Rust:   cd casefile; cargo fmt --check; cargo clippy --workspace --all-targets -- -D warnings; cargo test --workspace
+  CI:     act pull_request -j validate --pull=false -P ubuntu-latest=catthehacker/ubuntu:act-latest
+   Compiling casefile-store v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 6.08s
+     Running unittests src/lib.rs (.agent-workspace/20260930-speedup-implementation/writer/target/debug/deps/casefile_store-35dd4c6b7f743430)
+
+running 69 tests
+test layout::tests::persisted_paths_remain_strictly_slash_canonical ... ok
+test layout::tests::portable_planning_relative_grammar_is_host_independent ... ok
+test mutation_tests::process_writer ... ok
+test mutation_tests::progress_absent_publication_does_not_clobber_an_intervening_creator ... ok
+test mutation_tests::governed_write_failure_does_not_republish_an_unchanged_matrix ... ok
+test checking::tests::parent_checks_and_provider_diagnostics_exclude_activated_nested_scope_bodies ... ok
+test checking::tests::scoped_check_discards_each_canonical_support_body_before_opening_the_next ... ok
+test mutation_tests::governed_mid_transaction_failure_restores_the_matrix ... ok
+test mutation_tests::governed_post_write_cleanup_leaves_external_matrix_and_removes_own_transition ... ok
+test mutation_tests::global_identity_phantoms_and_multiline_board_metadata_remain_conflicts ... ok
+test mutation_tests::contested_batch_cleanup_continues_and_never_rewrites_noop_or_unwritten_targets ... ok
+test mutation_tests::record_batch_failure_restores_prior_targets_without_touching_unrelated_data ... ok
+test presentation::tests::activation_project_membership_invalidates_map_facts_not_unrelated_entries_or_handles ... ok
+test presentation::tests::cancellation_after_the_final_read_does_not_publish_or_cache_that_scope ... ok
+test presentation::tests::disjoint_target_loads_do_not_cancel_each_other_or_invalidate_received_handles ... ok
+test presentation::tests::interrupted_reads_retry_but_cancellation_never_returns_partial_content ... ok
+test mutation_tests::reverse_ordered_supersession_closure_rejects_a_new_cycle_without_writing ... ok
+test mutation_tests::rollback_preserves_external_symlink_and_does_not_touch_its_outside_target ... ok
+test presentation::tests::lazy_content_rejects_non_emitted_escaping_and_excluded_paths ... ok
+test presentation::tests::lazy_handles_survive_unrelated_edits_but_changed_and_deleted_paths_are_invalidated ... ok
+test presentation::tests::live_save_replacement_and_deletion_are_reconciled_per_entry ... ok
+test presentation::tests::newer_nonmonotonic_load_wins_and_late_old_events_cannot_replace_handles ... ok
+test presentation::tests::nested_activation_uses_deepest_scope_and_membership_change_reclassifies_cached_paths ... ok
+test presentation::tests::one_ticket_membership_edit_updates_progress_diagnostics_and_shares_unrelated_entries ... ok
+test presentation::tests::full_refresh_after_ancestor_replacement_reacquires_descriptors_without_an_anchoring_promise ... ok
+test presentation::tests::per_entry_read_failure_is_visible_and_retried_without_a_metadata_change ... ok
+test presentation::tests::note_only_edit_shares_board_entry_but_transition_updates_cards ... ok
+test presentation::tests::loaded_presentation_facts_match_complete_canonical_inputs ... ok
+test presentation::tests::production_catalogue_and_fetch_reject_a_root_renamed_to_a_symlink ... ok
+test presentation::tests::production_fetch_rejects_a_catalogued_path_whose_parent_becomes_a_symlink ... ok
+test presentation::tests::unactivated_and_invalid_activation_complete_before_filesystem_catalogue_reads ... ok
+test presentation::tests::scoped_load_keeps_untouched_target_content_handles_usable ... ok
+test mutation_tests::reverse_evidence_uses_canonical_metadata_and_aliases_cannot_bypass_it ... ok
+test presentation::tests::scoped_targets_emit_only_their_deterministic_activated_subtrees ... ok
+test presentation::tests::unchanged_refresh_reuses_records_without_reading_bodies_and_detail_reads_only_selection ... ok
+test presentation::tests::unrepresentable_native_names_fail_explicitly_instead_of_aliasing_a_replacement_name ... ok
+test provider::hierarchy_tests::snapshot_and_index_observe_cache_without_refreshing_it ... ok
+test mutation_tests::progress_post_write_failure_restores_owned_bytes_but_discards_external_restoration ... ok
+test presentation::tests::production_saves_atomic_replacements_and_deletions_after_enumeration_stay_local ... ok
+test provider::outcome_tests::current_cache_survives_publication_failure_but_required_external_changes_do_not ... ok
+test provider::outcome_tests::events_and_rescan_require_rebuild_even_when_metadata_revision_is_unchanged ... ok
+test revision::tests::controlled_same_identity_size_and_timestamps_edit_is_admitted ... ok
+test read_context::tests::scope_observation_rejects_affecting_changes_but_admits_unrelated_edits ... ok
+test revision::tests::revision_covers_type_native_identity_size_and_both_timestamps ... ok
+test scanning::scoped::tests::parallel_scope_read_reports_first_path_failure_and_retries_without_partial_results ... ok
+test provider::outcome_tests::observation_window_external_edit_cannot_claim_the_old_index_is_current ... ok
+test scanning::tests::selected_descriptor_and_global_membership_observations_refuse_races ... ok
+test scanning::tests::store_path_exclusion_is_exactly_direct_root_implementation_metadata ... ok
+test scanning::tests::attachment_overlay_uses_proposed_regular_presence_not_original_opaque_membership ... ok
+test store::safety_tests::current_revision_uses_metadata_inventory_without_body_reads ... ok
+test store::safety_tests::safe_target_parent_rejects_the_root_and_in_store_descendant_symlinks ... ok
+test validation::tests::attachment_targets_keep_canonical_store_separators ... ok
+test writing::diff_argument_tests::literal_hunk_lines_are_not_rewritten_as_canonical_file_headers ... ok
+test provider::outcome_tests::cache_preparation_failure_preserves_committed_receipt_bytes_and_supported_replay ... FAILED
+test writing::diff_argument_tests::contained_temporary_git_arguments_are_relative_and_keep_canonical_headers ... ok
+test writing::diff_argument_tests::terminated_and_failed_diff_processes_cannot_publish_partial_approval_output ... ok
+test provider::outcome_tests::unconfigured_outcomes_do_not_read_the_store_after_commit_or_replay ... ok
+test provider::outcome_tests::native_watch_create_edit_rename_delete_reconciles_canonical_index_content ... ok
+test revision::tests::metadata_revision_detects_ordinary_edits_replacements_types_and_existence ... ok
+test mutation_tests::shared_reference_changes_and_reverse_progress_membership_cannot_write_skew ... ok
+test checking::tests::scoped_check_never_opens_foreign_evidence_and_root_matches_canonical_validation ... ok
+test mutation_tests::progress_bootstrap_append_replay_and_record_batch_have_narrow_result_windows ... ok
+test mutation_tests::governed_multi_file_and_binding_results_and_legacy_replay_are_independent ... ok
+test mutation_tests::record_delete_no_op_and_default_board_receipts_survive_disjoint_result_changes ... ok
+test mutation_tests::growth_and_nontransitive_neighbors_do_not_expand_body_reads_or_conflicts ... ok
+test presentation::tests::batches_and_channels_are_bounded_and_cancellation_stops_backpressure ... ok
+test mutation_tests::provider_same_session_writes_survive_locked_validation_and_result_windows ... ok
+test mutation_tests::independent_processes_coordinate_disjoint_targets_replacement_creation_and_identity_claims ... ok
+test checking::tests::root_check_retains_one_evidence_body_as_scope_count_grows ... ok
+
+failures:
+
+---- provider::outcome_tests::cache_preparation_failure_preserves_committed_receipt_bytes_and_supported_replay stdout ----
+
+thread 'provider::outcome_tests::cache_preparation_failure_preserves_committed_receipt_bytes_and_supported_replay' (1726155) panicked at casefile-store/src/provider/outcome_tests.rs:131:5:
+assertion failed: matches!(provider.refresh_full_cache().expect("explicit refresh"),
+    CacheState::Current { .. })
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    provider::outcome_tests::cache_preparation_failure_preserves_committed_receipt_bytes_and_supported_replay
+
+test result: FAILED. 68 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.53s
+
+error: test failed, to rerun pass `-p casefile-store --lib`
+
+=== Historical failed attempt: transports-tests1.log ===
+warning: Git tree '/home/alex/dev/HUMANS.md' is dirty
+humans-md development shell
+  Setup:  (cd casefile/web && bun install)
+  Format: scripts/format-source.sh --check|--write
+  Web:    cd casefile/web; bun install; bun run typecheck; bun run test; bun run build
+  Rust:   cd casefile; cargo fmt --check; cargo clippy --workspace --all-targets -- -D warnings; cargo test --workspace
+  CI:     act pull_request -j validate --pull=false -P ubuntu-latest=catthehacker/ubuntu:act-latest
+   Compiling casefile-core v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-core)
+   Compiling casefile-store v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store)
+   Compiling casefile-store-sqlite v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store-sqlite)
+   Compiling casefile-tui v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-tui)
+   Compiling casefile-server v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-server)
+   Compiling casefile-cli v0.8.0 (/home/alex/dev/HUMANS.md/casefile/casefile-cli)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 17.83s
+     Running unittests src/main.rs (.agent-workspace/20260930-speedup-implementation/writer/target/debug/deps/casefile-d30e74368126311a)
+
+running 5 tests
+test error_tests::rollback_failure_channel_retains_details_and_excludes_private_source_text ... ok
+test mcp::tests::mcp_rejects_old_body_and_foreign_tool_ids_before_applying_retained_original ... ok
+test mcp::tests::mcp_apply_rollback_failure_keeps_error_flag_and_declared_structured_details ... ok
+test mcp::tests::same_mcp_session_dispatches_a_disjoint_apply_while_another_apply_is_active ... ok
+test json_output::tests::overflow_leaves_output_empty_including_json_escaping_expansion ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.43s
+
+     Running tests/mcp.rs (.agent-workspace/20260930-speedup-implementation/writer/target/debug/deps/mcp-a2ad7630cb61b864)
+
+running 6 tests
+test compatibility_contract_is_machine_readable_and_complete ... ok
+test fixed_root_session_negotiates_and_exposes_canonical_snapshot_and_query ... FAILED
+test adapter_never_infers_root_or_accepts_incompatible_mcp_protocol ... FAILED
+test root_protocol_and_capability_refusals_happen_before_tool_service ... FAILED
+test provider_preview_and_apply_remain_one_session_exact_operations ... FAILED
+test packaged_command_internalizes_the_launcher_contract ... ok
+
+failures:
+
+---- fixed_root_session_negotiates_and_exposes_canonical_snapshot_and_query stdout ----
+
+thread 'fixed_root_session_negotiates_and_exposes_canonical_snapshot_and_query' (1731363) panicked at casefile-cli/tests/mcp.rs:111:5:
+launcher requires provider protocol 4, but this adapter supports 5
+
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- adapter_never_infers_root_or_accepts_incompatible_mcp_protocol stdout ----
+
+thread 'adapter_never_infers_root_or_accepts_incompatible_mcp_protocol' (1731361) panicked at casefile-cli/tests/mcp.rs:341:5:
+assertion failed: output.status.success()
+
+---- root_protocol_and_capability_refusals_happen_before_tool_service stdout ----
+
+thread 'root_protocol_and_capability_refusals_happen_before_tool_service' (1731367) panicked at casefile-cli/tests/mcp.rs:307:5:
+assertion failed: String::from_utf8_lossy(&output.stderr).contains("unactivated")
+
+---- provider_preview_and_apply_remain_one_session_exact_operations stdout ----
+
+thread 'provider_preview_and_apply_remain_one_session_exact_operations' (1731365) panicked at casefile-cli/tests/mcp.rs:436:53:
+JSON: Error("EOF while parsing a value", line: 1, column: 0)
+
+
+failures:
+    adapter_never_infers_root_or_accepts_incompatible_mcp_protocol
+    fixed_root_session_negotiates_and_exposes_canonical_snapshot_and_query
+    provider_preview_and_apply_remain_one_session_exact_operations
+    root_protocol_and_capability_refusals_happen_before_tool_service
+
+test result: FAILED. 2 passed; 4 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+error: test failed, to rerun pass `-p casefile-cli --test mcp`
+
+=== Historical failed attempt: transports-tests2.log ===
+warning: Git tree '/home/alex/dev/HUMANS.md' is dirty
+humans-md development shell
+  Setup:  (cd casefile/web && bun install)
+  Format: scripts/format-source.sh --check|--write
+  Web:    cd casefile/web; bun install; bun run typecheck; bun run test; bun run build
+  Rust:   cd casefile; cargo fmt --check; cargo clippy --workspace --all-targets -- -D warnings; cargo test --workspace
+  CI:     act pull_request -j validate --pull=false -P ubuntu-latest=catthehacker/ubuntu:act-latest
+   Compiling casefile-cli v0.8.0 (/home/alex/dev/HUMANS.md/casefile/casefile-cli)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.70s
+     Running unittests src/main.rs (.agent-workspace/20260930-speedup-implementation/writer/target/debug/deps/casefile-d30e74368126311a)
+
+running 5 tests
+test error_tests::rollback_failure_channel_retains_details_and_excludes_private_source_text ... ok
+test mcp::tests::mcp_rejects_old_body_and_foreign_tool_ids_before_applying_retained_original ... ok
+test mcp::tests::mcp_apply_rollback_failure_keeps_error_flag_and_declared_structured_details ... ok
+test mcp::tests::same_mcp_session_dispatches_a_disjoint_apply_while_another_apply_is_active ... ok
+test json_output::tests::overflow_leaves_output_empty_including_json_escaping_expansion ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.42s
+
+     Running tests/mcp.rs (.agent-workspace/20260930-speedup-implementation/writer/target/debug/deps/mcp-a2ad7630cb61b864)
+
+running 7 tests
+test compatibility_contract_is_machine_readable_and_complete ... ok
+test adapter_never_infers_root_or_accepts_incompatible_mcp_protocol ... ok
+test root_protocol_and_capability_refusals_happen_before_tool_service ... ok
+test native_restarted_provider_refuses_the_previous_process_id_without_mutating ... ok
+test packaged_command_internalizes_the_launcher_contract ... ok
+test fixed_root_session_negotiates_and_exposes_canonical_snapshot_and_query ... ok
+test provider_preview_and_apply_remain_one_session_exact_operations ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running tests/serve.rs (.agent-workspace/20260930-speedup-implementation/writer/target/debug/deps/serve-e5812c367c3d99b8)
+
+running 3 tests
+test serve_exposes_only_the_fixed_read_contract ... FAILED
+test serve_preserves_preview_and_gates_apply_with_capability ... FAILED
+test serve_transports_derived_ticket_progress ... ok
+
+failures:
+
+---- serve_exposes_only_the_fixed_read_contract stdout ----
+
+thread 'serve_exposes_only_the_fixed_read_contract' (1731916) panicked at casefile-cli/tests/serve.rs:221:13:
+assertion failed: asset.body.contains("rendered_bytes")
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- serve_preserves_preview_and_gates_apply_with_capability stdout ----
+
+thread 'serve_preserves_preview_and_gates_apply_with_capability' (1731917) panicked at casefile-cli/tests/serve.rs:470:5:
+assertion failed: refused.body.contains("invalid_request")
+
+
+failures:
+    serve_exposes_only_the_fixed_read_contract
+    serve_preserves_preview_and_gates_apply_with_capability
+
+test result: FAILED. 1 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.10s
+
+error: test failed, to rerun pass `-p casefile-cli --test serve`
+
+=== Historical failed attempt: web-tests2.log ===
+warning: Git tree '/home/alex/dev/HUMANS.md' is dirty
+humans-md development shell
+  Setup:  (cd casefile/web && bun install)
+  Format: scripts/format-source.sh --check|--write
+  Web:    cd casefile/web; bun install; bun run typecheck; bun run test; bun run build
+  Rust:   cd casefile; cargo fmt --check; cargo clippy --workspace --all-targets -- -D warnings; cargo test --workspace
+  CI:     act pull_request -j validate --pull=false -P ubuntu-latest=catthehacker/ubuntu:act-latest
+$ tsc --noEmit
+src/api-contract.test.ts(293,3): error TS2741: Property 'preconnect' is missing in type '(_request: URL | RequestInfo, options: BunFetchRequestInit | RequestInit | undefined) => Promise<Response>' but required in type 'typeof fetch'.
+error: script "typecheck" exited with code 1
+
+=== Historical failed attempt: clippy1.log ===
+warning: Git tree '/home/alex/dev/HUMANS.md' is dirty
+humans-md development shell
+  Setup:  (cd casefile/web && bun install)
+  Format: scripts/format-source.sh --check|--write
+  Web:    cd casefile/web; bun install; bun run typecheck; bun run test; bun run build
+  Rust:   cd casefile; cargo fmt --check; cargo clippy --workspace --all-targets -- -D warnings; cargo test --workspace
+  CI:     act pull_request -j validate --pull=false -P ubuntu-latest=catthehacker/ubuntu:act-latest
+    Checking casefile-store v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store)
+error: very complex type used. Consider factoring parts into `type` definitions
+   --> casefile-store/src/writing.rs:457:6
+    |
+457 | ) -> Result<(Vec<Cow<'_, ChangeRequest>>, Overlay, Vec<Diagnostic>), StoreError> {
+    |      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#type_complexity
+    = note: `-D clippy::type-complexity` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(clippy::type_complexity)]`
+
+error: could not compile `casefile-store` (lib) due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `casefile-store` (lib test) due to 1 previous error
+
+=== Historical failed attempt: final-tests.log ===
+warning: Git tree '/home/alex/dev/HUMANS.md' is dirty
+humans-md development shell
+  Setup:  (cd casefile/web && bun install)
+  Format: scripts/format-source.sh --check|--write
+  Web:    cd casefile/web; bun install; bun run typecheck; bun run test; bun run build
+  Rust:   cd casefile; cargo fmt --check; cargo clippy --workspace --all-targets -- -D warnings; cargo test --workspace
+  CI:     act pull_request -j validate --pull=false -P ubuntu-latest=catthehacker/ubuntu:act-latest
+error: the argument '--lib' cannot be used multiple times
+
+Usage: cargo test [OPTIONS] [TESTNAME] [-- [ARGS]...]
+
+For more information, try '--help'.
+
+
+=== Final provenance verification ===
+87 source files and final release executable match timing hashes. All236 native hmd057-before JSON files and4 original source/table/results/log hashes match prior HMD058 manifests.
+
+=== Final actual CLI record-session proof: exit0 ===
+Python3 subprocess fixture copied minimum Store to TemporaryDirectory, git init; request.json outside planning root. Invoked target/debug/casefile --root <temporary planning> record-session --request <external request.json>. Created board draft, decoded compact review + successful receipt and checked regular target. Replaced request with Delete, read printed review, first sent foreign-provider-id: actual nonzero, canonical bytes unchanged. Repeated fresh session, sent exact returned preview_id: exit0, receipt path correct, canonical target absent. All subprocess status/assertions checked; no live Store/config.
+{"result": "PASS", "transport": "actual native CLI record-session", "create": "compact review + ID apply", "foreign_delete_approval": "nonzero and bytes preserved", "exact_delete_approval": "ID accepted and target deleted", "payload_location": "outside disposable synthetic planning root"}
+
+Staged diff whitespace check initially caught trailing blank line in copied Criterion stdout. Only durable log EOF whitespace normalized, original stdout/numbers unchanged; rerun staged --check passed actual exit0. No test/performance failure masked.

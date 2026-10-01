@@ -1,0 +1,57 @@
+Gnuplot not found, using plotters backend
+Benchmarking http_loopback_records/unchanged/250
+Benchmarking http_loopback_records/unchanged/250: Warming up for 1.0000 s
+Benchmarking http_loopback_records/unchanged/250: Collecting 10 samples in estimated 2.7514 s (165 iterations)
+Benchmarking http_loopback_records/unchanged/250: Analyzing
+http_loopback_records/unchanged/250
+                        time:   [16.360 ms 16.473 ms 16.680 ms]
+                        change: [−63.489% −63.128% −62.697%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Found 2 outliers among 10 measurements (20.00%)
+  2 (20.00%) high severe
+Benchmarking http_loopback_records/search_hit/250
+Benchmarking http_loopback_records/search_hit/250: Warming up for 1.0000 s
+Benchmarking http_loopback_records/search_hit/250: Collecting 10 samples in estimated 2.2588 s (385 iterations)
+Benchmarking http_loopback_records/search_hit/250: Analyzing
+http_loopback_records/search_hit/250
+                        time:   [5.8992 ms 5.9725 ms 6.0186 ms]
+                        change: [−86.282% −86.124% −85.956%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Benchmarking http_loopback_records/search_miss/250
+Benchmarking http_loopback_records/search_miss/250: Warming up for 1.0000 s
+Benchmarking http_loopback_records/search_miss/250: Collecting 10 samples in estimated 2.3218 s (385 iterations)
+Benchmarking http_loopback_records/search_miss/250: Analyzing
+http_loopback_records/search_miss/250
+                        time:   [5.9764 ms 6.0172 ms 6.0433 ms]
+                        change: [−86.391% −86.095% −85.858%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Benchmarking http_loopback_records/unchanged/1000
+Benchmarking http_loopback_records/unchanged/1000: Warming up for 1.0000 s
+
+Warning: Unable to complete 10 samples in 2.0s. You may wish to increase target time to 3.1s or enable flat sampling.
+Benchmarking http_loopback_records/unchanged/1000: Collecting 10 samples in estimated 3.0844 s (55 iterations)
+Benchmarking http_loopback_records/unchanged/1000: Analyzing
+http_loopback_records/unchanged/1000
+                        time:   [55.500 ms 55.625 ms 55.783 ms]
+                        change: [−62.340% −62.216% −62.086%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Benchmarking http_loopback_records/search_hit/1000
+Benchmarking http_loopback_records/search_hit/1000: Warming up for 1.0000 s
+Benchmarking http_loopback_records/search_hit/1000: Collecting 10 samples in estimated 2.2128 s (110 iterations)
+Benchmarking http_loopback_records/search_hit/1000: Analyzing
+http_loopback_records/search_hit/1000
+                        time:   [19.728 ms 19.776 ms 19.825 ms]
+                        change: [−86.152% −86.105% −86.051%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) high mild
+Benchmarking http_loopback_records/search_miss/1000
+Benchmarking http_loopback_records/search_miss/1000: Warming up for 1.0000 s
+Benchmarking http_loopback_records/search_miss/1000: Collecting 10 samples in estimated 2.1733 s (110 iterations)
+Benchmarking http_loopback_records/search_miss/1000: Analyzing
+http_loopback_records/search_miss/1000
+                        time:   [18.891 ms 18.949 ms 18.995 ms]
+                        change: [−86.815% −86.782% −86.744%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) high mild

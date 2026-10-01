@@ -1,0 +1,58 @@
+Gnuplot not found, using plotters backend
+Benchmarking priority_scope_500_notes/existing_detail/250
+Benchmarking priority_scope_500_notes/existing_detail/250: Warming up for 1.0000 s
+Benchmarking priority_scope_500_notes/existing_detail/250: Collecting 10 samples in estimated 2.1081 s (275 iterations)
+Benchmarking priority_scope_500_notes/existing_detail/250: Analyzing
+priority_scope_500_notes/existing_detail/250
+                        time:   [7.6181 ms 7.6733 ms 7.7973 ms]
+Benchmarking priority_scope_500_notes/missing_detail/250
+Benchmarking priority_scope_500_notes/missing_detail/250: Warming up for 1.0000 s
+Benchmarking priority_scope_500_notes/missing_detail/250: Collecting 10 samples in estimated 2.1162 s (385 iterations)
+Benchmarking priority_scope_500_notes/missing_detail/250: Analyzing
+priority_scope_500_notes/missing_detail/250
+                        time:   [5.4481 ms 5.4927 ms 5.5370 ms]
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) low mild
+Benchmarking priority_scope_500_notes/selected_record_index/250
+Benchmarking priority_scope_500_notes/selected_record_index/250: Warming up for 1.0000 s
+Benchmarking priority_scope_500_notes/selected_record_index/250: Collecting 10 samples in estimated 2.3048 s (110 iterations)
+Benchmarking priority_scope_500_notes/selected_record_index/250: Analyzing
+priority_scope_500_notes/selected_record_index/250
+                        time:   [21.276 ms 21.562 ms 21.959 ms]
+Benchmarking priority_scope_500_notes/existing_detail/1000
+Benchmarking priority_scope_500_notes/existing_detail/1000: Warming up for 1.0000 s
+Benchmarking priority_scope_500_notes/existing_detail/1000: Collecting 10 samples in estimated 2.4979 s (165 iterations)
+Benchmarking priority_scope_500_notes/existing_detail/1000: Analyzing
+priority_scope_500_notes/existing_detail/1000
+                        time:   [15.349 ms 15.547 ms 15.692 ms]
+Benchmarking priority_scope_500_notes/missing_detail/1000
+Benchmarking priority_scope_500_notes/missing_detail/1000: Warming up for 1.0000 s
+Benchmarking priority_scope_500_notes/missing_detail/1000: Collecting 10 samples in estimated 2.2216 s (165 iterations)
+Benchmarking priority_scope_500_notes/missing_detail/1000: Analyzing
+priority_scope_500_notes/missing_detail/1000
+                        time:   [12.841 ms 12.967 ms 13.145 ms]
+Found 2 outliers among 10 measurements (20.00%)
+  2 (20.00%) high severe
+Benchmarking priority_scope_500_notes/selected_record_index/1000
+Benchmarking priority_scope_500_notes/selected_record_index/1000: Warming up for 1.0000 s
+
+Warning: Unable to complete 10 samples in 2.0s. You may wish to increase target time to 3.6s or enable flat sampling.
+Benchmarking priority_scope_500_notes/selected_record_index/1000: Collecting 10 samples in estimated 3.6487 s (55 iterations)
+Benchmarking priority_scope_500_notes/selected_record_index/1000: Analyzing
+priority_scope_500_notes/selected_record_index/1000
+                        time:   [66.161 ms 66.392 ms 66.631 ms]
+
+Benchmarking priority_single_record_250_records_500_notes/preview
+Benchmarking priority_single_record_250_records_500_notes/preview: Warming up for 1.0000 s
+Benchmarking priority_single_record_250_records_500_notes/preview: Collecting 10 samples in estimated 3.3582 s (110 iterations)
+Benchmarking priority_single_record_250_records_500_notes/preview: Analyzing
+priority_single_record_250_records_500_notes/preview
+                        time:   [30.318 ms 30.586 ms 31.057 ms]
+Benchmarking priority_single_record_250_records_500_notes/apply
+Benchmarking priority_single_record_250_records_500_notes/apply: Warming up for 1.0000 s
+
+Warning: Unable to complete 10 samples in 2.0s. You may wish to increase target time to 3.3s or enable flat sampling.
+Benchmarking priority_single_record_250_records_500_notes/apply: Collecting 10 samples in estimated 3.3218 s (55 iterations)
+Benchmarking priority_single_record_250_records_500_notes/apply: Analyzing
+priority_single_record_250_records_500_notes/apply
+                        time:   [30.900 ms 31.249 ms 31.603 ms]

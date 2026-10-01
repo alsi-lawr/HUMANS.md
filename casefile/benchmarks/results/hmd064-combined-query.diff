@@ -1,0 +1,31 @@
+--- a/casefile/casefile-store-sqlite/src/lib.rs
++++ b/casefile/casefile-store-sqlite/src/lib.rs
+@@ -57,16 +57,19 @@
+             return Ok(Indexed::Missing);
+         }
+         let connection = Connection::open(&self.path)?;
+-        if connection.pragma_query_value(None, "user_version", |row| row.get::<_, i64>(0))?
+-            != SCHEMA_VERSION
+-        {
++        let indexed = connection.query_row(
++            "SELECT source_revision, user_version FROM metadata CROSS JOIN pragma_user_version LIMIT 1",
++            [],
++            |row| {
++                if row.get::<_, i64>(1)? != SCHEMA_VERSION {
++                    return Ok(None);
++                }
++                Ok(Some(Revision(row.get(0)?)))
++            },
++        )?;
++        let Some(indexed) = indexed else {
+             return Ok(Indexed::Missing);
+-        }
+-        let indexed = Revision(connection.query_row(
+-            "SELECT source_revision FROM metadata LIMIT 1",
+-            [],
+-            |row| row.get(0),
+-        )?);
++        };
+         if indexed != *current {
+             return Ok(Indexed::Stale {
+                 indexed_revision: indexed,

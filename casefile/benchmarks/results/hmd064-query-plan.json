@@ -1,0 +1,75 @@
+{
+  "scope": "diagnostic only; no planner string assertions",
+  "sqlite_version": "3.53.3",
+  "public_http_checks": "Unicode substring, NUL, nullable scope isolation and unchanged full rendered record passed",
+  "queries": {
+    "record": "SELECT path, document FROM records WHERE project = ? AND investigation IS ? AND identity = ? ORDER BY path LIMIT 2",
+    "records_scope_search": "SELECT document FROM records WHERE project = ? AND investigation IS ? AND instr(search_text, ?) > 0 ORDER BY path",
+    "boards": "SELECT document FROM boards WHERE project = ? AND investigation IS ? ORDER BY identity",
+    "relationships": "SELECT document FROM relationships WHERE (source_project = ? AND source_investigation IS ? AND source_identity = ?) OR (target_project = ? AND target_investigation IS ? AND target_identity = ?) ORDER BY kind, source_identity, target_identity"
+  },
+  "plans": {
+    "record": [
+      [
+        5,
+        0,
+        60,
+        "SEARCH records USING INDEX records_identity (project=? AND investigation=? AND identity=?)"
+      ]
+    ],
+    "records_scope_search": [
+      [
+        4,
+        0,
+        61,
+        "SEARCH records USING INDEX records_scope_path (project=? AND investigation=?)"
+      ]
+    ],
+    "boards": [
+      [
+        4,
+        0,
+        62,
+        "SEARCH boards USING INDEX boards_scope (project=? AND investigation=?)"
+      ]
+    ],
+    "relationships": [
+      [
+        5,
+        0,
+        0,
+        "MULTI-INDEX OR"
+      ],
+      [
+        6,
+        5,
+        0,
+        "INDEX 1"
+      ],
+      [
+        17,
+        6,
+        60,
+        "SEARCH relationships USING INDEX relationships_source (source_project=? AND source_investigation=? AND source_identity=?)"
+      ],
+      [
+        22,
+        5,
+        0,
+        "INDEX 2"
+      ],
+      [
+        33,
+        22,
+        60,
+        "SEARCH relationships USING INDEX relationships_target (target_project=? AND target_investigation=? AND target_identity=?)"
+      ],
+      [
+        46,
+        0,
+        0,
+        "USE TEMP B-TREE FOR ORDER BY"
+      ]
+    ]
+  }
+}

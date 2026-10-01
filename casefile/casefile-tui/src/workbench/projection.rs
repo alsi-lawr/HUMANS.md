@@ -1,4 +1,5 @@
 use super::*;
+use std::collections::BTreeSet;
 
 impl App {
     pub(super) fn reindex(&mut self) {
@@ -19,61 +20,132 @@ impl App {
             .collect();
     }
 
+    pub(super) fn boards_affected(&self, projection: &UiProjection) -> bool {
+        if projection.catalogue_changed {
+            return true;
+        }
+        let (Some(project), Some(investigation)) = (
+            self.browser.selected_project(),
+            self.browser.selected_investigation(),
+        ) else {
+            return false;
+        };
+        let selected = |identity: &casefile_store::ScopedIdentity| {
+            identity.scope.project == project
+                && identity.scope.investigation.as_deref() == Some(investigation)
+        };
+        if projection.derived.boards.iter().any(|board| {
+            selected(&board.identity) && self.board_records.get(&board.identity) != Some(board)
+        }) {
+            return true;
+        }
+        for path in &projection.removed {
+            if let Some(index) = self.entry_indices.get(path) {
+                let old = &self.scan.snapshot.entries[*index];
+                if old.identity.is_some()
+                    && self.scan.scope_for_path(path) == Some((project, Some(investigation)))
+                {
+                    return true;
+                }
+            }
+        }
+        let new_boards = projection
+            .derived
+            .boards
+            .iter()
+            .map(|board| &board.identity)
+            .collect::<BTreeSet<_>>();
+        for entry in &projection.scan.snapshot.entries {
+            if self.scan.scope_for_path(&entry.path) != Some((project, Some(investigation))) {
+                continue;
+            }
+            let old = self
+                .entry_indices
+                .get(&entry.path)
+                .map(|index| &self.scan.snapshot.entries[*index]);
+            if old
+                .and_then(|old| self.record_indices.get(&old.path))
+                .map(|index| &self.derived.records[*index])
+                .filter(|record| record.kind == Some(casefile_core::Kind::Board))
+                .and_then(|record| record.identity.as_ref())
+                .is_some_and(|identity| {
+                    self.board_records.contains_key(identity) && !new_boards.contains(identity)
+                })
+            {
+                return true;
+            }
+            if old.is_none_or(|old| {
+                old.identity != entry.identity
+                    || old.classification != entry.classification
+                    || old.kind != entry.kind
+            }) {
+                return true;
+            }
+            if (entry.kind == Some(casefile_core::Kind::Board)
+                || entry.path.ends_with("/progress/log.toml"))
+                && self
+                    .facts
+                    .diagnostics(Some(&entry.path))
+                    .iter()
+                    .ne(projection
+                        .scan
+                        .diagnostics
+                        .iter()
+                        .filter(|diagnostic| diagnostic.path == entry.path))
+            {
+                return true;
+            }
+        }
+        false
+    }
+
     pub(super) fn merge_projection(&mut self, projection: UiProjection) {
         let changed = projection
             .scan
             .snapshot
             .entries
             .iter()
-            .map(|entry| entry.path.as_str())
-            .chain(projection.removed.iter().map(String::as_str))
-            .collect::<std::collections::BTreeSet<_>>();
-        let identities = changed
-            .iter()
-            .filter_map(|path| self.record_indices.get(*path))
-            .filter_map(|index| self.derived.records[*index].identity.as_ref())
-            .collect::<Vec<_>>();
-        self.derived
-            .boards
-            .retain(|board| !identities.contains(&&board.identity));
-        self.derived.relationships.retain(|relationship| {
-            !projection
-                .relationship_updates
-                .contains_key(&relationship.source)
-        });
-        self.scan
-            .diagnostics
-            .retain(|diagnostic| !changed.contains(diagnostic.path.as_str()));
-        for path in &changed {
-            self.unavailable.remove(*path);
-        }
-        for path in &projection.availability_changed {
-            self.unavailable.remove(path);
-        }
+            .map(|entry| entry.path.clone())
+            .chain(projection.removed.iter().cloned())
+            .collect::<BTreeSet<_>>();
+        let mut index_changes = changed.clone();
         let new_records = projection
             .derived
             .records
             .iter()
             .map(|record| record.path.as_str())
-            .collect::<std::collections::BTreeSet<_>>();
-        let record_count = self.derived.records.len();
-        if changed
-            .iter()
-            .any(|path| self.record_indices.contains_key(*path) && !new_records.contains(path))
-        {
-            self.derived.records.retain(|record| {
-                !changed.contains(record.path.as_str())
-                    || new_records.contains(record.path.as_str())
-            });
+            .collect::<BTreeSet<_>>();
+        for path in &changed {
+            self.unavailable.remove(path);
+            if let Some(index) = self.record_indices.get(path) {
+                let old = &self.derived.records[*index];
+                if old.kind == Some(casefile_core::Kind::Board)
+                    && let Some(identity) = &old.identity
+                {
+                    self.board_records.remove(identity);
+                }
+            }
+            if !new_records.contains(path.as_str())
+                && let Some(index) = self.record_indices.remove(path)
+            {
+                self.derived.records.swap_remove(index);
+                if let Some(moved) = self.derived.records.get(index) {
+                    self.record_indices.insert(moved.path.clone(), index);
+                }
+            }
         }
-        if !projection.removed.is_empty() {
-            self.scan
-                .snapshot
-                .entries
-                .retain(|entry| !projection.removed.contains(&entry.path));
+        for path in &projection.removed {
+            if let Some(index) = self.entry_indices.remove(path) {
+                self.scan.snapshot.entries.swap_remove(index);
+                if let Some(moved) = self.scan.snapshot.entries.get(index) {
+                    self.entry_indices.insert(moved.path.clone(), index);
+                    index_changes.insert(moved.path.clone());
+                }
+            }
+            self.body_owners.remove(path);
         }
-        if !projection.removed.is_empty() || record_count != self.derived.records.len() {
-            self.reindex();
+        for path in &projection.availability_changed {
+            self.unavailable.remove(path);
         }
         for entry in projection.scan.snapshot.entries {
             if let Some(index) = self.entry_indices.get(&entry.path) {
@@ -93,25 +165,44 @@ impl App {
                 self.derived.records.push(record);
             }
         }
-        self.scan.activation = projection.scan.activation;
-        self.scan.investigation_roots = projection.scan.investigation_roots;
-        self.scan.diagnostics.extend(projection.scan.diagnostics);
-        self.scan
-            .diagnostics
-            .sort_by(|a, b| (&a.path, &a.code, &a.message).cmp(&(&b.path, &b.code, &b.message)));
-        self.scan.diagnostics.dedup();
-        self.derived.diagnostics = self.scan.diagnostics.clone();
-        self.derived.boards.extend(projection.derived.boards);
-        self.derived
-            .relationships
-            .extend(projection.relationship_updates.into_values().flatten());
-        self.derived.relationships.sort_by(|left, right| {
-            (&left.source, left.kind as u8, &left.target).cmp(&(
-                &right.source,
-                right.kind as u8,
-                &right.target,
-            ))
-        });
+        for board in projection.derived.boards {
+            self.board_records.insert(board.identity.clone(), board);
+        }
+        for (identity, edges) in projection.relationship_updates {
+            if edges.is_empty() {
+                self.relationships.remove(&identity);
+            } else {
+                self.relationships.insert(identity, edges);
+            }
+        }
+        if projection.catalogue_changed {
+            self.scan.activation = projection.scan.activation;
+            self.scan.investigation_roots = projection.scan.investigation_roots;
+            self.browser.rebuild(&self.scan);
+        } else {
+            self.browser
+                .update(&self.scan, &self.entry_indices, &index_changes);
+        }
+        if projection.catalogue_changed {
+            self.facts.reindex_scopes(&self.scan);
+        } else {
+            self.facts.update(&self.scan, &self.entry_indices, &changed);
+        }
+        self.facts
+            .replace_entry_diagnostics(&self.scan, &changed, projection.scan.diagnostics);
+        if let Some(diagnostics) = projection.catalogue_diagnostics {
+            self.facts
+                .replace_catalogue_diagnostics(&self.scan, diagnostics);
+        }
+        self.body_owners.extend(projection.body_owners);
         self.unavailable.extend(projection.unavailable);
+        if self
+            .browser
+            .selected_path()
+            .is_some_and(|path| changed.contains(path))
+            || projection.catalogue_changed
+        {
+            self.detail.invalidate();
+        }
     }
 }

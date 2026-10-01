@@ -85,131 +85,85 @@ pub struct ProgressLog {
     pub entries: Vec<ProgressEntry>,
 }
 
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct LogWire {
-    schema_version: i64,
-    #[serde(default)]
-    entries: Vec<EntryWire>,
+mod parse;
+pub use parse::{
+    ProgressProjection, ProgressSummary, parse_progress_log, parse_progress_operations,
+    parse_progress_projection,
+};
+
+struct EntryRef<'a> {
+    id: &'a str,
+    recorded_at: &'a str,
+    recorded_by: &'a str,
+    ticket_id: &'a str,
+    change: ChangeRef<'a>,
 }
 
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct EntryWire {
-    id: String,
-    recorded_at: String,
-    recorded_by: String,
-    ticket_id: String,
-    kind: String,
-    #[serde(rename = "from")]
-    from: Option<ProgressStatus>,
-    to: Option<ProgressStatus>,
-    category: Option<ProgressNoteCategory>,
-    message: Option<String>,
-}
-
-#[allow(clippy::result_large_err)]
-pub fn parse_progress_log(path: &str, text: &str) -> Result<ProgressLog, Vec<Diagnostic>> {
-    let wire: LogWire = toml::from_str(text).map_err(|error| {
-        vec![Diagnostic::new(
-            path,
-            "invalid_progress_log",
-            error.to_string(),
-        )]
-    })?;
-    if wire.schema_version != i64::from(SCHEMA_VERSION) {
-        return Err(vec![
-            Diagnostic::new(path, "invalid_schema_version", "schema_version must be 1")
-                .field("schema_version"),
-        ]);
-    }
-    let mut entries = Vec::with_capacity(wire.entries.len());
-    for wire in wire.entries {
-        let entry = match wire.kind.as_str() {
-            "transition" => {
-                if wire.category.is_some() || wire.message.is_some() {
-                    return Err(vec![Diagnostic::new(
-                        path,
-                        "invalid_progress_entry",
-                        "transition entries may not contain note fields",
-                    )]);
-                }
-                let (Some(from), Some(to)) = (wire.from, wire.to) else {
-                    return Err(vec![Diagnostic::new(
-                        path,
-                        "invalid_progress_entry",
-                        "transition entries need from and to statuses",
-                    )]);
-                };
-                ProgressEntry::Transition {
-                    id: wire.id,
-                    recorded_at: wire.recorded_at,
-                    recorded_by: wire.recorded_by,
-                    ticket_id: wire.ticket_id,
-                    from,
-                    to,
-                }
-            }
-            "note" => {
-                if wire.from.is_some() || wire.to.is_some() {
-                    return Err(vec![Diagnostic::new(
-                        path,
-                        "invalid_progress_entry",
-                        "note entries may not contain transition fields",
-                    )]);
-                }
-                let (Some(category), Some(message)) = (wire.category, wire.message) else {
-                    return Err(vec![Diagnostic::new(
-                        path,
-                        "invalid_progress_entry",
-                        "note entries need category and message",
-                    )]);
-                };
-                ProgressEntry::Note {
-                    id: wire.id,
-                    recorded_at: wire.recorded_at,
-                    recorded_by: wire.recorded_by,
-                    ticket_id: wire.ticket_id,
-                    category,
-                    message,
-                }
-            }
-            _ => {
-                return Err(vec![Diagnostic::new(
-                    path,
-                    "invalid_progress_entry",
-                    "entry kind must be transition or note",
-                )]);
-            }
-        };
-        entries.push(entry);
-    }
-    let log = ProgressLog { entries };
-    validate_progress_log(path, &log).map_err(|diagnostic| vec![diagnostic])?;
-    Ok(log)
+enum ChangeRef<'a> {
+    Transition {
+        from: ProgressStatus,
+        to: ProgressStatus,
+    },
+    Note {
+        message: &'a str,
+    },
 }
 
 #[allow(clippy::result_large_err)]
 pub fn validate_progress_log(path: &str, log: &ProgressLog) -> Result<(), Diagnostic> {
-    let mut ids = BTreeSet::new();
-    let mut current = BTreeMap::<&str, ProgressStatus>::new();
-    for entry in &log.entries {
-        let (id, recorded_at, recorded_by, ticket_id) = match entry {
+    validate_entries(
+        path,
+        log.entries.iter().map(|entry| match entry {
             ProgressEntry::Transition {
                 id,
                 recorded_at,
                 recorded_by,
                 ticket_id,
-                ..
-            }
-            | ProgressEntry::Note {
+                from,
+                to,
+            } => EntryRef {
                 id,
                 recorded_at,
                 recorded_by,
                 ticket_id,
+                change: ChangeRef::Transition {
+                    from: *from,
+                    to: *to,
+                },
+            },
+            ProgressEntry::Note {
+                id,
+                recorded_at,
+                recorded_by,
+                ticket_id,
+                message,
                 ..
-            } => (id, recorded_at, recorded_by, ticket_id),
-        };
+            } => EntryRef {
+                id,
+                recorded_at,
+                recorded_by,
+                ticket_id,
+                change: ChangeRef::Note { message },
+            },
+        }),
+    )
+}
+
+#[allow(clippy::result_large_err)]
+fn validate_entries<'a>(
+    path: &str,
+    entries: impl IntoIterator<Item = EntryRef<'a>>,
+) -> Result<(), Diagnostic> {
+    let mut ids = BTreeSet::new();
+    let mut current = BTreeMap::<&str, ProgressStatus>::new();
+    for EntryRef {
+        id,
+        recorded_at,
+        recorded_by,
+        ticket_id,
+        change,
+    } in entries
+    {
         if id.trim().is_empty() || !ids.insert(id) {
             return Err(Diagnostic::new(
                 path,
@@ -231,13 +185,13 @@ pub fn validate_progress_log(path: &str, log: &ProgressLog) -> Result<(), Diagno
                 "recorded_by and ticket_id must be non-empty",
             ));
         }
-        match entry {
-            ProgressEntry::Transition { from, to, .. } => {
+        match change {
+            ChangeRef::Transition { from, to } => {
                 let prior = current
-                    .get(ticket_id.as_str())
+                    .get(ticket_id)
                     .copied()
                     .unwrap_or(ProgressStatus::Unknown);
-                if *from != prior {
+                if from != prior {
                     return Err(Diagnostic::new(
                         path,
                         "stale_progress_from",
@@ -251,16 +205,16 @@ pub fn validate_progress_log(path: &str, log: &ProgressLog) -> Result<(), Diagno
                         "transition from and to must differ",
                     ));
                 }
-                current.insert(ticket_id, *to);
+                current.insert(ticket_id, to);
             }
-            ProgressEntry::Note { message, .. } if message.trim().is_empty() => {
+            ChangeRef::Note { message } if message.trim().is_empty() => {
                 return Err(Diagnostic::new(
                     path,
                     "invalid_progress_entry",
                     "note message must be non-empty",
                 ));
             }
-            ProgressEntry::Note { .. } => {}
+            ChangeRef::Note { .. } => {}
         }
     }
     Ok(())

@@ -1,15 +1,14 @@
 use crate::{
-    activation::{Activation, project_for, scope_for},
+    activation::{Activation, PathFacts, ScopeIndex},
     layout::safe_relative,
 };
-use casefile_core::{
-    Classification, Diagnostic, EntrySnapshot, Kind, RecordDraft, RecordSummary,
-    parse_metadata_arrays, parse_progress_log,
-};
+use casefile_core::{Classification, Diagnostic, EntrySnapshot, Kind, RecordDraft, RecordSummary};
 use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Default)]
-pub(super) struct ValidationFacts {
+pub(super) struct ValidationFacts<'a> {
+    pub(super) resolved: BTreeMap<String, PathFacts<'a>>,
+    pub(super) strategies: BTreeMap<String, Option<casefile_core::StrategyProjection>>,
     work: BTreeMap<String, WorkReferences>,
     metadata: BTreeMap<String, (Vec<String>, Vec<String>)>,
     progress: BTreeMap<String, Vec<(String, String)>>,
@@ -22,73 +21,88 @@ struct WorkReferences {
     superseded_by: Vec<String>,
 }
 
-impl ValidationFacts {
-    pub(super) fn insert(&mut self, entry: &EntrySnapshot) {
-        let Ok(text) = std::str::from_utf8(&entry.original_bytes) else {
-            return;
-        };
-        match entry.kind {
-            Some(kind @ (Kind::Ticket | Kind::Epic)) => {
-                if let Ok(RecordDraft::Ticket(item) | RecordDraft::Epic(item)) =
-                    casefile_core::parse_draft(&entry.path, kind, text)
-                {
-                    self.work.insert(
-                        entry.path.clone(),
-                        WorkReferences {
-                            decision_refs: item.decision_refs,
-                            related_tickets: item.related_tickets,
-                            supersedes: item.supersedes,
-                            superseded_by: item.superseded_by,
-                        },
-                    );
-                }
-            }
-            Some(Kind::Evidence | Kind::Review) => {
-                if let Ok(metadata) = parse_metadata_arrays(&entry.path, text) {
-                    self.metadata.insert(entry.path.clone(), metadata);
-                }
-            }
-            Some(Kind::Progress) => {
-                if let Ok(log) = parse_progress_log(&entry.path, text) {
-                    self.progress.insert(
-                        entry.path.clone(),
-                        log.entries
-                            .iter()
-                            .map(|entry| (entry.id().into(), entry.ticket_id().into()))
-                            .collect(),
-                    );
-                }
-            }
-            _ => {}
+impl<'a> ValidationFacts<'a> {
+    pub(super) fn attachment_targets(&self) -> impl Iterator<Item = String> + '_ {
+        self.metadata.iter().flat_map(|(path, (_, attachments))| {
+            attachments
+                .iter()
+                .filter_map(move |attachment| attachment_target(path, attachment))
+        })
+    }
+
+    pub(super) fn insert_progress_operations(
+        &mut self,
+        path: &str,
+        operations: &[(String, String)],
+    ) {
+        self.progress.insert(path.into(), operations.to_vec());
+    }
+
+    pub(super) fn insert_progress(
+        &mut self,
+        entry: &EntrySnapshot,
+        resolved: PathFacts<'a>,
+        log: &casefile_core::ProgressLog,
+    ) {
+        self.resolved.insert(entry.path.clone(), resolved);
+        self.progress.insert(
+            entry.path.clone(),
+            log.entries
+                .iter()
+                .map(|entry| (entry.id().into(), entry.ticket_id().into()))
+                .collect(),
+        );
+    }
+
+    pub(super) fn insert(
+        &mut self,
+        entry: &EntrySnapshot,
+        resolved: PathFacts<'a>,
+        parsed: impl std::borrow::Borrow<crate::scanning::classification::ParsedFacts>,
+    ) {
+        let parsed = parsed.borrow();
+        self.resolved.insert(entry.path.clone(), resolved);
+        if let Some(RecordDraft::Ticket(item) | RecordDraft::Epic(item)) = &parsed.draft {
+            self.work.insert(
+                entry.path.clone(),
+                WorkReferences {
+                    decision_refs: item.decision_refs.clone(),
+                    related_tickets: item.related_tickets.clone(),
+                    supersedes: item.supersedes.clone(),
+                    superseded_by: item.superseded_by.clone(),
+                },
+            );
+        }
+        if let Some(metadata) = &parsed.metadata {
+            self.metadata.insert(entry.path.clone(), metadata.clone());
+        }
+        if let Some(log) = &parsed.progress {
+            self.progress.insert(
+                entry.path.clone(),
+                log.entries
+                    .iter()
+                    .map(|entry| (entry.id().into(), entry.ticket_id().into()))
+                    .collect(),
+            );
+        }
+        if entry.kind == Some(Kind::Strategy) {
+            self.strategies
+                .insert(entry.path.clone(), parsed.strategy.clone());
         }
     }
-}
-
-pub(super) fn cross_validate(entries: &[EntrySnapshot], active: &Activation) -> Vec<Diagnostic> {
-    let mut facts = ValidationFacts::default();
-    for entry in entries {
-        facts.insert(entry);
-    }
-    cross_validate_facts(entries, active, &facts)
 }
 
 pub(super) fn cross_validate_facts(
     entries: &[EntrySnapshot],
     active: &Activation,
     facts: &ValidationFacts,
+    regular_target: impl Fn(&str) -> bool,
 ) -> Vec<Diagnostic> {
     let mut diagnostics = Vec::new();
     let mut identities: BTreeMap<&str, &EntrySnapshot> = BTreeMap::new();
     let paths: BTreeSet<&str> = entries.iter().map(|entry| entry.path.as_str()).collect();
     let mut supersedes = BTreeMap::new();
-    let scopes = entries
-        .iter()
-        .map(|entry| (entry.path.as_str(), scope_for(&entry.path, active)))
-        .collect::<BTreeMap<_, _>>();
-    let projects = entries
-        .iter()
-        .map(|entry| (entry.path.as_str(), project_for(&entry.path, active)))
-        .collect::<BTreeMap<_, _>>();
+    let scopes = &facts.resolved;
     for entry in entries
         .iter()
         .filter(|entry| entry.classification == Classification::Governed)
@@ -103,17 +117,14 @@ pub(super) fn cross_validate_facts(
             }
         }
         if entry.kind.is_some_and(Kind::is_writable) {
-            if let Some(project) = active.projects.iter().find(|(_, project)| {
-                project
-                    .investigations
-                    .iter()
-                    .any(|base| entry.path.starts_with(&(base.to_owned() + "/")))
-            }) {
-                if !entry
-                    .identity
-                    .as_deref()
-                    .is_some_and(|id| id.starts_with(&(project.1.prefix.clone() + "-")))
-                {
+            if let Some(project) = facts.resolved[&entry.path]
+                .project
+                .and_then(|project| active.projects.get(project))
+            {
+                if !entry.identity.as_deref().is_some_and(|id| {
+                    id.strip_prefix(&project.prefix)
+                        .is_some_and(|rest| rest.starts_with('-'))
+                }) {
                     diagnostics.push(Diagnostic::new(
                         &entry.path,
                         "project_prefix",
@@ -123,7 +134,11 @@ pub(super) fn cross_validate_facts(
             }
         }
     }
-    diagnostics.extend(progress_diagnostics_facts(entries, active, facts));
+    diagnostics.extend(progress_diagnostics_facts(
+        entries.iter(),
+        &facts.resolved,
+        |path| facts.progress.get(path).map(Vec::as_slice),
+    ));
     for entry in entries
         .iter()
         .filter(|entry| matches!(entry.summary, Some(RecordSummary::WorkItem { .. })))
@@ -134,10 +149,11 @@ pub(super) fn cross_validate_facts(
             unreachable!()
         };
         if let Some(item) = facts.work.get(&entry.path) {
-            let project = projects[entry.path.as_str()];
+            let project = scopes[entry.path.as_str()].project;
             for reference in &item.decision_refs {
                 let resolves = identities.get(reference.as_str()).is_some_and(|target| {
-                    target.kind == Some(Kind::Decision) && projects[target.path.as_str()] == project
+                    target.kind == Some(Kind::Decision)
+                        && scopes[target.path.as_str()].project == project
                 });
                 if reference == id || !resolves {
                     diagnostics.push(Diagnostic::new(
@@ -156,7 +172,7 @@ pub(super) fn cross_validate_facts(
                 if reference == id
                     || identities.get(reference.as_str()).is_none_or(|target| {
                         !matches!(target.kind, Some(Kind::Ticket | Kind::Epic))
-                            || projects[target.path.as_str()] != project
+                            || scopes[target.path.as_str()].project != project
                     })
                 {
                     diagnostics.push(Diagnostic::new(
@@ -174,11 +190,11 @@ pub(super) fn cross_validate_facts(
         .filter(|entry| matches!(entry.kind, Some(Kind::Evidence | Kind::Review)))
     {
         if let Some((refs, attachments)) = facts.metadata.get(&entry.path) {
-            let scope = scopes[entry.path.as_str()];
+            let scope = scopes[entry.path.as_str()].scope;
             for reference in refs {
                 if identities
                     .get(reference.as_str())
-                    .is_none_or(|target| scopes[target.path.as_str()] != scope)
+                    .is_none_or(|target| scopes[target.path.as_str()].scope != scope)
                 {
                     diagnostics.push(Diagnostic::new(
                         &entry.path,
@@ -189,10 +205,9 @@ pub(super) fn cross_validate_facts(
             }
             for attachment in attachments {
                 let target = attachment_target(&entry.path, attachment);
-                if !target
-                    .as_deref()
-                    .is_some_and(|path| safe_relative(path) && paths.contains(path))
-                {
+                if !target.as_deref().is_some_and(|path| {
+                    safe_relative(path) && paths.contains(path) && regular_target(path)
+                }) {
                     diagnostics.push(Diagnostic::new(
                         &entry.path,
                         "missing_attachment",
@@ -202,74 +217,79 @@ pub(super) fn cross_validate_facts(
             }
         }
     }
-    for start in supersedes.keys() {
-        if has_cycle(
-            start,
-            &supersedes,
-            &mut BTreeSet::new(),
-            &mut BTreeSet::new(),
-        ) {
-            diagnostics.push(Diagnostic::new(
-                identities[start.as_str()].path.clone(),
-                "supersession_cycle",
-                "supersession references must not form a cycle",
-            ));
-        }
+    for start in cycle_reachable(&supersedes) {
+        diagnostics.push(Diagnostic::new(
+            identities[start].path.clone(),
+            "supersession_cycle",
+            "supersession references must not form a cycle",
+        ));
     }
     diagnostics
 }
 
-pub(super) fn progress_diagnostics(
-    entries: &[EntrySnapshot],
+pub(super) fn progress_diagnostics<'a>(
+    entries: impl Iterator<Item = &'a EntrySnapshot> + Clone,
     active: &Activation,
+    operations: impl Iterator<Item = (&'a str, &'a [(String, String)])>,
 ) -> Vec<Diagnostic> {
-    let mut facts = ValidationFacts::default();
-    for entry in entries {
-        facts.insert(entry);
-    }
-    progress_diagnostics_facts(entries, active, &facts)
+    let scopes = ScopeIndex::new(active);
+    let resolved = entries
+        .clone()
+        .map(|entry| (entry.path.clone(), scopes.resolve(&entry.path)))
+        .collect();
+    let operations = operations.collect::<BTreeMap<_, _>>();
+    progress_diagnostics_facts(entries, &resolved, |path| operations.get(path).copied())
 }
 
-fn progress_diagnostics_facts(
-    entries: &[EntrySnapshot],
-    active: &Activation,
-    facts: &ValidationFacts,
+fn progress_diagnostics_facts<'a, 'b>(
+    entries: impl Iterator<Item = &'a EntrySnapshot> + Clone,
+    scopes: &BTreeMap<String, PathFacts<'_>>,
+    operations: impl Fn(&str) -> Option<&'b [(String, String)]>,
 ) -> Vec<Diagnostic> {
     let mut diagnostics = Vec::new();
-    let scopes = entries
-        .iter()
-        .map(|entry| (entry.path.as_str(), scope_for(&entry.path, active)))
-        .collect::<BTreeMap<_, _>>();
+    let mut observed_tickets = BTreeMap::new();
+    for entry in entries
+        .clone()
+        .filter(|entry| entry.kind == Some(Kind::Ticket))
+    {
+        let scope = scopes[entry.path.as_str()].scope;
+        if let Some(identity) = entry.identity.as_deref() {
+            observed_tickets.entry((scope, identity)).or_insert(entry);
+        }
+        if let Some(name) = entry
+            .path
+            .rsplit('/')
+            .next()
+            .and_then(|name| name.strip_suffix(".md"))
+        {
+            observed_tickets.entry((scope, name)).or_insert(entry);
+        }
+    }
     let accepted = entries
-        .iter()
+        .clone()
         .filter_map(|entry| {
             if entry.kind == Some(Kind::Ticket) && entry.classification == Classification::Governed
             {
                 if let Some(RecordSummary::WorkItem { id, status, .. }) = &entry.summary {
                     if status == "accepted" {
-                        return Some((scopes[entry.path.as_str()], id.as_str()));
+                        return Some((scopes[entry.path.as_str()].scope, id.as_str()));
                     }
                 }
             }
             None
         })
         .collect::<BTreeSet<_>>();
-    for entry in entries.iter().filter(|entry| {
+    for entry in entries.filter(|entry| {
         entry.kind == Some(Kind::Progress) && entry.classification == Classification::Governed
     }) {
-        let Some(log) = facts.progress.get(&entry.path) else {
+        let Some(log) = operations(&entry.path) else {
             continue;
         };
-        let scope = scopes[entry.path.as_str()];
+        let scope = scopes[entry.path.as_str()].scope;
         for (operation_id, ticket_id) in log {
             let accepted_ticket = accepted.contains(&(scope, ticket_id.as_str()));
             if !accepted_ticket {
-                let observed = entries.iter().find(|candidate| {
-                    scopes[candidate.path.as_str()] == scope
-                        && candidate.kind == Some(Kind::Ticket)
-                        && (candidate.identity.as_ref() == Some(ticket_id)
-                            || candidate.path.ends_with(&format!("/{ticket_id}.md")))
-                });
+                let observed = observed_tickets.get(&(scope, ticket_id.as_str())).copied();
                 let status = observed.and_then(|entry| match &entry.summary {
                     Some(RecordSummary::WorkItem { status, .. }) => Some(status.clone()),
                     _ => None,
@@ -295,11 +315,14 @@ fn progress_diagnostics_facts(
                     next_query: casefile_core::ProgressTicketQuery {
                         query: "record_index".into(),
                         scope: casefile_core::ProgressTicketScope {
-                            project: project_for(&entry.path, active).unwrap_or_default().into(),
+                            project: scopes[entry.path.as_str()]
+                                .project
+                                .unwrap_or_default()
+                                .into(),
                             investigation: scope
                                 .and_then(|path| {
                                     crate::activation::investigation_identity(
-                                        project_for(&entry.path, active).unwrap_or_default(),
+                                        scopes[entry.path.as_str()].project.unwrap_or_default(),
                                         path,
                                     )
                                 })
@@ -324,26 +347,36 @@ fn attachment_target(entry_path: &str, attachment: &str) -> Option<String> {
     safe_relative(&target).then_some(target)
 }
 
-fn has_cycle(
-    node: &str,
-    graph: &BTreeMap<String, Vec<String>>,
-    visiting: &mut BTreeSet<String>,
-    checked: &mut BTreeSet<String>,
-) -> bool {
-    if !visiting.insert(node.into()) {
-        return true;
+fn cycle_reachable(graph: &BTreeMap<String, Vec<String>>) -> BTreeSet<&str> {
+    let mut remaining = BTreeMap::new();
+    let mut predecessors: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
+    for (node, next) in graph {
+        let mut count = 0;
+        for target in next.iter().filter(|target| graph.contains_key(*target)) {
+            count += 1;
+            predecessors.entry(target).or_default().push(node);
+        }
+        remaining.insert(node.as_str(), count);
     }
-    if checked.contains(node) {
-        visiting.remove(node);
-        return false;
+    let mut leaves = remaining
+        .iter()
+        .filter_map(|(node, count)| (*count == 0).then_some(*node))
+        .collect::<Vec<_>>();
+    while let Some(node) = leaves.pop() {
+        if let Some(parents) = predecessors.get(node) {
+            for parent in parents {
+                let count = remaining.get_mut(parent).expect("graph predecessor");
+                *count -= 1;
+                if *count == 0 {
+                    leaves.push(parent);
+                }
+            }
+        }
     }
-    let result = graph.get(node).is_some_and(|next| {
-        next.iter()
-            .any(|id| has_cycle(id, graph, visiting, checked))
-    });
-    visiting.remove(node);
-    checked.insert(node.into());
-    result
+    remaining
+        .into_iter()
+        .filter_map(|(node, count)| (count > 0).then_some(node))
+        .collect()
 }
 
 #[cfg(test)]

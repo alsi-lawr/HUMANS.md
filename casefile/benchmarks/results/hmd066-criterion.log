@@ -1,0 +1,60 @@
+Gnuplot not found, using plotters backend
+Benchmarking http_loopback_records/unchanged/250
+Benchmarking http_loopback_records/unchanged/250: Warming up for 1.0000 s
+Benchmarking http_loopback_records/unchanged/250: Collecting 10 samples in estimated 2.5941 s (165 iterations)
+Benchmarking http_loopback_records/unchanged/250: Analyzing
+http_loopback_records/unchanged/250
+                        time:   [15.548 ms 15.604 ms 15.707 ms]
+                        change: [−65.207% −64.542% −63.425%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) high severe
+Benchmarking http_loopback_records/search_hit/250
+Benchmarking http_loopback_records/search_hit/250: Warming up for 1.0000 s
+Benchmarking http_loopback_records/search_hit/250: Collecting 10 samples in estimated 2.2398 s (385 iterations)
+Benchmarking http_loopback_records/search_hit/250: Analyzing
+http_loopback_records/search_hit/250
+                        time:   [5.7846 ms 5.8935 ms 5.9652 ms]
+                        change: [−86.373% −86.260% −86.118%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Found 2 outliers among 10 measurements (20.00%)
+  2 (20.00%) high mild
+Benchmarking http_loopback_records/search_miss/250
+Benchmarking http_loopback_records/search_miss/250: Warming up for 1.0000 s
+Benchmarking http_loopback_records/search_miss/250: Collecting 10 samples in estimated 2.2945 s (385 iterations)
+Benchmarking http_loopback_records/search_miss/250: Analyzing
+http_loopback_records/search_miss/250
+                        time:   [5.7775 ms 5.7867 ms 5.8013 ms]
+                        change: [−86.612% −86.360% −86.150%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Found 2 outliers among 10 measurements (20.00%)
+  2 (20.00%) high mild
+Benchmarking http_loopback_records/unchanged/1000
+Benchmarking http_loopback_records/unchanged/1000: Warming up for 1.0000 s
+
+Warning: Unable to complete 10 samples in 2.0s. You may wish to increase target time to 3.3s or enable flat sampling.
+Benchmarking http_loopback_records/unchanged/1000: Collecting 10 samples in estimated 3.2580 s (55 iterations)
+Benchmarking http_loopback_records/unchanged/1000: Analyzing
+http_loopback_records/unchanged/1000
+                        time:   [59.203 ms 59.371 ms 59.554 ms]
+                        change: [−59.748% −59.574% −59.382%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Benchmarking http_loopback_records/search_hit/1000
+Benchmarking http_loopback_records/search_hit/1000: Warming up for 1.0000 s
+Benchmarking http_loopback_records/search_hit/1000: Collecting 10 samples in estimated 2.0744 s (110 iterations)
+Benchmarking http_loopback_records/search_hit/1000: Analyzing
+http_loopback_records/search_hit/1000
+                        time:   [18.770 ms 18.997 ms 19.290 ms]
+                        change: [−86.831% −86.731% −86.598%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Found 2 outliers among 10 measurements (20.00%)
+  1 (10.00%) high mild
+  1 (10.00%) high severe
+Benchmarking http_loopback_records/search_miss/1000
+Benchmarking http_loopback_records/search_miss/1000: Warming up for 1.0000 s
+Benchmarking http_loopback_records/search_miss/1000: Collecting 10 samples in estimated 2.1361 s (110 iterations)
+Benchmarking http_loopback_records/search_miss/1000: Analyzing
+http_loopback_records/search_miss/1000
+                        time:   [19.037 ms 19.504 ms 19.891 ms]
+                        change: [−86.535% −86.316% −86.090%] (p = 0.00 < 0.05)
+                        Performance has improved.

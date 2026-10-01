@@ -42,13 +42,6 @@ pub(super) fn write_json(output: &mut impl Write, value: &impl Serialize) -> Res
     Ok(())
 }
 
-pub(super) fn write_message(output: &mut impl Write, value: &impl Serialize) -> Result<()> {
-    let bytes = encode(value)?;
-    output.write_all(&bytes)?;
-    output.flush()?;
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

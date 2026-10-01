@@ -1,0 +1,239 @@
+HMD-059 correction round 1; parent b8d3edcb99aa77cb2d6c6560db496a652a55594b
+CARGO_TARGET_DIR=/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target
+All final commands used set -e and actual exit status was inspected.
+
+COMMAND: nix develop . --command cargo test --manifest-path casefile/Cargo.toml -p casefile-store --lib --test scanning --test provider --test validation --test governance --test v1
+EXIT: 0
+warning: Git tree '/home/alex/dev/HUMANS.md' is dirty
+humans-md development shell
+  Setup:  (cd casefile/web && bun install)
+  Format: scripts/format-source.sh --check|--write
+  Web:    cd casefile/web; bun install; bun run typecheck; bun run test; bun run build
+  Rust:   cd casefile; cargo fmt --check; cargo clippy --workspace --all-targets -- -D warnings; cargo test --workspace
+  CI:     act pull_request -j validate --pull=false -P ubuntu-latest=catthehacker/ubuntu:act-latest
+   Compiling casefile-store v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.97s
+     Running unittests src/lib.rs (.agent-workspace/20260930-speedup-implementation/writer/target/debug/deps/casefile_store-9b83a5ca5ea132d4)
+
+running 45 tests
+test layout::tests::persisted_paths_remain_strictly_slash_canonical ... ok
+test mutation_tests::process_writer ... ok
+test layout::tests::portable_planning_relative_grammar_is_host_independent ... ok
+test checking::tests::parent_checks_and_provider_diagnostics_exclude_activated_nested_scope_bodies ... ok
+test mutation_tests::record_batch_failure_restores_prior_targets_without_touching_unrelated_data ... ok
+test checking::tests::scoped_check_discards_each_canonical_support_body_before_opening_the_next ... ok
+test presentation::tests::lazy_content_rejects_non_emitted_escaping_and_excluded_paths ... ok
+test presentation::tests::per_entry_read_failure_is_visible_and_retried_without_a_metadata_change ... ok
+test presentation::tests::live_save_replacement_and_deletion_are_reconciled_per_entry ... ok
+test mutation_tests::governed_mid_transaction_failure_restores_the_matrix ... ok
+test presentation::tests::production_catalogue_and_fetch_reject_a_root_renamed_to_a_symlink ... ok
+test mutation_tests::reverse_evidence_uses_canonical_metadata_and_aliases_cannot_bypass_it ... ok
+test presentation::tests::production_fetch_rejects_a_catalogued_path_whose_parent_becomes_a_symlink ... ok
+test presentation::tests::scoped_load_keeps_untouched_target_content_handles_usable ... ok
+test presentation::tests::loaded_presentation_facts_match_complete_canonical_inputs ... ok
+test presentation::tests::unactivated_and_invalid_activation_complete_before_filesystem_catalogue_reads ... ok
+test presentation::tests::scoped_targets_emit_only_their_deterministic_activated_subtrees ... ok
+test provider::hierarchy_tests::snapshot_and_index_observe_cache_without_refreshing_it ... ok
+test presentation::tests::unchanged_refresh_reuses_records_without_reading_bodies_and_detail_reads_only_selection ... ok
+test revision::tests::controlled_same_identity_size_and_timestamps_edit_is_admitted ... ok
+test read_context::tests::scope_observation_rejects_affecting_changes_but_admits_unrelated_edits ... ok
+test mutation_tests::global_identity_phantoms_and_multiline_board_metadata_remain_conflicts ... ok
+test revision::tests::revision_covers_type_native_identity_size_and_both_timestamps ... ok
+test revision::tests::metadata_revision_detects_ordinary_edits_replacements_types_and_existence ... ok
+test scanning::tests::attachment_overlay_uses_proposed_regular_presence_not_original_opaque_membership ... ok
+test scanning::scoped::tests::parallel_scope_read_reports_first_path_failure_and_retries_without_partial_results ... ok
+test scanning::tests::store_path_exclusion_is_exactly_direct_root_implementation_metadata ... ok
+test store::safety_tests::current_revision_uses_metadata_inventory_without_body_reads ... ok
+test store::safety_tests::safe_target_parent_rejects_the_root_and_in_store_descendant_symlinks ... ok
+test validation::tests::attachment_targets_keep_canonical_store_separators ... ok
+test writing::diff_argument_tests::contained_temporary_git_arguments_are_relative_and_keep_canonical_headers ... ok
+test scanning::tests::selected_descriptor_and_global_membership_observations_refuse_races ... ok
+test presentation::tests::production_saves_atomic_replacements_and_deletions_after_enumeration_stay_local ... ok
+test provider::outcome_tests::unconfigured_outcomes_do_not_read_the_store_after_commit_or_replay ... ok
+test provider::outcome_tests::cache_preparation_failure_preserves_committed_receipt_bytes_and_supported_replay ... ok
+test mutation_tests::shared_reference_changes_and_reverse_progress_membership_cannot_write_skew ... ok
+test checking::tests::scoped_check_never_opens_foreign_evidence_and_root_matches_canonical_validation ... ok
+test mutation_tests::progress_bootstrap_append_replay_and_record_batch_have_narrow_result_windows ... ok
+test presentation::tests::batches_and_channels_are_bounded_and_cancellation_stops_backpressure ... ok
+test mutation_tests::record_delete_no_op_and_default_board_receipts_survive_disjoint_result_changes ... ok
+test mutation_tests::governed_multi_file_and_binding_results_and_legacy_replay_are_independent ... ok
+test mutation_tests::independent_processes_coordinate_disjoint_targets_replacement_creation_and_identity_claims ... ok
+test mutation_tests::growth_and_nontransitive_neighbors_do_not_expand_body_reads_or_conflicts ... ok
+test mutation_tests::provider_same_session_writes_survive_locked_validation_and_result_windows ... ok
+test checking::tests::root_check_retains_one_evidence_body_as_scope_count_grows ... ok
+
+test result: ok. 45 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.49s
+
+     Running tests/governance.rs (.agent-workspace/20260930-speedup-implementation/writer/target/debug/deps/governance-80200e5e642881b0)
+
+running 11 tests
+test provider_refuses_every_authoritative_transition_preview_change_without_mutation ... ok
+test historical_transition_and_backup_files_remain_raw_and_untouched ... ok
+test governed_and_progress_writes_allow_a_symlinked_ancestor_above_the_store_root ... ok
+test binding_provider_preview_is_complete_strict_atomic_and_has_no_archive_or_scratch_escape ... ok
+test progress_transition_to_in_progress_is_required_again_after_interruption ... ok
+test binding_accepts_unrelated_changes_and_refuses_invalid_schema_and_symlink_targets ... ok
+test strategy_transition_is_strict_store_visible_idempotent_and_creates_no_backup ... ok
+test first_phase_strategy_transition_creates_missing_matrix_and_refuses_later_recovery ... ok
+test transition_accepts_unrelated_changes_and_preserves_collision_validation_and_rollback ... ok
+test strategy_replay_equates_only_line_endings_and_keeps_raw_preview_staleness ... ok
+test binding_activity_is_derived_exactly_from_canonical_progress_and_spawn_requires_in_progress ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.41s
+
+     Running tests/provider.rs (.agent-workspace/20260930-speedup-implementation/writer/target/debug/deps/provider-6eed07b9b77ca52a)
+
+running 14 tests
+test default_board_refuses_missing_and_ambiguous_activation_mappings_before_preview ... ok
+test catalogue_union_keeps_mapping_only_and_governed_missing_mapping_projects ... ok
+test record_preview_rejects_win32_special_components_without_writing ... ok
+test hierarchical_reads_are_selective_bounded_and_exact ... ok
+test invalid_unactivated_and_legacy_activation_fail_closed_without_conversion ... ok
+test cache_refresh_failure_after_a_confirmed_write_is_degraded_not_authoritative ... ok
+test record_apply_requires_the_complete_provider_preview_and_preserves_store_on_alteration ... ok
+test default_board_ignores_unrelated_diagnostics_within_and_across_investigations ... ok
+test snapshot_and_exact_scoped_reads_are_bounded_protocol_v4 ... ok
+test default_board_is_named_exact_preview_with_preflight_collision_and_byte_preserving_no_op ... ok
+test record_batch_promotes_mutually_related_tickets_as_one_valid_change ... ok
+test every_provider_apply_family_accepts_unrelated_store_changes ... ok
+test progress_preview_integrity_covers_bootstrap_transition_replay_no_op_and_conflict ... ok
+test scoped_diagnostics_report_exact_progress_target_and_bounded_follow_up ... ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.67s
+
+     Running tests/scanning.rs (.agent-workspace/20260930-speedup-implementation/writer/target/debug/deps/scanning-afc642fbe7153636)
+
+running 9 tests
+test flat_project_decisions_do_not_govern_nested_archives_and_activation_errors_are_unique ... ok
+test exact_detail_distinguishes_supported_records_malformed_duplicates_and_absence ... ok
+test binding_diagnostics_use_canonical_scope_despite_parent_nested_parent_order ... ok
+test deepest_activated_scope_excludes_nested_records_boards_and_progress ... ok
+test requested_governed_containers_distinguish_missing_from_unsafe_without_following ... ok
+test scoped_attachment_freshness_tracks_existence_type_and_containment_not_body_edits ... ok
+test typed_scope_tokens_track_only_affecting_data_and_selected_mapping_values ... ok
+test consumed_attachment_types_agree_across_scan_checks_and_independent_preview ... ok
+test native_names_never_alias_and_opaque_symlinks_are_not_followed_in_deep_trees ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.36s
+
+     Running tests/v1.rs (.agent-workspace/20260930-speedup-implementation/writer/target/debug/deps/v1-0bfd68d2c356cdfa)
+
+running 29 tests
+test derived_relationships_are_unique_and_directed ... ok
+test activation_state_distinguishes_unactivated_and_invalid_roots ... ok
+test binary_delete_preview_has_canonical_paths ... ok
+test nested_investigation_roots_have_distinct_scoped_identities ... ok
+test canonical_scan_excludes_only_direct_root_implementation_metadata ... ok
+test progress_apply_refuses_unsafe_paths_without_replacing_existing_bytes ... ok
+test accepted_tickets_project_unknown_and_a_valid_log_folds_progress_notes_and_progress_boards ... ok
+test nested_active_investigations_use_the_most_specific_binding_scope ... ok
+test atomic_progress_write_failure_preserves_the_previous_log ... ok
+test scans_each_v1_kind_and_preserves_raw_material ... ok
+test project_decisions_resolve_within_the_project_only ... ok
+test scans_the_current_v1_fixture_with_windows_line_endings ... ok
+test semantic_invalid_progress_suppresses_unknown_and_progress_board_cards ... ok
+test progress_target_paths_must_remain_contained ... ok
+test bootstrap_creates_only_an_absent_empty_log_and_existing_valid_log_is_byte_preserving_no_op ... ok
+test generic_preview_preserves_baseline_diagnostics_but_rejects_introduced_diagnostics ... ok
+test structural_faults_are_deterministic_and_drafts_round_trip ... ok
+test progress_mutations_require_active_activation_but_ignore_unrelated_diagnostics ... ok
+test strategy_binding_is_pending_without_implementation_and_unresolved_without_exact_writer ... ok
+test strategy_binding_projection_keeps_legacy_and_failure_states_distinct ... ok
+test reference_cycle_attachment_prefix_symlink_and_json_diagnostics_are_checked ... ok
+test work_item_references_may_cross_investigations_within_one_project_only ... ok
+test malformed_and_cross_scope_progress_never_become_unknown_and_store_writer_is_preview_first_and_idempotent ... ok
+test strategy_bindings_are_isolated_by_active_investigation_scope ... ok
+test binding_replacement_is_guarded_single_file_and_atomic ... ok
+test previews_and_applies_one_path_without_touching_index ... ok
+test progress_rejections_preserve_precise_same_scope_ticket_facts ... ok
+test table_rows_and_review_faults_are_structural ... ok
+test atomic_multi_ticket_continuations_capture_the_complete_proposal ... ok
+
+test result: ok. 29 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.40s
+
+     Running tests/validation.rs (.agent-workspace/20260930-speedup-implementation/writer/target/debug/deps/validation-7ea53a8a1884a14c)
+
+running 1 test
+test long_supersession_chains_and_cycle_reachable_ancestors_preserve_diagnostics ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.11s
+
+
+COMMAND: nix develop . --command cargo clippy --manifest-path casefile/Cargo.toml -p casefile-store -p casefile-core -p casefile-cli --all-targets -- -D warnings
+EXIT: 0
+warning: Git tree '/home/alex/dev/HUMANS.md' is dirty
+humans-md development shell
+  Setup:  (cd casefile/web && bun install)
+  Format: scripts/format-source.sh --check|--write
+  Web:    cd casefile/web; bun install; bun run typecheck; bun run test; bun run build
+  Rust:   cd casefile; cargo fmt --check; cargo clippy --workspace --all-targets -- -D warnings; cargo test --workspace
+  CI:     act pull_request -j validate --pull=false -P ubuntu-latest=catthehacker/ubuntu:act-latest
+    Checking casefile-store v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store)
+    Checking casefile-store-sqlite v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-store-sqlite)
+    Checking casefile-tui v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-tui)
+    Checking casefile-server v0.1.0 (/home/alex/dev/HUMANS.md/casefile/casefile-server)
+    Checking casefile-cli v0.8.0 (/home/alex/dev/HUMANS.md/casefile/casefile-cli)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 3.58s
+
+COMMAND: nix develop . --command cargo fmt --manifest-path casefile/Cargo.toml --all --check
+EXIT: 0
+warning: Git tree '/home/alex/dev/HUMANS.md' is dirty
+humans-md development shell
+  Setup:  (cd casefile/web && bun install)
+  Format: scripts/format-source.sh --check|--write
+  Web:    cd casefile/web; bun install; bun run typecheck; bun run test; bun run build
+  Rust:   cd casefile; cargo fmt --check; cargo clippy --workspace --all-targets -- -D warnings; cargo test --workspace
+  CI:     act pull_request -j validate --pull=false -P ubuntu-latest=catthehacker/ubuntu:act-latest
+
+COMMAND: nix develop . --command rustc --edition=2024 <owned public-probe.rs> --extern casefile_store=<current target debug rlib> -L dependency=<target/debug/deps> -o <owned probe>; execute probe
+EXIT: 0
+warning: Git tree '/home/alex/dev/HUMANS.md' is dirty
+humans-md development shell
+  Setup:  (cd casefile/web && bun install)
+  Format: scripts/format-source.sh --check|--write
+  Web:    cd casefile/web; bun install; bun run typecheck; bun run test; bun run build
+  Rust:   cd casefile; cargo fmt --check; cargo clippy --workspace --all-targets -- -D warnings; cargo test --workspace
+  CI:     act pull_request -j validate --pull=false -P ubuntu-latest=catthehacker/ubuntu:act-latest
+global scan diagnostics=[("projects/demo/investigations/sample/evidence/ref.md", "missing_attachment")]
+global check valid=Some(false) diagnostics=[("projects/demo/investigations/sample/evidence/ref.md", "missing_attachment")]
+scoped check valid=Some(false) diagnostics=[("projects/demo/investigations/sample/evidence/ref.md", "missing_attachment")]
+Unreferenced opaque symlink remains valid across scan/check, as required
+
+PUBLIC PROBE SOURCE (reviewer reproduction with corrected equivalence assertions):
+use std::{fs,os::unix::fs::symlink};
+use casefile_store::Store;
+fn main(){
+ let root=std::env::temp_dir().join(format!("casefile-review059-{}",std::process::id())); assert!(!root.exists());
+ let scope="projects/demo/investigations/sample";
+ let evidence=root.join(scope).join("evidence"); fs::create_dir_all(&evidence).unwrap();
+ fs::write(root.join("casefile.toml"),format!("schema_version = 1\n[projects.demo]\nprefix='HMD'\ninvestigations=['{scope}']\n")).unwrap();
+ fs::write(root.join("projects.toml"),"[projects]\ndemo='/offline/demo'\n").unwrap();
+ fs::write(evidence.join("ref.md"),"---\nattachments: [payload.bin]\n---\n# Attachment evidence\n").unwrap();
+ fs::write(root.join("payload-source.bin"),b"do not follow").unwrap(); symlink(root.join("payload-source.bin"),evidence.join("payload.bin")).unwrap();
+ let store=Store::open(&root).unwrap();
+ let scan=store.scan().unwrap(); let check=store.check(None).unwrap(); let scoped=store.check(Some(scope)).unwrap();
+ println!("global scan diagnostics={:?}",scan.diagnostics.iter().map(|d|(&d.path,&d.code)).collect::<Vec<_>>());
+ println!("global check valid={:?} diagnostics={:?}",check.valid,check.diagnostics.iter().map(|d|(&d.path,&d.code)).collect::<Vec<_>>());
+ println!("scoped check valid={:?} diagnostics={:?}",scoped.valid,scoped.diagnostics.iter().map(|d|(&d.path,&d.code)).collect::<Vec<_>>());
+ assert_eq!(scan.diagnostics, check.diagnostics); assert_eq!(scan.diagnostics, scoped.diagnostics); assert_eq!(scan.diagnostics[0].code, "missing_attachment"); assert_eq!(check.valid,Some(false)); assert_eq!(scoped.valid,Some(false));
+ fs::write(evidence.join("ref.md"),"# Unreferenced evidence\n").unwrap();
+ assert!(store.scan().unwrap().diagnostics.is_empty()); assert_eq!(store.check(None).unwrap().valid,Some(true)); assert_eq!(store.check(Some(scope)).unwrap().valid,Some(true));
+ println!("Unreferenced opaque symlink remains valid across scan/check, as required");
+ fs::remove_dir_all(root).unwrap();
+}
+
+SOURCE HASHES (source-identical measured correction):
+{
+  "casefile/casefile-store/src/checking.rs": "68793eb54a3fbc404349d1c568c3eddf2635fa89447ce652da76740c81d8531c",
+  "casefile/casefile-store/src/scanning.rs": "573d040eda482c1b1c2c7b92c8a6bb51cb14c19a6af880957c013cd8ea77650b",
+  "casefile/casefile-store/src/validation.rs": "f75e0c0b6d9f2069b81f80204b226f8e76848e875a81d855c2eead690ed9638d",
+  "casefile/casefile-store/tests/scanning.rs": "35fe31980ac57d7c6a1c378426f8054422b1617fd90478cdb28b6b5e7d883a48"
+}
+BASELINE VERIFICATION:
+casefile/benchmarks/BASELINE.md: OK
+casefile/benchmarks/results/hmd057-before.json: OK
+casefile/benchmarks/results/hmd057-before.log: OK
+casefile/casefile-store-sqlite/benches/baselines.rs: OK
+Native saved-before JSON hash checks: 236 PASS
+All 59 native baseline sample/estimate/benchmark records equal durable hmd057-before.json.
+Original benchmark sources and initial b8 timing JSON/logs byte-equal b8 (git diff --exit-code: 0).

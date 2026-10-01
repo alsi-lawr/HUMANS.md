@@ -28,9 +28,13 @@ pub(super) fn acquire(root: &Path, keys: &BTreeMap<String, bool>) -> Result<Vec<
     let root = fs::canonicalize(root)?;
     let root_identity = filesystem_identity(&root)?;
     let mut canonical = BTreeMap::new();
+    let mut case_probes = BTreeMap::new();
     for (key, exclusive) in keys {
         let key = if let Some(path) = key.strip_prefix("path:") {
-            format!("path:{}", canonical_relative(&root, path)?)
+            format!(
+                "path:{}",
+                canonical_relative(&root, path, &mut case_probes)?
+            )
         } else {
             key.clone()
         };
@@ -65,13 +69,17 @@ pub(super) fn acquire(root: &Path, keys: &BTreeMap<String, bool>) -> Result<Vec<
         .collect()
 }
 
-fn canonical_relative(root: &Path, path: &str) -> Result<String, StoreError> {
+fn canonical_relative(
+    root: &Path,
+    path: &str,
+    probes: &mut BTreeMap<PathBuf, bool>,
+) -> Result<String, StoreError> {
     let mut parent = root.to_path_buf();
-    let mut sensitive = case_sensitive(&parent)?;
+    let mut sensitive = cached_case_sensitive(&parent, probes)?;
     let mut names = Vec::new();
     for name in path.split('/') {
         if parent.is_dir() {
-            sensitive = case_sensitive(&parent)?;
+            sensitive = cached_case_sensitive(&parent, probes)?;
         }
         names.push(if sensitive {
             name.to_owned()
@@ -83,8 +91,20 @@ fn canonical_relative(root: &Path, path: &str) -> Result<String, StoreError> {
     Ok(names.join("/"))
 }
 
+fn cached_case_sensitive(
+    path: &Path,
+    probes: &mut BTreeMap<PathBuf, bool>,
+) -> Result<bool, StoreError> {
+    if let Some(sensitive) = probes.get(path) {
+        return Ok(*sensitive);
+    }
+    let sensitive = case_sensitive(path, probes)?;
+    probes.insert(path.to_owned(), sensitive);
+    Ok(sensitive)
+}
+
 #[cfg(target_os = "macos")]
-fn case_sensitive(path: &Path) -> Result<bool, StoreError> {
+fn case_sensitive(path: &Path, _probes: &mut BTreeMap<PathBuf, bool>) -> Result<bool, StoreError> {
     use std::{ffi::CString, os::unix::ffi::OsStrExt};
     let path = CString::new(path.as_os_str().as_bytes())
         .map_err(|error| StoreError::Invalid(error.to_string()))?;
@@ -96,7 +116,7 @@ fn case_sensitive(path: &Path) -> Result<bool, StoreError> {
 }
 
 #[cfg(windows)]
-fn case_sensitive(path: &Path) -> Result<bool, StoreError> {
+fn case_sensitive(path: &Path, _probes: &mut BTreeMap<PathBuf, bool>) -> Result<bool, StoreError> {
     use std::os::windows::{fs::OpenOptionsExt, io::AsRawHandle};
     use windows_sys::Win32::{
         Foundation::HANDLE,
@@ -133,7 +153,7 @@ fn case_sensitive(path: &Path) -> Result<bool, StoreError> {
 }
 
 #[cfg(not(any(windows, target_os = "macos")))]
-fn case_sensitive(path: &Path) -> Result<bool, StoreError> {
+fn case_sensitive(path: &Path, _probes: &mut BTreeMap<PathBuf, bool>) -> Result<bool, StoreError> {
     // Consult an existing child rather than infer sensitivity from the host OS: mounted
     // filesystems can accept case aliases even on Unix.
     for entry in fs::read_dir(path)? {
@@ -166,7 +186,7 @@ fn case_sensitive(path: &Path) -> Result<bool, StoreError> {
         }
     }
     match path.parent() {
-        Some(parent) if parent != path => case_sensitive(parent),
+        Some(parent) if parent != path => cached_case_sensitive(parent, _probes),
         _ => Ok(true),
     }
 }
@@ -185,24 +205,31 @@ pub(super) fn canonical_target(root: &Path, relative: &str) -> Result<String, St
     let parent = path.parent().unwrap_or(Path::new(""));
     crate::store::require_safe_target_parent(root, parent, "mutation target")?;
     let name = path.file_name().expect("checked target filename");
-    let entries = fs::read_dir(root.join(parent))?.collect::<Result<Vec<_>, _>>()?;
-    if entries.iter().any(|entry| entry.file_name() == name) {
+    if cached_case_sensitive(&root.join(parent), &mut BTreeMap::new())? {
         return Ok(relative.into());
     }
+    let mut matching_names = Vec::new();
+    for entry in fs::read_dir(root.join(parent))? {
+        let entry = entry?;
+        let actual = entry.file_name();
+        if actual == name {
+            return Ok(relative.into());
+        }
+        if actual
+            .to_str()
+            .zip(name.to_str())
+            .is_some_and(|(actual, requested)| actual.to_lowercase() == requested.to_lowercase())
+        {
+            matching_names.push(actual);
+        }
+    }
     let identity = filesystem_identity(&target)?;
-    let matches = entries
-        .into_iter()
-        .filter_map(|entry| {
-            let matching = entry.file_name().to_string_lossy().to_lowercase()
-                == name.to_string_lossy().to_lowercase();
-            matching.then_some(entry)
-        })
-        .filter_map(|entry| match filesystem_identity(&entry.path()) {
-            Ok(value) if value == identity => Some(Ok(entry.file_name())),
-            Ok(_) => None,
-            Err(error) => Some(Err(error)),
-        })
-        .collect::<Result<Vec<_>, StoreError>>()?;
+    let mut matches = Vec::new();
+    for name in matching_names {
+        if filesystem_identity(&root.join(parent).join(&name))? == identity {
+            matches.push(name);
+        }
+    }
     if let [name] = matches.as_slice() {
         let parent = parent.to_string_lossy().replace('\\', "/");
         return Ok(if parent.is_empty() {

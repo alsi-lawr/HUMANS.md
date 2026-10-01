@@ -18,8 +18,17 @@ use std::{
 };
 use thiserror::Error;
 
-pub const PROVIDER_PROTOCOL_VERSION: u32 = 3;
-const PREVIEW_LIMIT: usize = 256;
+pub const PROVIDER_PROTOCOL_VERSION: u32 = 5;
+
+mod indexed;
+pub use indexed::WorkspaceReadToken;
+mod preview_vault;
+mod review;
+mod watching;
+use preview_vault::{PreviewVault, StoredPreview};
+pub use review::{
+    ProviderPreview, ProviderPreviewKind, ProviderReviewOperation, ProviderReviewOperationKind,
+};
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -147,7 +156,7 @@ pub struct ProviderInvestigation {
 pub struct ProviderSnapshot {
     pub capabilities: ProviderCapabilities,
     pub activation: ActivationState,
-    pub revision: Revision,
+    pub freshness: crate::CatalogueToken,
     pub diagnostic_coverage: ProviderDiagnosticCoverage,
     pub catalogue: ProviderCatalogue,
     pub cache: CacheState,
@@ -213,29 +222,29 @@ pub enum ProviderQuery {
 #[serde(tag = "result", rename_all = "snake_case")]
 pub enum ProviderQueryResult {
     Diagnostics {
-        revision: Revision,
+        freshness: crate::ScopeReadToken,
         scope: InvestigationScope,
         diagnostics: Vec<Diagnostic>,
         total_count: usize,
     },
     RecordIndex {
-        revision: Revision,
+        freshness: crate::ScopeReadToken,
         scope: InvestigationScope,
         diagnostic_coverage: ProviderIndexDiagnosticCoverage,
         records: Vec<ProviderRecordIndexEntry>,
     },
     RecordDetail {
-        revision: Revision,
+        freshness: crate::ScopeReadToken,
         identity: InvestigationScopedIdentity,
         record: Option<Box<ProviderRecordDetail>>,
     },
     Boards {
-        revision: Revision,
+        freshness: crate::ScopeReadToken,
         scope: InvestigationScope,
         boards: Vec<DerivedBoard>,
     },
     StrategyTransitions {
-        revision: Revision,
+        freshness: crate::ScopeReadToken,
         scope: InvestigationScope,
         transitions: Vec<StrategyTransitionProjection>,
     },
@@ -293,22 +302,14 @@ where
         snapshot: &DerivedSnapshot,
         source: &dyn RevisionSource,
     ) -> Result<(), String> {
+        let prepared = self.prepare(snapshot).map_err(|error| error.to_string())?;
         match self
-            .state(&snapshot.source_revision)
+            .publish(prepared, source)
             .map_err(|error| error.to_string())?
         {
             Indexed::Current { .. } => Ok(()),
             Indexed::Missing | Indexed::Stale { .. } => {
-                let prepared = self.prepare(snapshot).map_err(|error| error.to_string())?;
-                match self
-                    .publish(prepared, source)
-                    .map_err(|error| error.to_string())?
-                {
-                    Indexed::Current { .. } => Ok(()),
-                    Indexed::Missing | Indexed::Stale { .. } => {
-                        Err("canonical content changed during cache refresh".into())
-                    }
-                }
+                Err("canonical content changed during cache refresh".into())
             }
         }
     }
@@ -329,27 +330,6 @@ impl ProviderCache for NoCache {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-pub struct ProviderPreview {
-    pub preview_id: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub rendered_bytes: Option<Vec<u8>>,
-    #[serde(flatten)]
-    pub canonical: Preview,
-    pub no_op: bool,
-    pub approval_required: bool,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-pub struct ProviderBatchPreview {
-    pub preview_id: String,
-    pub rendered_bytes: Vec<Option<Vec<u8>>>,
-    #[serde(flatten)]
-    pub canonical: ChangeBatchPreview,
-    pub no_op: bool,
-    pub approval_required: bool,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "operation", rename_all = "snake_case")]
 pub enum ProgressOperation {
     Bootstrap {
@@ -359,40 +339,6 @@ pub enum ProgressOperation {
         investigation: String,
         entries: Vec<ProgressEntry>,
     },
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-pub struct ProviderProgressPreview {
-    pub preview_id: String,
-    pub operation: ProgressOperation,
-    pub canonical: ProgressPreview,
-    pub approval_required: bool,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct ProviderStrategyTransitionPreview {
-    pub preview_id: String,
-    pub canonical: StrategyTransitionPreview,
-    pub approval_required: bool,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct ProviderWriterBindingPreview {
-    pub preview_id: String,
-    pub canonical: WriterBindingPreview,
-    pub approval_required: bool,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-pub struct DefaultBoardPreview {
-    pub preview_id: String,
-    pub investigation: String,
-    pub canonical: Preview,
-    pub rendered_bytes: Vec<u8>,
-    pub no_op: bool,
-    pub approval_required: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -428,8 +374,10 @@ pub enum ProviderError {
     Store(#[from] StoreError),
     #[error("governed provider mutation is unavailable: {0}")]
     ReadOnly(String),
-    #[error("provider preview is unknown, expired, or was altered")]
+    #[error("provider preview is unknown, expired, or belongs to another operation")]
     PreviewIntegrity,
+    #[error("provider index read failed: {0}")]
+    CacheRead(String),
     #[error("default delivery-board mapping is invalid: {0}")]
     DefaultBoardMapping(String),
     #[error("unsupported provider protocol version {requested}; supported version is {supported}")]
@@ -438,27 +386,11 @@ pub enum ProviderError {
     AmbiguousRecordIdentity { paths: Vec<String> },
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-enum StoredPreview {
-    Record(Preview, Option<Vec<u8>>, bool, bool),
-    RecordBatch(ChangeBatchPreview, Vec<Option<Vec<u8>>>, bool, bool),
-    Progress(ProgressOperation, ProgressPreview, bool),
-    Board(String, Preview, Vec<u8>, bool, bool),
-    StrategyTransition(StrategyTransitionPreview, bool),
-    WriterBinding(WriterBindingPreview, bool),
-}
-
-#[derive(Default)]
-struct PreviewVault {
-    next: u64,
-    order: VecDeque<String>,
-    values: BTreeMap<String, StoredPreview>,
-}
-
 pub struct Provider<C = NoCache> {
     store: Store,
     cache: C,
     previews: Mutex<PreviewVault>,
+    watch: Mutex<Option<watching::CacheWatch>>,
 }
 
 impl Provider<NoCache> {
@@ -469,10 +401,14 @@ impl Provider<NoCache> {
 
 impl<C: ProviderCache> Provider<C> {
     pub fn new(store: Store, cache: C) -> Self {
+        let watch = cache
+            .configured()
+            .then(|| watching::CacheWatch::new(store.observation_root()));
         Self {
             store,
             cache,
             previews: Mutex::new(PreviewVault::default()),
+            watch: Mutex::new(watch),
         }
     }
 
@@ -513,7 +449,9 @@ impl<C: ProviderCache> Provider<C> {
         Ok(ProviderSnapshot {
             capabilities: capabilities(baseline.activation),
             activation: baseline.activation,
-            revision: baseline.revision,
+            freshness: crate::CatalogueToken {
+                revision: baseline.revision,
+            },
             diagnostic_coverage: ProviderDiagnosticCoverage {
                 catalogue: ProviderDiagnosticCount {
                     count: diagnostic_count,
@@ -565,8 +503,14 @@ impl<C: ProviderCache> Provider<C> {
                 if size > 256 * 1024 {
                     return Err(StoreError::Invalid("scoped diagnostics exceed the 256 KiB field budget; query exact record_detail identities".into()).into());
                 }
+                let crate::CheckFreshness::ScopeRead { token: freshness } = result.freshness else {
+                    return Err(StoreError::Invalid(
+                        "scoped diagnostics require scoped freshness".into(),
+                    )
+                    .into());
+                };
                 ProviderQueryResult::Diagnostics {
-                    revision: result.revision,
+                    freshness,
                     scope,
                     diagnostics,
                     total_count,
@@ -588,11 +532,7 @@ impl<C: ProviderCache> Provider<C> {
             &scope.investigation,
             crate::scanning::ScopedRead::RecordIndex,
         )?;
-        let progress = crate::derived::scoped_progress(
-            &selected.entries,
-            &selected.diagnostics,
-            &selected.path,
-        );
+        let progress = selected.progress.as_ref().map(|progress| &progress.tickets);
         let diagnostics = diagnostic_counts(&selected.diagnostics);
         let records = selected
             .entries
@@ -622,23 +562,25 @@ impl<C: ProviderCache> Provider<C> {
                             summary.2 == "accepted" && entry.kind == Some(Kind::Ticket)
                         })
                         .map(|summary| {
-                            progress.get(&summary.0).map_or(
-                                ProviderRecordProgressSummary {
-                                    status: casefile_core::ProgressStatus::Unknown,
-                                    note_count: 0,
-                                },
-                                |progress| ProviderRecordProgressSummary {
-                                    status: progress.status,
-                                    note_count: progress.notes.len(),
-                                },
-                            )
+                            progress
+                                .and_then(|progress| progress.get(&summary.0))
+                                .map_or(
+                                    ProviderRecordProgressSummary {
+                                        status: casefile_core::ProgressStatus::Unknown,
+                                        note_count: 0,
+                                    },
+                                    |progress| ProviderRecordProgressSummary {
+                                        status: progress.status,
+                                        note_count: progress.note_count,
+                                    },
+                                )
                         }),
                     diagnostic_count: diagnostics.get(&entry.path).copied().unwrap_or_default(),
                 }
             })
             .collect();
         Ok(ProviderQueryResult::RecordIndex {
-            revision: selected.revision,
+            freshness: selected.freshness,
             diagnostic_coverage: ProviderIndexDiagnosticCoverage {
                 scope: scope.clone(),
                 kind: ProviderIndexDiagnosticCoverageKind::LocalAndInvestigation,
@@ -652,7 +594,7 @@ impl<C: ProviderCache> Provider<C> {
         &self,
         identity: InvestigationScopedIdentity,
     ) -> Result<ProviderQueryResult, ProviderError> {
-        let selected = crate::scanning::scoped_detail_scan(
+        let mut selected = crate::scanning::scoped_detail_scan(
             self.store.observation_root(),
             &identity.scope.project,
             &identity.scope.investigation,
@@ -674,17 +616,20 @@ impl<C: ProviderCache> Provider<C> {
         let record = matches
             .first()
             .map(|entry| {
-                let text = std::str::from_utf8(&entry.original_bytes)
-                    .map_err(|_| StoreError::Invalid("record detail must be UTF-8".into()))?;
                 let kind = entry.kind.expect("filtered work item");
-                let draft = casefile_core::parse_draft(&entry.path, kind, text)
-                    .map_err(|diagnostics| StoreError::Invalid(diagnostics[0].message.clone()))?;
-                let progress = crate::derived::scoped_progress(
-                    &selected.entries,
-                    &selected.diagnostics,
-                    &selected.path,
-                )
-                .remove(&identity.identity);
+                let draft = selected.drafts.remove(&entry.path).ok_or_else(|| {
+                    StoreError::Invalid(format!(
+                        "{}: requested record has no valid draft",
+                        entry.path
+                    ))
+                })?;
+                let progress = selected
+                    .progress
+                    .take()
+                    .and_then(|progress| progress.detail)
+                    .and_then(|log| {
+                        crate::derived::fold_progress(log.entries).remove(&identity.identity)
+                    });
                 let diagnostics = selected
                     .diagnostics
                     .iter()
@@ -703,7 +648,7 @@ impl<C: ProviderCache> Provider<C> {
             })
             .transpose()?;
         Ok(ProviderQueryResult::RecordDetail {
-            revision: selected.revision,
+            freshness: selected.freshness,
             identity,
             record,
         })
@@ -718,13 +663,13 @@ impl<C: ProviderCache> Provider<C> {
         )?;
         let boards = crate::derived::scoped_boards(
             &selected.entries,
-            &selected.diagnostics,
+            &selected.boards,
+            selected.progress.as_ref(),
             &selected.project,
             &selected.investigation,
-            &selected.path,
         );
         Ok(ProviderQueryResult::Boards {
-            revision: selected.revision,
+            freshness: selected.freshness,
             scope,
             boards,
         })
@@ -755,119 +700,93 @@ impl<C: ProviderCache> Provider<C> {
             })
             .collect();
         Ok(ProviderQueryResult::StrategyTransitions {
-            revision: selected.revision,
+            freshness: selected.freshness,
             scope,
             transitions,
         })
     }
 
     pub fn refresh_full_cache(&self) -> Result<CacheState, ProviderError> {
-        let scan = self.store.scan()?;
-        let derived = self.store.derive_snapshot(&scan);
-        Ok(self.refresh_cache(&derived))
+        let (state, _) = self.full_cache_phase(
+            |cache, revision, published| {
+                (
+                    if published {
+                        CacheState::Current {
+                            source_revision: revision.clone(),
+                        }
+                    } else {
+                        cache.observe(revision)
+                    },
+                    Some(()),
+                )
+            },
+            |_, _, ()| Ok(()),
+        )?;
+        Ok(state)
     }
 
     pub fn preview_record(&self, request: ChangeRequest) -> Result<ProviderPreview, ProviderError> {
         self.require_mutation()?;
         let canonical = self.store.preview(request)?;
-        let rendered_bytes = canonical
-            .request
-            .rendered()
-            .transpose()
-            .map_err(|diagnostic| StoreError::Invalid(diagnostic.message))?;
-        let no_op = canonical.diff.is_empty() && canonical.diagnostics.is_empty();
-        let approval_required = record_approval_required(&canonical.request);
-        let preview_id = self.remember(StoredPreview::Record(
-            canonical.clone(),
-            rendered_bytes.clone(),
-            no_op,
-            approval_required,
-        ));
-        Ok(ProviderPreview {
-            preview_id,
-            rendered_bytes,
-            canonical,
-            no_op,
-            approval_required,
-        })
+        Ok(self.remember(StoredPreview::Record(canonical)))
+    }
+
+    pub fn preview_kind(&self, preview_id: &str) -> Result<ProviderPreviewKind, ProviderError> {
+        Ok(self.retained(preview_id)?.kind())
     }
 
     pub fn apply_record(
         &self,
-        preview: ProviderPreview,
+        preview_id: &str,
     ) -> Result<ProviderApplyOutcome<ProviderRecordApplyResult>, ProviderError> {
+        self.outcome(self.apply_record_canonical(preview_id)?)
+    }
+
+    fn apply_record_canonical(
+        &self,
+        preview_id: &str,
+    ) -> Result<ProviderRecordApplyResult, ProviderError> {
         self.require_mutation()?;
-        self.verify(
-            &preview.preview_id,
-            &StoredPreview::Record(
-                preview.canonical.clone(),
-                preview.rendered_bytes,
-                preview.no_op,
-                preview.approval_required,
-            ),
-        )?;
-        let result = self.store.apply(preview.canonical)?;
-        self.outcome(ProviderRecordApplyResult {
+        let original = self.retained(preview_id)?;
+        let StoredPreview::Record(preview) = original.as_ref() else {
+            return Err(ProviderError::PreviewIntegrity);
+        };
+        let result = self.store.apply_ref(preview)?;
+        Ok(ProviderRecordApplyResult {
             result,
-            no_op: preview.no_op,
+            no_op: preview.diff.is_empty() && preview.diagnostics.is_empty(),
         })
     }
 
     pub fn preview_record_batch(
         &self,
         requests: Vec<ChangeRequest>,
-    ) -> Result<ProviderBatchPreview, ProviderError> {
+    ) -> Result<ProviderPreview, ProviderError> {
         self.require_mutation()?;
         let canonical = self.store.preview_batch(requests)?;
-        let rendered_bytes = canonical
-            .requests
-            .iter()
-            .map(ChangeRequest::rendered)
-            .map(Option::transpose)
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|diagnostic| StoreError::Invalid(diagnostic.message))?;
-        let no_op = canonical.diff.is_empty() && canonical.diagnostics.is_empty();
-        let approval_required = canonical.requests.iter().any(record_approval_required);
-        let preview_id = self.remember(StoredPreview::RecordBatch(
-            canonical.clone(),
-            rendered_bytes.clone(),
-            no_op,
-            approval_required,
-        ));
-        Ok(ProviderBatchPreview {
-            preview_id,
-            rendered_bytes,
-            canonical,
-            no_op,
-            approval_required,
-        })
+        Ok(self.remember(StoredPreview::RecordBatch(canonical)))
     }
 
     pub fn apply_record_batch(
         &self,
-        preview: ProviderBatchPreview,
+        preview_id: &str,
     ) -> Result<ProviderApplyOutcome<ProviderRecordBatchApplyResult>, ProviderError> {
         self.require_mutation()?;
-        self.verify(
-            &preview.preview_id,
-            &StoredPreview::RecordBatch(
-                preview.canonical.clone(),
-                preview.rendered_bytes,
-                preview.no_op,
-                preview.approval_required,
-            ),
-        )?;
-        let result = self.store.apply_batch(preview.canonical)?;
+        let original = self.retained(preview_id)?;
+        let StoredPreview::RecordBatch(preview) = original.as_ref() else {
+            return Err(ProviderError::PreviewIntegrity);
+        };
+        let result = self.store.apply_batch_ref(preview)?;
         self.outcome(ProviderRecordBatchApplyResult {
             result,
-            no_op: preview.no_op,
+            no_op: preview.diff.is_empty() && preview.diagnostics.is_empty(),
         })
     }
 
     pub fn bootstrap_progress(
         &self,
         investigation: impl Into<String>,
-    ) -> Result<ProviderProgressPreview, ProviderError> {
+    ) -> Result<ProviderPreview, ProviderError> {
         self.preview_progress(ProgressOperation::Bootstrap {
             investigation: investigation.into(),
         })
@@ -876,59 +795,45 @@ impl<C: ProviderCache> Provider<C> {
     pub fn preview_progress(
         &self,
         operation: ProgressOperation,
-    ) -> Result<ProviderProgressPreview, ProviderError> {
+    ) -> Result<ProviderPreview, ProviderError> {
         let operation = canonical_progress_operation(operation)?;
         self.require_mutation()?;
-        let request = match &operation {
+        let request = match operation {
             ProgressOperation::Bootstrap { investigation } => {
-                self.store.bootstrap_progress(investigation)?
+                self.store.bootstrap_progress(&investigation)?
             }
             ProgressOperation::Append {
                 investigation,
                 entries,
             } => ProgressChangeRequest {
-                investigation: investigation.clone(),
-                entries: entries.clone(),
+                investigation,
+                entries,
                 replacement: None,
                 replacement_source: None,
                 bootstrap: false,
             },
         };
         let canonical = self.store.preview_progress(request)?;
-        let preview_id = self.remember(StoredPreview::Progress(
-            operation.clone(),
-            canonical.clone(),
-            false,
-        ));
-        Ok(ProviderProgressPreview {
-            preview_id,
-            operation,
-            canonical,
-            approval_required: false,
-        })
+        Ok(self.remember(StoredPreview::Progress(canonical)))
     }
 
     pub fn apply_progress(
         &self,
-        preview: ProviderProgressPreview,
+        preview_id: &str,
     ) -> Result<ProviderApplyOutcome<ProgressApplyResult>, ProviderError> {
         self.require_mutation()?;
-        self.verify(
-            &preview.preview_id,
-            &StoredPreview::Progress(
-                preview.operation,
-                preview.canonical.clone(),
-                preview.approval_required,
-            ),
-        )?;
-        let result = self.store.apply_progress(preview.canonical)?;
+        let original = self.retained(preview_id)?;
+        let StoredPreview::Progress(preview) = original.as_ref() else {
+            return Err(ProviderError::PreviewIntegrity);
+        };
+        let result = self.store.apply_progress_ref(preview)?;
         self.outcome(result)
     }
 
     pub fn preview_default_delivery_board(
         &self,
         investigation: impl Into<String>,
-    ) -> Result<DefaultBoardPreview, ProviderError> {
+    ) -> Result<ProviderPreview, ProviderError> {
         let investigation = checked_path(&investigation.into())?;
         self.require_mutation()?;
         let (_, active, _) = crate::activation::activation(self.store.observation_root())?;
@@ -983,113 +888,72 @@ impl<C: ProviderCache> Provider<C> {
                 "delivery.toml already differs; the existing board was preserved",
             ));
         }
-        let no_op =
-            existing.is_some() && canonical.diff.is_empty() && canonical.diagnostics.is_empty();
-        let rendered_bytes = canonical
-            .request
-            .rendered()
-            .transpose()
-            .map_err(|diagnostic| StoreError::Invalid(diagnostic.message))?
-            .expect("board renders bytes");
-        let preview_id = self.remember(StoredPreview::Board(
-            investigation.clone(),
-            canonical.clone(),
-            rendered_bytes.clone(),
-            no_op,
-            false,
-        ));
-        Ok(DefaultBoardPreview {
-            preview_id,
-            investigation,
-            canonical,
-            rendered_bytes,
-            no_op,
-            approval_required: false,
-        })
+        Ok(self.remember(StoredPreview::Board(canonical)))
     }
 
     pub fn apply_default_delivery_board(
         &self,
-        preview: DefaultBoardPreview,
+        preview_id: &str,
     ) -> Result<ProviderApplyOutcome<DefaultBoardApplyResult>, ProviderError> {
         self.require_mutation()?;
-        self.verify(
-            &preview.preview_id,
-            &StoredPreview::Board(
-                preview.investigation,
-                preview.canonical.clone(),
-                preview.rendered_bytes,
-                preview.no_op,
-                preview.approval_required,
-            ),
-        )?;
-        if !preview.canonical.diagnostics.is_empty() {
+        let original = self.retained(preview_id)?;
+        let StoredPreview::Board(preview) = original.as_ref() else {
+            return Err(ProviderError::PreviewIntegrity);
+        };
+        if !preview.diagnostics.is_empty() {
             return Err(StoreError::Invalid(
                 "default delivery-board preview contains diagnostics".into(),
             )
             .into());
         }
-        let result = self.store.apply(preview.canonical)?;
+        let result = self.store.apply_ref(preview)?;
         self.outcome(DefaultBoardApplyResult {
             result,
-            no_op: preview.no_op,
+            no_op: preview.diff.is_empty(),
         })
     }
 
     pub fn preview_strategy_transition(
         &self,
         request: StrategyTransitionRequest,
-    ) -> Result<ProviderStrategyTransitionPreview, ProviderError> {
+    ) -> Result<ProviderPreview, ProviderError> {
         self.require_mutation()?;
         let canonical = self.store.preview_strategy_transition(request)?;
-        let preview_id = self.remember(StoredPreview::StrategyTransition(canonical.clone(), false));
-        Ok(ProviderStrategyTransitionPreview {
-            preview_id,
-            canonical,
-            approval_required: false,
-        })
+        Ok(self.remember(StoredPreview::StrategyTransition(canonical)))
     }
 
     pub fn apply_strategy_transition(
         &self,
-        preview: ProviderStrategyTransitionPreview,
+        preview_id: &str,
     ) -> Result<ProviderApplyOutcome<GovernedApplyResult>, ProviderError> {
         self.require_mutation()?;
-        self.verify(
-            &preview.preview_id,
-            &StoredPreview::StrategyTransition(
-                preview.canonical.clone(),
-                preview.approval_required,
-            ),
-        )?;
-        let result = self.store.apply_strategy_transition(preview.canonical)?;
+        let original = self.retained(preview_id)?;
+        let StoredPreview::StrategyTransition(preview) = original.as_ref() else {
+            return Err(ProviderError::PreviewIntegrity);
+        };
+        let result = self.store.apply_strategy_transition_ref(preview)?;
         self.outcome(result)
     }
 
     pub fn preview_writer_binding(
         &self,
         request: WriterBindingRequest,
-    ) -> Result<ProviderWriterBindingPreview, ProviderError> {
+    ) -> Result<ProviderPreview, ProviderError> {
         self.require_mutation()?;
         let canonical = self.store.preview_writer_binding(request)?;
-        let preview_id = self.remember(StoredPreview::WriterBinding(canonical.clone(), false));
-        Ok(ProviderWriterBindingPreview {
-            preview_id,
-            canonical,
-            approval_required: false,
-        })
+        Ok(self.remember(StoredPreview::WriterBinding(canonical)))
     }
 
     pub fn apply_writer_binding(
         &self,
-        preview: ProviderWriterBindingPreview,
+        preview_id: &str,
     ) -> Result<ProviderApplyOutcome<GovernedApplyResult>, ProviderError> {
         self.require_mutation()?;
-        self.verify(
-            &preview.preview_id,
-            &StoredPreview::WriterBinding(preview.canonical.clone(), preview.approval_required),
-        )?;
-        let result = self.store.apply_writer_binding(preview.canonical)?;
+        let original = self.retained(preview_id)?;
+        let StoredPreview::WriterBinding(preview) = original.as_ref() else {
+            return Err(ProviderError::PreviewIntegrity);
+        };
+        let result = self.store.apply_writer_binding_ref(preview)?;
         self.outcome(result)
     }
 
@@ -1111,27 +975,12 @@ impl<C: ProviderCache> Provider<C> {
         }
     }
 
-    fn remember(&self, value: StoredPreview) -> String {
-        let mut vault = self.previews.lock().expect("preview vault");
-        vault.next += 1;
-        let id = format!("provider-preview-{}", vault.next);
-        vault.order.push_back(id.clone());
-        vault.values.insert(id.clone(), value);
-        while vault.order.len() > PREVIEW_LIMIT {
-            if let Some(expired) = vault.order.pop_front() {
-                vault.values.remove(&expired);
-            }
-        }
-        id
+    fn remember(&self, value: StoredPreview) -> ProviderPreview {
+        self.previews.lock().expect("preview vault").remember(value)
     }
 
-    fn verify(&self, id: &str, expected: &StoredPreview) -> Result<(), ProviderError> {
-        let vault = self.previews.lock().expect("preview vault");
-        if vault.values.get(id) == Some(expected) {
-            Ok(())
-        } else {
-            Err(ProviderError::PreviewIntegrity)
-        }
+    fn retained(&self, id: &str) -> Result<std::sync::Arc<StoredPreview>, ProviderError> {
+        self.previews.lock().expect("preview vault").get(id)
     }
 
     fn refresh_cache(&self, derived: &DerivedSnapshot) -> CacheState {
@@ -1399,7 +1248,7 @@ mod hierarchy_tests {
         .expect("activation");
         fs::write(
             root.path().join("projects.toml"),
-            "schema_version = 1\n[projects]\ndemo = '/source/demo'\n",
+            "schema_version = 1\n[projects]\ndemo = '//source/demo'\n",
         )
         .expect("map");
         fs::write(

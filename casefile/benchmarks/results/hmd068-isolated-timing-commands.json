@@ -1,0 +1,122 @@
+[
+  {
+    "phase": "historical",
+    "command": [
+      "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/boards-diagnostic/matched-reader/historical/target/release/deps/baselines-c4809f1d9a5e36eb",
+      "--bench",
+      "--save-baseline",
+      "hmd068-isolated-before"
+    ],
+    "cwd": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/isolated/historical-source",
+    "CRITERION_HOME": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/isolated/criterion",
+    "TMPDIR": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/isolated/measurement-tmp",
+    "exit_code": 0,
+    "elapsed_seconds": 276.48410654067993,
+    "log": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/isolated/historical-baselines-criterion.log"
+  },
+  {
+    "phase": "historical",
+    "command": [
+      "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/boards-diagnostic/matched-reader/historical/target/release/deps/priority-e055286706c230ab",
+      "--bench",
+      "--save-baseline",
+      "hmd068-isolated-before"
+    ],
+    "cwd": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/isolated/historical-source",
+    "CRITERION_HOME": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/isolated/criterion",
+    "TMPDIR": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/isolated/measurement-tmp",
+    "exit_code": 0,
+    "elapsed_seconds": 55.05924963951111,
+    "log": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/isolated/historical-priority-criterion.log"
+  },
+  {
+    "phase": "historical",
+    "command": [
+      "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/boards-diagnostic/matched-reader/historical/target/release/deps/http-7588797662343eab",
+      "--bench",
+      "--save-baseline",
+      "hmd068-isolated-before"
+    ],
+    "cwd": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/isolated/historical-source",
+    "CRITERION_HOME": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/isolated/criterion",
+    "TMPDIR": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/isolated/measurement-tmp",
+    "exit_code": 0,
+    "elapsed_seconds": 48.87570309638977,
+    "log": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/isolated/historical-http-criterion.log"
+  },
+  {
+    "phase": "historical",
+    "command": [
+      "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/boards-diagnostic/matched-reader/historical/target/release/deps/interactions-a5a41a6618a92aa7",
+      "--bench",
+      "--save-baseline",
+      "hmd068-isolated-before"
+    ],
+    "cwd": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/isolated/historical-source",
+    "CRITERION_HOME": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/isolated/criterion",
+    "TMPDIR": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/isolated/measurement-tmp",
+    "exit_code": 0,
+    "elapsed_seconds": 18.177924871444702,
+    "log": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/isolated/historical-interactions-criterion.log"
+  },
+  {
+    "phase": "current",
+    "command": [
+      "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/boards-diagnostic/matched-reader/current/target/release/deps/baselines-79b66f38661bc100",
+      "--bench",
+      "--baseline",
+      "hmd068-isolated-before"
+    ],
+    "cwd": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/isolated/current-source",
+    "CRITERION_HOME": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/isolated/criterion",
+    "TMPDIR": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/isolated/measurement-tmp",
+    "exit_code": 0,
+    "elapsed_seconds": 238.79985404014587,
+    "log": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/isolated/current-baselines-criterion.log"
+  },
+  {
+    "phase": "current",
+    "command": [
+      "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/boards-diagnostic/matched-reader/current/target/release/deps/priority-4c02a3bbca696e82",
+      "--bench",
+      "--baseline",
+      "hmd068-isolated-before"
+    ],
+    "cwd": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/isolated/current-source",
+    "CRITERION_HOME": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/isolated/criterion",
+    "TMPDIR": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/isolated/measurement-tmp",
+    "exit_code": 0,
+    "elapsed_seconds": 49.9616858959198,
+    "log": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/isolated/current-priority-criterion.log"
+  },
+  {
+    "phase": "current",
+    "command": [
+      "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/boards-diagnostic/matched-reader/current/target/release/deps/http-5eb4c4006879e177",
+      "--bench",
+      "--baseline",
+      "hmd068-isolated-before"
+    ],
+    "cwd": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/isolated/current-source",
+    "CRITERION_HOME": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/isolated/criterion",
+    "TMPDIR": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/isolated/measurement-tmp",
+    "exit_code": 0,
+    "elapsed_seconds": 47.33240079879761,
+    "log": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/isolated/current-http-criterion.log"
+  },
+  {
+    "phase": "current",
+    "command": [
+      "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/boards-diagnostic/matched-reader/current/target/release/deps/interactions-023394bd4bbc43da",
+      "--bench",
+      "--baseline",
+      "hmd068-isolated-before"
+    ],
+    "cwd": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/isolated/current-source",
+    "CRITERION_HOME": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/isolated/criterion",
+    "TMPDIR": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/isolated/measurement-tmp",
+    "exit_code": 0,
+    "elapsed_seconds": 17.387532711029053,
+    "log": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/isolated/current-interactions-criterion.log"
+  }
+]

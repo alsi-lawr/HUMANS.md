@@ -1,3 +1,4 @@
+pub(crate) mod layout;
 use crate::{
     markdown,
     ui::{
@@ -13,8 +14,8 @@ use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Style},
-    text::{Line, Span, Text},
-    widgets::{Paragraph, Tabs, Widget, Wrap},
+    text::{Line, Span},
+    widgets::{Tabs, Widget},
 };
 use std::cell::{Cell, RefCell};
 
@@ -64,12 +65,27 @@ pub(crate) struct RecordDetail {
     scroll: u16,
     rows: Cell<u16>,
     flow: RefCell<crate::strategy_flow::Cache>,
+    layout: RefCell<Option<DetailLayout>>,
+}
+
+struct DetailLayout {
+    path: Option<String>,
+    revision: Option<casefile_core::Revision>,
+    tab: DetailTab,
+    layout: layout::Layout,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) struct DetailState {
     tab: DetailTab,
     scroll: u16,
+}
+
+pub(crate) struct DetailRecord<'a> {
+    pub(crate) entry: Option<&'a EntrySnapshot>,
+    pub(crate) derived: Option<&'a DerivedRecord>,
+    pub(crate) bytes: Option<&'a [u8]>,
+    pub(crate) diagnostics: &'a [Diagnostic],
 }
 
 impl RecordDetail {
@@ -79,6 +95,7 @@ impl RecordDetail {
             scroll: 0,
             rows: Cell::new(1),
             flow: RefCell::default(),
+            layout: RefCell::default(),
         }
     }
 
@@ -99,6 +116,10 @@ impl RecordDetail {
         self.scroll = state.scroll;
     }
 
+    pub(crate) fn invalidate(&self) {
+        self.layout.borrow_mut().take();
+    }
+
     pub(crate) fn reset_scroll(&mut self) {
         self.scroll = 0;
     }
@@ -113,13 +134,17 @@ impl RecordDetail {
 
     pub(crate) fn render(
         &self,
-        entry: Option<&EntrySnapshot>,
-        derived: Option<&DerivedRecord>,
-        diagnostics: &[Diagnostic],
+        record: DetailRecord<'_>,
         focused: bool,
         area: Rect,
         buffer: &mut Buffer,
     ) {
+        let DetailRecord {
+            entry,
+            derived,
+            bytes,
+            diagnostics,
+        } = record;
         let inner = panel("", focused).inner(area);
         if inner.height == 0 || inner.width == 0 {
             self.rows.set(1);
@@ -130,25 +155,43 @@ impl RecordDetail {
             .constraints([Constraint::Length(2), Constraint::Min(1)])
             .areas(inner);
         let titles = DetailTab::ALL.map(|tab| Line::from(format!(" {} ", tab.title())));
-        let text = entry.map_or_else(
-            || Text::from("Select a record to inspect it."),
-            |entry| {
-                if self.tab == DetailTab::Rendered
-                    && entry.kind == Some(casefile_core::Kind::Strategy)
-                {
-                    Text::from(self.flow.borrow_mut().lines(entry, derived, content.width))
-                } else {
-                    Text::from(detail_lines(entry, derived, diagnostics, self.tab))
-                }
-            },
-        );
-        let paragraph = Paragraph::new(text)
-            .style(Style::default().fg(Color::White))
-            .wrap(Wrap { trim: false });
-        let line_count = paragraph
-            .line_count(content.width)
-            .max(1)
-            .min(usize::from(u16::MAX)) as u16;
+        let mut cached = self.layout.borrow_mut();
+        if cached.as_ref().is_none_or(|cached| {
+            cached.path.as_deref() != entry.map(|entry| entry.path.as_str())
+                || cached.revision.as_ref() != entry.map(|entry| &entry.content_revision)
+                || cached.tab != self.tab
+                || cached.layout.width() != content.width
+        }) {
+            let mut lines = entry.map_or_else(
+                || vec![Line::from("Select a record to inspect it.")],
+                |entry| {
+                    if self.tab == DetailTab::Rendered
+                        && entry.kind == Some(casefile_core::Kind::Strategy)
+                    {
+                        self.flow.borrow_mut().lines(entry, derived, content.width)
+                    } else {
+                        detail_lines(
+                            entry,
+                            derived,
+                            diagnostics,
+                            self.tab,
+                            bytes.unwrap_or(&entry.original_bytes),
+                        )
+                    }
+                },
+            );
+            for line in &mut lines {
+                line.style = Style::default().fg(Color::White).patch(line.style);
+            }
+            *cached = Some(DetailLayout {
+                path: entry.map(|entry| entry.path.clone()),
+                revision: entry.map(|entry| entry.content_revision.clone()),
+                tab: self.tab,
+                layout: layout::Layout::new(&lines, content.width),
+            });
+        }
+        let cached = cached.as_ref().expect("detail layout");
+        let line_count = cached.layout.height();
         self.rows.set(line_count);
         let scroll = self.scroll.min(line_count.saturating_sub(1));
         let position = scroll.saturating_add(1);
@@ -171,7 +214,7 @@ impl RecordDetail {
             .style(Style::default().fg(MUTED))
             .highlight_style(Style::default().fg(ACCENT).bold())
             .render(tabs, buffer);
-        paragraph.scroll((scroll, 0)).render(content, buffer);
+        cached.layout.render(scroll, content, buffer);
     }
 
     fn max_scroll(&self) -> u16 {
@@ -189,19 +232,20 @@ fn detail_lines(
     derived: Option<&DerivedRecord>,
     diagnostics: &[Diagnostic],
     tab: DetailTab,
+    bytes: &[u8],
 ) -> Vec<Line<'static>> {
     match tab {
         DetailTab::Overview => overview_lines(entry, derived, diagnostics),
-        DetailTab::Rendered => rendered_lines(entry),
-        DetailTab::Source => source_lines(&entry.original_bytes),
+        DetailTab::Rendered => rendered_lines(entry, bytes),
+        DetailTab::Source => source_lines(bytes),
         DetailTab::Diagnostics => diagnostic_lines(entry, diagnostics),
     }
 }
 
-fn rendered_lines(entry: &EntrySnapshot) -> Vec<Line<'static>> {
-    match std::str::from_utf8(&entry.original_bytes) {
+fn rendered_lines(entry: &EntrySnapshot, bytes: &[u8]) -> Vec<Line<'static>> {
+    match std::str::from_utf8(bytes) {
         Ok(text) if entry.path.ends_with(".md") => markdown::render(text),
-        _ => content_lines(&entry.original_bytes),
+        _ => content_lines(bytes),
     }
 }
 
@@ -591,9 +635,12 @@ mod tests {
         terminal
             .draw(|frame| {
                 detail.render(
-                    Some(entry),
-                    None,
-                    diagnostics,
+                    DetailRecord {
+                        entry: Some(entry),
+                        derived: None,
+                        bytes: None,
+                        diagnostics,
+                    },
                     true,
                     frame.area(),
                     frame.buffer_mut(),
@@ -648,7 +695,7 @@ mod tests {
             source.as_bytes(),
         );
 
-        let visible = detail_lines(&entry, None, &[], DetailTab::Source)
+        let visible = detail_lines(&entry, None, &[], DetailTab::Source, &entry.original_bytes)
             .into_iter()
             .map(|line| line.to_string())
             .collect::<Vec<_>>()

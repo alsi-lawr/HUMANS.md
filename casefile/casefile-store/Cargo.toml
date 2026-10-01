@@ -6,6 +6,7 @@ license.workspace = true
 
 [dependencies]
 casefile-core = { path = "../casefile-core" }
+notify.workspace = true
 regex.workspace = true
 serde = { workspace = true, features = ["rc"] }
 serde-saphyr.workspace = true
@@ -14,6 +15,8 @@ tempfile.workspace = true
 thiserror.workspace = true
 time.workspace = true
 toml.workspace = true
+walkdir = "2.5.0"
+rayon = "1.12.0"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Storage_FileSystem", "Win32_System_SystemServices"] }

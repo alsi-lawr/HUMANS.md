@@ -14,3 +14,9 @@ ratatui.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
+criterion.workspace = true
+
+[[bench]]
+name = "interactions"
+path = "src/benchmark.rs"
+harness = false

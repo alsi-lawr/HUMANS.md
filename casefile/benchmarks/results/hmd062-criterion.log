@@ -1,0 +1,25 @@
+Gnuplot not found, using plotters backend
+Benchmarking presentation_250_records/cold_session
+Benchmarking presentation_250_records/cold_session: Warming up for 1.0000 s
+Benchmarking presentation_250_records/cold_session: Collecting 10 samples in estimated 2.8991 s (165 iterations)
+Benchmarking presentation_250_records/cold_session: Analyzing
+presentation_250_records/cold_session
+                        time:   [17.555 ms 17.717 ms 17.895 ms]
+                        thrpt:  [13.970 Kelem/s 14.111 Kelem/s 14.241 Kelem/s]
+                 change:
+                        time:   [−50.272% −49.465% −48.827%] (p = 0.00 < 0.05)
+                        thrpt:  [+95.415% +97.883% +101.09%]
+                        Performance has improved.
+Benchmarking presentation_250_records/unchanged_refresh
+Benchmarking presentation_250_records/unchanged_refresh: Warming up for 1.0000 s
+Benchmarking presentation_250_records/unchanged_refresh: Collecting 10 samples in estimated 2.0549 s (1485 iterations)
+Benchmarking presentation_250_records/unchanged_refresh: Analyzing
+presentation_250_records/unchanged_refresh
+                        time:   [1.3712 ms 1.3759 ms 1.3822 ms]
+                        thrpt:  [180.88 Kelem/s 181.70 Kelem/s 182.33 Kelem/s]
+                 change:
+                        time:   [−3.5973% −2.9207% −2.1827%] (p = 0.00 < 0.05)
+                        thrpt:  [+2.2314% +3.0086% +3.7315%]
+                        Performance has improved.
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) high mild

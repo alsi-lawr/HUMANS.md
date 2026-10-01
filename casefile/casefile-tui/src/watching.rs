@@ -12,7 +12,7 @@ use std::{
 const RETRY_INTERVAL: Duration = Duration::from_millis(250);
 const REDRAW_COALESCE: Duration = Duration::from_millis(150);
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
 enum ScopeImpact {
     Store,
     Project { project: String },
@@ -197,7 +197,7 @@ struct PathClassifier {
     root: String,
     root_namespace: RootNamespace,
     windows: bool,
-    activation_roots: Vec<ActivationRoot>,
+    activation_roots: BTreeMap<String, ActivationRoot>,
     projects: BTreeMap<String, String>,
     catalogue_known: bool,
 }
@@ -223,7 +223,7 @@ impl PathClassifier {
             root: normalized,
             root_namespace,
             windows,
-            activation_roots: Vec::new(),
+            activation_roots: BTreeMap::new(),
             projects: BTreeMap::new(),
             catalogue_known: false,
         }
@@ -249,21 +249,16 @@ impl PathClassifier {
             .iter()
             .flat_map(|project| {
                 project.investigations.iter().filter_map(|investigation| {
-                    lexical(&investigation.path, self.windows).map(|relative| ActivationRoot {
-                        relative: relative.trim_matches('/').into(),
-                        project: project.slug.clone(),
-                        identity: investigation.identity.clone(),
-                    })
+                    lexical(&investigation.path, self.windows)
+                        .map(|relative| ActivationRoot {
+                            relative: relative.trim_matches('/').into(),
+                            project: project.slug.clone(),
+                            identity: investigation.identity.clone(),
+                        })
+                        .map(|root| (root.relative.clone(), root))
                 })
             })
             .collect();
-        self.activation_roots.sort_by(|left, right| {
-            right
-                .relative
-                .len()
-                .cmp(&left.relative.len())
-                .then_with(|| left.relative.cmp(&right.relative))
-        });
         self.catalogue_known = true;
     }
 
@@ -299,14 +294,18 @@ impl PathClassifier {
         if !self.catalogue_known {
             return Ok(ScopeImpact::Store);
         }
-        for root in &self.activation_roots {
-            if relative == root.relative || strip_lexical_prefix(relative, &root.relative).is_some()
-            {
+        let mut ancestor = relative;
+        loop {
+            if let Some(root) = self.activation_roots.get(ancestor) {
                 return Ok(ScopeImpact::Investigation {
                     project: root.project.clone(),
                     identity: root.identity.clone(),
                 });
             }
+            let Some((parent, _)) = ancestor.rsplit_once('/') else {
+                break;
+            };
+            ancestor = parent;
         }
         let mut parts = relative.split('/');
         if parts.next() == Some("projects")
@@ -359,8 +358,8 @@ impl PathClassifier {
     fn investigation_identity(&self, project: &str, path: &str) -> Option<String> {
         let path = lexical(path, self.windows)?;
         self.activation_roots
-            .iter()
-            .find(|root| root.project == project && root.relative == path)
+            .get(&path)
+            .filter(|root| root.project == project)
             .map(|root| root.identity.clone())
     }
 }
@@ -427,6 +426,12 @@ fn lexical(value: &str, windows: bool) -> Option<String> {
     }
 }
 
+fn paths_overlap(left: &str, right: &str) -> bool {
+    left == right
+        || strip_lexical_prefix(left, right).is_some()
+        || strip_lexical_prefix(right, left).is_some()
+}
+
 fn strip_lexical_prefix<'a>(path: &'a str, root: &str) -> Option<&'a str> {
     path.strip_prefix(root)?.strip_prefix('/')
 }
@@ -452,6 +457,8 @@ struct FreshnessReducer {
     records: Vec<StaleRecord>,
     health: WatchHealth,
     started: BTreeMap<u64, (PresentationTarget, u64)>,
+    floors: BTreeMap<ScopeImpact, u64>,
+    scope_paths: BTreeMap<(String, String), String>,
 }
 
 impl FreshnessReducer {
@@ -461,6 +468,8 @@ impl FreshnessReducer {
             records: Vec::new(),
             health: initial,
             started: BTreeMap::new(),
+            floors: BTreeMap::new(),
+            scope_paths: BTreeMap::new(),
         };
         if initial == WatchHealth::Degraded {
             reducer.mark(
@@ -477,13 +486,21 @@ impl FreshnessReducer {
             return false;
         }
         self.generation = self.generation.saturating_add(1);
-        self.records.push(StaleRecord {
+        self.floors.insert(impact.clone(), self.generation);
+        let record = StaleRecord {
             generation: self.generation,
             impact,
             direct_clears: BTreeSet::new(),
             degraded,
             reason,
-        });
+        };
+        if let Some(index) = self.records.iter().position(|existing| {
+            existing.impact == record.impact && existing.degraded == record.degraded
+        }) {
+            self.records[index] = record;
+        } else {
+            self.records.push(record);
+        }
         true
     }
 
@@ -492,15 +509,10 @@ impl FreshnessReducer {
             return false;
         }
         self.health = health;
-        self.generation = self.generation.saturating_add(1);
         if health == WatchHealth::Degraded {
-            self.records.push(StaleRecord {
-                generation: self.generation,
-                impact: ScopeImpact::Store,
-                direct_clears: BTreeSet::new(),
-                degraded: true,
-                reason,
-            });
+            self.mark(ScopeImpact::Store, true, reason);
+        } else {
+            self.generation = self.generation.saturating_add(1);
         }
         true
     }
@@ -518,6 +530,16 @@ impl FreshnessReducer {
     }
 
     fn report(&mut self, report: RefreshReport, classifier: &PathClassifier) -> bool {
+        self.scope_paths = classifier
+            .activation_roots
+            .values()
+            .map(|root| {
+                (
+                    (root.project.clone(), root.identity.clone()),
+                    root.relative.clone(),
+                )
+            })
+            .collect();
         match report {
             RefreshReport::Started {
                 generation,
@@ -551,11 +573,13 @@ impl FreshnessReducer {
                         &target,
                         started_observation_generation,
                         completed_observation_generation,
+                        classifier,
                     )
                 {
                     return false;
                 }
-                let before = self.records.clone();
+                let before_len = self.records.len();
+                let mut cleared = false;
                 match target {
                     PresentationTarget::Store => {
                         self.records.retain(|record| {
@@ -582,7 +606,7 @@ impl FreshnessReducer {
                                         } if stale_project == &project && stale_identity == &identity
                                     )
                                 {
-                                    record
+                                    cleared |= record
                                         .direct_clears
                                         .insert((project.clone(), identity.clone()));
                                 }
@@ -590,7 +614,7 @@ impl FreshnessReducer {
                         }
                     }
                 }
-                before != self.records
+                cleared || before_len != self.records.len()
             }
         }
     }
@@ -600,30 +624,56 @@ impl FreshnessReducer {
         target: &PresentationTarget,
         started: u64,
         completed: u64,
+        classifier: &PathClassifier,
     ) -> bool {
         if completed == started {
             return false;
         }
-        if matches!(target, PresentationTarget::Store) {
+        self.floors.iter().any(|(impact, generation)| {
+            *generation > started
+                && match (target, impact) {
+                    (_, ScopeImpact::Store) | (PresentationTarget::Store, _) => true,
+                    (
+                        PresentationTarget::Project { project },
+                        ScopeImpact::Project { project: changed }
+                        | ScopeImpact::Investigation {
+                            project: changed, ..
+                        },
+                    ) => project == changed,
+                    (
+                        PresentationTarget::Investigation { project, .. },
+                        ScopeImpact::Project { project: changed },
+                    ) => project == changed,
+                    (
+                        PresentationTarget::Investigation { project, path },
+                        ScopeImpact::Investigation {
+                            project: changed,
+                            identity,
+                        },
+                    ) => {
+                        project == changed
+                            && classifier
+                                .activation_roots
+                                .values()
+                                .find(|root| &root.project == changed && &root.identity == identity)
+                                .is_some_and(|root| paths_overlap(path, &root.relative))
+                    }
+                    (_, ScopeImpact::Ignore) => false,
+                }
+        })
+    }
+
+    fn investigations_overlap(&self, project: &str, left: &str, right: &str) -> bool {
+        if left == right {
             return true;
         }
-        let project = match target {
-            PresentationTarget::Project { project }
-            | PresentationTarget::Investigation { project, .. } => project,
-            PresentationTarget::Store => unreachable!("Store handled above"),
-        };
-        self.records.iter().any(|record| {
-            record.generation > started
-                && record.generation <= completed
-                && (record.degraded
-                    || matches!(record.impact, ScopeImpact::Store)
-                    || matches!(
-                        &record.impact,
-                        ScopeImpact::Project { project: stale }
-                            | ScopeImpact::Investigation { project: stale, .. }
-                            if stale == project
-                    ))
-        })
+        match (
+            self.scope_paths.get(&(project.into(), left.into())),
+            self.scope_paths.get(&(project.into(), right.into())),
+        ) {
+            (Some(left), Some(right)) => paths_overlap(left, right),
+            _ => false,
+        }
     }
 
     fn warning(&self, scope: &SelectedScope) -> Option<String> {
@@ -653,6 +703,7 @@ impl FreshnessReducer {
                     },
                 ) => {
                     project == stale_project
+                        && self.investigations_overlap(project, identity, stale_identity)
                         && !(identity == stale_identity
                             && record
                                 .direct_clears
@@ -751,6 +802,17 @@ impl WatchCoordinator {
 
     pub(crate) fn rebuild(&mut self, catalogue: &PresentationCatalogue) {
         self.classifier.rebuild(catalogue);
+        self.reducer.scope_paths = self
+            .classifier
+            .activation_roots
+            .values()
+            .map(|root| {
+                (
+                    (root.project.clone(), root.identity.clone()),
+                    root.relative.clone(),
+                )
+            })
+            .collect();
     }
 
     pub(crate) fn has_catalogue(&self) -> bool {
@@ -1091,7 +1153,13 @@ mod tests {
             },
             &classifier
         ));
-        assert_eq!(reducer.records.len(), 2);
+        assert!(
+            reducer
+                .warning(&SelectedScope::Project {
+                    project: "alpha".into()
+                })
+                .is_some()
+        );
         reducer.report(
             RefreshReport::Started {
                 generation: 2,
@@ -1110,11 +1178,17 @@ mod tests {
             },
             &classifier,
         );
-        assert_eq!(reducer.records.len(), 2);
+        assert!(
+            reducer
+                .warning(&SelectedScope::Project {
+                    project: "alpha".into()
+                })
+                .is_some()
+        );
     }
 
     #[test]
-    fn project_change_is_direct_for_one_investigation_and_inherited_for_sibling() {
+    fn investigation_change_is_direct_without_invalidating_a_sibling() {
         let mut reducer = FreshnessReducer::new(WatchHealth::Healthy);
         reducer.mark(
             ScopeImpact::Investigation {
@@ -1139,8 +1213,7 @@ mod tests {
                     project: "alpha".into(),
                     identity: "two".into()
                 })
-                .unwrap()
-                .contains("INHERITED")
+                .is_none()
         );
         assert!(
             reducer
@@ -1466,5 +1539,131 @@ mod tests {
         }
         assert!(observed, "native backend did not report the changed path");
         drop(subscription);
+    }
+    #[test]
+    fn refresh_window_ignores_sibling_bursts_but_preserves_nested_floors_and_clears() {
+        let mut catalogue = catalogue();
+        catalogue.projects[0].investigations.extend([
+            PresentationInvestigation {
+                identity: "sibling".into(),
+                path: "projects/alpha/investigations/sibling".into(),
+            },
+            PresentationInvestigation {
+                identity: "nested".into(),
+                path: "projects/alpha/investigations/deep/nested".into(),
+            },
+        ]);
+        let mut classifier = PathClassifier::new("/store", false);
+        classifier.rebuild(&catalogue);
+        let mut reducer = FreshnessReducer::new(WatchHealth::Healthy);
+        let target = PresentationTarget::Investigation {
+            project: "alpha".into(),
+            path: "projects/alpha/investigations/deep".into(),
+        };
+        reducer.mark(
+            ScopeImpact::Investigation {
+                project: "alpha".into(),
+                identity: "deep".into(),
+            },
+            false,
+            "old".into(),
+        );
+        let started = reducer.observation().generation;
+        reducer.report(
+            RefreshReport::Started {
+                generation: 1,
+                target: target.clone(),
+                observation_generation: started,
+            },
+            &classifier,
+        );
+        for _ in 0..100 {
+            reducer.mark(
+                classifier
+                    .classify_str("/store/projects/alpha/investigations/sibling/file.md")
+                    .unwrap(),
+                false,
+                "sibling".into(),
+            );
+        }
+        assert!(reducer.report(
+            RefreshReport::Succeeded {
+                generation: 1,
+                target: target.clone(),
+                started_observation_generation: started,
+                completed_observation_generation: reducer.observation().generation
+            },
+            &classifier
+        ));
+        assert!(
+            reducer
+                .warning(&SelectedScope::Investigation {
+                    project: "alpha".into(),
+                    identity: "deep".into()
+                })
+                .is_none()
+        );
+        assert!(
+            reducer
+                .warning(&SelectedScope::Investigation {
+                    project: "alpha".into(),
+                    identity: "sibling".into()
+                })
+                .is_some()
+        );
+        let started = reducer.observation().generation;
+        reducer.report(
+            RefreshReport::Started {
+                generation: 2,
+                target: target.clone(),
+                observation_generation: started,
+            },
+            &classifier,
+        );
+        for _ in 0..100 {
+            reducer.mark(
+                classifier
+                    .classify_str("/store/projects/alpha/investigations/deep/nested/file.md")
+                    .unwrap(),
+                false,
+                "nested".into(),
+            );
+        }
+        assert!(!reducer.report(
+            RefreshReport::Succeeded {
+                generation: 2,
+                target,
+                started_observation_generation: started,
+                completed_observation_generation: reducer.observation().generation
+            },
+            &classifier
+        ));
+        assert!(
+            reducer
+                .warning(&SelectedScope::Investigation {
+                    project: "alpha".into(),
+                    identity: "deep".into()
+                })
+                .is_some()
+        );
+        let latest = reducer.observation().generation;
+        reducer.report(
+            RefreshReport::Started {
+                generation: 3,
+                target: PresentationTarget::Store,
+                observation_generation: latest,
+            },
+            &classifier,
+        );
+        assert!(reducer.report(
+            RefreshReport::Succeeded {
+                generation: 3,
+                target: PresentationTarget::Store,
+                started_observation_generation: latest,
+                completed_observation_generation: latest
+            },
+            &classifier
+        ));
+        assert!(reducer.warning(&SelectedScope::Store).is_none());
     }
 }

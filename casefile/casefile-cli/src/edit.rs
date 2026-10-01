@@ -1,8 +1,6 @@
 use crate::editor::{EditorConfig, open_draft};
 use anyhow::{Context, Result};
-use casefile_core::{
-    ChangeRequest, Classification, Diagnostic, EntrySnapshot, Kind, Preview, parse_draft,
-};
+use casefile_core::{ChangeRequest, Diagnostic, EntrySnapshot, Kind, Preview, parse_draft};
 use casefile_store::Store;
 use std::{
     fs,
@@ -18,15 +16,11 @@ pub(super) fn prepare_preview(
     path: &str,
     kind: Kind,
 ) -> Result<Option<(Preview, PathBuf)>> {
-    let scan = store.scan()?;
-    let entry = scan
-        .snapshot
-        .entries
-        .iter()
-        .find(|entry| entry.path == path)
-        .filter(|entry| editable(entry, kind))
+    let entry = store
+        .read_editable_entry(path, kind)?
         .context("selected record is no longer an editable governed ticket, epic, or board")?;
-    let draft_path = create_draft(root, entry)?;
+    let path = entry.path.as_str();
+    let draft_path = create_draft(root, &entry)?;
 
     if let Err(error) = open_draft(&draft_path, editor) {
         return Err(retained_draft(error, &draft_path));
@@ -67,6 +61,12 @@ pub(super) fn prepare_preview(
         }
         Err(error) => return Err(retained_draft(error.into(), &draft_path)),
     };
+    if preview.expected_target_revision.as_ref() != Some(&entry.content_revision) {
+        return Err(retained_draft(
+            casefile_store::StoreError::StaleTargetRevision.into(),
+            &draft_path,
+        ));
+    }
     Ok(Some((preview, draft_path)))
 }
 
@@ -76,33 +76,25 @@ pub(super) fn cancel(draft_path: &Path) -> Result<()> {
     Ok(())
 }
 
-pub(super) fn apply(store: &Store, preview: Preview, path: &str, draft_path: &Path) -> Result<()> {
-    if let Err(error) = store.apply(preview) {
-        return Err(retained_draft(error.into(), draft_path));
-    }
-    let scan = store.scan().map_err(|error| {
-        anyhow::Error::new(error).context(format!(
-            "canonical change applied; post-apply rescan failed; draft retained at {}",
-            draft_path.display()
-        ))
-    })?;
+pub(super) fn apply(store: &Store, preview: Preview, draft_path: &Path) -> Result<()> {
+    let applied = store
+        .apply(preview)
+        .map_err(|error| retained_draft(error.into(), draft_path))?;
     discard_draft(draft_path).with_context(|| {
         format!(
-            "canonical change applied and rescanned; draft cleanup failed at {}",
+            "canonical change applied; draft cleanup failed at {}",
             draft_path.display()
         )
     })?;
     println!(
-        "Applied {} and rescanned revision {}.",
-        path, scan.snapshot.revision.0
+        "Applied {} at target revision {}.",
+        applied.path,
+        applied
+            .resulting_target_revision
+            .as_ref()
+            .map_or("absent", |revision| revision.0.as_str())
     );
     Ok(())
-}
-
-fn editable(entry: &EntrySnapshot, kind: Kind) -> bool {
-    entry.classification == Classification::Governed
-        && entry.kind == Some(kind)
-        && kind.is_writable()
 }
 
 fn create_draft(root: &Path, entry: &EntrySnapshot) -> Result<PathBuf> {

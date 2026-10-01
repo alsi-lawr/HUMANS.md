@@ -1,0 +1,305 @@
+{
+  "parent": "9cde6d83915ae08c246a03622d08a6b57d6d74e0",
+  "baseline": "hmd057-before",
+  "command_window_utc": [
+    "2026-09-30T22:43:55.618886+00:00",
+    "2026-09-30T22:44:03.375493+00:00"
+  ],
+  "target_directory": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target",
+  "command": "CARGO_TARGET_DIR=/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target /home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/release/deps/baselines-a1b7be9b5e9f5b39 '^sqlite_500_records/prepare_replacement$' --bench --baseline hmd057-before",
+  "configuration": {
+    "criterion": "0.8.2",
+    "samples": 10,
+    "warm_up_seconds": 1,
+    "measurement_target_seconds": 2,
+    "confidence_level": 0.95,
+    "noise_threshold": 0.01,
+    "mode": "release; warm filesystem; disposable synthetic Store/index; setup outside measured operation; no competing builds",
+    "actual_work_items": 502,
+    "fixture_progress_notes": 0
+  },
+  "source_sha256": {
+    "casefile/Cargo.lock": "745f3413832b204ac259163a084422317f096e3619b585ef52fac10c42a7b67a",
+    "casefile/Cargo.toml": "b8f0a810fc31e948296805e071f847b6701044460ecbf4782588fc3c511bba76",
+    "casefile/benchmarks/support/mod.rs": "9a073d937a0aaef7d27be68b0dbc6821338a8bab29db2c91ffa4d248301e1361",
+    "casefile/casefile-core/Cargo.toml": "47ef3670f095f44677eb34bde11cc7665af5e233e5f94addc3847ee0e7c7380b",
+    "casefile/casefile-core/src/board.rs": "2458232b2ac378e509fe7fa6419b43ee85ed3bf0f133f885d6b440e3830095ac",
+    "casefile/casefile-core/src/change.rs": "62baaecaf55dc57402839b78bd9c8ebad703a79d46ff487782a3dcfa84a29770",
+    "casefile/casefile-core/src/decision.rs": "9456e83c4656d25bbd8f0e40720ea0f81ab411392163b0fdfe0e726a0157434b",
+    "casefile/casefile-core/src/diagnostic.rs": "d85e3fc270478f566c2caa716e89a1b69671f1e7fb46f081b225982c16a7b593",
+    "casefile/casefile-core/src/lib.rs": "1283fd1ab8905bf5e0e28ea113e4c6baf3ca103018220df206c3902d135b7b04",
+    "casefile/casefile-core/src/markdown.rs": "f14af32fdc9256ab2054a6496f388b90608cf9878fdb3154d0463357d9293c7f",
+    "casefile/casefile-core/src/metadata.rs": "f479a46ea7135640c664afe3f290eed86d94499754ddb669a4cfa8feb5f3f782",
+    "casefile/casefile-core/src/progress.rs": "28b23416ff41c9aae7a39749187c9fa64aab62b0d1dfee8bd481c1dba2e61124",
+    "casefile/casefile-core/src/progress/parse.rs": "2454be911956140e8de1961a9ece31163a988c1e462cbf255f4e2606b6047285",
+    "casefile/casefile-core/src/project_map.rs": "3f778d5de7b05c0f869f1eae4013f4f4f2232f5460b828b8a902d1d6ebb08ac2",
+    "casefile/casefile-core/src/record.rs": "39c923a8117146d61d00d1f9b517949dd603d8bc59f6f0ab2a91fae0f65a4519",
+    "casefile/casefile-core/src/rendering.rs": "0d9c574c4fa1c6c69d79baffe48aa9909a3cf53e4ed4af8e2df1748fdd09a021",
+    "casefile/casefile-core/src/request.rs": "f45211b6204002f7658dfa64a18c52bab14f4c05ee4b7458452507ea36e135a5",
+    "casefile/casefile-core/src/snapshot.rs": "3e55a04b5dcb8587f529c46ae02bf1ebed030177d1abd0321f44d2b4b7b93739",
+    "casefile/casefile-core/src/strategy.rs": "9188debe2b7019aef8a6e266e327dcf3281dc244bcb4e1522306acd64d38eff6",
+    "casefile/casefile-core/src/strategy_transition.rs": "4c8924bc9d6654b8cd14ec4d5846c4c7c35c58cbcad4395a457fa29aff4f18aa",
+    "casefile/casefile-core/src/work_item.rs": "5bf5efc4ea50aeb2f5304a82dc2d4aa42f18e4a6d47649ebe0dd8c8a53f508f3",
+    "casefile/casefile-store-sqlite/Cargo.toml": "ebea173be90ab46b6a553e21146eecdab298e454873335cf780e3a2a5a2b1bc2",
+    "casefile/casefile-store-sqlite/benches/baselines.rs": "364657f44bf4e1c453300105f889b24acb9309c338c168cb288633db18e350fc",
+    "casefile/casefile-store-sqlite/src/lib.rs": "e1c23d24da0746d38c8c1f3bca6ee32ab711cd4b54aaf48661567704cfe1964b",
+    "casefile/casefile-store-sqlite/tests/integration.rs": "4eee4bac03922f02b9bc915b99015a6ba7e906291e43e6657ac5cd2422b87523",
+    "casefile/casefile-store/Cargo.toml": "8d5ad3f3faa240852535d21849c2cf5c11aab4f3759f753a80d2ab2001d941e1",
+    "casefile/casefile-store/src/activation.rs": "9b1ad5144e3c98d29881e6163cdd3e5f873a7c87e498f1f919da13704fe26c91",
+    "casefile/casefile-store/src/checking.rs": "68793eb54a3fbc404349d1c568c3eddf2635fa89447ce652da76740c81d8531c",
+    "casefile/casefile-store/src/derived.rs": "b906f1acef7d14066537213601ffdf34f3fa60328893fb7d51a350096d06985a",
+    "casefile/casefile-store/src/derived/boards.rs": "38b3c2cbb943792d9c11542fbb2312a5c1fa6990e2979a179fc4806baf4c724f",
+    "casefile/casefile-store/src/derived/progress.rs": "07b37ec31d91e874debff73e2c87b1839f2a9ef28d90c4c1f6a93f0c1eb94a58",
+    "casefile/casefile-store/src/derived/records.rs": "21bb9a7f332f816331ffa875f5ff0837f5c9f15e98a7978094f1191f3d7c379e",
+    "casefile/casefile-store/src/governance.rs": "0e4d8d198d2fe9accc1e20bec72dcad3b957e98e75276c2ddb3cb5a09cc8e569",
+    "casefile/casefile-store/src/index.rs": "20e36c9ec19d21791a17558e53eb583d8ded96f1cdc4ffd4ca152c3db2556f62",
+    "casefile/casefile-store/src/layout.rs": "7d9651b214616d139e4049e7b02db77f2ee3cce1707d0af53ec1d0745e676129",
+    "casefile/casefile-store/src/lib.rs": "9a496e813698ab45b073e8cd2a20f149e30dce8a78b92846ec8507aabfa0540d",
+    "casefile/casefile-store/src/mutation.rs": "09bb9edc247b1ad0c66926294babbaa86249ab0f5b6dda96cea5579c243dd6aa",
+    "casefile/casefile-store/src/mutation_dependencies.rs": "7d944577065ce8f6b97cc748de818e1fea67fc1606985f9b1d843b1a1591ecd1",
+    "casefile/casefile-store/src/mutation_hooks.rs": "e7ffd9ff983b33e310e13fd3486b6e55afe4cc86e5b7c9baad681ab528e2b9e5",
+    "casefile/casefile-store/src/mutation_locks.rs": "eb4bbb2ad522b6ddc67dbbe016cc364603e7c09929aac0195ce34d3cde3bd27d",
+    "casefile/casefile-store/src/mutation_metadata.rs": "50c3efe33e1aa12c9b3efadcc7bdca35799c84628930e4771936c8dc956e0fdf",
+    "casefile/casefile-store/src/mutation_projection.rs": "5c69b4d20e94f84f9c42157115672ee89792bb0feda22c4c15dc2be831db8ad5",
+    "casefile/casefile-store/src/mutation_restore.rs": "6e62d3c6f0596e11300695effa4c67a91ce69395b7f94a3f5379697d49dac53a",
+    "casefile/casefile-store/src/mutation_tests.rs": "f3f65ac22bfcfbaf51daf1a79b54dd552c7ac3d14b4542456a2c29f9e2d5f3ab",
+    "casefile/casefile-store/src/presentation.rs": "186eb0efd3718f4c296f0172842716c6fe3d864a439580637ddc77da3c45eb22",
+    "casefile/casefile-store/src/presentation/catalogue.rs": "b09c614c51984f036fa3568f7c83568b39a58e4777ce886c061403156d6c1508",
+    "casefile/casefile-store/src/presentation/content.rs": "53492c8cb103122cd5babc10a8e8500e888336f72ec7f11f1a6e378b8ed6c2f0",
+    "casefile/casefile-store/src/presentation/entries.rs": "0b3c562550651f42ff6123e9c8a61feca80260dfd57237fab009724a941acf59",
+    "casefile/casefile-store/src/presentation/facts.rs": "b6dfa861574402468c21ea291832011018378ee8b781db39b8f60e7231d4721c",
+    "casefile/casefile-store/src/presentation/loading.rs": "0497e94e2931c26f5056eb826532f3a24c9a1cae34f4c3fe02b0661211d39bcf",
+    "casefile/casefile-store/src/presentation/model.rs": "df23fb59633165c787d7977285d1d689f2d027845aa7d87b70e504fe3cb8f641",
+    "casefile/casefile-store/src/presentation/reader.rs": "54c1eb388bbd0c4788ee7d12f8cde92bd4ae2cf179e982ef088b0890a5c371f9",
+    "casefile/casefile-store/src/presentation/scope.rs": "f3a8b2c6bfa508e0f6d6c41230ad4bcb6bfcffcc75021384433eb1530702ca14",
+    "casefile/casefile-store/src/presentation/session.rs": "085e1d20f691676fea3893a26066582bb38facd505b5d1ad2de9a22793510e66",
+    "casefile/casefile-store/src/presentation/tests.rs": "fd35855427b16e7c11933b849980fbdf33b4dd6ff075be77245bc83e5bb49171",
+    "casefile/casefile-store/src/progress.rs": "a0519d1de1e32717372a292e3c2085945e67439d7c9d2cc448cc9d30c0a4d802",
+    "casefile/casefile-store/src/provider.rs": "39a18d00ee6fd39da44f66c2813d8b44dec3a0cc7bc1758e0dd04b00e948b492",
+    "casefile/casefile-store/src/provider/outcome_tests.rs": "d2491109a1fb203550a44abf8e0e73daf780b363dfe48893c1feef739ad33848",
+    "casefile/casefile-store/src/provider/preview_vault.rs": "149c765a1d71782d0a1494b3e1f7bd94849c52bce5844edcc5e092fbc5690607",
+    "casefile/casefile-store/src/provider/review.rs": "285e25dd2fdc5cbcc78d8bd0dccf24774df40145a970af2fae03a6772313bf30",
+    "casefile/casefile-store/src/provider/watching.rs": "9bb353e1823311d39158dd3ebfd4063c7086ab7191f33ec2cbe9dc5ea5194d05",
+    "casefile/casefile-store/src/read_context.rs": "94cc206049618e6a5598ff438b03f545ef62bcfb999789e8ea6404650d632304",
+    "casefile/casefile-store/src/read_context/tokens.rs": "c9be378c514ff715f7f7559e05eac0669599e97df4acd01bf8f8801ee042e47c",
+    "casefile/casefile-store/src/revision.rs": "703e6cfed119c6ec42dfcafe9d9b9e479920986836156aaf1a05eceea0d7ccd6",
+    "casefile/casefile-store/src/scanning.rs": "4f88a7b5f6f1c64aa541ea726c234040846d28d22b0aa7f0dd9edca5088719e0",
+    "casefile/casefile-store/src/scanning/classification.rs": "77d19ac8ee470aa1eebf3e04c8ecdd2458c15fb2abcdeedcdbc5406bccdbb265",
+    "casefile/casefile-store/src/scanning/inventory.rs": "010236bb3974e57852f9d6a6997194cce0a9ddb66307fd57c33737f57eed0bb3",
+    "casefile/casefile-store/src/scanning/scoped.rs": "132a46d633ab7761fc233efeff212f5d436210ba30f9f4a713848ff8020be944",
+    "casefile/casefile-store/src/store.rs": "08a1aaf7b32db81d2fd0c5dd6b3e2a53ed17aa33d3b8c1583b65470296506c72",
+    "casefile/casefile-store/src/validation.rs": "845f20b8ea2181037f61e37c4118376b5e8cb0085f38ac45cc070a2347725cae",
+    "casefile/casefile-store/src/writing.rs": "a6982d4fbb58efdd965a2b5b460a247fd9c626977543ff390a5f52941d38e67a"
+  },
+  "executables_sha256": {
+    ".agent-workspace/20260930-speedup-implementation/writer/target/release/deps/baselines-a1b7be9b5e9f5b39": "6fdec807f5ea6ab96b17f02d7c497129547fc9c5ae4522f9d8aa07e8857813c3"
+  },
+  "preserved_native_baseline_json_count": 236,
+  "scenarios": {
+    "sqlite_500_records/prepare_replacement": {
+      "before": {
+        "benchmark": {
+          "group_id": "sqlite_500_records",
+          "function_id": "prepare_replacement",
+          "value_str": null,
+          "throughput": null,
+          "full_id": "sqlite_500_records/prepare_replacement",
+          "directory_name": "sqlite_500_records/prepare_replacement",
+          "title": "sqlite_500_records/prepare_replacement"
+        },
+        "estimates": {
+          "mean": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 65192997.0602381,
+              "upper_bound": 66884417.568571426
+            },
+            "point_estimate": 65925557.58579366,
+            "standard_error": 438830.3534009297
+          },
+          "median": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 65015161.7,
+              "upper_bound": 66378024.222222224
+            },
+            "point_estimate": 65678554.08333333,
+            "standard_error": 330907.4409288955
+          },
+          "median_abs_dev": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 178304.3916344661,
+              "upper_bound": 1733122.2089209247
+            },
+            "point_estimate": 1010289.9697871,
+            "standard_error": 417097.96492553875
+          },
+          "slope": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 65320905.18691589,
+              "upper_bound": 66872226.081743866
+            },
+            "point_estimate": 65972019.766233765,
+            "standard_error": 395742.3910641676
+          },
+          "std_dev": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 489420.4621335673,
+              "upper_bound": 2127603.7116746223
+            },
+            "point_estimate": 1464415.5667630802,
+            "standard_error": 501355.43003935786
+          }
+        },
+        "sample": {
+          "sampling_mode": "Linear",
+          "iters": [
+            1.0,
+            2.0,
+            3.0,
+            4.0,
+            5.0,
+            6.0,
+            7.0,
+            8.0,
+            9.0,
+            10.0
+          ],
+          "times": [
+            65759671.0,
+            129132915.0,
+            196482595.0,
+            257795235.0,
+            348007297.0,
+            393584623.0,
+            465894739.0,
+            526703732.0,
+            597402218.0,
+            650151617.0
+          ]
+        },
+        "tukey": [
+          61810654.05833332,
+          63472787.45833333,
+          67905143.19166668,
+          69567276.59166668
+        ]
+      },
+      "after": {
+        "benchmark": {
+          "group_id": "sqlite_500_records",
+          "function_id": "prepare_replacement",
+          "value_str": null,
+          "throughput": null,
+          "full_id": "sqlite_500_records/prepare_replacement",
+          "directory_name": "sqlite_500_records/prepare_replacement",
+          "title": "sqlite_500_records/prepare_replacement"
+        },
+        "estimates": {
+          "mean": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 65544018.30079363,
+              "upper_bound": 67462808.92880952
+            },
+            "point_estimate": 66497008.78246032,
+            "standard_error": 493365.7815531099
+          },
+          "median": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 65134935.33333333,
+              "upper_bound": 67855471.4861111
+            },
+            "point_estimate": 66511088.89285714,
+            "standard_error": 695638.8067795404
+          },
+          "median_abs_dev": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 579909.2957378881,
+              "upper_bound": 2871131.758902222
+            },
+            "point_estimate": 1737395.898655057,
+            "standard_error": 603529.6894126834
+          },
+          "slope": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 66599930.14563107,
+              "upper_bound": 67835564.06458798
+            },
+            "point_estimate": 67316190.04155844,
+            "standard_error": 306836.25352735555
+          },
+          "std_dev": {
+            "confidence_interval": {
+              "confidence_level": 0.95,
+              "lower_bound": 957515.6441477707,
+              "upper_bound": 2035934.2761296474
+            },
+            "point_estimate": 1643024.5631095984,
+            "standard_error": 275536.3000000676
+          }
+        },
+        "sample": {
+          "sampling_mode": "Linear",
+          "iters": [
+            1.0,
+            2.0,
+            3.0,
+            4.0,
+            5.0,
+            6.0,
+            7.0,
+            8.0,
+            9.0,
+            10.0
+          ],
+          "times": [
+            64396197.0,
+            128333502.0,
+            195422472.0,
+            265451290.0,
+            345874912.0,
+            395242042.0,
+            466615487.0,
+            546154406.0,
+            606974780.0,
+            674845390.0
+          ]
+        },
+        "tukey": [
+          58874701.25,
+          62099368.83333333,
+          70698482.38888888,
+          73923149.97222221
+        ]
+      },
+      "change": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": -0.011779677980057884,
+            "upper_bound": 0.02706643895933942
+          },
+          "point_estimate": 0.008668128379847095,
+          "standard_error": 0.010024412450809778
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": -0.010588761121593904,
+            "upper_bound": 0.03384294573018187
+          },
+          "point_estimate": 0.01267590039310984,
+          "standard_error": 0.011875845653165148
+        }
+      }
+    }
+  },
+  "purpose": "one root-approved unchanged prepare-only diagnostic after high-variance final-five anomaly; not a replacement of final-five evidence"
+}

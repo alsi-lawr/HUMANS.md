@@ -45,3 +45,15 @@ pub(super) fn writing(root: &Path, path: &str) -> Result<(), crate::StoreError> 
     event(Boundary::Write, root, path);
     Ok(())
 }
+
+thread_local! { static RESULT_FAILURE: RefCell<bool> = const { RefCell::new(false) }; }
+pub(super) fn fail_result() {
+    RESULT_FAILURE.with(|slot| *slot.borrow_mut() = true);
+}
+pub(super) fn resulting(root: &Path) -> Result<(), crate::StoreError> {
+    event(Boundary::Result, root, "");
+    if RESULT_FAILURE.with(|slot| std::mem::take(&mut *slot.borrow_mut())) {
+        return Err(std::io::Error::other("injected post-write observation failure").into());
+    }
+    Ok(())
+}

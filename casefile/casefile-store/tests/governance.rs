@@ -1,6 +1,6 @@
 use std::{fs, path::Path, process::Command};
 
-use casefile_core::{Diagnostic, Kind, ProgressEntry, ProgressLog, ProgressStatus, Revision};
+use casefile_core::{Kind, ProgressEntry, ProgressLog, ProgressStatus, Revision};
 use casefile_store::{
     GovernedOperationKind, InvestigationScope, ProgressChangeRequest, Provider, ProviderError,
     ProviderOperation, ProviderQuery, ProviderQueryResult, Store, StrategyTransitionRequest,
@@ -472,67 +472,25 @@ fn historical_transition_and_backup_files_remain_raw_and_untouched() {
 }
 
 #[test]
-fn provider_refuses_every_authoritative_transition_preview_change_without_mutation() {
+fn strategy_preview_ids_are_local_to_the_provider_and_refuse_foreign_applies() {
     let root = fixture();
     let provider = Provider::without_cache(Store::open(root.path()).expect("store"));
     let preview = provider
         .preview_strategy_transition(transition_request())
         .expect("preview");
     let before = fs::read(strategy(root.path())).expect("before matrix");
-    let mut altered = Vec::new();
-    let mut value = preview.clone();
-    value.canonical.request.investigation = INVESTIGATION.replace('/', r"\\");
-    altered.push(value);
-    let mut value = preview.clone();
-    value.canonical.operation = GovernedOperationKind::WriterBinding;
-    altered.push(value);
-    let mut value = preview.clone();
-    value.canonical.request.rationale.push_str(" altered");
-    altered.push(value);
-    let mut value = preview.clone();
-    value
-        .canonical
-        .transition_record
-        .rationale
-        .push_str(" altered");
-    altered.push(value);
-    let mut value = preview.clone();
-    value.canonical.changes[0].path.push_str(".other");
-    altered.push(value);
-    let mut value = preview.clone();
-    value.canonical.changes[0].rendered_bytes.push(b'!');
-    altered.push(value);
-    let mut value = preview.clone();
-    value.canonical.changes[0].diff.push_str("altered");
-    altered.push(value);
-    let mut value = preview.clone();
-    value.canonical.changes[0].expected_target_revision = Some(Revision("altered".into()));
-    altered.push(value);
-    let mut value = preview.clone();
-    value.canonical.changes[0].proposed_target_revision = Some(Revision("altered".into()));
-    altered.push(value);
-    let mut value = preview.clone();
-    value
-        .canonical
-        .diagnostics
-        .push(Diagnostic::new("x", "x", "x"));
-    altered.push(value);
-    let mut value = preview.clone();
-    value.canonical.no_op = true;
-    altered.push(value);
-    for value in altered {
-        assert!(matches!(
-            provider.apply_strategy_transition(value),
-            Err(ProviderError::PreviewIntegrity)
-        ));
-        assert_eq!(fs::read(strategy(root.path())).expect("matrix"), before);
-        assert_eq!(
-            fs::read_dir(root.path().join(INVESTIGATION).join("strategy/transitions"))
-                .expect("transitions")
-                .count(),
-            0
-        );
-    }
+    let foreign = Provider::without_cache(Store::open(root.path()).expect("foreign Provider"));
+    assert!(matches!(
+        foreign.apply_strategy_transition(&preview.preview_id),
+        Err(ProviderError::PreviewIntegrity)
+    ));
+    assert_eq!(fs::read(strategy(root.path())).expect("matrix"), before);
+    assert_eq!(
+        fs::read_dir(root.path().join(INVESTIGATION).join("strategy/transitions"))
+            .expect("transitions")
+            .count(),
+        0
+    );
 }
 
 #[test]
@@ -698,7 +656,7 @@ fn binding_activity_is_derived_exactly_from_canonical_progress_and_spawn_require
 }
 
 #[test]
-fn binding_provider_preview_is_complete_strict_atomic_and_has_no_archive_or_scratch_escape() {
+fn binding_preview_ids_preserve_stale_target_checks_and_byte_exact_replay() {
     let root = fixture();
     write_progress(root.path(), None);
     let provider = Provider::without_cache(Store::open(root.path()).expect("store"));
@@ -708,61 +666,38 @@ fn binding_provider_preview_is_complete_strict_atomic_and_has_no_archive_or_scra
             binding_source: BINDING.into(),
         })
         .expect("preview");
-    assert_eq!(preview.canonical.request.investigation, INVESTIGATION);
     assert_eq!(
-        preview.canonical.operation,
-        GovernedOperationKind::WriterBinding
+        preview.operations[0]
+            .path
+            .strip_suffix("/strategy/bindings.toml")
+            .expect("binding path"),
+        INVESTIGATION
     );
-    assert_eq!(preview.canonical.changes.len(), 1);
-    assert!(!preview.canonical.changes[0].diff.is_empty());
-    let target = root.path().join(&preview.canonical.changes[0].path);
-    let mut altered = Vec::new();
-    let mut value = preview.clone();
-    value.canonical.operation = GovernedOperationKind::StrategyTransition;
-    altered.push(value);
-    let mut value = preview.clone();
-    value.canonical.request.binding_source.push_str("# altered");
-    altered.push(value);
-    let mut value = preview.clone();
-    value.canonical.changes[0].path.push_str(".other");
-    altered.push(value);
-    let mut value = preview.clone();
-    value.canonical.changes[0].rendered_bytes.push(b'!');
-    altered.push(value);
-    let mut value = preview.clone();
-    value.canonical.changes[0].diff.push_str("altered");
-    altered.push(value);
-    let mut value = preview.clone();
-    value.canonical.changes[0].expected_target_revision = Some(Revision("altered".into()));
-    altered.push(value);
-    let mut value = preview.clone();
-    value.canonical.changes[0].proposed_target_revision = Some(Revision("altered".into()));
-    altered.push(value);
-    let mut value = preview.clone();
-    value
-        .canonical
-        .diagnostics
-        .push(Diagnostic::new("x", "x", "x"));
-    altered.push(value);
-    let mut value = preview.clone();
-    value.canonical.no_op = true;
-    altered.push(value);
-    for value in altered {
-        assert!(matches!(
-            provider.apply_writer_binding(value),
-            Err(ProviderError::PreviewIntegrity)
-        ));
-        assert!(!target.exists());
-    }
+    assert_eq!(
+        preview.kind,
+        casefile_store::ProviderPreviewKind::WriterBinding
+    );
+    assert_eq!(preview.operations.len(), 1);
+    assert!(!preview.diff.is_empty());
+    let target = root.path().join(&preview.operations[0].path);
+    let foreign = Provider::without_cache(Store::open(root.path()).expect("foreign Provider"));
+    assert!(matches!(
+        foreign.apply_writer_binding(&preview.preview_id),
+        Err(ProviderError::PreviewIntegrity)
+    ));
+    assert!(!target.exists());
+
     fs::write(&target, BINDING).expect("binding appeared after preview");
     assert!(matches!(
-        provider.apply_writer_binding(preview.clone()),
+        provider.apply_writer_binding(&preview.preview_id),
         Err(ProviderError::Store(
             casefile_store::StoreError::StaleTargetRevision
         ))
     ));
     fs::remove_file(&target).expect("remove stale binding");
-    let result = provider.apply_writer_binding(preview).expect("apply");
+    let result = provider
+        .apply_writer_binding(&preview.preview_id)
+        .expect("apply");
     assert!(!result.result.no_op);
     assert_eq!(fs::read_to_string(&target).expect("binding"), BINDING);
     let replay = provider
@@ -771,10 +706,10 @@ fn binding_provider_preview_is_complete_strict_atomic_and_has_no_archive_or_scra
             binding_source: BINDING.into(),
         })
         .expect("no-op preview");
-    assert!(replay.canonical.no_op);
+    assert!(replay.no_op);
     assert!(
         provider
-            .apply_writer_binding(replay)
+            .apply_writer_binding(&replay.preview_id)
             .expect("no-op")
             .result
             .no_op
@@ -979,4 +914,81 @@ fn progress_transition_to_in_progress_is_required_again_after_interruption() {
             .require_writer_progress(INVESTIGATION, "HMD-011")
             .is_err()
     );
+}
+
+#[test]
+fn selected_writer_projection_keeps_binding_states_and_progress_permission_separate() {
+    let root = fixture();
+    let strategy = root.path().join(format!("{INVESTIGATION}/strategy"));
+    let implementation = strategy.join("implementation.toml");
+    fs::copy(
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../adapters/codex/matrices/casefile-implement-ticket-batch.toml"),
+        &implementation,
+    )
+    .unwrap();
+    let store = Store::open(root.path()).unwrap();
+    let project = || {
+        store.project_writer_binding(
+            &INVESTIGATION.replace('/', "\\\\"),
+            "casefile-implement-ticket-batch",
+        )
+    };
+    let canonical = || {
+        store
+            .derived_snapshot()
+            .unwrap()
+            .records
+            .into_iter()
+            .find(|record| record.path == format!("{INVESTIGATION}/strategy/implementation.toml"))
+            .unwrap()
+            .strategy
+            .unwrap()
+            .binding
+            .unwrap()
+    };
+    assert_eq!(project().unwrap().binding, canonical());
+    for source in [
+        BINDING.to_owned(),
+        BINDING.replacen("codex", "claude", 1),
+        "not = [toml".into(),
+    ] {
+        fs::write(strategy.join("bindings.toml"), source).unwrap();
+        assert_eq!(project().unwrap().binding, canonical());
+    }
+    assert!(
+        store
+            .project_writer_binding(INVESTIGATION, "wrong-strategy")
+            .is_err()
+    );
+    fs::create_dir_all(root.path().join(format!("{INVESTIGATION}/progress"))).unwrap();
+    fs::write(
+        root.path()
+            .join(format!("{INVESTIGATION}/progress/log.toml")),
+        "invalid = [progress",
+    )
+    .unwrap();
+    fs::write(
+        root.path()
+            .join(format!("{INVESTIGATION}/tickets/accepted/HMD-999.md")),
+        [0xff],
+    )
+    .unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let opaque = root.path().join("unreadable-unrelated.bin");
+        fs::write(&opaque, "unrelated").unwrap();
+        fs::set_permissions(opaque, fs::Permissions::from_mode(0o000)).unwrap();
+    }
+    assert!(project().is_ok());
+    assert!(
+        store
+            .require_writer_progress(INVESTIGATION, "HMD-011")
+            .is_err()
+    );
+    fs::remove_file(&implementation).unwrap();
+    assert!(project().is_err());
+    fs::write(implementation, "not = [toml").unwrap();
+    assert!(project().is_err());
 }

@@ -1,0 +1,472 @@
+{
+  "parent": "80d7bb79026585db655fbef7bc00f8d7ea3b741e",
+  "baseline": "hmd057-before",
+  "command_window_utc": [
+    "2026-09-30T20:41:54.628558+00:00",
+    "2026-09-30T20:42:05.080899+00:00"
+  ],
+  "target_directory": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target",
+  "command": "CARGO_TARGET_DIR=/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target /home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/release/deps/baselines-79c3fc1f4572a921 '^presentation_250_records/(cold_session|unchanged_refresh)$' --bench --baseline hmd057-before",
+  "configuration": {
+    "criterion": "0.8.2",
+    "samples": 10,
+    "warm_up_seconds": 1,
+    "measurement_target_seconds": 2,
+    "confidence_level": 0.95,
+    "noise_threshold": 0.01,
+    "mode": "release; warm filesystem; disposable synthetic Store; fixture setup outside measured operation; no competing builds",
+    "actual_work_items": 252,
+    "actual_files": 265,
+    "fixture_progress_notes": 0
+  },
+  "source_sha256": {
+    "casefile/Cargo.lock": "fef9ec3610487dff0bc7395fe61edd48be7b5c37f0dc7b81591f8898537ed081",
+    "casefile/Cargo.toml": "b8f0a810fc31e948296805e071f847b6701044460ecbf4782588fc3c511bba76",
+    "casefile/benchmarks/support/mod.rs": "9a073d937a0aaef7d27be68b0dbc6821338a8bab29db2c91ffa4d248301e1361",
+    "casefile/casefile-cli/Cargo.toml": "715a1af1574d0eaa29561408146c3b302edbdf6649e1c49fce93e9d7d1b42e11",
+    "casefile/casefile-core/Cargo.toml": "47ef3670f095f44677eb34bde11cc7665af5e233e5f94addc3847ee0e7c7380b",
+    "casefile/casefile-core/src/board.rs": "2458232b2ac378e509fe7fa6419b43ee85ed3bf0f133f885d6b440e3830095ac",
+    "casefile/casefile-core/src/change.rs": "62baaecaf55dc57402839b78bd9c8ebad703a79d46ff487782a3dcfa84a29770",
+    "casefile/casefile-core/src/decision.rs": "9456e83c4656d25bbd8f0e40720ea0f81ab411392163b0fdfe0e726a0157434b",
+    "casefile/casefile-core/src/diagnostic.rs": "d85e3fc270478f566c2caa716e89a1b69671f1e7fb46f081b225982c16a7b593",
+    "casefile/casefile-core/src/lib.rs": "1283fd1ab8905bf5e0e28ea113e4c6baf3ca103018220df206c3902d135b7b04",
+    "casefile/casefile-core/src/markdown.rs": "f14af32fdc9256ab2054a6496f388b90608cf9878fdb3154d0463357d9293c7f",
+    "casefile/casefile-core/src/metadata.rs": "f479a46ea7135640c664afe3f290eed86d94499754ddb669a4cfa8feb5f3f782",
+    "casefile/casefile-core/src/progress.rs": "28b23416ff41c9aae7a39749187c9fa64aab62b0d1dfee8bd481c1dba2e61124",
+    "casefile/casefile-core/src/progress/parse.rs": "2454be911956140e8de1961a9ece31163a988c1e462cbf255f4e2606b6047285",
+    "casefile/casefile-core/src/project_map.rs": "3f778d5de7b05c0f869f1eae4013f4f4f2232f5460b828b8a902d1d6ebb08ac2",
+    "casefile/casefile-core/src/record.rs": "39c923a8117146d61d00d1f9b517949dd603d8bc59f6f0ab2a91fae0f65a4519",
+    "casefile/casefile-core/src/rendering.rs": "0d9c574c4fa1c6c69d79baffe48aa9909a3cf53e4ed4af8e2df1748fdd09a021",
+    "casefile/casefile-core/src/request.rs": "f45211b6204002f7658dfa64a18c52bab14f4c05ee4b7458452507ea36e135a5",
+    "casefile/casefile-core/src/snapshot.rs": "3e55a04b5dcb8587f529c46ae02bf1ebed030177d1abd0321f44d2b4b7b93739",
+    "casefile/casefile-core/src/strategy.rs": "9188debe2b7019aef8a6e266e327dcf3281dc244bcb4e1522306acd64d38eff6",
+    "casefile/casefile-core/src/strategy_transition.rs": "4c8924bc9d6654b8cd14ec4d5846c4c7c35c58cbcad4395a457fa29aff4f18aa",
+    "casefile/casefile-core/src/work_item.rs": "5bf5efc4ea50aeb2f5304a82dc2d4aa42f18e4a6d47649ebe0dd8c8a53f508f3",
+    "casefile/casefile-server/Cargo.toml": "82b957b999188a4b4ffbbe4a85704241cb021aacf5e743430761ee2e97310284",
+    "casefile/casefile-store-sqlite/Cargo.toml": "ebea173be90ab46b6a553e21146eecdab298e454873335cf780e3a2a5a2b1bc2",
+    "casefile/casefile-store-sqlite/benches/baselines.rs": "364657f44bf4e1c453300105f889b24acb9309c338c168cb288633db18e350fc",
+    "casefile/casefile-store-sqlite/benches/priority.rs": "3d5aec3b6ff7f784446f55d21446edc58468539b963b4ff82868dd0111d8655f",
+    "casefile/casefile-store-sqlite/benches/support/mod.rs": "94b9cfd03b314e442357c084b68261dbe5509a1c667ee61f9334ce43ce401272",
+    "casefile/casefile-store-sqlite/src/lib.rs": "5419285937324b47c96697a9d3cf0d4053295eca85445fa7220fee335a8c395d",
+    "casefile/casefile-store-sqlite/tests/integration.rs": "7aed482eb84941207f73a473915d76806c2b9e4a7193e0784297c0085b00f915",
+    "casefile/casefile-store/Cargo.toml": "7521cd431c94f8ba2f5ca170bcf8dda4e08ca9a57d6823dc95a130ca6c978eeb",
+    "casefile/casefile-store/src/activation.rs": "9b1ad5144e3c98d29881e6163cdd3e5f873a7c87e498f1f919da13704fe26c91",
+    "casefile/casefile-store/src/checking.rs": "68793eb54a3fbc404349d1c568c3eddf2635fa89447ce652da76740c81d8531c",
+    "casefile/casefile-store/src/derived.rs": "b906f1acef7d14066537213601ffdf34f3fa60328893fb7d51a350096d06985a",
+    "casefile/casefile-store/src/derived/boards.rs": "38b3c2cbb943792d9c11542fbb2312a5c1fa6990e2979a179fc4806baf4c724f",
+    "casefile/casefile-store/src/derived/progress.rs": "07b37ec31d91e874debff73e2c87b1839f2a9ef28d90c4c1f6a93f0c1eb94a58",
+    "casefile/casefile-store/src/derived/records.rs": "21bb9a7f332f816331ffa875f5ff0837f5c9f15e98a7978094f1191f3d7c379e",
+    "casefile/casefile-store/src/governance.rs": "a0dd9f7c2cc6f960a253fe9456409a42c205e0ec51da5c7114d61a755e52c34a",
+    "casefile/casefile-store/src/index.rs": "20e36c9ec19d21791a17558e53eb583d8ded96f1cdc4ffd4ca152c3db2556f62",
+    "casefile/casefile-store/src/layout.rs": "7d9651b214616d139e4049e7b02db77f2ee3cce1707d0af53ec1d0745e676129",
+    "casefile/casefile-store/src/lib.rs": "ce4ba0b8ead4e8484cc8f9444abde2761e6128c9159f95f649c7056cb89ef931",
+    "casefile/casefile-store/src/mutation.rs": "09bb9edc247b1ad0c66926294babbaa86249ab0f5b6dda96cea5579c243dd6aa",
+    "casefile/casefile-store/src/mutation_dependencies.rs": "7d944577065ce8f6b97cc748de818e1fea67fc1606985f9b1d843b1a1591ecd1",
+    "casefile/casefile-store/src/mutation_hooks.rs": "e7ffd9ff983b33e310e13fd3486b6e55afe4cc86e5b7c9baad681ab528e2b9e5",
+    "casefile/casefile-store/src/mutation_locks.rs": "eb4bbb2ad522b6ddc67dbbe016cc364603e7c09929aac0195ce34d3cde3bd27d",
+    "casefile/casefile-store/src/mutation_metadata.rs": "50c3efe33e1aa12c9b3efadcc7bdca35799c84628930e4771936c8dc956e0fdf",
+    "casefile/casefile-store/src/mutation_projection.rs": "5c69b4d20e94f84f9c42157115672ee89792bb0feda22c4c15dc2be831db8ad5",
+    "casefile/casefile-store/src/mutation_restore.rs": "6e62d3c6f0596e11300695effa4c67a91ce69395b7f94a3f5379697d49dac53a",
+    "casefile/casefile-store/src/mutation_tests.rs": "0b3fa162f0189c3a1503fa71f0d79e1074ac0d0e399f86b4560c7d7aa6008d06",
+    "casefile/casefile-store/src/presentation.rs": "186eb0efd3718f4c296f0172842716c6fe3d864a439580637ddc77da3c45eb22",
+    "casefile/casefile-store/src/presentation/catalogue.rs": "b09c614c51984f036fa3568f7c83568b39a58e4777ce886c061403156d6c1508",
+    "casefile/casefile-store/src/presentation/content.rs": "53492c8cb103122cd5babc10a8e8500e888336f72ec7f11f1a6e378b8ed6c2f0",
+    "casefile/casefile-store/src/presentation/entries.rs": "0b3c562550651f42ff6123e9c8a61feca80260dfd57237fab009724a941acf59",
+    "casefile/casefile-store/src/presentation/facts.rs": "b6dfa861574402468c21ea291832011018378ee8b781db39b8f60e7231d4721c",
+    "casefile/casefile-store/src/presentation/loading.rs": "0497e94e2931c26f5056eb826532f3a24c9a1cae34f4c3fe02b0661211d39bcf",
+    "casefile/casefile-store/src/presentation/model.rs": "df23fb59633165c787d7977285d1d689f2d027845aa7d87b70e504fe3cb8f641",
+    "casefile/casefile-store/src/presentation/reader.rs": "54c1eb388bbd0c4788ee7d12f8cde92bd4ae2cf179e982ef088b0890a5c371f9",
+    "casefile/casefile-store/src/presentation/scope.rs": "f3a8b2c6bfa508e0f6d6c41230ad4bcb6bfcffcc75021384433eb1530702ca14",
+    "casefile/casefile-store/src/presentation/session.rs": "085e1d20f691676fea3893a26066582bb38facd505b5d1ad2de9a22793510e66",
+    "casefile/casefile-store/src/presentation/tests.rs": "fd35855427b16e7c11933b849980fbdf33b4dd6ff075be77245bc83e5bb49171",
+    "casefile/casefile-store/src/progress.rs": "00d6c76ab18d6d1ba21048d877d7b5e556387eb16a8b3c308edc2c860a9681dd",
+    "casefile/casefile-store/src/provider.rs": "df07e9cb79d6cb010c873dbf9c50e0dc9b32ca4d52450ea09e0024a54d3ee838",
+    "casefile/casefile-store/src/provider/outcome_tests.rs": "5bef39141f18af960fdfa21d2f7cf54928df54a3a7ce914015aafabeb4dcd825",
+    "casefile/casefile-store/src/read_context.rs": "94cc206049618e6a5598ff438b03f545ef62bcfb999789e8ea6404650d632304",
+    "casefile/casefile-store/src/read_context/tokens.rs": "c9be378c514ff715f7f7559e05eac0669599e97df4acd01bf8f8801ee042e47c",
+    "casefile/casefile-store/src/revision.rs": "703e6cfed119c6ec42dfcafe9d9b9e479920986836156aaf1a05eceea0d7ccd6",
+    "casefile/casefile-store/src/scanning.rs": "4f88a7b5f6f1c64aa541ea726c234040846d28d22b0aa7f0dd9edca5088719e0",
+    "casefile/casefile-store/src/scanning/classification.rs": "77d19ac8ee470aa1eebf3e04c8ecdd2458c15fb2abcdeedcdbc5406bccdbb265",
+    "casefile/casefile-store/src/scanning/inventory.rs": "010236bb3974e57852f9d6a6997194cce0a9ddb66307fd57c33737f57eed0bb3",
+    "casefile/casefile-store/src/scanning/scoped.rs": "132a46d633ab7761fc233efeff212f5d436210ba30f9f4a713848ff8020be944",
+    "casefile/casefile-store/src/store.rs": "c5d5822e6deebd33c35435c8ca3a8330bb995f3f76c5465d31bf7dec5bc580ac",
+    "casefile/casefile-store/src/validation.rs": "845f20b8ea2181037f61e37c4118376b5e8cb0085f38ac45cc070a2347725cae",
+    "casefile/casefile-store/src/writing.rs": "914070c2dc00864b63aca85fb0a09025c4de7f420f69a3887edea817fd47991b",
+    "casefile/casefile-store/tests/derived.rs": "fa93ab5213bfd7619f0b4dd93193e9a396c5bc0c09e645adc782f0a3e14a03df",
+    "casefile/casefile-store/tests/diff_paths.rs": "67f9de6faa3d6d32aa0b723ff7b1918d7ae25191d89a157a5cece92be9039651",
+    "casefile/casefile-store/tests/governance.rs": "75720f3f217741d139920ecf94fdc541d6136ed710bdde4a35195ffa7b585607",
+    "casefile/casefile-store/tests/provider.rs": "25bf17d1f37b00479c9a9f849545aafae156d4ad6ccf301fd185f3d4927ec210",
+    "casefile/casefile-store/tests/scanning.rs": "15a5f8ea4a198bb7b9d15b963ca5ecb25524f29db6fde9cc9d31291f597be893",
+    "casefile/casefile-store/tests/v1.rs": "23f0267781c22526161fc0db28590a43ab60b06211d6bd8d35e6438f67e54db0",
+    "casefile/casefile-store/tests/validation.rs": "9f7fe4c0c3047d186f3f5b5ca860b00e994508156dce10247b210248765bac1c",
+    "casefile/casefile-tui/Cargo.toml": "83f381e98fea9b3af577f0d9785dec49886f60bedd4baf9c992e3e0f8f273d4d"
+  },
+  "executables_sha256": {
+    "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/release/deps/baselines-79c3fc1f4572a921": "970f58449ebca6b4f0efa2408eda15ff655b75ea5c31085417e1b7c3f4717af4"
+  },
+  "preserved_native_baseline_json_count": 236,
+  "scenarios": {
+    "presentation_250_records/cold_session": {
+      "benchmark": {
+        "group_id": "presentation_250_records",
+        "function_id": "cold_session",
+        "value_str": null,
+        "throughput": {
+          "Elements": 250
+        },
+        "full_id": "presentation_250_records/cold_session",
+        "directory_name": "presentation_250_records/cold_session",
+        "title": "presentation_250_records/cold_session"
+      },
+      "sample": {
+        "sampling_mode": "Linear",
+        "iters": [
+          3.0,
+          6.0,
+          9.0,
+          12.0,
+          15.0,
+          18.0,
+          21.0,
+          24.0,
+          27.0,
+          30.0
+        ],
+        "times": [
+          52021778.0,
+          101809208.0,
+          156222720.0,
+          213456710.0,
+          268941243.0,
+          323924986.0,
+          366065951.0,
+          421382930.0,
+          486068291.0,
+          528850832.0
+        ]
+      },
+      "estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 17395678.82023809,
+            "upper_bound": 17795138.414444443
+          },
+          "point_estimate": 17600040.63208995,
+          "standard_error": 101274.3533445104
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 17358080.0,
+            "upper_bound": 17929416.2
+          },
+          "point_estimate": 17592991.575,
+          "standard_error": 155098.69519853132
+        },
+        "median_abs_dev": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 59163.031145199784,
+            "upper_bound": 607760.6010600943
+          },
+          "point_estimate": 361243.2548816482,
+          "standard_error": 135189.417190185
+        },
+        "slope": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 17555383.25919908,
+            "upper_bound": 17895095.5266323
+          },
+          "point_estimate": 17716917.195670996,
+          "standard_error": 86884.26213860366
+        },
+        "std_dev": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 197044.66128076165,
+            "upper_bound": 428273.75826307415
+          },
+          "point_estimate": 336402.9699925647,
+          "standard_error": 62019.50845442099
+        }
+      },
+      "change_estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": -0.5027210626266402,
+            "upper_bound": -0.4882673944186279
+          },
+          "point_estimate": -0.49465132416929714,
+          "standard_error": 0.0036729784249353425
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": -0.5008520086920116,
+            "upper_bound": -0.4829210386527555
+          },
+          "point_estimate": -0.49296785748331695,
+          "standard_error": 0.004843778758135622
+        }
+      },
+      "baseline_sample": {
+        "sampling_mode": "Linear",
+        "iters": [
+          2.0,
+          4.0,
+          6.0,
+          8.0,
+          10.0,
+          12.0,
+          14.0,
+          16.0,
+          18.0,
+          20.0
+        ],
+        "times": [
+          69317631.0,
+          136749025.0,
+          209046860.0,
+          277677540.0,
+          344886506.0,
+          416059495.0,
+          485607769.0,
+          556233589.0,
+          644458025.0,
+          709278311.0
+        ]
+      },
+      "baseline_estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 34576050.21642856,
+            "upper_bound": 35120508.46767857
+          },
+          "point_estimate": 34827519.04545635,
+          "standard_error": 140198.37137051788
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 34580137.59166667,
+            "upper_bound": 35114257.43125
+          },
+          "point_estimate": 34697980.85714286,
+          "standard_error": 105346.91092040214
+        },
+        "median_abs_dev": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 20351.43803869133,
+            "upper_bound": 740327.5759915533
+          },
+          "point_estimate": 155510.60179538518,
+          "standard_error": 188481.47212629154
+        },
+        "slope": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 34655102.41666513,
+            "upper_bound": 35454078.10497238
+          },
+          "point_estimate": 35121408.24805195,
+          "standard_error": 209167.89150562783
+        },
+        "std_dev": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 126346.04373302017,
+            "upper_bound": 623823.9262563167
+          },
+          "point_estimate": 468153.7347462823,
+          "standard_error": 123388.49783224896
+        }
+      }
+    },
+    "presentation_250_records/unchanged_refresh": {
+      "benchmark": {
+        "group_id": "presentation_250_records",
+        "function_id": "unchanged_refresh",
+        "value_str": null,
+        "throughput": {
+          "Elements": 250
+        },
+        "full_id": "presentation_250_records/unchanged_refresh",
+        "directory_name": "presentation_250_records/unchanged_refresh",
+        "title": "presentation_250_records/unchanged_refresh"
+      },
+      "sample": {
+        "sampling_mode": "Linear",
+        "iters": [
+          27.0,
+          54.0,
+          81.0,
+          108.0,
+          135.0,
+          162.0,
+          189.0,
+          216.0,
+          243.0,
+          270.0
+        ],
+        "times": [
+          38256586.0,
+          73994300.0,
+          112905407.0,
+          148081125.0,
+          185812816.0,
+          222435352.0,
+          262504003.0,
+          297086898.0,
+          334924397.0,
+          369319409.0
+        ]
+      },
+      "estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 1373613.8365285126,
+            "upper_bound": 1390854.3383766166
+          },
+          "point_estimate": 1381209.1543680187,
+          "standard_error": 4488.235408411638
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 1371121.5277777778,
+            "upper_bound": 1388910.0687830688
+          },
+          "point_estimate": 1375896.7675925926,
+          "standard_error": 4429.439985426447
+        },
+        "median_abs_dev": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 2070.3868002803642,
+            "upper_bound": 20759.629472492303
+          },
+          "point_estimate": 7714.851731922954,
+          "standard_error": 4932.152124327118
+        },
+        "slope": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 1371161.4085977883,
+            "upper_bound": 1382160.7760511094
+          },
+          "point_estimate": 1375921.0165464166,
+          "standard_error": 2837.97915383558
+        },
+        "std_dev": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 4192.909801996842,
+            "upper_bound": 21010.33044138291
+          },
+          "point_estimate": 15006.35248080289,
+          "standard_error": 4542.060117695555
+        }
+      },
+      "change_estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": -0.035972755035964046,
+            "upper_bound": -0.021826896103906743
+          },
+          "point_estimate": -0.029206815880586268,
+          "standard_error": 0.003615419014127077
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": -0.03730119030611415,
+            "upper_bound": -0.023124055496641316
+          },
+          "point_estimate": -0.032977629492892735,
+          "standard_error": 0.0034339426163640303
+        }
+      },
+      "baseline_sample": {
+        "sampling_mode": "Linear",
+        "iters": [
+          26.0,
+          52.0,
+          78.0,
+          104.0,
+          130.0,
+          156.0,
+          182.0,
+          208.0,
+          234.0,
+          260.0
+        ],
+        "times": [
+          37485214.0,
+          73659092.0,
+          111029891.0,
+          148110866.0,
+          185571954.0,
+          222681072.0,
+          256734594.0,
+          295383917.0,
+          330860254.0,
+          369765687.0
+        ]
+      },
+      "baseline_estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 1417967.9178861417,
+            "upper_bound": 1428143.94051614
+          },
+          "point_estimate": 1422763.5473366913,
+          "standard_error": 2608.613589559447
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 1416521.0,
+            "upper_bound": 1427442.7692307692
+          },
+          "point_estimate": 1422817.930128205,
+          "standard_error": 2655.0386663465365
+        },
+        "median_abs_dev": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 1458.3024410330147,
+            "upper_bound": 13746.453119413185
+          },
+          "point_estimate": 6881.842271284515,
+          "standard_error": 3062.2628997343554
+        },
+        "slope": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 1415594.1228559774,
+            "upper_bound": 1423986.0173076922
+          },
+          "point_estimate": 1419569.9687312688,
+          "standard_error": 2130.36286006286
+        },
+        "std_dev": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 3877.5716821967726,
+            "upper_bound": 11940.007511724685
+          },
+          "point_estimate": 8680.173822886167,
+          "standard_error": 2216.9776217435133
+        }
+      }
+    }
+  }
+}

@@ -9,6 +9,7 @@ impl Coordinator {
             .is_some_and(|content| Some(content.path.as_str()) != path)
         {
             self.content = None;
+            self.content_status = None;
             changed = true;
         }
         if self
@@ -96,33 +97,32 @@ impl Coordinator {
         if !matches {
             return false;
         }
-        match &event {
+        match event {
             PresentationContentEvent::Loaded { entry, .. } => {
-                self.changed.insert(entry.path.clone());
-                let entry = Arc::new(entry.as_ref().clone());
-                if let Some(load) = self.active.as_mut()
-                    && load.entries.contains_key(&entry.path)
+                let entry: Arc<PresentationEntry> = Arc::from(entry);
+                if self
+                    .visible_entry(&entry.path)
+                    .is_none_or(|old| old.as_ref() != entry.as_ref())
                 {
-                    load.entries.insert(entry.path.clone(), entry.clone());
+                    self.changed.insert(entry.path.clone());
+                    if let Some(load) = self.active.as_mut()
+                        && load.entries.contains_key(&entry.path)
+                    {
+                        load.entries.insert(entry.path.clone(), Arc::clone(&entry));
+                    }
+                    self.relationships.entry_changed(
+                        &entry.path,
+                        self.entries.get(&entry.path).map(AsRef::as_ref),
+                        Some(&entry),
+                    );
+                    self.entries.insert(entry.path.clone(), entry);
+                    self.relationships.resolve(&self.entries);
                 }
-                self.relationships.entry_changed(
-                    &entry.path,
-                    self.entries.get(&entry.path).map(AsRef::as_ref),
-                    Some(&entry),
-                );
-                self.entries.insert(entry.path.clone(), entry);
-                self.relationships.resolve(&self.entries);
-            }
-            PresentationContentEvent::Pending { .. } | PresentationContentEvent::Failure { .. } => {
-            }
-        }
-        match &event {
-            PresentationContentEvent::Pending { path, .. } => {
-                self.content_status = Some(format!("Loading {path}…"));
-            }
-            PresentationContentEvent::Loaded { .. } => {
                 self.content_status = None;
                 self.content = None;
+            }
+            PresentationContentEvent::Pending { path, .. } => {
+                self.content_status = Some(format!("Loading {path}…"));
             }
             PresentationContentEvent::Failure { path, message, .. } => {
                 self.content_status = Some(format!(

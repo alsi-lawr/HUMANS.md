@@ -761,9 +761,22 @@ fn table_rows_and_review_faults_are_structural() {
         scan_has(root.path(), code);
     }
     let root = fixture();
+    let source = |name| {
+        toml::Value::String(
+            root.path()
+                .join("offline")
+                .join(name)
+                .to_string_lossy()
+                .into_owned(),
+        )
+    };
     fs::write(
         root.path().join("projects.toml"),
-        "[projects]\ndemo = 'x'\nlegacy = 'keep'\n",
+        format!(
+            "[projects]\ndemo = {}\nlegacy = {}\n",
+            source("demo"),
+            source("legacy")
+        ),
     )
     .expect("extra map");
     assert!(

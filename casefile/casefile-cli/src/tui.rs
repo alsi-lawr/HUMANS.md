@@ -21,7 +21,7 @@ pub(super) fn run(store: &Store, root: &Path, editor: EditorConfig) -> Result<Ex
                 match decision {
                     casefile_tui::ReviewDecision::Cancel => edit::cancel(&draft_path)?,
                     casefile_tui::ReviewDecision::Apply => {
-                        edit::apply(store, preview, &intent.path, &draft_path)?;
+                        edit::apply(store, preview, &draft_path)?;
                     }
                 }
             }

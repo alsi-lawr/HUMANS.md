@@ -94,7 +94,7 @@ fn provider_same_session_writes_survive_locked_validation_and_result_windows() {
                 write(
                     root.path(),
                     "projects.toml",
-                    "[projects]\ndemo = \"/source/demo\"\nother = \"/source/other\"\n",
+                    "[projects]\ndemo = \"//source/demo\"\nother = \"//source/other\"\n",
                 );
             }
             let provider = Arc::new(Provider::without_cache(Store::open(root.path()).unwrap()));
@@ -112,13 +112,13 @@ fn provider_same_session_writes_survive_locked_validation_and_result_windows() {
                 if event == boundary {
                     if let Some(preview) = second.take() {
                         shared
-                            .apply_record(preview)
+                            .apply_record(&preview.preview_id)
                             .expect("same Provider disjoint write");
                     }
                 }
             });
             provider
-                .apply_record(first)
+                .apply_record(&first.preview_id)
                 .expect("first committed outcome");
             mutation_hooks::clear();
             assert!(
@@ -296,20 +296,26 @@ fn progress_bootstrap_append_replay_and_record_batch_have_narrow_result_windows(
         Boundary::Result,
         store.preview(board("bootstrap-overlap")).unwrap(),
     );
-    provider.apply_progress(bootstrap).unwrap();
+    provider.apply_progress(&bootstrap.preview_id).unwrap();
     mutation_hooks::clear();
     let progress = provider.preview_progress(append()).unwrap();
     disjoint_at(
         Boundary::Result,
         store.preview(board("append-overlap")).unwrap(),
     );
-    provider.apply_progress(progress.clone()).unwrap();
+    provider.apply_progress(&progress.preview_id).unwrap();
     mutation_hooks::clear();
     disjoint_at(
         Boundary::Locked,
         store.preview(board("replay-overlap")).unwrap(),
     );
-    assert!(provider.apply_progress(progress).unwrap().result.no_op);
+    assert!(
+        provider
+            .apply_progress(&progress.preview_id)
+            .unwrap()
+            .result
+            .no_op
+    );
     mutation_hooks::clear();
     let batch = store
         .preview_batch(vec![board("batch-a"), board("batch-b")])
@@ -361,7 +367,7 @@ fn shared_reference_changes_and_reverse_progress_membership_cannot_write_skew() 
         })
         .unwrap();
     assert!(deletion.diagnostics.is_empty());
-    provider.apply_progress(pending).unwrap();
+    provider.apply_progress(&pending.preview_id).unwrap();
     assert!(store.apply(deletion).is_err());
     assert!(root.path().join(&first).exists());
     assert!(store.scan().unwrap().diagnostics.is_empty());
@@ -474,7 +480,7 @@ fn governed_multi_file_and_binding_results_and_legacy_replay_are_independent() {
     assert!(records.iter().any(|r| r.expected_store_revision.is_none()));
     let provider = Provider::without_cache(store.clone());
     provider
-        .apply_progress(provider.bootstrap_progress(BASE).unwrap())
+        .apply_progress(&provider.bootstrap_progress(BASE).unwrap().preview_id)
         .unwrap();
     let binding = WriterBindingRequest { investigation: BASE.into(), binding_source:"schema_version = 1\nadapter = \"codex\"\nrole = \"implementation-writer\"\nmodel = \"gpt-6-astra\"\nreasoning_effort = \"high\"\n\n[resolution]\nmode = \"named_agent_type\"\nvalue = \"casefile-implementation-writer-gpt-6-astra-high\"\n".into() };
     let preview = store.preview_writer_binding(binding).unwrap();
@@ -566,7 +572,7 @@ fn independent_processes_coordinate_disjoint_targets_replacement_creation_and_id
             write(
                 root.path(),
                 "projects.toml",
-                "[projects]\ndemo = \"/source/demo\"\nother = \"/source/other\"\n",
+                "[projects]\ndemo = \"//source/demo\"\nother = \"//source/other\"\n",
             );
         }
         let mut first = board("first");
@@ -664,7 +670,7 @@ fn record_delete_no_op_and_default_board_receipts_survive_disjoint_result_change
         Boundary::Result,
         store.preview(board("no-op-overlap")).unwrap(),
     );
-    let result = provider.apply_record(no_op).unwrap();
+    let result = provider.apply_record(&no_op.preview_id).unwrap();
     mutation_hooks::clear();
     assert_eq!(
         result.result.result.resulting_target_revision,
@@ -688,7 +694,9 @@ fn record_delete_no_op_and_default_board_receipts_survive_disjoint_result_change
         Boundary::Result,
         store.preview(board("default-overlap")).unwrap(),
     );
-    let created = provider.apply_default_delivery_board(preview).unwrap();
+    let created = provider
+        .apply_default_delivery_board(&preview.preview_id)
+        .unwrap();
     mutation_hooks::clear();
     let repeated = provider.preview_default_delivery_board(BASE).unwrap();
     assert!(repeated.no_op);
@@ -696,7 +704,9 @@ fn record_delete_no_op_and_default_board_receipts_survive_disjoint_result_change
         Boundary::Result,
         store.preview(board("default-no-op-overlap")).unwrap(),
     );
-    let result = provider.apply_default_delivery_board(repeated).unwrap();
+    let result = provider
+        .apply_default_delivery_board(&repeated.preview_id)
+        .unwrap();
     mutation_hooks::clear();
     assert_eq!(
         created.result.result.resulting_target_revision,
@@ -738,4 +748,279 @@ fn reverse_evidence_uses_canonical_metadata_and_aliases_cannot_bypass_it() {
     }
     assert!(store.apply(alias_preview).is_err());
     assert!(root.path().join(path).exists());
+}
+
+#[test]
+fn progress_post_write_failure_restores_owned_bytes_but_discards_external_restoration() {
+    for external in [false, true] {
+        let root = fixture();
+        let store = Store::open(root.path()).unwrap();
+        store
+            .apply_progress(
+                store
+                    .preview_progress(store.bootstrap_progress(BASE).unwrap())
+                    .unwrap(),
+            )
+            .unwrap();
+        let path = format!("{BASE}/progress/log.toml");
+        let before = fs::read(root.path().join(&path)).unwrap();
+        let crate::ProgressOperation::Append {
+            investigation,
+            entries,
+        } = append()
+        else {
+            unreachable!()
+        };
+        let preview = store
+            .preview_progress(crate::ProgressChangeRequest {
+                investigation,
+                entries,
+                replacement: None,
+                replacement_source: None,
+                bootstrap: false,
+            })
+            .unwrap();
+        let changed = path.clone();
+        mutation_hooks::set(move |event, root, _| {
+            if event == Boundary::Result && external {
+                fs::write(root.join(&changed), b"external edit wins").unwrap();
+            }
+        });
+        mutation_hooks::fail_result();
+        let error = store.apply_progress(preview).unwrap_err();
+        mutation_hooks::clear();
+        if external {
+            let crate::StoreError::IncompleteRollback { details, .. } = error else {
+                panic!("typed incomplete rollback")
+            };
+            assert_eq!(details.affected_paths.len(), 1);
+            assert_eq!(details.affected_paths[0].path, path);
+            assert_eq!(
+                details.affected_paths[0].reason,
+                crate::RollbackReason::ExternalChange
+            );
+            assert!(matches!(
+                details.affected_paths[0].remaining,
+                crate::RollbackRemainingState::Regular { .. }
+            ));
+            assert_eq!(
+                fs::read(root.path().join(path)).unwrap(),
+                b"external edit wins"
+            );
+            assert!(
+                !serde_json::to_string(&details)
+                    .unwrap()
+                    .contains("external edit wins")
+            );
+        } else {
+            assert!(matches!(error, crate::StoreError::Io(_)));
+            assert_eq!(fs::read(root.path().join(path)).unwrap(), before);
+        }
+    }
+}
+
+#[test]
+fn progress_absent_publication_does_not_clobber_an_intervening_creator() {
+    let root = fixture();
+    let store = Store::open(root.path()).unwrap();
+    let preview = store
+        .preview_progress(store.bootstrap_progress(BASE).unwrap())
+        .unwrap();
+    let path = preview.path.clone();
+    mutation_hooks::set(move |event, root, target| {
+        if event == Boundary::Write && target == path {
+            write(root, &path, b"external creator");
+        }
+    });
+    assert!(matches!(
+        store.apply_progress(preview),
+        Err(crate::StoreError::StaleTargetRevision)
+    ));
+    mutation_hooks::clear();
+    assert_eq!(
+        fs::read(root.path().join(format!("{BASE}/progress/log.toml"))).unwrap(),
+        b"external creator"
+    );
+}
+
+#[test]
+fn contested_batch_cleanup_continues_and_never_rewrites_noop_or_unwritten_targets() {
+    let root = fixture();
+    let store = Store::open(root.path()).unwrap();
+    let unchanged = board("unchanged");
+    store
+        .apply(store.preview(unchanged.clone()).unwrap())
+        .unwrap();
+    let no_op = match unchanged {
+        ChangeRequest::Create { path, draft } => ChangeRequest::Replace { path, draft },
+        _ => unreachable!(),
+    };
+    let untouched = crate::revision::target_revision(&root.path().join(no_op.path())).unwrap();
+    let first = board("first");
+    let second = board("second");
+    let last = board("neverwritten");
+    let first_path = first.path().to_owned();
+    let second_path = second.path().to_owned();
+    let last_path = last.path().to_owned();
+    let preview = store
+        .preview_batch(vec![first, second, no_op.clone(), last])
+        .unwrap();
+    mutation_hooks::fail_write(last_path.clone());
+    mutation_hooks::set(move |event, root, path| {
+        if event == Boundary::Write && path == second_path {
+            fs::write(root.join(&first_path), b"external first").unwrap();
+        }
+    });
+    let error = store.apply_batch(preview).unwrap_err();
+    mutation_hooks::clear();
+    let crate::StoreError::IncompleteRollback { details, .. } = error else {
+        panic!("typed incomplete rollback")
+    };
+    assert_eq!(details.affected_paths.len(), 1);
+    assert_eq!(
+        fs::read(root.path().join(format!("{BASE}/boards/first.toml"))).unwrap(),
+        b"external first"
+    );
+    assert!(
+        !root
+            .path()
+            .join(format!("{BASE}/boards/second.toml"))
+            .exists()
+    );
+    assert!(!root.path().join(last_path).exists());
+    assert_eq!(
+        crate::revision::target_revision(&root.path().join(no_op.path())).unwrap(),
+        untouched
+    );
+}
+
+#[test]
+fn governed_post_write_cleanup_leaves_external_matrix_and_removes_own_transition() {
+    let root = fixture();
+    let store = Store::open(root.path()).unwrap();
+    let matrix_path = format!("{BASE}/strategy/implementation.toml");
+    write(
+        root.path(),
+        &matrix_path,
+        matrix("casefile-implement-ticket-batch.toml"),
+    );
+    let preview = store.preview_strategy_transition(transition()).unwrap();
+    let record_path = preview.changes[1].path.clone();
+    let external = matrix_path.clone();
+    mutation_hooks::set(move |event, root, _| {
+        if event == Boundary::Result {
+            fs::write(root.join(&external), b"external governed matrix").unwrap();
+        }
+    });
+    mutation_hooks::fail_result();
+    let error = store.apply_strategy_transition(preview).unwrap_err();
+    mutation_hooks::clear();
+    let crate::StoreError::IncompleteRollback { details, .. } = error else {
+        panic!("typed incomplete rollback")
+    };
+    assert_eq!(details.affected_paths[0].path, matrix_path);
+    assert_eq!(
+        fs::read(root.path().join(matrix_path)).unwrap(),
+        b"external governed matrix"
+    );
+    assert!(!root.path().join(record_path).exists());
+}
+
+#[test]
+fn governed_write_failure_does_not_republish_an_unchanged_matrix() {
+    let root = fixture();
+    let store = Store::open(root.path()).unwrap();
+    let request = transition();
+    let path = format!("{BASE}/strategy/implementation.toml");
+    write(root.path(), &path, &request.selected_matrix_source);
+    let before = crate::revision::target_revision(&root.path().join(&path)).unwrap();
+    let preview = store.preview_strategy_transition(request).unwrap();
+    assert!(preview.changes[0].no_op);
+    let never_written = preview.changes[1].path.clone();
+    mutation_hooks::fail_write(never_written.clone());
+    assert!(matches!(
+        store.apply_strategy_transition(preview),
+        Err(crate::StoreError::Io(_))
+    ));
+    mutation_hooks::clear();
+    assert_eq!(
+        crate::revision::target_revision(&root.path().join(path)).unwrap(),
+        before
+    );
+    assert!(!root.path().join(never_written).exists());
+}
+
+#[cfg(unix)]
+#[test]
+fn rollback_preserves_external_symlink_and_does_not_touch_its_outside_target() {
+    let root = fixture();
+    let outside = tempfile::NamedTempFile::new().unwrap();
+    fs::write(outside.path(), b"outside private bytes").unwrap();
+    let store = Store::open(root.path()).unwrap();
+    let preview = store.preview(board("contested-link")).unwrap();
+    let path = preview.request.path().to_owned();
+    let outside_path = outside.path().to_owned();
+    let external = path.clone();
+    mutation_hooks::set(move |event, root, _| {
+        if event == Boundary::Result {
+            fs::remove_file(root.join(&external)).unwrap();
+            std::os::unix::fs::symlink(&outside_path, root.join(&external)).unwrap();
+        }
+    });
+    let error = store.apply(preview).unwrap_err();
+    mutation_hooks::clear();
+    let crate::StoreError::IncompleteRollback { details, .. } = error else {
+        panic!("typed incomplete rollback")
+    };
+    assert_eq!(
+        details.affected_paths[0].remaining,
+        crate::RollbackRemainingState::Symlink
+    );
+    assert!(
+        fs::symlink_metadata(root.path().join(path))
+            .unwrap()
+            .file_type()
+            .is_symlink()
+    );
+    assert_eq!(fs::read(outside.path()).unwrap(), b"outside private bytes");
+}
+
+#[test]
+fn reverse_ordered_supersession_closure_rejects_a_new_cycle_without_writing() {
+    let root = fixture();
+    let store = Store::open(root.path()).unwrap();
+    let target = format!("{BASE}/tickets/accepted/HMD-011.md");
+    let original = fs::read(root.path().join(&target)).unwrap();
+    let template = std::str::from_utf8(&original).unwrap();
+    for (id, next) in [("HMD-012", "HMD-011"), ("HMD-013", "HMD-012")] {
+        write(
+            root.path(),
+            &format!("{BASE}/tickets/accepted/{id}.md"),
+            template
+                .replace("HMD-011", id)
+                .replace("supersedes: []", &format!("supersedes: [{next}]")),
+        );
+    }
+    assert!(store.scan().unwrap().diagnostics.is_empty());
+    let mut draft =
+        casefile_core::parse_draft(&target, casefile_core::Kind::Ticket, template).unwrap();
+    if let RecordDraft::Ticket(item) = &mut draft {
+        item.supersedes = vec!["HMD-013".into()];
+    }
+    let preview = store
+        .preview(ChangeRequest::Replace {
+            path: target.clone(),
+            draft,
+        })
+        .unwrap();
+    assert!(
+        preview
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.code == "supersession_cycle"),
+        "{:?}",
+        preview.diagnostics
+    );
+    assert!(store.apply(preview).is_err());
+    assert_eq!(fs::read(root.path().join(&target)).unwrap(), original);
 }

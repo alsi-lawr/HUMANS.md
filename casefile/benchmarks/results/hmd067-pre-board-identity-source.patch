@@ -1,0 +1,123 @@
+diff --git b/casefile/casefile-tui/src/workbench/progressive_tests.rs a/casefile/casefile-tui/src/workbench/progressive_tests.rs
+index 0f29286..4075c48 100644
+--- b/casefile/casefile-tui/src/workbench/progressive_tests.rs
++++ a/casefile/casefile-tui/src/workbench/progressive_tests.rs
+@@ -160,53 +160,6 @@ fn scoped_refresh_updates_rendered_boards_and_progress_without_losing_selection_
+         other_rows
+     );
+ 
+-    let board = fs::read_to_string(root.path().join(BOARD)).unwrap();
+-    fs::write(
+-        root.path().join(BOARD),
+-        board
+-            .replace("HMD-board", "HMD-renamed-board")
+-            .replace("Updated delivery", "Renamed delivery"),
+-    )
+-    .unwrap();
+-    coordinator
+-        .refresh(PresentationTarget::Investigation {
+-            project: "demo".into(),
+-            path: ROOT.into(),
+-        })
+-        .unwrap();
+-    finish(&mut coordinator, &mut app);
+-    let renamed = test_support::render(&app, 180, 40);
+-    assert!(renamed.contains("Renamed delivery"));
+-    assert!(!renamed.contains("Updated delivery"));
+-    assert!(renamed.lines().next().unwrap().contains("BOARDS 1"));
+-    assert_eq!(app.browser.state(), selection);
+-
+-    let log_path = root.path().join(ROOT).join("progress/log.toml");
+-    let valid_log = fs::read(&log_path).unwrap();
+-    fs::write(&log_path, "malformed progress").unwrap();
+-    coordinator
+-        .refresh(PresentationTarget::Investigation {
+-            project: "demo".into(),
+-            path: ROOT.into(),
+-        })
+-        .unwrap();
+-    finish(&mut coordinator, &mut app);
+-    let invalid = test_support::render(&app, 180, 40);
+-    assert!(
+-        invalid.contains("Board definitions or the progress log are invalid."),
+-        "{invalid}"
+-    );
+-    assert!(!invalid.contains("Renamed delivery"));
+-    fs::write(&log_path, valid_log).unwrap();
+-    coordinator
+-        .refresh(PresentationTarget::Investigation {
+-            project: "demo".into(),
+-            path: ROOT.into(),
+-        })
+-        .unwrap();
+-    finish(&mut coordinator, &mut app);
+-    assert!(test_support::render(&app, 180, 40).contains("Renamed delivery"));
+-
+     fs::remove_file(root.path().join(BOARD)).unwrap();
+     coordinator
+         .refresh(PresentationTarget::Project {
+@@ -222,7 +175,7 @@ fn scoped_refresh_updates_rendered_boards_and_progress_without_losing_selection_
+             .iter()
+             .any(|entry| entry.path == BOARD)
+     );
+-    assert!(!test_support::render(&app, 180, 40).contains("Renamed delivery"));
++    assert!(!test_support::render(&app, 180, 40).contains("Updated delivery"));
+ }
+ 
+ #[test]
+diff --git b/casefile/casefile-tui/src/workbench/projection.rs a/casefile/casefile-tui/src/workbench/projection.rs
+index 8491610..1749479 100644
+--- b/casefile/casefile-tui/src/workbench/projection.rs
++++ a/casefile/casefile-tui/src/workbench/projection.rs
+@@ -49,12 +49,6 @@ impl App {
+                 }
+             }
+         }
+-        let new_boards = projection
+-            .derived
+-            .boards
+-            .iter()
+-            .map(|board| &board.identity)
+-            .collect::<BTreeSet<_>>();
+         for entry in &projection.scan.snapshot.entries {
+             if self.scan.scope_for_path(&entry.path) != Some((project, Some(investigation))) {
+                 continue;
+@@ -63,17 +57,6 @@ impl App {
+                 .entry_indices
+                 .get(&entry.path)
+                 .map(|index| &self.scan.snapshot.entries[*index]);
+-            if old
+-                .and_then(|old| self.record_indices.get(&old.path))
+-                .map(|index| &self.derived.records[*index])
+-                .filter(|record| record.kind == Some(casefile_core::Kind::Board))
+-                .and_then(|record| record.identity.as_ref())
+-                .is_some_and(|identity| {
+-                    self.board_records.contains_key(identity) && !new_boards.contains(identity)
+-                })
+-            {
+-                return true;
+-            }
+             if old.is_none_or(|old| {
+                 old.identity != entry.identity
+                     || old.classification != entry.classification
+@@ -117,17 +100,12 @@ impl App {
+             .collect::<BTreeSet<_>>();
+         for path in &changed {
+             self.unavailable.remove(path);
+-            if let Some(index) = self.record_indices.get(path) {
+-                let old = &self.derived.records[*index];
+-                if old.kind == Some(casefile_core::Kind::Board)
+-                    && let Some(identity) = &old.identity
+-                {
+-                    self.board_records.remove(identity);
+-                }
+-            }
+             if !new_records.contains(path.as_str())
+                 && let Some(index) = self.record_indices.remove(path)
+             {
++                if let Some(identity) = &self.derived.records[index].identity {
++                    self.board_records.remove(identity);
++                }
+                 self.derived.records.swap_remove(index);
+                 if let Some(moved) = self.derived.records.get(index) {
+                     self.record_indices.insert(moved.path.clone(), index);

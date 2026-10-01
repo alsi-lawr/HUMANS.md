@@ -3,12 +3,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     ActivationState, Store, StoreError,
-    activation::{Activation, activation_content, scope_for},
-    layout::{checked_path, kind_for_path},
-    scanning::{
-        InventoryKind, MetadataInventory, binding_diagnostics, classify, metadata_inventory,
-        read_inventory_entry,
-    },
+    activation::{Activation, activation_content},
+    layout::checked_path,
+    scanning::{InventoryKind, metadata_inventory},
     validation::{ValidationFacts, cross_validate_facts},
 };
 
@@ -25,7 +22,7 @@ pub struct ScanSummary {
 pub struct CheckResult {
     pub activation: ActivationState,
     pub valid: Option<bool>,
-    pub revision: Revision,
+    pub freshness: crate::CheckFreshness,
     pub diagnostics: Vec<Diagnostic>,
 }
 
@@ -49,42 +46,89 @@ impl Store {
     }
 
     /// Validates canonical records one body at a time; opaque attachments are metadata only.
-    /// Scoped checks canonically read project work-item/decision/board support one record at a time,
+    /// Scoped checks canonically read project work-item/decision support one record at a time,
     /// retaining only parsed facts, never unrelated evidence or opaque bodies.
     pub fn check(&self, investigation: Option<&str>) -> Result<CheckResult, StoreError> {
         let root = self.observation_root();
-        let investigation = investigation.map(checked_path).transpose()?;
+        if let Some(path) = investigation.map(checked_path).transpose()? {
+            let (project_path, identity) = path
+                .split_once("/investigations/")
+                .ok_or_else(|| StoreError::Invalid("investigation is not activated".into()))?;
+            let project = project_path
+                .strip_prefix("projects/")
+                .ok_or_else(|| StoreError::Invalid("investigation is not activated".into()))?;
+            let mut observation = crate::read_context::ScopeObservation::begin(
+                root,
+                crate::ScopeReadTarget::Diagnostics {
+                    scope: crate::InvestigationScope {
+                        project: project.into(),
+                        investigation: identity.into(),
+                    },
+                },
+            )?;
+            let mut diagnostics = observation.mapping_diagnostics.clone();
+            let (found, attachments) = check_scope(
+                root,
+                observation
+                    .entries
+                    .iter()
+                    .chain(observation.support.iter())
+                    .map(|(path, entry)| (path, entry)),
+                &observation.active,
+                Some(&observation.path),
+            )?;
+            diagnostics.extend(found);
+            observation.attachments = attachments;
+            let freshness = crate::CheckFreshness::ScopeRead {
+                token: observation.verify(root)?,
+            };
+            let diagnostics = stable(diagnostics);
+            return Ok(CheckResult {
+                activation: ActivationState::Active,
+                valid: Some(diagnostics.is_empty()),
+                freshness,
+                diagnostics,
+            });
+        }
         let inventory = metadata_inventory(root)?;
         let bytes = inventory
             .entries
             .get("casefile.toml")
             .map(|entry| {
                 if entry.kind == InventoryKind::Regular {
-                    read_inventory_entry(entry)
+                    crate::scanning::read_observed_entry(root, "casefile.toml", entry)
                 } else {
                     Ok(Vec::new())
                 }
             })
             .transpose()?;
         let (activation, active, mut diagnostics) = activation_content(bytes.as_deref());
-        if let Some(path) = &investigation {
-            if activation != ActivationState::Active
-                || !active
-                    .projects
-                    .values()
-                    .any(|project| project.investigations.contains(path))
-            {
-                return Err(StoreError::Invalid("investigation is not activated".into()));
-            }
+        if inventory
+            .entries
+            .get("casefile.toml")
+            .is_some_and(|entry| entry.kind != InventoryKind::Regular)
+        {
+            diagnostics = vec![Diagnostic::new(
+                "casefile.toml",
+                "unsafe_path",
+                "activation must be a regular non-symlink file",
+            )];
         }
         if activation == ActivationState::Active {
-            diagnostics.extend(check_scope(&inventory, &active, investigation.as_deref())?);
+            diagnostics.extend(
+                check_scope(
+                    root,
+                    inventory
+                        .entries
+                        .iter()
+                        .filter(|(path, _)| path.as_str() != "casefile.toml"),
+                    &active,
+                    None,
+                )?
+                .0,
+            );
         }
-        if metadata_inventory(root)?.revision != inventory.revision {
-            return Err(StoreError::Invalid(
-                "Store contents changed during check; retry the exact scope".into(),
-            ));
-        }
+        crate::scanning::require_inventory_unchanged(root, &inventory)?;
         let diagnostics = stable(diagnostics);
         let valid = match activation {
             ActivationState::Unactivated => None,
@@ -94,78 +138,79 @@ impl Store {
         Ok(CheckResult {
             activation,
             valid,
-            revision: inventory.revision,
+            freshness: crate::CheckFreshness::Store {
+                revision: inventory.revision,
+            },
             diagnostics,
         })
     }
 }
 
-fn check_scope(
-    inventory: &MetadataInventory,
+fn check_scope<'a>(
+    root: &std::path::Path,
+    inventory: impl Iterator<Item = (&'a String, &'a crate::scanning::InventoryEntry)>,
     active: &Activation,
     scope: Option<&str>,
-) -> Result<Vec<Diagnostic>, StoreError> {
-    let project_prefix = scope.map(|scope| {
-        scope
-            .split_once("/investigations/")
-            .expect("validated investigation")
-            .0
-    });
+) -> Result<
+    (
+        Vec<Diagnostic>,
+        std::collections::BTreeMap<String, crate::AttachmentState>,
+    ),
+    StoreError,
+> {
+    let scopes = crate::activation::ScopeIndex::new(active);
     let mut entries = Vec::new();
     let mut facts = ValidationFacts::default();
     let mut diagnostics = Vec::new();
-    let mut strategies = Vec::new();
-    let mut strategy_scope = None;
-    for (path, file) in &inventory.entries {
-        let kind = if path == "projects.toml" {
-            Some(Kind::ProjectMap)
-        } else {
-            kind_for_path(path, active)
-        };
-        let selected = scope.is_none_or(|scope| scope_for(path, active) == Some(scope));
-        let support = project_prefix
-            .is_some_and(|project| path.starts_with(&format!("{project}/")))
+    for (path, file) in inventory {
+        let resolved = scopes.resolve(path);
+        let selected = scope.is_none_or(|scope| resolved.scope == Some(scope));
+        let support = !selected
             && matches!(
-                kind,
-                Some(Kind::Ticket | Kind::Epic | Kind::Decision | Kind::Board)
+                resolved.kind,
+                Some(Kind::Ticket | Kind::Epic | Kind::Decision)
             );
+        if !selected && !support {
+            continue;
+        }
         let mut entry = EntrySnapshot {
             path: path.clone(),
-            classification: Classification::Raw,
-            kind: None,
+            classification: if resolved.scope.is_some() {
+                Classification::Raw
+            } else {
+                Classification::Ungoverned
+            },
+            kind: resolved.kind,
             identity: None,
             summary: None,
             content_revision: file.revision.clone(),
             original_bytes: Vec::new(),
         };
-        if file.kind != InventoryKind::Regular && selected {
-            diagnostics.push(Diagnostic::new(
-                path,
-                "unsafe_path",
-                "governed paths cannot be symlinks",
-            ));
-        }
-        if kind.is_some() && (selected || support) {
+        let mut parsed = crate::scanning::classification::ParsedFacts::default();
+        let container = resolved
+            .scope
+            .is_some_and(|scope| crate::layout::scope_container(path, scope));
+        if container {
+            entry.classification = Classification::Invalid;
+            if selected {
+                diagnostics.push(Diagnostic::new(
+                    path,
+                    "unsafe_path",
+                    "governed container must be a non-symlink directory",
+                ));
+            }
+        } else if resolved.kind.is_some() {
             if file.kind == InventoryKind::Regular {
-                entry.original_bytes = read_inventory_entry(file)?;
+                entry.original_bytes = crate::scanning::read_observed_entry(root, path, file)?;
                 #[cfg(test)]
-                BODY_PEAK.with(|peak| {
-                    peak.set(
-                        peak.get().max(
-                            entry.original_bytes.capacity()
-                                + entries
-                                    .iter()
-                                    .map(|entry: &EntrySnapshot| entry.original_bytes.capacity())
-                                    .sum::<usize>()
-                                + strategies
-                                    .iter()
-                                    .map(|entry: &EntrySnapshot| entry.original_bytes.capacity())
-                                    .sum::<usize>(),
-                        ),
-                    )
-                });
-                let (classification, kind, identity, summary, found) =
-                    classify(path, &entry.original_bytes, active);
+                BODY_PEAK.with(|peak| peak.set(peak.get().max(entry.original_bytes.capacity())));
+                let classified = crate::scanning::classify_facts(
+                    path,
+                    &entry.original_bytes,
+                    active,
+                    resolved.kind,
+                );
+                let (classification, kind, identity, summary, found) = classified.classification;
                 entry.classification = classification;
                 entry.kind = kind;
                 entry.identity = identity;
@@ -173,39 +218,67 @@ fn check_scope(
                 if selected {
                     diagnostics.extend(found);
                 }
-                facts.insert(&entry);
+                parsed = classified.facts;
             } else {
                 entry.classification = Classification::Invalid;
-                entry.kind = kind;
+                if selected {
+                    diagnostics.push(Diagnostic::new(
+                        path,
+                        "unsafe_path",
+                        "governed paths must be regular non-symlink files",
+                    ));
+                }
             }
         }
-        if selected && matches!(kind, Some(Kind::Strategy | Kind::StrategyBinding)) {
-            let current_scope = scope_for(path, active);
-            if strategy_scope != current_scope {
-                diagnostics.extend(binding_diagnostics(&strategies));
-                strategies.clear();
-                strategy_scope = current_scope;
-            }
-            strategies.push(entry.clone());
-        }
+        facts.insert(&entry, resolved, parsed);
         entry.original_bytes = Vec::new();
-        if !matches!(kind, Some(Kind::Ticket | Kind::Epic | Kind::Progress)) {
-            entry.summary = None;
-        }
-        // Unsafe attachments must not count as contained regular files.
         if file.kind == InventoryKind::Regular || entry.kind.is_some() {
             entries.push(entry);
         }
     }
+    let mut attachments = std::collections::BTreeMap::new();
+    for path in facts
+        .attachment_targets()
+        .collect::<std::collections::BTreeSet<_>>()
+    {
+        let state = crate::read_context::observe_attachment(root, &path)?;
+        if state == crate::AttachmentState::Regular
+            && !entries.iter().any(|entry| entry.path == path)
+        {
+            let resolved = scopes.resolve(&path);
+            let entry = EntrySnapshot {
+                path: path.clone(),
+                classification: Classification::Raw,
+                kind: None,
+                identity: None,
+                summary: None,
+                content_revision: Revision("attachment-existence".into()),
+                original_bytes: Vec::new(),
+            };
+            facts.resolved.insert(path.clone(), resolved);
+            entries.push(entry);
+        }
+        attachments.insert(path, state);
+    }
+    if scope.is_some() {
+        entries.sort_unstable_by(|left, right| left.path.cmp(&right.path));
+    }
     diagnostics.extend(
-        cross_validate_facts(&entries, active, &facts)
-            .into_iter()
-            .filter(|diagnostic| {
-                scope.is_none_or(|scope| scope_for(&diagnostic.path, active) == Some(scope))
-            }),
+        cross_validate_facts(&entries, active, &facts, |path| {
+            attachments.get(path) == Some(&crate::AttachmentState::Regular)
+        })
+        .into_iter()
+        .filter(|diagnostic| {
+            scope.is_none_or(|scope| {
+                facts
+                    .resolved
+                    .get(&diagnostic.path)
+                    .is_some_and(|resolved| resolved.scope == Some(scope))
+            })
+        }),
     );
-    diagnostics.extend(binding_diagnostics(&strategies));
-    Ok(diagnostics)
+    diagnostics.extend(crate::scanning::binding_diagnostics_facts(&entries, &facts));
+    Ok((diagnostics, attachments))
 }
 
 #[cfg(test)]
@@ -268,11 +341,15 @@ mod tests {
             "schema_version = 1\n[[entries]]\nid = 'bad'\n",
         )
         .unwrap();
+        fs::create_dir_all(root.path().join(format!("{other}/boards"))).unwrap();
+        let foreign_board = root.path().join(format!("{other}/boards/broken.toml"));
+        fs::write(&foreign_board, [0xff, 0xfe]).unwrap();
         let store = Store::open(root.path()).unwrap();
         OPENED.with(|paths| *paths.borrow_mut() = Some(Vec::new()));
         let checked = store.check(Some(scope)).unwrap();
         let opened = OPENED.with(|paths| paths.borrow_mut().take().unwrap());
         assert!(!opened.contains(&foreign));
+        assert!(!opened.contains(&foreign_board));
         assert!(
             checked
                 .diagnostics
@@ -298,7 +375,7 @@ mod tests {
         let store = Store::open(root.path()).unwrap();
         fs::write(
             root.path().join("projects.toml"),
-            "[projects]\ndemo = '/source/demo'\n",
+            "[projects]\ndemo = '//source/demo'\n",
         )
         .unwrap();
         let body = format!("# Evidence\n{}", "x".repeat(4 * 1024 * 1024));

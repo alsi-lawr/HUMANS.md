@@ -13,11 +13,14 @@ mod mutation_dependencies;
 mod mutation_hooks;
 mod mutation_locks;
 mod mutation_metadata;
+mod mutation_projection;
+mod mutation_restore;
 #[cfg(test)]
 mod mutation_tests;
 mod presentation;
 mod progress;
 mod provider;
+mod read_context;
 mod revision;
 mod scanning;
 mod store;
@@ -29,14 +32,14 @@ pub use checking::{CheckResult, ScanSummary};
 pub use derived::{
     DerivedBoard, DerivedBoardColumn, DerivedCard, DerivedProgressNote, DerivedProgressTransition,
     DerivedRecord, DerivedRelationship, DerivedSnapshot, DerivedStrategy, DerivedStrategyBinding,
-    DerivedTicketProgress, EffectiveWriterBinding, RecordScope, RelationshipKind, ScopedIdentity,
-    StrategyBindingState, WriterBindingSource, derive_relationships,
+    DerivedTicketProgress, DerivedWorkItem, EffectiveWriterBinding, RecordScope, RelationshipKind,
+    ScopedIdentity, StrategyBindingState, WriterBindingSource, derive_relationships,
 };
 pub use governance::{
     GovernedApplyResult, GovernedChange, GovernedOperationKind, StrategyTransitionPreview,
     StrategyTransitionRequest, WriterBindingPreview, WriterBindingRequest,
 };
-pub use index::{DerivedIndex, Indexed, RevisionSource};
+pub use index::{DerivedIndex, IndexPublicationId, Indexed, RevisionSource};
 pub use layout::normalize_planning_relative;
 pub use presentation::{
     FactAvailability, PRESENTATION_BATCH_LIMIT, PRESENTATION_CHANNEL_CAPACITY,
@@ -49,17 +52,25 @@ pub use presentation::{
 };
 pub use progress::{ProgressApplyResult, ProgressChangeRequest, ProgressPreview};
 pub use provider::{
-    CacheState, DefaultBoardApplyResult, DefaultBoardPreview, InvestigationScope,
-    InvestigationScopedIdentity, NoCache, PROVIDER_PROTOCOL_VERSION, ProgressOperation, Provider,
-    ProviderApplyOutcome, ProviderApprovalPolicy, ProviderBatchPreview, ProviderCache,
-    ProviderCapabilities, ProviderCatalogue, ProviderDiagnosticCount, ProviderDiagnosticCoverage,
-    ProviderError, ProviderIndexDiagnosticCoverage, ProviderIndexDiagnosticCoverageKind,
-    ProviderInvestigation, ProviderMutationState, ProviderOperation, ProviderPreview,
-    ProviderProgressPreview, ProviderProject, ProviderQuery, ProviderQueryResult,
-    ProviderRecordApplyResult, ProviderRecordBatchApplyResult, ProviderRecordDetail,
-    ProviderRecordDiagnosticCoverage, ProviderRecordIndexEntry, ProviderRecordProgressSummary,
-    ProviderSnapshot, ProviderStrategyTransitionPreview, ProviderWriterBindingPreview,
-    StrategyTransitionProjection,
+    CacheState, DefaultBoardApplyResult, InvestigationScope, InvestigationScopedIdentity, NoCache,
+    PROVIDER_PROTOCOL_VERSION, ProgressOperation, Provider, ProviderApplyOutcome,
+    ProviderApprovalPolicy, ProviderCache, ProviderCapabilities, ProviderCatalogue,
+    ProviderDiagnosticCount, ProviderDiagnosticCoverage, ProviderError,
+    ProviderIndexDiagnosticCoverage, ProviderIndexDiagnosticCoverageKind, ProviderInvestigation,
+    ProviderMutationState, ProviderOperation, ProviderPreview, ProviderPreviewKind,
+    ProviderProject, ProviderQuery, ProviderQueryResult, ProviderRecordApplyResult,
+    ProviderRecordBatchApplyResult, ProviderRecordDetail, ProviderRecordDiagnosticCoverage,
+    ProviderRecordIndexEntry, ProviderRecordProgressSummary, ProviderReviewOperation,
+    ProviderReviewOperationKind, ProviderSnapshot, StrategyTransitionProjection,
+    WorkspaceReadToken,
 };
+pub use read_context::{
+    AttachmentState, CatalogueToken, CheckFreshness, ReadDependency, ScopeReadTarget,
+    ScopeReadToken,
+};
+pub use scanning::selected::WriterBindingProjection;
 pub use scanning::{ScanResult, is_store_path_excluded};
-pub use store::{Store, StoreError};
+pub use store::{
+    IncompleteRollback, RollbackCause, RollbackErrorCode, RollbackPathState, RollbackReason,
+    RollbackRemainingState, Store, StoreError,
+};

@@ -197,8 +197,9 @@ impl PresentationReader for FakeReader {
         Ok(state.activation.clone())
     }
 
-    fn read_dir(&self, relative: &str) -> Result<Vec<String>, StoreError> {
+    fn read_dir(&self, relative: &str, cancelled: &AtomicBool) -> Result<Vec<String>, StoreError> {
         let mut state = self.state.lock().expect("fake state");
+        check_cancelled(cancelled)?;
         state.operations.push(Operation::ReadDir(relative.into()));
         let prefix = if relative.is_empty() {
             String::new()
@@ -238,7 +239,7 @@ impl PresentationReader for FakeReader {
         })
     }
 
-    fn read(&self, relative: &str) -> Result<Vec<u8>, StoreError> {
+    fn read(&self, relative: &str, cancelled: &AtomicBool) -> Result<Vec<u8>, StoreError> {
         let mut state = self.state.lock().expect("fake state");
         state.operations.push(Operation::Body(relative.into()));
         if state.fail_reads.contains(relative) {
@@ -251,6 +252,7 @@ impl PresentationReader for FakeReader {
                 state = self.changed.wait(state).expect("fake release wait");
             }
         }
+        check_cancelled(cancelled)?;
         match state.nodes.get(relative) {
             Some(FakeNode::File { bytes, .. }) => Ok(bytes.clone()),
             Some(_) => Err(StoreError::Invalid(
@@ -945,18 +947,18 @@ fn production_saves_atomic_replacements_and_deletions_after_enumeration_stay_loc
         fn activation(&self) -> Result<(ActivationState, Activation, Vec<Diagnostic>), StoreError> {
             self.reader.activation()
         }
-        fn read_dir(&self, path: &str) -> Result<Vec<String>, StoreError> {
-            self.reader.read_dir(path)
+        fn read_dir(&self, path: &str, cancelled: &AtomicBool) -> Result<Vec<String>, StoreError> {
+            self.reader.read_dir(path, cancelled)
         }
         fn metadata(&self, path: &str) -> Result<ReaderMetadata, StoreError> {
             self.reader.metadata(path)
         }
-        fn read(&self, path: &str) -> Result<Vec<u8>, StoreError> {
+        fn read(&self, path: &str, cancelled: &AtomicBool) -> Result<Vec<u8>, StoreError> {
             if path == TICKET {
                 self.entered.wait();
                 self.resume.wait();
             }
-            self.reader.read(path)
+            self.reader.read(path, cancelled)
         }
     }
     for change in ["save", "replace", "remove"] {
@@ -1007,4 +1009,648 @@ fn production_saves_atomic_replacements_and_deletions_after_enumeration_stay_loc
             );
         }
     }
+}
+
+struct PausedRead {
+    reader: Arc<FakeReader>,
+    path: String,
+    first: AtomicBool,
+    gate: Mutex<(bool, bool)>,
+    changed: Condvar,
+}
+
+impl PausedRead {
+    fn new(reader: Arc<FakeReader>, path: &str) -> Arc<Self> {
+        Arc::new(Self {
+            reader,
+            path: path.into(),
+            first: AtomicBool::new(true),
+            gate: Mutex::new((false, false)),
+            changed: Condvar::new(),
+        })
+    }
+    fn wait(&self) {
+        let mut gate = self.gate.lock().unwrap();
+        while !gate.0 {
+            gate = self.changed.wait(gate).unwrap();
+        }
+    }
+    fn release(&self) {
+        self.gate.lock().unwrap().1 = true;
+        self.changed.notify_all();
+    }
+}
+
+impl PresentationReader for PausedRead {
+    fn activation(&self) -> Result<(ActivationState, Activation, Vec<Diagnostic>), StoreError> {
+        self.reader.activation()
+    }
+    fn read_dir(&self, path: &str, cancelled: &AtomicBool) -> Result<Vec<String>, StoreError> {
+        self.reader.read_dir(path, cancelled)
+    }
+    fn metadata(&self, path: &str) -> Result<ReaderMetadata, StoreError> {
+        self.reader.metadata(path)
+    }
+    fn read(&self, path: &str, cancelled: &AtomicBool) -> Result<Vec<u8>, StoreError> {
+        let bytes = self.reader.read(path, cancelled)?;
+        if path == self.path && self.first.swap(false, Ordering::AcqRel) {
+            let mut gate = self.gate.lock().unwrap();
+            gate.0 = true;
+            self.changed.notify_all();
+            while !gate.1 {
+                gate = self.changed.wait(gate).unwrap();
+            }
+        }
+        Ok(bytes)
+    }
+}
+
+#[test]
+fn newer_nonmonotonic_load_wins_and_late_old_events_cannot_replace_handles() {
+    let reader = FakeReader::active();
+    let paused = PausedRead::new(reader.clone(), TICKET);
+    let session = PresentationSession::with_reader(paused.clone());
+    let old = session
+        .load(load_request(99, PresentationTarget::Store))
+        .unwrap();
+    assert!(matches!(
+        old.recv().unwrap(),
+        PresentationEvent::Catalogue { .. }
+    ));
+    paused.wait();
+    let source = match &reader.state.lock().unwrap().nodes[TICKET] {
+        FakeNode::File { bytes, .. } => bytes.clone(),
+        _ => unreachable!(),
+    };
+    reader.replace(TICKET, [source, b"\n<!-- new load -->\n".to_vec()].concat());
+    let new = event_entries(&drain(
+        session
+            .load(load_request(2, PresentationTarget::Store))
+            .unwrap(),
+    ));
+    let handle = new
+        .iter()
+        .find(|entry| entry.path == RAW)
+        .unwrap()
+        .content_handle
+        .clone()
+        .unwrap();
+    paused.release();
+    assert!(!drain(old).iter().any(|event| {
+        match event {
+            PresentationEvent::Entries { entries, .. } => entries
+                .iter()
+                .any(|entry| entry.path.starts_with(INVESTIGATION)),
+            PresentationEvent::Complete { .. } => true,
+            _ => false,
+        }
+    }));
+    let final_entries = event_entries(&drain(
+        session
+            .load(load_request(0, PresentationTarget::Store))
+            .unwrap(),
+    ));
+    assert!(
+        matches!(&final_entries.iter().find(|entry| entry.path == TICKET).unwrap().body, PresentationFact::Available(bytes) if bytes.ends_with(b"<!-- new load -->\n"))
+    );
+    assert_eq!(
+        final_entries
+            .iter()
+            .find(|entry| entry.path == RAW)
+            .unwrap()
+            .content_handle
+            .as_ref(),
+        Some(&handle)
+    );
+    assert!(matches!(
+        drain_content(session.fetch_content(content_request(0, handle)).unwrap()).last(),
+        Some(PresentationContentEvent::Loaded { .. })
+    ));
+}
+
+#[test]
+fn disjoint_target_loads_do_not_cancel_each_other_or_invalidate_received_handles() {
+    let reader = FakeReader::active();
+    let other = "projects/demo/investigations/other";
+    reader
+        .state
+        .lock()
+        .unwrap()
+        .activation
+        .1
+        .projects
+        .get_mut("demo")
+        .unwrap()
+        .investigations
+        .push(other.into());
+    let other_raw = format!("{other}/kept.raw");
+    reader.insert_file(&other_raw, b"other content".to_vec());
+    let paused = PausedRead::new(reader.clone(), TICKET);
+    let session = PresentationSession::with_reader(paused.clone());
+    let first_target = PresentationTarget::Investigation {
+        project: "demo".into(),
+        path: INVESTIGATION.into(),
+    };
+    let other_target = PresentationTarget::Investigation {
+        project: "demo".into(),
+        path: other.into(),
+    };
+    let first = session.load(load_request(99, first_target)).unwrap();
+    first.recv().unwrap();
+    paused.wait();
+    let received = event_entries(&drain(
+        session.load(load_request(1, other_target.clone())).unwrap(),
+    ));
+    let handle = received
+        .iter()
+        .find(|entry| entry.path == other_raw)
+        .unwrap()
+        .content_handle
+        .clone()
+        .unwrap();
+    paused.release();
+    assert!(matches!(
+        drain(first).last(),
+        Some(PresentationEvent::Complete { .. })
+    ));
+    let request = PresentationContentRequest {
+        generation: 0,
+        target: other_target,
+        selector: PresentationContentSelector::Handle { handle },
+    };
+    assert!(
+        matches!(drain_content(session.fetch_content(request).unwrap()).last(), Some(PresentationContentEvent::Loaded { entry, .. }) if matches!(&entry.body, PresentationFact::Available(bytes) if bytes == b"other content"))
+    );
+}
+
+#[test]
+fn cancellation_after_the_final_read_does_not_publish_or_cache_that_scope() {
+    let reader = FakeReader::active();
+    let paused = PausedRead::new(reader.clone(), TICKET);
+    let session = PresentationSession::with_reader(paused.clone());
+    let target = PresentationTarget::Investigation {
+        project: "demo".into(),
+        path: INVESTIGATION.into(),
+    };
+    let stream = session.load(load_request(1, target.clone())).unwrap();
+    stream.recv().unwrap();
+    paused.wait();
+    stream.cancel();
+    paused.release();
+    assert!(!drain(stream).iter().any(|event| matches!(
+        event,
+        PresentationEvent::Entries { .. } | PresentationEvent::Complete { .. }
+    )));
+    reader
+        .state
+        .lock()
+        .unwrap()
+        .fail_reads
+        .insert(TICKET.into());
+    let next = event_entries(&drain(session.load(load_request(0, target)).unwrap()));
+    assert!(
+        matches!(&next.iter().find(|entry| entry.path == TICKET).unwrap().diagnostics, PresentationFact::Available(diagnostics) if diagnostics.iter().any(|diagnostic| diagnostic.code == "presentation_read"))
+    );
+}
+
+#[test]
+fn interrupted_reads_retry_but_cancellation_never_returns_partial_content() {
+    struct InterruptedThenCancel {
+        cancelled: Arc<AtomicBool>,
+        interrupted: bool,
+    }
+    impl Read for InterruptedThenCancel {
+        fn read(&mut self, bytes: &mut [u8]) -> io::Result<usize> {
+            if !self.interrupted {
+                self.interrupted = true;
+                return Err(io::ErrorKind::Interrupted.into());
+            }
+            bytes.fill(b'x');
+            self.cancelled.store(true, Ordering::Release);
+            Ok(bytes.len())
+        }
+    }
+    let cancelled = Arc::new(AtomicBool::new(false));
+    let mut reader = InterruptedThenCancel {
+        cancelled: cancelled.clone(),
+        interrupted: false,
+    };
+    assert!(matches!(
+        read_cancellable(&mut reader, &cancelled),
+        Err(StoreError::Invalid(_))
+    ));
+}
+
+#[test]
+fn lazy_handles_survive_unrelated_edits_but_changed_and_deleted_paths_are_invalidated() {
+    let reader = FakeReader::active();
+    let session = PresentationSession::with_reader(reader.clone());
+    let first = event_entries(&drain(
+        session
+            .load(load_request(10, PresentationTarget::Store))
+            .unwrap(),
+    ));
+    let handle = |entries: &[PresentationEntry], path: &str| {
+        entries
+            .iter()
+            .find(|entry| entry.path == path)
+            .unwrap()
+            .content_handle
+            .clone()
+            .unwrap()
+    };
+    let raw = handle(&first, RAW);
+    let evidence = handle(&first, EVIDENCE);
+    reader.insert_file(
+        "projects/demo/investigations/sample/elsewhere.raw",
+        b"new unrelated".to_vec(),
+    );
+    let second = event_entries(&drain(
+        session
+            .load(load_request(2, PresentationTarget::Store))
+            .unwrap(),
+    ));
+    assert_eq!(handle(&second, RAW), raw);
+    assert_eq!(handle(&second, EVIDENCE), evidence);
+    reader.replace(RAW, b"changed raw".to_vec());
+    reader.remove(EVIDENCE);
+    let third = event_entries(&drain(
+        session
+            .load(load_request(0, PresentationTarget::Store))
+            .unwrap(),
+    ));
+    assert_ne!(handle(&third, RAW), raw);
+    assert!(!third.iter().any(|entry| entry.path == EVIDENCE));
+    for old in [raw, evidence] {
+        assert!(matches!(
+            drain_content(session.fetch_content(content_request(0, old)).unwrap()).last(),
+            Some(PresentationContentEvent::Failure { .. })
+        ));
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn unrepresentable_native_names_fail_explicitly_instead_of_aliasing_a_replacement_name() {
+    use std::os::unix::ffi::OsStringExt;
+    let root = fixture();
+    let path = root.path().join(INVESTIGATION);
+    fs::write(
+        path.join(std::ffi::OsString::from_vec(b"bad-\xff.raw".to_vec())),
+        b"native one",
+    )
+    .unwrap();
+    fs::write(
+        path.join(std::ffi::OsString::from_vec(b"bad-\xfe.raw".to_vec())),
+        b"native two",
+    )
+    .unwrap();
+    fs::write(path.join("bad-�.raw"), b"different legitimate UTF-8 file").unwrap();
+    let session = crate::Store::open(root.path())
+        .unwrap()
+        .presentation_session();
+    let events = drain(
+        session
+            .load(load_request(0, PresentationTarget::Store))
+            .unwrap(),
+    );
+    assert!(
+        matches!(events.last(), Some(PresentationEvent::Failure { message, .. }) if message.contains("not UTF-8"))
+    );
+    assert!(
+        !events
+            .iter()
+            .any(|event| matches!(event, PresentationEvent::Complete { .. }))
+    );
+}
+
+#[test]
+fn one_ticket_membership_edit_updates_progress_diagnostics_and_shares_unrelated_entries() {
+    let reader = FakeReader::active();
+    let log = format!("{INVESTIGATION}/progress/log.toml");
+    reader.insert_file(&log, b"schema_version=1\n[[entries]]\nid='start'\nrecorded_at='2026-09-30T10:00:00Z'\nrecorded_by='root'\nticket_id='HMD-011'\nkind='transition'\nfrom='unknown'\nto='in_progress'\n".to_vec());
+    let session = PresentationSession::with_reader(reader.clone());
+    let first = drain(
+        session
+            .load(load_request(1, PresentationTarget::Store))
+            .unwrap(),
+    );
+    let find = |events: &[PresentationEvent], path: &str| {
+        events
+            .iter()
+            .find_map(|event| match event {
+                PresentationEvent::Entries { entries, .. } => {
+                    entries.iter().find(|entry| entry.path == path).cloned()
+                }
+                _ => None,
+            })
+            .unwrap()
+    };
+    let ticket = find(&first, TICKET);
+    assert!(
+        matches!(&ticket.progress, PresentationFact::Available(Some(progress)) if progress.status == casefile_core::ProgressStatus::InProgress)
+    );
+    let review = find(&first, REVIEW);
+    let evidence = find(&first, EVIDENCE).content_handle.clone().unwrap();
+    let source = match &reader.state.lock().unwrap().nodes[TICKET] {
+        FakeNode::File { bytes, .. } => bytes.clone(),
+        _ => unreachable!(),
+    };
+    let provisional = TICKET.replace("/accepted/", "/provisional/");
+    reader.remove(TICKET);
+    reader.insert_file(
+        &provisional,
+        String::from_utf8(source)
+            .unwrap()
+            .replace("status: accepted", "status: provisional")
+            .into_bytes(),
+    );
+    let second = drain(
+        session
+            .load(load_request(0, PresentationTarget::Store))
+            .unwrap(),
+    );
+    assert!(
+        matches!(&find(&second, &log).diagnostics, PresentationFact::Available(diagnostics) if diagnostics.iter().any(|diagnostic| diagnostic.code == "invalid_progress_ticket"))
+    );
+    assert_eq!(
+        find(&second, &provisional).progress,
+        PresentationFact::Available(None)
+    );
+    assert!(
+        Arc::ptr_eq(&review, &find(&second, REVIEW)),
+        "unchanged public immutable entry must be shared"
+    );
+    assert_eq!(
+        find(&second, EVIDENCE).content_handle.as_ref(),
+        Some(&evidence)
+    );
+}
+
+#[test]
+fn nested_activation_uses_deepest_scope_and_membership_change_reclassifies_cached_paths() {
+    let reader = FakeReader::active();
+    let nested = format!("{INVESTIGATION}/nested");
+    reader
+        .state
+        .lock()
+        .unwrap()
+        .activation
+        .1
+        .projects
+        .get_mut("demo")
+        .unwrap()
+        .investigations
+        .push(nested.clone());
+    let ticket = format!("{nested}/tickets/accepted/HMD-012.md");
+    let source = include_bytes!(
+        "../../tests/fixtures/minimum/projects/demo/investigations/sample/tickets/accepted/HMD-011.md"
+    );
+    reader.insert_file(
+        &ticket,
+        String::from_utf8(source.to_vec())
+            .unwrap()
+            .replace("HMD-011", "HMD-012")
+            .replace("investigation: sample", "investigation: sample/nested")
+            .into_bytes(),
+    );
+    let session = PresentationSession::with_reader(reader.clone());
+    let entries = event_entries(&drain(
+        session
+            .load(load_request(1, PresentationTarget::Store))
+            .unwrap(),
+    ));
+    let child = entries.iter().find(|entry| entry.path == ticket).unwrap();
+    assert_eq!(
+        child.scope.as_ref().unwrap().investigation.as_deref(),
+        Some("sample/nested")
+    );
+    assert_eq!(child.kind, Some(Kind::Ticket));
+    reader
+        .state
+        .lock()
+        .unwrap()
+        .activation
+        .1
+        .projects
+        .get_mut("demo")
+        .unwrap()
+        .investigations
+        .retain(|scope| scope != &nested);
+    let next = event_entries(&drain(
+        session
+            .load(load_request(0, PresentationTarget::Store))
+            .unwrap(),
+    ));
+    let child = next.iter().find(|entry| entry.path == ticket).unwrap();
+    assert_eq!(
+        child.scope.as_ref().unwrap().investigation.as_deref(),
+        Some("sample")
+    );
+    assert_eq!(child.kind, None);
+    assert_eq!(child.body, PresentationFact::Unavailable);
+}
+
+#[cfg(unix)]
+#[test]
+fn full_refresh_after_ancestor_replacement_reacquires_descriptors_without_an_anchoring_promise() {
+    let root = fixture();
+    let path = root.path().join(INVESTIGATION);
+    fs::write(path.join("lazy.raw"), b"old source").unwrap();
+    let store = crate::Store::open(root.path()).unwrap();
+    let session = store.presentation_session();
+    let entries = event_entries(&drain(
+        session
+            .load(load_request(1, PresentationTarget::Store))
+            .unwrap(),
+    ));
+    let old = entries
+        .iter()
+        .find(|entry| entry.path.ends_with("lazy.raw"))
+        .unwrap()
+        .content_handle
+        .clone()
+        .unwrap();
+    let archived = TempDir::new().unwrap();
+    let moved = archived.path().join("moved-parent");
+    fs::rename(&path, &moved).unwrap();
+    let outside = TempDir::new().unwrap();
+    fs::write(outside.path().join("lazy.raw"), b"outside").unwrap();
+    std::os::unix::fs::symlink(outside.path(), &path).unwrap();
+    assert!(matches!(
+        drain_content(
+            session
+                .fetch_content(content_request(1, old.clone()))
+                .unwrap()
+        )
+        .last(),
+        Some(PresentationContentEvent::Failure { .. })
+    ));
+    fs::remove_file(&path).unwrap();
+    fs::create_dir_all(&path).unwrap();
+    copy_tree(&moved, &path);
+    fs::write(path.join("lazy.raw"), b"replacement inside root").unwrap();
+    let refreshed = event_entries(&drain(
+        session
+            .load(load_request(0, PresentationTarget::Store))
+            .unwrap(),
+    ));
+    let current = refreshed
+        .iter()
+        .find(|entry| entry.path.ends_with("lazy.raw"))
+        .unwrap()
+        .content_handle
+        .clone()
+        .unwrap();
+    assert_ne!(current, old);
+    assert!(matches!(
+        drain_content(session.fetch_content(content_request(0, old)).unwrap()).last(),
+        Some(PresentationContentEvent::Failure { .. })
+    ));
+    assert!(
+        matches!(drain_content(session.fetch_content(content_request(0, current)).unwrap()).last(), Some(PresentationContentEvent::Loaded { entry, .. }) if matches!(&entry.body, PresentationFact::Available(bytes) if bytes == b"replacement inside root"))
+    );
+    let new_session = store.presentation_session();
+    assert!(matches!(
+        drain(
+            new_session
+                .load(load_request(0, PresentationTarget::Store))
+                .unwrap()
+        )
+        .last(),
+        Some(PresentationEvent::Complete { .. })
+    ));
+}
+
+#[test]
+fn note_only_edit_shares_board_entry_but_transition_updates_cards() {
+    let reader = FakeReader::active();
+    let board = format!("{INVESTIGATION}/boards/progress.toml");
+    reader.insert_file(&board, b"schema_version=1\nid='HMD-progress'\ntitle='Progress'\nstatus_source='progress'\n[[columns]]\nname='Active'\nstatuses=['in_progress']\n[[columns]]\nname='Done'\nstatuses=['complete']\n".to_vec());
+    let log = format!("{INVESTIGATION}/progress/log.toml");
+    let start = "schema_version=1\n[[entries]]\nid='start'\nrecorded_at='2026-09-30T10:00:00Z'\nrecorded_by='root'\nticket_id='HMD-011'\nkind='transition'\nfrom='unknown'\nto='in_progress'\n";
+    reader.insert_file(&log, start.as_bytes().to_vec());
+    let session = PresentationSession::with_reader(reader.clone());
+    let find = |events: &[PresentationEvent], path: &str| {
+        events
+            .iter()
+            .find_map(|event| match event {
+                PresentationEvent::Entries { entries, .. } => {
+                    entries.iter().find(|entry| entry.path == path).cloned()
+                }
+                _ => None,
+            })
+            .unwrap()
+    };
+    let first = drain(
+        session
+            .load(load_request(1, PresentationTarget::Store))
+            .unwrap(),
+    );
+    let old_board = find(&first, &board);
+    assert!(
+        matches!(&old_board.boards, PresentationFact::Available(boards)
+        if boards[0].columns[0].cards[0].identity.identity == "HMD-011"
+        && boards[0].columns[1].cards.is_empty())
+    );
+    let note = format!(
+        "{start}[[entries]]\nid='note'\nrecorded_at='2026-09-30T10:01:00Z'\nrecorded_by='root'\nticket_id='HMD-011'\nkind='note'\ncategory='quirk'\nmessage='Keep this message'\n"
+    );
+    reader.replace(&log, note.as_bytes().to_vec());
+    let second = drain(
+        session
+            .load(load_request(0, PresentationTarget::Store))
+            .unwrap(),
+    );
+    assert!(Arc::ptr_eq(&old_board, &find(&second, &board)));
+    assert!(
+        matches!(&find(&second, TICKET).progress, PresentationFact::Available(Some(progress))
+        if progress.notes.len() == 1 && progress.notes[0].message == "Keep this message")
+    );
+    reader.replace(&log, format!("{note}[[entries]]\nid='done'\nrecorded_at='2026-09-30T10:02:00Z'\nrecorded_by='root'\nticket_id='HMD-011'\nkind='transition'\nfrom='in_progress'\nto='complete'\n").into_bytes());
+    let third = drain(
+        session
+            .load(load_request(0, PresentationTarget::Store))
+            .unwrap(),
+    );
+    assert!(
+        matches!(&find(&third, &board).boards, PresentationFact::Available(boards)
+        if boards[0].columns[0].cards.is_empty()
+        && boards[0].columns[1].cards[0].identity.identity == "HMD-011")
+    );
+}
+
+#[test]
+fn activation_project_membership_invalidates_map_facts_not_unrelated_entries_or_handles() {
+    let reader = FakeReader::active();
+    reader.replace(
+        "projects.toml",
+        format!(
+            "schema_version=1\n[projects]\ndemo={:?}\n",
+            std::env::temp_dir().join("offline-demo").to_str().unwrap()
+        )
+        .into_bytes(),
+    );
+    let session = PresentationSession::with_reader(reader.clone());
+    let find = |events: &[PresentationEvent], path: &str| {
+        events
+            .iter()
+            .find_map(|event| match event {
+                PresentationEvent::Entries { entries, .. } => {
+                    entries.iter().find(|entry| entry.path == path).cloned()
+                }
+                _ => None,
+            })
+            .unwrap()
+    };
+    let first = drain(
+        session
+            .load(load_request(1, PresentationTarget::Store))
+            .unwrap(),
+    );
+    let ticket = find(&first, TICKET);
+    let handle = find(&first, RAW).content_handle.clone();
+    assert_eq!(
+        find(&first, "projects.toml").classification,
+        PresentationFact::Available(Classification::Governed)
+    );
+    reader.state.lock().unwrap().activation.1.projects.insert(
+        "other".into(),
+        Project {
+            prefix: "OTH".into(),
+            investigations: Vec::new(),
+        },
+    );
+    let second = drain(
+        session
+            .load(load_request(0, PresentationTarget::Store))
+            .unwrap(),
+    );
+    assert_eq!(
+        find(&second, "projects.toml").classification,
+        PresentationFact::Available(Classification::Invalid)
+    );
+    assert!(matches!(&find(&second, "projects.toml").diagnostics,
+        PresentationFact::Available(diagnostics) if !diagnostics.is_empty()));
+    assert!(Arc::ptr_eq(&ticket, &find(&second, TICKET)));
+    assert_eq!(find(&second, RAW).content_handle, handle);
+    reader
+        .state
+        .lock()
+        .unwrap()
+        .activation
+        .1
+        .projects
+        .remove("other");
+    let third = drain(
+        session
+            .load(load_request(0, PresentationTarget::Store))
+            .unwrap(),
+    );
+    assert_eq!(
+        find(&third, "projects.toml").classification,
+        PresentationFact::Available(Classification::Governed)
+    );
+    assert!(matches!(&find(&third, "projects.toml").diagnostics,
+        PresentationFact::Available(diagnostics) if diagnostics.is_empty()));
 }

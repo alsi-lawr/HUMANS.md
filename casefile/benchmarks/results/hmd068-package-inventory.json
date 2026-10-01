@@ -1,0 +1,422 @@
+[
+  {
+    "path": "build/marketplace/plugins/claude/coding/.claude-plugin/plugin.json",
+    "size": 422,
+    "mode": "0o644",
+    "sha256": "ebb8115b76438e35fdbd407208aec9cc5e13a876ffb3941c30b50d98ced8f07a"
+  },
+  {
+    "path": "build/marketplace/plugins/claude/coding/LICENSE",
+    "size": 1066,
+    "mode": "0o644",
+    "sha256": "c18bf489a3707f6ef4cb6f67bfd61a63c0f0f1411f23f8fc1ca7b9eddad4b63c"
+  },
+  {
+    "path": "build/marketplace/plugins/claude/coding/scripts/validate-skill.py",
+    "size": 13873,
+    "mode": "0o755",
+    "sha256": "a302fc0e7dc80b6565136b88f3edcadf58bcea05a4187e5cc6ddf144671194df"
+  },
+  {
+    "path": "build/marketplace/plugins/claude/coding/scripts/verify-skill.py",
+    "size": 19137,
+    "mode": "0o755",
+    "sha256": "f8037d57180c82c8fefc29be6fa4417080c33693368f6c431d6739bb90f055e6"
+  },
+  {
+    "path": "build/marketplace/plugins/claude/coding/skills/code-writing/SKILL.md",
+    "size": 3309,
+    "mode": "0o644",
+    "sha256": "afd3cff3de9b495fe0ba3ad5ae29a9dc1803f97e2d18aa8138f331365eb30f7b"
+  },
+  {
+    "path": "build/marketplace/plugins/claude/coding/skills/git-contribution/SKILL.md",
+    "size": 1927,
+    "mode": "0o644",
+    "sha256": "dae41338a5517b381c9746673eab6d48a0b8cdc5f55f9f5c2ab1b02b6fee1145"
+  },
+  {
+    "path": "build/marketplace/plugins/claude/coding/skills/readme-generator/SKILL.md",
+    "size": 3367,
+    "mode": "0o644",
+    "sha256": "c7536852b62571644c575b6ff4e0d329ca9b3db1d55c0cdab7309bf7f0891432"
+  },
+  {
+    "path": "build/marketplace/plugins/claude/coding/skills/skill-generator/SKILL.md",
+    "size": 2476,
+    "mode": "0o644",
+    "sha256": "a85373145e64eca578b698f0c669cf60516aa422d99d956288df415542058a3e"
+  },
+  {
+    "path": "build/marketplace/plugins/claude/coding/verification/prompts/code-writing-behavior.txt",
+    "size": 269,
+    "mode": "0o644",
+    "sha256": "726ee76c0e8928fcde14c8e6a22ba11f320f2b8b98479689bf3f465f6c95101a"
+  },
+  {
+    "path": "build/marketplace/plugins/claude/coding/verification/prompts/code-writing-near.txt",
+    "size": 101,
+    "mode": "0o644",
+    "sha256": "52aacd9533372b43716b3be0cbc3a23185148b6f06f1d96b14799bd198a0525f"
+  },
+  {
+    "path": "build/marketplace/plugins/claude/coding/verification/prompts/code-writing-positive.txt",
+    "size": 160,
+    "mode": "0o644",
+    "sha256": "f580c975da6691f0becbd2e89e2b54970640996481b6625689ef7680e86bb398"
+  },
+  {
+    "path": "build/marketplace/plugins/claude/coding/verification/prompts/git-contribution-behavior.txt",
+    "size": 196,
+    "mode": "0o644",
+    "sha256": "52fd57b3bcda3b506adf53788105693e20ca6394e9b78fcea47dbd73f92a894e"
+  },
+  {
+    "path": "build/marketplace/plugins/claude/coding/verification/prompts/git-contribution-near.txt",
+    "size": 79,
+    "mode": "0o644",
+    "sha256": "05a846917265a3a3760b8a5fb95810151301a9c3dfedba1765a402ee7a686430"
+  },
+  {
+    "path": "build/marketplace/plugins/claude/coding/verification/prompts/git-contribution-positive.txt",
+    "size": 87,
+    "mode": "0o644",
+    "sha256": "ae096236899f44648d6963cbfc84144fa8c8bdd6d107c96eaec42e678baca494"
+  },
+  {
+    "path": "build/marketplace/plugins/claude/coding/verification/prompts/readme-generator-behavior.txt",
+    "size": 225,
+    "mode": "0o644",
+    "sha256": "440aaef4ba2cd734f955248ac36d263a8becfe5eea580cda8b86343b4a5c8b7f"
+  },
+  {
+    "path": "build/marketplace/plugins/claude/coding/verification/prompts/readme-generator-near.txt",
+    "size": 54,
+    "mode": "0o644",
+    "sha256": "b69af7250101da6141f718c71b15cde2f9f7f551869c40462a6975820cdb28a2"
+  },
+  {
+    "path": "build/marketplace/plugins/claude/coding/verification/prompts/readme-generator-positive.txt",
+    "size": 102,
+    "mode": "0o644",
+    "sha256": "6690e43741f636b015c0b91e599e44a559c3d5fcfc3b7fc6d4efa39994955ac2"
+  },
+  {
+    "path": "build/marketplace/plugins/claude/coding/verification/prompts/skill-generator-behavior.txt",
+    "size": 221,
+    "mode": "0o644",
+    "sha256": "398504bedfaf63cdbef978fcad96857894ce61445fcc73b8f9ed7cea5ea6a40f"
+  },
+  {
+    "path": "build/marketplace/plugins/claude/coding/verification/prompts/skill-generator-near.txt",
+    "size": 83,
+    "mode": "0o644",
+    "sha256": "b102149b0fc975246f6a82c5014fb3469611c1a950fc2fc2394fb62597928cd8"
+  },
+  {
+    "path": "build/marketplace/plugins/claude/coding/verification/prompts/skill-generator-positive.txt",
+    "size": 96,
+    "mode": "0o644",
+    "sha256": "50c04847a335a58dbf93f2a4098c5bf4f91203ff3c4c7ffcc7b6b25e2e0a8483"
+  },
+  {
+    "path": "build/marketplace/plugins/claude/coding/verification/rubrics/behavior.md",
+    "size": 354,
+    "mode": "0o644",
+    "sha256": "5e8c5489651c3ba9ac59a99ac53401a8a6741425ad5a685eb7ad6f28325ae72c"
+  },
+  {
+    "path": "build/marketplace/plugins/claude/coding/verification/rubrics/trigger.md",
+    "size": 361,
+    "mode": "0o644",
+    "sha256": "f8cab47eda24915c70fdbc6193daf568b692dab05e75922e21990c79f56e47db"
+  },
+  {
+    "path": "build/marketplace/plugins/claude/coding/verification/strategies/balanced.toml",
+    "size": 405,
+    "mode": "0o644",
+    "sha256": "c266aa29fc9fe50affd0068ff8e94d4b5186e9abb561f2cb658d1c221aa392f4"
+  },
+  {
+    "path": "build/marketplace/plugins/claude/coding/verification/strategies/comparative.toml",
+    "size": 422,
+    "mode": "0o644",
+    "sha256": "4b89cc7680d8efb869bb8a0386a476a11c3f92041be4359756ad4b14f55b5ddd"
+  },
+  {
+    "path": "build/marketplace/plugins/claude/coding/verification/strategies/structural.toml",
+    "size": 366,
+    "mode": "0o644",
+    "sha256": "377795accc8800a41252a9bd3254ecc787b1b0f1cb95dffa34171be92cd9d44d"
+  },
+  {
+    "path": "build/marketplace/plugins/claude/coding/verification/suites/code-writing.toml",
+    "size": 664,
+    "mode": "0o644",
+    "sha256": "21d7c8bb1073b438e9ea6f23e6d9ef583f216165e25c01b844acef15c8e9b544"
+  },
+  {
+    "path": "build/marketplace/plugins/claude/humans-md/.claude-plugin/plugin.json",
+    "size": 398,
+    "mode": "0o644",
+    "sha256": "28bde433f26ea008c55499465d4bfdbaf3d46a698c8b804f1ab74927435e2210"
+  },
+  {
+    "path": "build/marketplace/plugins/claude/humans-md/LICENSE",
+    "size": 1066,
+    "mode": "0o644",
+    "sha256": "c18bf489a3707f6ef4cb6f67bfd61a63c0f0f1411f23f8fc1ca7b9eddad4b63c"
+  },
+  {
+    "path": "build/marketplace/plugins/claude/humans-md/scripts/setup-claude.py",
+    "size": 11970,
+    "mode": "0o755",
+    "sha256": "5a71f105e1c3779a36b4fc490515164c87a96078ec1739dc1d3c8e5b4423dfed"
+  },
+  {
+    "path": "build/marketplace/plugins/claude/humans-md/skills/claude-setup/SKILL.md",
+    "size": 1473,
+    "mode": "0o644",
+    "sha256": "41596eb60049e9f01f0086b6b35d9d755c0ae6cc330581ca4780f31ad85e444f"
+  },
+  {
+    "path": "build/marketplace/plugins/claude/humans-md/skills/claude-uninstall/SKILL.md",
+    "size": 1160,
+    "mode": "0o644",
+    "sha256": "38330cc8de207c3c74224fed3a769212e56bfc1ab45b51695b00e3cfec59261b"
+  },
+  {
+    "path": "build/marketplace/plugins/claude/humans-md/skills/contract-bootstrap/SKILL.md",
+    "size": 995,
+    "mode": "0o644",
+    "sha256": "d2ea934f1825f9f1e210d7d5b43ee227780196a61cb26e6fd7f0b01eb2cf0888"
+  },
+  {
+    "path": "build/marketplace/plugins/claude/humans-md/skills/contract-bootstrap/scripts/bootstrap-contract.py",
+    "size": 3670,
+    "mode": "0o755",
+    "sha256": "2a4a5b775d56532705a4ff7ffdb836f2193490d1e6f943ad56732d53ad4c635f"
+  },
+  {
+    "path": "build/marketplace/plugins/claude/humans-md/templates/AGENTS.md",
+    "size": 3610,
+    "mode": "0o644",
+    "sha256": "4814fe0184e5dcbd03ed1fdb36957e1431740363898bd6979cac872603ec2ca3"
+  },
+  {
+    "path": "build/marketplace/plugins/claude/humans-md/templates/settings.json",
+    "size": 111,
+    "mode": "0o644",
+    "sha256": "3839246e26cb734a09f9b0493c1b9c396f65d51616a2399b834f7a32eedcbf3c"
+  },
+  {
+    "path": "build/marketplace/plugins/codex/coding/.codex-plugin/plugin.json",
+    "size": 1083,
+    "mode": "0o644",
+    "sha256": "a2d560b051ff817b9c65d82b0e2eecf8669e54d66eafec014359f6362cccb13b"
+  },
+  {
+    "path": "build/marketplace/plugins/codex/coding/LICENSE",
+    "size": 1066,
+    "mode": "0o644",
+    "sha256": "c18bf489a3707f6ef4cb6f67bfd61a63c0f0f1411f23f8fc1ca7b9eddad4b63c"
+  },
+  {
+    "path": "build/marketplace/plugins/codex/coding/scripts/validate-skill.py",
+    "size": 13873,
+    "mode": "0o755",
+    "sha256": "a302fc0e7dc80b6565136b88f3edcadf58bcea05a4187e5cc6ddf144671194df"
+  },
+  {
+    "path": "build/marketplace/plugins/codex/coding/scripts/verify-skill.py",
+    "size": 19137,
+    "mode": "0o755",
+    "sha256": "f8037d57180c82c8fefc29be6fa4417080c33693368f6c431d6739bb90f055e6"
+  },
+  {
+    "path": "build/marketplace/plugins/codex/coding/skills/code-writing/SKILL.md",
+    "size": 3309,
+    "mode": "0o644",
+    "sha256": "afd3cff3de9b495fe0ba3ad5ae29a9dc1803f97e2d18aa8138f331365eb30f7b"
+  },
+  {
+    "path": "build/marketplace/plugins/codex/coding/skills/git-contribution/SKILL.md",
+    "size": 2034,
+    "mode": "0o644",
+    "sha256": "5d4a017d8876b143fed43f2f9702382a855dffbc0ef94ecc415dd4504e17a9ea"
+  },
+  {
+    "path": "build/marketplace/plugins/codex/coding/skills/git-contribution/references/codex-github-cli.md",
+    "size": 350,
+    "mode": "0o644",
+    "sha256": "2b08625b47dbeb426d498224bcec3d14fd76bd374a6cb0b1bd861bc292fcca7d"
+  },
+  {
+    "path": "build/marketplace/plugins/codex/coding/skills/readme-generator/SKILL.md",
+    "size": 3367,
+    "mode": "0o644",
+    "sha256": "c7536852b62571644c575b6ff4e0d329ca9b3db1d55c0cdab7309bf7f0891432"
+  },
+  {
+    "path": "build/marketplace/plugins/codex/coding/skills/skill-generator/SKILL.md",
+    "size": 2476,
+    "mode": "0o644",
+    "sha256": "a85373145e64eca578b698f0c669cf60516aa422d99d956288df415542058a3e"
+  },
+  {
+    "path": "build/marketplace/plugins/codex/coding/verification/prompts/code-writing-behavior.txt",
+    "size": 269,
+    "mode": "0o644",
+    "sha256": "726ee76c0e8928fcde14c8e6a22ba11f320f2b8b98479689bf3f465f6c95101a"
+  },
+  {
+    "path": "build/marketplace/plugins/codex/coding/verification/prompts/code-writing-near.txt",
+    "size": 101,
+    "mode": "0o644",
+    "sha256": "52aacd9533372b43716b3be0cbc3a23185148b6f06f1d96b14799bd198a0525f"
+  },
+  {
+    "path": "build/marketplace/plugins/codex/coding/verification/prompts/code-writing-positive.txt",
+    "size": 160,
+    "mode": "0o644",
+    "sha256": "f580c975da6691f0becbd2e89e2b54970640996481b6625689ef7680e86bb398"
+  },
+  {
+    "path": "build/marketplace/plugins/codex/coding/verification/prompts/git-contribution-behavior.txt",
+    "size": 196,
+    "mode": "0o644",
+    "sha256": "52fd57b3bcda3b506adf53788105693e20ca6394e9b78fcea47dbd73f92a894e"
+  },
+  {
+    "path": "build/marketplace/plugins/codex/coding/verification/prompts/git-contribution-near.txt",
+    "size": 79,
+    "mode": "0o644",
+    "sha256": "05a846917265a3a3760b8a5fb95810151301a9c3dfedba1765a402ee7a686430"
+  },
+  {
+    "path": "build/marketplace/plugins/codex/coding/verification/prompts/git-contribution-positive.txt",
+    "size": 87,
+    "mode": "0o644",
+    "sha256": "ae096236899f44648d6963cbfc84144fa8c8bdd6d107c96eaec42e678baca494"
+  },
+  {
+    "path": "build/marketplace/plugins/codex/coding/verification/prompts/readme-generator-behavior.txt",
+    "size": 225,
+    "mode": "0o644",
+    "sha256": "440aaef4ba2cd734f955248ac36d263a8becfe5eea580cda8b86343b4a5c8b7f"
+  },
+  {
+    "path": "build/marketplace/plugins/codex/coding/verification/prompts/readme-generator-near.txt",
+    "size": 54,
+    "mode": "0o644",
+    "sha256": "b69af7250101da6141f718c71b15cde2f9f7f551869c40462a6975820cdb28a2"
+  },
+  {
+    "path": "build/marketplace/plugins/codex/coding/verification/prompts/readme-generator-positive.txt",
+    "size": 102,
+    "mode": "0o644",
+    "sha256": "6690e43741f636b015c0b91e599e44a559c3d5fcfc3b7fc6d4efa39994955ac2"
+  },
+  {
+    "path": "build/marketplace/plugins/codex/coding/verification/prompts/skill-generator-behavior.txt",
+    "size": 221,
+    "mode": "0o644",
+    "sha256": "398504bedfaf63cdbef978fcad96857894ce61445fcc73b8f9ed7cea5ea6a40f"
+  },
+  {
+    "path": "build/marketplace/plugins/codex/coding/verification/prompts/skill-generator-near.txt",
+    "size": 83,
+    "mode": "0o644",
+    "sha256": "b102149b0fc975246f6a82c5014fb3469611c1a950fc2fc2394fb62597928cd8"
+  },
+  {
+    "path": "build/marketplace/plugins/codex/coding/verification/prompts/skill-generator-positive.txt",
+    "size": 96,
+    "mode": "0o644",
+    "sha256": "50c04847a335a58dbf93f2a4098c5bf4f91203ff3c4c7ffcc7b6b25e2e0a8483"
+  },
+  {
+    "path": "build/marketplace/plugins/codex/coding/verification/rubrics/behavior.md",
+    "size": 354,
+    "mode": "0o644",
+    "sha256": "5e8c5489651c3ba9ac59a99ac53401a8a6741425ad5a685eb7ad6f28325ae72c"
+  },
+  {
+    "path": "build/marketplace/plugins/codex/coding/verification/rubrics/trigger.md",
+    "size": 361,
+    "mode": "0o644",
+    "sha256": "f8cab47eda24915c70fdbc6193daf568b692dab05e75922e21990c79f56e47db"
+  },
+  {
+    "path": "build/marketplace/plugins/codex/coding/verification/strategies/balanced.toml",
+    "size": 405,
+    "mode": "0o644",
+    "sha256": "c266aa29fc9fe50affd0068ff8e94d4b5186e9abb561f2cb658d1c221aa392f4"
+  },
+  {
+    "path": "build/marketplace/plugins/codex/coding/verification/strategies/comparative.toml",
+    "size": 422,
+    "mode": "0o644",
+    "sha256": "4b89cc7680d8efb869bb8a0386a476a11c3f92041be4359756ad4b14f55b5ddd"
+  },
+  {
+    "path": "build/marketplace/plugins/codex/coding/verification/strategies/structural.toml",
+    "size": 366,
+    "mode": "0o644",
+    "sha256": "377795accc8800a41252a9bd3254ecc787b1b0f1cb95dffa34171be92cd9d44d"
+  },
+  {
+    "path": "build/marketplace/plugins/codex/coding/verification/suites/code-writing.toml",
+    "size": 664,
+    "mode": "0o644",
+    "sha256": "21d7c8bb1073b438e9ea6f23e6d9ef583f216165e25c01b844acef15c8e9b544"
+  },
+  {
+    "path": "build/marketplace/plugins/codex/humans-md/.codex-plugin/plugin.json",
+    "size": 857,
+    "mode": "0o644",
+    "sha256": "f2a8d5081d70ca1ec0848789ea0a59fcd7cab62c3891f1c33480ab1024eaa4e7"
+  },
+  {
+    "path": "build/marketplace/plugins/codex/humans-md/LICENSE",
+    "size": 1066,
+    "mode": "0o644",
+    "sha256": "c18bf489a3707f6ef4cb6f67bfd61a63c0f0f1411f23f8fc1ca7b9eddad4b63c"
+  },
+  {
+    "path": "build/marketplace/plugins/codex/humans-md/scripts/setup-codex.py",
+    "size": 13977,
+    "mode": "0o755",
+    "sha256": "37f4c23c433ea4127e837b53d6ff6d62bd057b7cd8084e4c19e62eb4ba4f8dfd"
+  },
+  {
+    "path": "build/marketplace/plugins/codex/humans-md/skills/codex-setup/SKILL.md",
+    "size": 717,
+    "mode": "0o644",
+    "sha256": "928eb3022e5006acda063ae8875d9bef2e577338d2992e48241775fd165d5522"
+  },
+  {
+    "path": "build/marketplace/plugins/codex/humans-md/skills/codex-uninstall/SKILL.md",
+    "size": 450,
+    "mode": "0o644",
+    "sha256": "160bb85a7b5e6595f66fc90a42bd0cd3fa482dfd67a32c65d8c652e60ad181fe"
+  },
+  {
+    "path": "build/marketplace/plugins/codex/humans-md/skills/contract-bootstrap/SKILL.md",
+    "size": 995,
+    "mode": "0o644",
+    "sha256": "d2ea934f1825f9f1e210d7d5b43ee227780196a61cb26e6fd7f0b01eb2cf0888"
+  },
+  {
+    "path": "build/marketplace/plugins/codex/humans-md/skills/contract-bootstrap/scripts/bootstrap-contract.py",
+    "size": 3670,
+    "mode": "0o755",
+    "sha256": "2a4a5b775d56532705a4ff7ffdb836f2193490d1e6f943ad56732d53ad4c635f"
+  },
+  {
+    "path": "build/marketplace/plugins/codex/humans-md/templates/AGENTS.md",
+    "size": 3610,
+    "mode": "0o644",
+    "sha256": "4814fe0184e5dcbd03ed1fdb36957e1431740363898bd6979cac872603ec2ca3"
+  }
+]
