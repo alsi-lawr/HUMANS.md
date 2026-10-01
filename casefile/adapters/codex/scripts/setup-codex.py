@@ -457,7 +457,7 @@ def unowned_config(data: bytes) -> bytes:
                 raise SetupError("managed config marker is unbalanced")
             payload = drop_owned_lines(data[start + len(begin) : stop], table)
             data = data[:start] + payload + data[stop + len(end) :]
-    result = remove_owned_tables(data)
+    result = drop_owned_lines(remove_owned_tables(data))
     if result:
         tomllib.loads(result.decode("utf-8"))
     return result

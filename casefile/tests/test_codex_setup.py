@@ -455,7 +455,11 @@ class CodexSetupTests(unittest.TestCase):
                     self.assertEqual(24, tomllib.loads(config.read_text())["agents"]["max_threads"])
                     receipt_path, receipt = setup.receipt(home, None)
                     setup.uninstall(home, "codex", receipt_path, receipt)
-                self.assertEqual(24, tomllib.loads(config.read_text())["agents"]["max_threads"])
+                restored = tomllib.loads(config.read_text())
+                self.assertEqual(24, restored["agents"]["max_threads"])
+                self.assertFalse(
+                    {"multi_agent", "multi_agent_v2"} & restored.get("features", {}).keys()
+                )
 
     def test_thread_count_inside_old_owned_markers_survives_reinstall_and_uninstall(self):
         for reinstall in (False, True):
