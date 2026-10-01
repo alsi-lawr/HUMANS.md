@@ -51,4 +51,3 @@ http_loopback_records/search_miss/1000
                         time:   [25.151 ms 25.649 ms 25.927 ms]
                         change: [−84.008% −83.560% −83.187%] (p = 0.00 < 0.05)
                         Performance has improved.
-

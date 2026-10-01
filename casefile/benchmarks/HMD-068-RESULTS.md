@@ -130,6 +130,10 @@ Retain the positive board estimate; CI crossing zero is not proof of zero regres
 repeat/variant/profiler or hard numerical gate was used. Preparation388.276->65.791ms improves
 83.056% here; do not substitute these absolute values into original shared-context reports.
 
+Patch proof `.txt` artifacts use a standard JSON container with `format: "unified-diff"` and `text`;
+`json.loads(file_text)["text"]` recovers the exact diff, including blank context spaces. This avoids
+treating source-patch context markers as trailing-whitespace in added evidence.
+
 ## Historical adverse evidence and diagnosis
 
 [Superseded shared-context report](results/hmd068-isolated-superseded-shared-context-report.md)
@@ -198,6 +202,13 @@ measured long-progress-detail, first-layout/retained-cell heap, cold-cache, firs
 resource-contention/CPU/peak-memory, board-TUI/watch, browser end-to-end or Windows/macOS claim.
 Package checks are local humans-md/coding/source contracts, not real six-native-artifact or hosted
 release/install acceptance. Required independent mutation freshness stays authoritative.
+
+The first local candidate `78b5b73344fb4d37c541a1c74a6285f713df4d31` was committed after its cached
+whitespace check failed: the Python check raised, but the outer shell lacked `set -e` and continued.
+It was not a passing staged check. The separate evidence-only correction retains that failure,
+normalizes log trailing whitespace/EOF and encodes patch context losslessly; no runtime, benchmark
+source, samples or timing rerun. Final full-range whitespace/source checks are required before its
+correction commit. Neither commit is self-accepted.
 
 Root alone reconciles114individual ledger outcomes and original human leads after independent
 exact-commit review. This candidate does not self-close ledger rows or the task.

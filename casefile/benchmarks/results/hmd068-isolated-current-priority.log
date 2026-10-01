@@ -72,4 +72,3 @@ priority_single_record_250_records_500_notes/apply
                         time:   [27.354 ms 28.036 ms 28.745 ms]
                         change: [−12.777% −10.787% −8.3326%] (p = 0.00 < 0.05)
                         Performance has improved.
-

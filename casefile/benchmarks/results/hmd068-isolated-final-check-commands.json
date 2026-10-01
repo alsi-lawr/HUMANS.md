@@ -159,5 +159,24 @@
     "exit_code": 0,
     "receipt_kind": "actual aggregate set-e exit; individual durations not captured",
     "log": "final-authored-checks.log"
+  },
+  {
+    "name": "first-immutable-whitespace-check",
+    "command": "git show --format= --check 78b5b73344fb4d37c541a1c74a6285f713df4d31",
+    "exit_code": 2,
+    "receipt_kind": "actual failure; outer shell missing set-e committed after checked Python raised",
+    "log": "first immutable commit cached-check failure block in final-verification.txt"
+  },
+  {
+    "name": "evidence-only-correction-gates",
+    "commands": [
+      "scripts/format-source.sh --check",
+      "python scripts/strip-non-ascii.py --check .",
+      "python casefile/scripts/validate-casefile.py --source casefile",
+      "git diff --cached --check",
+      "git diff --cached 18b71c8bbd70db48b1f12832e41084c0e918a237 --check"
+    ],
+    "exit_code": 0,
+    "receipt_kind": "actual set-e checks; individual durations not captured"
   }
 ]

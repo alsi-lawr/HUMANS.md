@@ -648,4 +648,3 @@ tui_250_records_500_notes/detail_scroll_20_frames
                         time:   [5.9106 ms 5.9202 ms 5.9269 ms]
                         change: [−44.951% −44.718% −44.475%] (p = 0.00 < 0.05)
                         Performance has improved.
-

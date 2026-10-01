@@ -1242,3 +1242,82 @@ All matched files use Prettier code style!
 ASCII check passed; changed 0 file(s)
 validated Casefile boundary
 
+===== first immutable commit cached-check failure =====
+casefile/benchmarks/results/hmd068-criterion.log:660: new blank line at EOF.
+casefile/benchmarks/results/hmd068-initial-criterion.log:651: new blank line at EOF.
+casefile/benchmarks/results/hmd068-isolated-api-adapters.txt:60: trailing whitespace.
++
+casefile/benchmarks/results/hmd068-isolated-api-adapters.txt:78: trailing whitespace.
++
+casefile/benchmarks/results/hmd068-isolated-api-adapters.txt:87: trailing whitespace.
++
+casefile/benchmarks/results/hmd068-isolated-api-adapters.txt:136: trailing whitespace.
++
+casefile/benchmarks/results/hmd068-isolated-api-adapters.txt:138: trailing whitespace.
++
+casefile/benchmarks/results/hmd068-isolated-api-adapters.txt:150: trailing whitespace.
++
+casefile/benchmarks/results/hmd068-isolated-api-adapters.txt:150: new blank line at EOF.
+casefile/benchmarks/results/hmd068-isolated-benchmark-patch.txt:330: trailing whitespace.
++
+casefile/benchmarks/results/hmd068-isolated-benchmark-patch.txt:375: trailing whitespace.
++
+casefile/benchmarks/results/hmd068-isolated-benchmark-patch.txt:409: trailing whitespace.
++
+casefile/benchmarks/results/hmd068-isolated-benchmark-patch.txt:469: trailing whitespace.
++
+casefile/benchmarks/results/hmd068-isolated-benchmark-patch.txt:597: trailing whitespace.
++
+casefile/benchmarks/results/hmd068-isolated-benchmark-patch.txt:687: trailing whitespace.
++
+casefile/benchmarks/results/hmd068-isolated-benchmark-patch.txt:831: trailing whitespace.
++
+casefile/benchmarks/results/hmd068-isolated-current-baselines.log:496: new blank line at EOF.
+casefile/benchmarks/results/hmd068-isolated-current-http.log:54: new blank line at EOF.
+casefile/benchmarks/results/hmd068-isolated-current-interactions.log:26: new blank line at EOF.
+casefile/benchmarks/results/hmd068-isolated-current-priority.log:75: new blank line at EOF.
+casefile/benchmarks/results/hmd068-isolated-final-verification.txt:1244: new blank line at EOF.
+casefile/benchmarks/results/hmd068-isolated-historical-baselines.log:353: new blank line at EOF.
+casefile/benchmarks/results/hmd068-isolated-historical-http.log:53: new blank line at EOF.
+casefile/benchmarks/results/hmd068-isolated-historical-interactions.log:26: new blank line at EOF.
+casefile/benchmarks/results/hmd068-isolated-historical-priority.log:59: new blank line at EOF.
+casefile/benchmarks/results/hmd068-isolated-production-patch.txt:19: trailing whitespace.
++
+casefile/benchmarks/results/hmd068-isolated-production-patch.txt:24: trailing whitespace.
++
+casefile/benchmarks/results/hmd068-isolated-production-patch.txt:50: trailing whitespace.
++
+casefile/benchmarks/results/hmd068-isolated-production-patch.txt:196: trailing whitespace.
++
+casefile/benchmarks/results/hmd068-isolated-production-patch.txt:212: trailing whitespace.
++
+casefile/benchmarks/results/hmd068-post-transaction-criterion.log:663: new blank line at EOF.
+casefile/benchmarks/results/hmd068-verification.txt:1640: trailing whitespace.
++error: Unexpected Casefile launch output:
+casefile/benchmarks/results/hmd068-verification.txt:1652: trailing whitespace.
++error: Unexpected Casefile launch output:
+casefile/benchmarks/results/hmd068-verification.txt:1664: trailing whitespace.
++error: Unexpected Casefile launch output:
+casefile/benchmarks/results/hmd068-verification.txt:1676: trailing whitespace.
++error: Unexpected Casefile launch output:
+casefile/benchmarks/results/hmd068-verification.txt:1688: trailing whitespace.
++error: Unexpected Casefile launch output:
+
+The staging Python check raised correctly, but its outer shell lacked set-e and committed 78b5b73344fb4d37c541a1c74a6285f713df4d31 anyway. Not a passing cached check. A separate evidence-only correction normalizes whitespace and keeps patch text decodable. Runtime, benchmark source, raw samples and measurements are unchanged.
+
+===== evidence-only correction source and full-range gates =====
+warning: Git tree '/home/alex/dev/HUMANS.md' is dirty
+humans-md development shell
+  Setup:  (cd casefile/web && bun install)
+  Format: scripts/format-source.sh --check|--write
+  Web:    cd casefile/web; bun install; bun run typecheck; bun run test; bun run build
+  Rust:   cd casefile; cargo fmt --check; cargo clippy --workspace --all-targets -- -D warnings; cargo test --workspace
+  CI:     act pull_request -j validate --pull=false -P ubuntu-latest=catthehacker/ubuntu:act-latest
+../benchmarks/HMD-068-RESULTS.md 91ms
+Checking formatting...
+All matched files use Prettier code style!
+ASCII check passed; changed 0 file(s)
+validated Casefile boundary
+
+Actual git diff --cached --check: exit0
+Actual git diff --cached 18b71c8bbd70db48b1f12832e41084c0e918a237 --check: exit0

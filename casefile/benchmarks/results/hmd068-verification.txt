@@ -1637,7 +1637,7 @@ error: command failed: 'cargo': No such file or directory (os error 2)
 712 |     await rm(temporary, { force: true, recursive: true });
 713 |     throw new Error(`Unexpected Casefile launch output: ${lines.join(" | ")}`);
                     ^
-error: Unexpected Casefile launch output: 
+error: Unexpected Casefile launch output:
       at <anonymous> (/home/alex/dev/HUMANS.md/casefile/web/src/app/app.browser.test.tsx:713:15)
       at async <anonymous> (/home/alex/dev/HUMANS.md/casefile/web/src/app/app.browser.test.tsx:36:22)
 (fail) navigates and reconciles governed work against the shared host fixture [87.82ms]
@@ -1649,7 +1649,7 @@ error: command failed: 'cargo': No such file or directory (os error 2)
 712 |     await rm(temporary, { force: true, recursive: true });
 713 |     throw new Error(`Unexpected Casefile launch output: ${lines.join(" | ")}`);
                     ^
-error: Unexpected Casefile launch output: 
+error: Unexpected Casefile launch output:
       at <anonymous> (/home/alex/dev/HUMANS.md/casefile/web/src/app/app.browser.test.tsx:713:15)
       at async <anonymous> (/home/alex/dev/HUMANS.md/casefile/web/src/app/app.browser.test.tsx:271:22)
 (fail) rejects stale board projections across scope changes and refresh outcomes [34.88ms]
@@ -1661,7 +1661,7 @@ error: command failed: 'cargo': No such file or directory (os error 2)
 712 |     await rm(temporary, { force: true, recursive: true });
 713 |     throw new Error(`Unexpected Casefile launch output: ${lines.join(" | ")}`);
                     ^
-error: Unexpected Casefile launch output: 
+error: Unexpected Casefile launch output:
       at <anonymous> (/home/alex/dev/HUMANS.md/casefile/web/src/app/app.browser.test.tsx:713:15)
       at async <anonymous> (/home/alex/dev/HUMANS.md/casefile/web/src/app/app.browser.test.tsx:334:22)
 (fail) loads a progress log and places cards in their recorded board columns [30.35ms]
@@ -1673,7 +1673,7 @@ error: command failed: 'cargo': No such file or directory (os error 2)
 712 |     await rm(temporary, { force: true, recursive: true });
 713 |     throw new Error(`Unexpected Casefile launch output: ${lines.join(" | ")}`);
                     ^
-error: Unexpected Casefile launch output: 
+error: Unexpected Casefile launch output:
       at <anonymous> (/home/alex/dev/HUMANS.md/casefile/web/src/app/app.browser.test.tsx:713:15)
       at async <anonymous> (/home/alex/dev/HUMANS.md/casefile/web/src/app/app.browser.test.tsx:373:22)
 (fail) keeps nested investigations with the same leaf independently selectable [32.31ms]
@@ -1685,7 +1685,7 @@ error: command failed: 'cargo': No such file or directory (os error 2)
 712 |     await rm(temporary, { force: true, recursive: true });
 713 |     throw new Error(`Unexpected Casefile launch output: ${lines.join(" | ")}`);
                     ^
-error: Unexpected Casefile launch output: 
+error: Unexpected Casefile launch output:
       at <anonymous> (/home/alex/dev/HUMANS.md/casefile/web/src/app/app.browser.test.tsx:713:15)
       at async <anonymous> (/home/alex/dev/HUMANS.md/casefile/web/src/app/app.browser.test.tsx:442:22)
 (fail) a delayed obsolete search reply cannot replace the newer guarded workspace [29.42ms]

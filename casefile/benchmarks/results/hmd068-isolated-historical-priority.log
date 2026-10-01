@@ -56,4 +56,3 @@ Benchmarking priority_single_record_250_records_500_notes/apply: Collecting 10 s
 Benchmarking priority_single_record_250_records_500_notes/apply: Analyzing
 priority_single_record_250_records_500_notes/apply
                         time:   [30.900 ms 31.249 ms 31.603 ms]
-

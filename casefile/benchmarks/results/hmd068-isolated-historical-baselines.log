@@ -350,4 +350,3 @@ sqlite_500_records/boards
                         time:   [361.61 µs 370.75 µs 381.24 µs]
 Found 1 outliers among 10 measurements (10.00%)
   1 (10.00%) high mild
-
