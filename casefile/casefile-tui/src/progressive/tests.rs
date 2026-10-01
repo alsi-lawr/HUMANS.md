@@ -59,6 +59,11 @@ fn catalogue_is_navigable_before_completion_and_post_start_observation_is_report
     finish_active(&mut coordinator);
 
     assert!(!coordinator.projection().provisional);
+    assert_eq!(
+        coordinator.status(),
+        "",
+        "global observation is not target freshness"
+    );
     assert!(matches!(
         report_receiver.recv().expect("success report"),
         RefreshReport::Succeeded {
@@ -201,15 +206,11 @@ fn selected_lazy_content_exposes_loaded_and_fresh_failure_states() {
     finish_active(&mut coordinator);
     assert!(coordinator.request_content(Some(EVIDENCE)));
     finish_content(&mut coordinator);
-    let loaded = coordinator
-        .projection()
-        .scan
-        .snapshot
-        .entries
-        .into_iter()
-        .find(|entry| entry.path == EVIDENCE)
-        .expect("evidence");
-    assert!(!loaded.original_bytes.is_empty());
+    let projection = coordinator.projection();
+    let loaded = &projection.body_owners[EVIDENCE];
+    assert!(
+        matches!(&loaded.body, PresentationFact::Available(bytes) if bytes == &fs::read(root.path().join(EVIDENCE)).unwrap())
+    );
 
     let root = fixture();
     let store = Store::open(root.path()).expect("store");
@@ -228,6 +229,52 @@ fn selected_lazy_content_exposes_loaded_and_fresh_failure_states() {
         .find(|entry| entry.path == EVIDENCE)
         .expect("evidence");
     assert!(evidence.original_bytes.is_empty());
+}
+
+#[test]
+fn status_only_content_events_redraw_and_selection_cancellation_rejects_late_delivery() {
+    let root = fixture();
+    let store = Store::open(root.path()).unwrap();
+    let mut coordinator = Coordinator::start(store.presentation_session(), None).unwrap();
+    finish_active(&mut coordinator);
+    // Consume the initial payload so only status changes remain.
+    coordinator.take_projection();
+    assert!(coordinator.request_content(Some(EVIDENCE)));
+    let active = coordinator.content.as_ref().unwrap();
+    let generation = active.generation;
+    let target = active.target.clone();
+    let pending = || PresentationContentEvent::Pending {
+        generation,
+        target: target.clone(),
+        path: EVIDENCE.into(),
+    };
+    assert!(coordinator.apply_content_event(pending()));
+    assert!(coordinator.status().contains("Loading"));
+    let projection = coordinator.take_projection();
+    assert!(projection.scan.snapshot.entries.is_empty());
+    assert!(!projection.catalogue_changed);
+    assert!(coordinator.request_content(None));
+    assert!(!coordinator.status().contains(EVIDENCE));
+    assert!(!coordinator.apply_content_event(pending()));
+    assert!(coordinator.request_content(Some(EVIDENCE)));
+    let active = coordinator.content.as_ref().unwrap();
+    assert!(
+        coordinator.apply_content_event(PresentationContentEvent::Failure {
+            generation: active.generation,
+            target: active.target.clone(),
+            path: Some(EVIDENCE.into()),
+            message: "supported content failure".into()
+        })
+    );
+    assert!(coordinator.status().contains("supported content failure"));
+    assert!(
+        coordinator
+            .take_projection()
+            .scan
+            .snapshot
+            .entries
+            .is_empty()
+    );
 }
 
 #[test]

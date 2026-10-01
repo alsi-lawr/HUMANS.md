@@ -1,0 +1,702 @@
+{
+  "parent": "27ca531f7ab8fc19a9c6a17684269c2743f4f791",
+  "command": [
+    "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/release/deps/interactions-cee69abf78b7fcec",
+    "^tui_250_records_500_notes/",
+    "--bench",
+    "--baseline",
+    "hmd057-before"
+  ],
+  "source_sha256": {
+    "casefile/Cargo.lock": "0728d84b97d2564f6a5798777e693abf68c8dd15f1cd053462bd65689a46334a",
+    "casefile/Cargo.toml": "93faca5025855579badbd520ba05286857d27143c257c9ccb3d3a41d0549091d",
+    "casefile/benchmarks/support/mod.rs": "9a073d937a0aaef7d27be68b0dbc6821338a8bab29db2c91ffa4d248301e1361",
+    "casefile/casefile-core/Cargo.toml": "47ef3670f095f44677eb34bde11cc7665af5e233e5f94addc3847ee0e7c7380b",
+    "casefile/casefile-core/src/board.rs": "2458232b2ac378e509fe7fa6419b43ee85ed3bf0f133f885d6b440e3830095ac",
+    "casefile/casefile-core/src/change.rs": "62baaecaf55dc57402839b78bd9c8ebad703a79d46ff487782a3dcfa84a29770",
+    "casefile/casefile-core/src/decision.rs": "9456e83c4656d25bbd8f0e40720ea0f81ab411392163b0fdfe0e726a0157434b",
+    "casefile/casefile-core/src/diagnostic.rs": "d85e3fc270478f566c2caa716e89a1b69671f1e7fb46f081b225982c16a7b593",
+    "casefile/casefile-core/src/lib.rs": "1283fd1ab8905bf5e0e28ea113e4c6baf3ca103018220df206c3902d135b7b04",
+    "casefile/casefile-core/src/markdown.rs": "f14af32fdc9256ab2054a6496f388b90608cf9878fdb3154d0463357d9293c7f",
+    "casefile/casefile-core/src/metadata.rs": "f479a46ea7135640c664afe3f290eed86d94499754ddb669a4cfa8feb5f3f782",
+    "casefile/casefile-core/src/progress/parse.rs": "2454be911956140e8de1961a9ece31163a988c1e462cbf255f4e2606b6047285",
+    "casefile/casefile-core/src/progress.rs": "28b23416ff41c9aae7a39749187c9fa64aab62b0d1dfee8bd481c1dba2e61124",
+    "casefile/casefile-core/src/project_map.rs": "3f778d5de7b05c0f869f1eae4013f4f4f2232f5460b828b8a902d1d6ebb08ac2",
+    "casefile/casefile-core/src/record.rs": "39c923a8117146d61d00d1f9b517949dd603d8bc59f6f0ab2a91fae0f65a4519",
+    "casefile/casefile-core/src/rendering.rs": "0d9c574c4fa1c6c69d79baffe48aa9909a3cf53e4ed4af8e2df1748fdd09a021",
+    "casefile/casefile-core/src/request.rs": "f45211b6204002f7658dfa64a18c52bab14f4c05ee4b7458452507ea36e135a5",
+    "casefile/casefile-core/src/snapshot.rs": "3e55a04b5dcb8587f529c46ae02bf1ebed030177d1abd0321f44d2b4b7b93739",
+    "casefile/casefile-core/src/strategy.rs": "9188debe2b7019aef8a6e266e327dcf3281dc244bcb4e1522306acd64d38eff6",
+    "casefile/casefile-core/src/strategy_transition.rs": "4c8924bc9d6654b8cd14ec4d5846c4c7c35c58cbcad4395a457fa29aff4f18aa",
+    "casefile/casefile-core/src/work_item.rs": "5bf5efc4ea50aeb2f5304a82dc2d4aa42f18e4a6d47649ebe0dd8c8a53f508f3",
+    "casefile/casefile-store/Cargo.toml": "8d5ad3f3faa240852535d21849c2cf5c11aab4f3759f753a80d2ab2001d941e1",
+    "casefile/casefile-store/src/activation.rs": "9b1ad5144e3c98d29881e6163cdd3e5f873a7c87e498f1f919da13704fe26c91",
+    "casefile/casefile-store/src/checking.rs": "68793eb54a3fbc404349d1c568c3eddf2635fa89447ce652da76740c81d8531c",
+    "casefile/casefile-store/src/derived/boards.rs": "38b3c2cbb943792d9c11542fbb2312a5c1fa6990e2979a179fc4806baf4c724f",
+    "casefile/casefile-store/src/derived/progress.rs": "07b37ec31d91e874debff73e2c87b1839f2a9ef28d90c4c1f6a93f0c1eb94a58",
+    "casefile/casefile-store/src/derived/records.rs": "21bb9a7f332f816331ffa875f5ff0837f5c9f15e98a7978094f1191f3d7c379e",
+    "casefile/casefile-store/src/derived.rs": "8fb8bf4ea4b449d54a7fef8f6ea7ca092b4611215d53a9522344149363a7d0bc",
+    "casefile/casefile-store/src/governance.rs": "0e4d8d198d2fe9accc1e20bec72dcad3b957e98e75276c2ddb3cb5a09cc8e569",
+    "casefile/casefile-store/src/index.rs": "da8ad3b36cc668228339e5d2af90b7d190a9abc98b74b86bebf387ab56cd6fb6",
+    "casefile/casefile-store/src/layout.rs": "7d9651b214616d139e4049e7b02db77f2ee3cce1707d0af53ec1d0745e676129",
+    "casefile/casefile-store/src/lib.rs": "4c43eb55a9b26621a18423b6a24120f5cc76e0f915aa7a2fcbc52c54997d99a8",
+    "casefile/casefile-store/src/mutation.rs": "09bb9edc247b1ad0c66926294babbaa86249ab0f5b6dda96cea5579c243dd6aa",
+    "casefile/casefile-store/src/mutation_dependencies.rs": "7d944577065ce8f6b97cc748de818e1fea67fc1606985f9b1d843b1a1591ecd1",
+    "casefile/casefile-store/src/mutation_hooks.rs": "e7ffd9ff983b33e310e13fd3486b6e55afe4cc86e5b7c9baad681ab528e2b9e5",
+    "casefile/casefile-store/src/mutation_locks.rs": "eb4bbb2ad522b6ddc67dbbe016cc364603e7c09929aac0195ce34d3cde3bd27d",
+    "casefile/casefile-store/src/mutation_metadata.rs": "50c3efe33e1aa12c9b3efadcc7bdca35799c84628930e4771936c8dc956e0fdf",
+    "casefile/casefile-store/src/mutation_projection.rs": "5c69b4d20e94f84f9c42157115672ee89792bb0feda22c4c15dc2be831db8ad5",
+    "casefile/casefile-store/src/mutation_restore.rs": "6e62d3c6f0596e11300695effa4c67a91ce69395b7f94a3f5379697d49dac53a",
+    "casefile/casefile-store/src/mutation_tests.rs": "f3f65ac22bfcfbaf51daf1a79b54dd552c7ac3d14b4542456a2c29f9e2d5f3ab",
+    "casefile/casefile-store/src/presentation/catalogue.rs": "b09c614c51984f036fa3568f7c83568b39a58e4777ce886c061403156d6c1508",
+    "casefile/casefile-store/src/presentation/content.rs": "53492c8cb103122cd5babc10a8e8500e888336f72ec7f11f1a6e378b8ed6c2f0",
+    "casefile/casefile-store/src/presentation/entries.rs": "0b3c562550651f42ff6123e9c8a61feca80260dfd57237fab009724a941acf59",
+    "casefile/casefile-store/src/presentation/facts.rs": "b6dfa861574402468c21ea291832011018378ee8b781db39b8f60e7231d4721c",
+    "casefile/casefile-store/src/presentation/loading.rs": "0497e94e2931c26f5056eb826532f3a24c9a1cae34f4c3fe02b0661211d39bcf",
+    "casefile/casefile-store/src/presentation/model.rs": "df23fb59633165c787d7977285d1d689f2d027845aa7d87b70e504fe3cb8f641",
+    "casefile/casefile-store/src/presentation/reader.rs": "54c1eb388bbd0c4788ee7d12f8cde92bd4ae2cf179e982ef088b0890a5c371f9",
+    "casefile/casefile-store/src/presentation/scope.rs": "f3a8b2c6bfa508e0f6d6c41230ad4bcb6bfcffcc75021384433eb1530702ca14",
+    "casefile/casefile-store/src/presentation/session.rs": "085e1d20f691676fea3893a26066582bb38facd505b5d1ad2de9a22793510e66",
+    "casefile/casefile-store/src/presentation/tests.rs": "fd35855427b16e7c11933b849980fbdf33b4dd6ff075be77245bc83e5bb49171",
+    "casefile/casefile-store/src/presentation.rs": "186eb0efd3718f4c296f0172842716c6fe3d864a439580637ddc77da3c45eb22",
+    "casefile/casefile-store/src/progress.rs": "a0519d1de1e32717372a292e3c2085945e67439d7c9d2cc448cc9d30c0a4d802",
+    "casefile/casefile-store/src/provider/indexed.rs": "179153c8e87e8e217639999356f671d6fcbf5d0dc6744284627d533ff583a81f",
+    "casefile/casefile-store/src/provider/outcome_tests.rs": "c5bbc69f9f3736ddd16cfee0f6e4b58ba284c7f8d75a948dc570b11d89b34ccb",
+    "casefile/casefile-store/src/provider/preview_vault.rs": "9743ac5d8d47cc2ade4e652a76bdd1e9a8cb4663ca34c6e039dddc755d14e65f",
+    "casefile/casefile-store/src/provider/review.rs": "285e25dd2fdc5cbcc78d8bd0dccf24774df40145a970af2fae03a6772313bf30",
+    "casefile/casefile-store/src/provider/watching.rs": "9bb353e1823311d39158dd3ebfd4063c7086ab7191f33ec2cbe9dc5ea5194d05",
+    "casefile/casefile-store/src/provider.rs": "51006f7d4917e434c3624c3482ef6d1598b8267bf122b07471965c155c94b55d",
+    "casefile/casefile-store/src/read_context/tokens.rs": "c9be378c514ff715f7f7559e05eac0669599e97df4acd01bf8f8801ee042e47c",
+    "casefile/casefile-store/src/read_context.rs": "25c25aa67372a1e9cb3e477289ef773c35bcee5d15e8f91792a0c9c316b19219",
+    "casefile/casefile-store/src/revision.rs": "703e6cfed119c6ec42dfcafe9d9b9e479920986836156aaf1a05eceea0d7ccd6",
+    "casefile/casefile-store/src/scanning/classification.rs": "77d19ac8ee470aa1eebf3e04c8ecdd2458c15fb2abcdeedcdbc5406bccdbb265",
+    "casefile/casefile-store/src/scanning/inventory.rs": "010236bb3974e57852f9d6a6997194cce0a9ddb66307fd57c33737f57eed0bb3",
+    "casefile/casefile-store/src/scanning/scoped.rs": "81a0f9339963174baa8c0e46d99d555df9810fac403e1e4f34848ae8fdc80505",
+    "casefile/casefile-store/src/scanning/selected.rs": "16ad229e1cb86147e9905722ada53e9a87baaad2f6ab2840f4b395670487161b",
+    "casefile/casefile-store/src/scanning.rs": "6e310fab05f89561edaa323653e65701136c11ca1b45cec3076e2fc5c5718779",
+    "casefile/casefile-store/src/store.rs": "e2c166d263e2b31198643b7a75a0dafe2e4560cf65acf91865b942cd08a7681d",
+    "casefile/casefile-store/src/validation.rs": "845f20b8ea2181037f61e37c4118376b5e8cb0085f38ac45cc070a2347725cae",
+    "casefile/casefile-store/src/writing.rs": "a6982d4fbb58efdd965a2b5b460a247fd9c626977543ff390a5f52941d38e67a",
+    "casefile/casefile-store/tests/fixtures/minimum/casefile.toml": "a6267a3333579d35f399760cd06ab8639a44dfef544ed75d8da32c70d96d3127",
+    "casefile/casefile-store/tests/fixtures/minimum/projects/demo/investigations/sample/boards/main.toml": "8680ebc27fc050a84a3db8cb053c965801488e72827f294c919e857384ab95fa",
+    "casefile/casefile-store/tests/fixtures/minimum/projects/demo/investigations/sample/decision-log/HMD-D-001-scope.md": "95d8c4219be83caac514f9a104edd0ba68c4dc2981b00704282835d256097503",
+    "casefile/casefile-store/tests/fixtures/minimum/projects/demo/investigations/sample/epics/accepted/HMD-E-001.md": "b7ab6768dec6639d30084738d4c7bc2c30cab726c524ac5d7dae5aa8559cf56c",
+    "casefile/casefile-store/tests/fixtures/minimum/projects/demo/investigations/sample/evidence/attachment.txt": "b97295be7fa8b49d8d64ec318c127eab337ffeaba23796bcaa1006352bdc149b",
+    "casefile/casefile-store/tests/fixtures/minimum/projects/demo/investigations/sample/evidence/observation.md": "0bfc2ad4717b628e0a0a17c88f648af75274e53201cf1f72a594452b8e737f27",
+    "casefile/casefile-store/tests/fixtures/minimum/projects/demo/investigations/sample/final-disposition.md": "d141dd73de560b0fefefe00e9917a28834d57231be03bf17cf6887b8cc494a89",
+    "casefile/casefile-store/tests/fixtures/minimum/projects/demo/investigations/sample/implementation-plan/PLAN.md": "76e71fcbcddc1adae185a792e3c74642a89dbff4c38ba4b0e3a4fece7ea5581b",
+    "casefile/casefile-store/tests/fixtures/minimum/projects/demo/investigations/sample/request.md": "aa4d8f84b1a3cd793d033bbd1d33298fafb0b99e2fc81b8ae9b9e4e638d50946",
+    "casefile/casefile-store/tests/fixtures/minimum/projects/demo/investigations/sample/review/round-1.md": "a1e44bcd2e0a45751c22dc653cad8362c86fbbabda39c5a2b83ec50640853014",
+    "casefile/casefile-store/tests/fixtures/minimum/projects/demo/investigations/sample/strategy/implementation.toml": "7074267d5ab5c8128dff14708bcf2954b666d869c1ed692f50eacb8f9231b537",
+    "casefile/casefile-store/tests/fixtures/minimum/projects/demo/investigations/sample/strategy/investigation.toml": "27e800866ca5eb8f6e58798fa75b075b97c76a0ddd2218b3095b05f6e9c5941d",
+    "casefile/casefile-store/tests/fixtures/minimum/projects/demo/investigations/sample/strategy/review.toml": "2d996934cdd77b476bab65483867657d33505a06754059a01dca0726079333d6",
+    "casefile/casefile-store/tests/fixtures/minimum/projects/demo/investigations/sample/tickets/accepted/HMD-011.md": "ac462ed7a42f8a919dc55f44ef9a4c18c6f23a509943a7195434e55c2871198c",
+    "casefile/casefile-store/tests/fixtures/minimum/projects.toml": "4ab8cb7ebf0923ae4d5eaee24a48664910d891e9a1290e20d0a943e2ea4fc648",
+    "casefile/casefile-tui/Cargo.toml": "83f381e98fea9b3af577f0d9785dec49886f60bedd4baf9c992e3e0f8f273d4d",
+    "casefile/casefile-tui/benches/interactions.rs": "6296199c7281c4478afac21290da831e0a844c76fdc6138ee31810aa673ad34d",
+    "casefile/casefile-tui/src/benchmark.rs": "e13800c445aaf2e7c6fdfa316e1a9a35a690ee61bbb441a61770a62f7c51d53c",
+    "casefile/casefile-tui/src/browsing/projection.rs": "722f490daa137eb4d7672f072c6b46e2bda514f013070281b7a1d55ccab8b22b",
+    "casefile/casefile-tui/src/browsing.rs": "b26590ce84a3ab3b21daa786e9f599a13f717741f081463fa798a0c771954291",
+    "casefile/casefile-tui/src/interaction.rs": "294e0927ad83f18334ade50a2479df17a58b0794e301d216fb03fda19c7d54e9",
+    "casefile/casefile-tui/src/lib.rs": "f6aa240e064b11b525d0044b6844cc40eb49322e2351abc5febf13b2cf6fd706",
+    "casefile/casefile-tui/src/markdown.rs": "bec0b2d56d931934ac278d4c33c616095729602edc73e817cddc556ae84b5775",
+    "casefile/casefile-tui/src/progressive/content.rs": "5b1e90033de6338d455a7f7a0d2b5e79367a06a18f60aafc03cf3d3ac238305c",
+    "casefile/casefile-tui/src/progressive/loading.rs": "3e53a1fe0b199917dd3066b7f0f7fefc0b613dcf23bfa7f05f55c8e9f232a5c6",
+    "casefile/casefile-tui/src/progressive/projection.rs": "e9b6ce0a605984a13d6240c3818f560f5d597589325dbf92e9e24892414ab7ae",
+    "casefile/casefile-tui/src/progressive/relationships.rs": "153cae7470ea60bd197c22c75caea707a876c6d093a543e1a39dbffecce12b60",
+    "casefile/casefile-tui/src/progressive/tests.rs": "877dd1dc17188cdd476dda18212c649c07362be74dee23bd39c50bcd7dabd845",
+    "casefile/casefile-tui/src/progressive.rs": "717602ea3d8663bab3016ecb6456a76448f9d3d1c0c5d2b0acdfaf639b7fab9d",
+    "casefile/casefile-tui/src/record_detail/layout.rs": "fd20bc7e9a0018c61b66bbc12dc6e2aba6e1078b5d0a4cdaf925122812d50175",
+    "casefile/casefile-tui/src/record_detail.rs": "332af01935ad5e76b4943f5483bfbbbe0e0ae880c5e1bf0aee427fa34cee3c84",
+    "casefile/casefile-tui/src/review.rs": "a0a7cda06747e5c1fc56ad07c772b81b1ae75bcf0dd9a45b7e12e1fd1cab69eb",
+    "casefile/casefile-tui/src/strategy_flow/canvas.rs": "f1f1c3f88628de2bc9ba3a88ae7d7740cdfaf85e37e284e42bc58e8696ac3156",
+    "casefile/casefile-tui/src/strategy_flow/contracts.rs": "e12d17f5d6e992f5d19d35f19208c9bd628b11f8d65a2c4209b45771ccede5f1",
+    "casefile/casefile-tui/src/strategy_flow/layout.rs": "e6e6856fcd08f9579b91b2f742f9022fb3171d70f656ace10eba3f5bfd62aebe",
+    "casefile/casefile-tui/src/strategy_flow/mod.rs": "c85a393dfdff8825cde8d3fc1795518bec99099986a20f5ae99f55e88b433c83",
+    "casefile/casefile-tui/src/strategy_flow/tests.rs": "4d30afc120619b7c749b4affc2728223e93a05c8a6ce683f9695c65a1440c8ef",
+    "casefile/casefile-tui/src/test_support.rs": "a5f23efd344a23a1e988427550a93124635cedefcfef37e226526b88ad144ace",
+    "casefile/casefile-tui/src/ui.rs": "27b087475d322eae28a65fa4cd9bf157e80b2496b5e52533294e3f12bf6be36e",
+    "casefile/casefile-tui/src/watching.rs": "a6edf6bf72f82d04592aaae9ce6a7c9cc93421877164dc5ad25f45b3ff36211b",
+    "casefile/casefile-tui/src/workbench/boards.rs": "58a0123bfeb7fc0a42619f729d612baea8c45b1014a7ce0d0f3821eee5fe0d0a",
+    "casefile/casefile-tui/src/workbench/facts.rs": "ebc7c13347c2edba1b3aa9bf913b384fb5f520c6e2508ff45c5f4e6ec9c7e25c",
+    "casefile/casefile-tui/src/workbench/flow_tests.rs": "7264cc75d538dde612619b983d047a08cfdcb5df3e4d00e2ebf7d26669ef175a",
+    "casefile/casefile-tui/src/workbench/progressive_tests.rs": "435ff7f2c1ba2ca0349ab69d95f9849abf17273d6da87220999c87a52f7a853d",
+    "casefile/casefile-tui/src/workbench/projection.rs": "2931598475ea552258849b53ced0a264edd6853d658b89a1361cb1c54902e862",
+    "casefile/casefile-tui/src/workbench/relationship_tests.rs": "aac26f8d75b8ce063d122f8186b41e0c8723bb029cca253f1aa609a193a8c240",
+    "casefile/casefile-tui/src/workbench/tests.rs": "c1dbc213245d4b45160fc36eb198289f4717f5be5dd5035d2f4a6226fc064911",
+    "casefile/casefile-tui/src/workbench.rs": "297b6898c6463f3c7449251922dee8e30fcb34c6067b17ea8465b551a7ad8d27"
+  },
+  "binary_sha256": "8e18ba5d9664ca46a89dbf3734a2b3c28f9de131639af88b5ed7e90175eef3a9",
+  "target_directory": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target",
+  "started_utc": "2026-10-01T02:24:06.527242+00:00",
+  "configuration": {
+    "criterion": "0.8.2",
+    "samples": 10,
+    "warm_up_seconds": 1,
+    "measurement_target_seconds": 2,
+    "confidence_level": 0.95,
+    "noise_threshold": 0.01,
+    "mode": "release; warm filesystem; synthetic disposable Store; setup outside measurement; actual production App keys/render and TestBackend120x40; no competing builds"
+  },
+  "fixture": {
+    "added_tickets": 250,
+    "work_items": 252,
+    "progress_notes": 500,
+    "long_ticket_paragraphs": 80,
+    "canonical_files": 266,
+    "investigation_records": 264,
+    "backend_width": 120,
+    "backend_height": 40
+  },
+  "harness_sha256": "6296199c7281c4478afac21290da831e0a844c76fdc6138ee31810aa673ad34d",
+  "exit_code": 0,
+  "ended_utc": "2026-10-01T02:24:19.306507+00:00",
+  "scenarios": {
+    "tui_250_records_500_notes/detail_scroll_20_frames": {
+      "benchmark": {
+        "group_id": "tui_250_records_500_notes",
+        "function_id": "detail_scroll_20_frames",
+        "value_str": null,
+        "throughput": null,
+        "full_id": "tui_250_records_500_notes/detail_scroll_20_frames",
+        "directory_name": "tui_250_records_500_notes/detail_scroll_20_frames",
+        "title": "tui_250_records_500_notes/detail_scroll_20_frames"
+      },
+      "before_estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 10661016.952979168,
+            "upper_bound": 10748073.301547617
+          },
+          "point_estimate": 10704502.817738097,
+          "standard_error": 22223.037286052142
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 10633595.95,
+            "upper_bound": 10766532.583333334
+          },
+          "point_estimate": 10712976.375,
+          "standard_error": 34501.34185836325
+        },
+        "median_abs_dev": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 22038.57062123716,
+            "upper_bound": 123873.17989081246
+          },
+          "point_estimate": 92478.1617581849,
+          "standard_error": 26402.8007210456
+        },
+        "slope": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 10635442.027868852,
+            "upper_bound": 10743196.244594594
+          },
+          "point_estimate": 10675916.95,
+          "standard_error": 27707.041116108016
+        },
+        "std_dev": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 45025.462610850205,
+            "upper_bound": 89841.92644074974
+          },
+          "point_estimate": 73721.52841752893,
+          "standard_error": 11412.123754257904
+        }
+      },
+      "before_sample": {
+        "sampling_mode": "Linear",
+        "iters": [
+          4.0,
+          8.0,
+          12.0,
+          16.0,
+          20.0,
+          24.0,
+          28.0,
+          32.0,
+          36.0,
+          40.0
+        ],
+        "times": [
+          42884221.0,
+          85877017.0,
+          129198391.0,
+          172546744.0,
+          213280113.0,
+          254269612.0,
+          302856996.0,
+          342556720.0,
+          382509150.0,
+          425343838.0
+        ]
+      },
+      "after_estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 5848473.611972788,
+            "upper_bound": 5901896.850340135
+          },
+          "point_estimate": 5867897.902811791,
+          "standard_error": 15588.854589856413
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 5846153.068027211,
+            "upper_bound": 5860842.285714285
+          },
+          "point_estimate": 5849265.714285715,
+          "standard_error": 5547.367217587805
+        },
+        "median_abs_dev": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 1324.3324264883995,
+            "upper_bound": 18415.697015912767
+          },
+          "point_estimate": 7191.778302321188,
+          "standard_error": 5975.361409440264
+        },
+        "slope": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 5846337.637833115,
+            "upper_bound": 5948056.264250528
+          },
+          "point_estimate": 5883935.673469388,
+          "standard_error": 30141.523198833103
+        },
+        "std_dev": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 4598.06819458217,
+            "upper_bound": 79915.83949596132
+          },
+          "point_estimate": 51966.06441879053,
+          "standard_error": 26667.80345402654
+        }
+      },
+      "after_sample": {
+        "sampling_mode": "Linear",
+        "iters": [
+          7.0,
+          14.0,
+          21.0,
+          28.0,
+          35.0,
+          42.0,
+          49.0,
+          56.0,
+          63.0,
+          70.0
+        ],
+        "times": [
+          41025896.0,
+          81991989.0,
+          122733731.0,
+          163766030.0,
+          204645010.0,
+          246325856.0,
+          286544295.0,
+          327585700.0,
+          378911008.0,
+          409105653.0
+        ]
+      },
+      "change_estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": -0.4551088101799731,
+            "upper_bound": -0.44819060432223085
+          },
+          "point_estimate": -0.45182901039660806,
+          "standard_error": 0.0017775204157760565
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": -0.4568012608568276,
+            "upper_bound": -0.44966499968208373
+          },
+          "point_estimate": -0.45400180962447845,
+          "standard_error": 0.001798516740460977
+        }
+      }
+    },
+    "tui_250_records_500_notes/list_scroll_20_frames": {
+      "benchmark": {
+        "group_id": "tui_250_records_500_notes",
+        "function_id": "list_scroll_20_frames",
+        "value_str": null,
+        "throughput": null,
+        "full_id": "tui_250_records_500_notes/list_scroll_20_frames",
+        "directory_name": "tui_250_records_500_notes/list_scroll_20_frames",
+        "title": "tui_250_records_500_notes/list_scroll_20_frames"
+      },
+      "before_estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 11046688.568154762,
+            "upper_bound": 11211186.722460318
+          },
+          "point_estimate": 11114216.253710318,
+          "standard_error": 43602.906718699574
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 11025311.381944444,
+            "upper_bound": 11133129.145833332
+          },
+          "point_estimate": 11085934.755357143,
+          "standard_error": 34744.25268738437
+        },
+        "median_abs_dev": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 11031.927564144502,
+            "upper_bound": 141860.455186473
+          },
+          "point_estimate": 70610.34517641485,
+          "standard_error": 32261.057524923675
+        },
+        "slope": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 11023102.45948276,
+            "upper_bound": 11111535.696816714
+          },
+          "point_estimate": 11064758.116883118,
+          "standard_error": 22512.983459282812
+        },
+        "std_dev": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 41339.14367052616,
+            "upper_bound": 218664.2161739735
+          },
+          "point_estimate": 145979.4030578894,
+          "standard_error": 57780.6674211014
+        }
+      },
+      "before_sample": {
+        "sampling_mode": "Linear",
+        "iters": [
+          4.0,
+          8.0,
+          12.0,
+          16.0,
+          20.0,
+          24.0,
+          28.0,
+          32.0,
+          36.0,
+          40.0
+        ],
+        "times": [
+          46005590.0,
+          88342713.0,
+          132405340.0,
+          178236872.0,
+          222559699.0,
+          267034891.0,
+          309771806.0,
+          351688038.0,
+          396280211.0,
+          444343629.0
+        ]
+      },
+      "after_estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 6355872.252400794,
+            "upper_bound": 6371495.888743387
+          },
+          "point_estimate": 6364041.625826719,
+          "standard_error": 4010.3124151430384
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 6353854.791666666,
+            "upper_bound": 6376008.203703703
+          },
+          "point_estimate": 6367132.347222222,
+          "standard_error": 6791.367929445471
+        },
+        "median_abs_dev": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 3049.7150097456756,
+            "upper_bound": 23790.31191013873
+          },
+          "point_estimate": 14611.578715592623,
+          "standard_error": 5366.494179360992
+        },
+        "slope": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 6352433.37745098,
+            "upper_bound": 6375855.099572649
+          },
+          "point_estimate": 6367145.730735931,
+          "standard_error": 6240.627640046915
+        },
+        "std_dev": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 7946.714277288955,
+            "upper_bound": 16607.51732363079
+          },
+          "point_estimate": 13374.491213032537,
+          "standard_error": 2289.3120241688694
+        }
+      },
+      "after_sample": {
+        "sampling_mode": "Linear",
+        "iters": [
+          6.0,
+          12.0,
+          18.0,
+          24.0,
+          30.0,
+          36.0,
+          42.0,
+          48.0,
+          54.0,
+          60.0
+        ],
+        "times": [
+          38260199.0,
+          76348446.0,
+          114312969.0,
+          152567738.0,
+          190625637.0,
+          229388191.0,
+          267625668.0,
+          304298023.0,
+          344304443.0,
+          382797851.0
+        ]
+      },
+      "change_estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": -0.4323973486713548,
+            "upper_bound": -0.4237758368596772
+          },
+          "point_estimate": -0.4273962751352641,
+          "standard_error": 0.0022701701122463365
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": -0.42876475959023097,
+            "upper_bound": -0.42249703394569604
+          },
+          "point_estimate": -0.42565670033865366,
+          "standard_error": 0.0018841433115191618
+        }
+      }
+    },
+    "tui_250_records_500_notes/selected_scope_navigation": {
+      "benchmark": {
+        "group_id": "tui_250_records_500_notes",
+        "function_id": "selected_scope_navigation",
+        "value_str": null,
+        "throughput": null,
+        "full_id": "tui_250_records_500_notes/selected_scope_navigation",
+        "directory_name": "tui_250_records_500_notes/selected_scope_navigation",
+        "title": "tui_250_records_500_notes/selected_scope_navigation"
+      },
+      "before_estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 1090483.0452521008,
+            "upper_bound": 1111798.410817577
+          },
+          "point_estimate": 1101123.9931162465,
+          "standard_error": 5421.424166118939
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 1088225.1911764706,
+            "upper_bound": 1118858.862745098
+          },
+          "point_estimate": 1098843.6862745099,
+          "standard_error": 6799.415873044797
+        },
+        "median_abs_dev": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 2240.9903513911145,
+            "upper_bound": 33474.76099393954
+          },
+          "point_estimate": 18291.907853195036,
+          "standard_error": 8474.106097082044
+        },
+        "slope": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 1095600.0204826829,
+            "upper_bound": 1115450.4442670678
+          },
+          "point_estimate": 1104674.946065699,
+          "standard_error": 5086.515599388593
+        },
+        "std_dev": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 10033.252111737016,
+            "upper_bound": 22744.986206380807
+          },
+          "point_estimate": 18079.90036853961,
+          "standard_error": 3199.040519470374
+        }
+      },
+      "before_sample": {
+        "sampling_mode": "Linear",
+        "iters": [
+          34.0,
+          68.0,
+          102.0,
+          136.0,
+          170.0,
+          204.0,
+          238.0,
+          272.0,
+          306.0,
+          340.0
+        ],
+        "times": [
+          36423976.0,
+          73765498.0,
+          112035155.0,
+          153335149.0,
+          187258263.0,
+          229525375.0,
+          260914746.0,
+          295997252.0,
+          342370812.0,
+          373763190.0
+        ]
+      },
+      "after_estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 849811.1542940199,
+            "upper_bound": 852495.5761413343
+          },
+          "point_estimate": 851154.843697859,
+          "standard_error": 693.5825654809996
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 849224.4218023256,
+            "upper_bound": 852441.2325581395
+          },
+          "point_estimate": 851525.7139534884,
+          "standard_error": 964.8339225066218
+        },
+        "median_abs_dev": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 519.5754368221411,
+            "upper_bound": 4162.99016748737
+          },
+          "point_estimate": 2340.403585891377,
+          "standard_error": 918.2183198758264
+        },
+        "slope": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 848644.7673711727,
+            "upper_bound": 851199.8811734736
+          },
+          "point_estimate": 849681.6339474479,
+          "standard_error": 647.4034238752093
+        },
+        "std_dev": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": 1327.0141644722087,
+            "upper_bound": 2984.4313742426907
+          },
+          "point_estimate": 2330.7350203720703,
+          "standard_error": 429.3200561950774
+        }
+      },
+      "after_sample": {
+        "sampling_mode": "Linear",
+        "iters": [
+          43.0,
+          86.0,
+          129.0,
+          172.0,
+          215.0,
+          258.0,
+          301.0,
+          344.0,
+          387.0,
+          430.0
+        ],
+        "times": [
+          36775670.0,
+          73212754.0,
+          110055079.0,
+          146599043.0,
+          183124172.0,
+          219929838.0,
+          255650025.0,
+          291872255.0,
+          328006880.0,
+          365492684.0
+        ]
+      },
+      "change_estimates": {
+        "mean": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": -0.23460219748041067,
+            "upper_bound": -0.21940748400312204
+          },
+          "point_estimate": -0.22701271698835657,
+          "standard_error": 0.0038869373792079836
+        },
+        "median": {
+          "confidence_interval": {
+            "confidence_level": 0.95,
+            "lower_bound": -0.23981655651392852,
+            "upper_bound": -0.21704608285931293
+          },
+          "point_estimate": -0.2250711137627971,
+          "standard_error": 0.0048988333420375545
+        }
+      }
+    }
+  },
+  "prior_harness_sha256": {
+    "27ca531f7ab8fc19a9c6a17684269c2743f4f791": "6296199c7281c4478afac21290da831e0a844c76fdc6138ee31810aa673ad34d",
+    "8e97fc4e368361d75b0323913ed4e56e745fc259": "6296199c7281c4478afac21290da831e0a844c76fdc6138ee31810aa673ad34d"
+  },
+  "preservation_checks": [
+    "before-hashes.txt: PASS 4 SHA256 objects unchanged",
+    "native-before-hashes.txt: PASS 236 SHA256 objects unchanged",
+    "All 68 previously tracked benchmark/evidence paths equal parent bytes"
+  ]
+}

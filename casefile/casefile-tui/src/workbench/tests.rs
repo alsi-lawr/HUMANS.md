@@ -726,6 +726,9 @@ fn board_card_selection_survives_complete_projection_with_deletion_and_ambiguity
 
     app.apply_projection(
         UiProjection {
+            body_owners: BTreeMap::new(),
+            catalogue_changed: true,
+            catalogue_diagnostics: None,
             relationship_updates: BTreeMap::new(),
             availability_changed: Vec::new(),
             incremental: false,
@@ -747,6 +750,9 @@ fn board_card_selection_survives_complete_projection_with_deletion_and_ambiguity
     ));
     app.apply_projection(
         UiProjection {
+            body_owners: BTreeMap::new(),
+            catalogue_changed: true,
+            catalogue_diagnostics: None,
             relationship_updates: BTreeMap::new(),
             availability_changed: Vec::new(),
             incremental: false,
@@ -772,6 +778,9 @@ fn board_card_selection_survives_complete_projection_with_deletion_and_ambiguity
     ));
     ambiguous.apply_projection(
         UiProjection {
+            body_owners: BTreeMap::new(),
+            catalogue_changed: true,
+            catalogue_diagnostics: None,
             relationship_updates: BTreeMap::new(),
             availability_changed: Vec::new(),
             incremental: false,
@@ -1221,6 +1230,9 @@ fn copy_tree(from: &Path, to: &Path) {
 
 fn ui_projection(scan: ScanResult, provisional: bool) -> UiProjection {
     UiProjection {
+        body_owners: BTreeMap::new(),
+        catalogue_changed: true,
+        catalogue_diagnostics: None,
         relationship_updates: BTreeMap::new(),
         availability_changed: Vec::new(),
         incremental: false,
@@ -1270,4 +1282,91 @@ fn ticket_entry(path: &str, id: &str, title: &str, bytes: &[u8]) -> casefile_cor
         }),
         bytes,
     )
+}
+
+#[test]
+fn viewport_navigation_keeps_last_group_selected_across_resize_and_filter() {
+    let mut scan = test_support::scan();
+    for directory in 0..6 {
+        for file in 0..20 {
+            scan.snapshot.entries.push(test_support::entry(
+                &format!("projects/demo/investigations/sample/z-{directory}/row-{file:02}.txt"),
+                Classification::Ungoverned,
+                None,
+                None,
+                b"Viewport body",
+            ));
+        }
+    }
+    let mut app = test_support::app(scan);
+    app.set_view(View::Files);
+    app.handle(KeyCode::End);
+    let selected = "projects/demo/investigations/sample/z-5/row-19.txt";
+    assert_eq!(app.browser.selected_path(), Some(selected));
+    for (width, height) in [(120, 16), (70, 24), (140, 20)] {
+        let output = test_support::render(&app, width, height);
+        assert!(
+            output.contains("row-19.txt"),
+            "last selected row missing: {output}"
+        );
+        assert_eq!(app.browser.selected_path(), Some(selected));
+    }
+    app.handle(KeyCode::Char('/'));
+    for character in "z-5/row-19".chars() {
+        app.handle(KeyCode::Char(character));
+    }
+    app.handle(KeyCode::Enter);
+    let output = test_support::render(&app, 120, 20);
+    assert!(output.contains("z-5/"));
+    assert!(output.contains("row-19.txt"));
+    assert!(output.contains("1 / 1"));
+    app.handle(KeyCode::Up);
+    assert_eq!(app.browser.selected_path(), Some(selected));
+    app.clear_filter();
+    app.handle(KeyCode::Up);
+    assert!(app.browser.selected_path().unwrap().ends_with("row-18.txt"));
+}
+
+#[test]
+fn catalogue_root_change_rescopes_cached_card_identities_without_body_updates() {
+    let mut scan = test_support::scan();
+    let nested = "projects/demo/investigations/sample/child/tickets/accepted/HMD-013.md";
+    scan.investigation_roots
+        .get_mut("demo")
+        .unwrap()
+        .push("sample/child".into());
+    let mut child = scan
+        .snapshot
+        .entries
+        .iter()
+        .find(|entry| entry.path == TICKET_PATH)
+        .unwrap()
+        .clone();
+    child.path = nested.into();
+    scan.snapshot.entries.push(child);
+    let mut derived = test_support::derived(&scan);
+    derived.boards.push(board_with_cards(
+        "Catalogue card",
+        vec![board_card("HMD-013", "Navigator")],
+    ));
+    let mut app = App::new(scan, derived);
+    app.set_view(View::Boards);
+    assert!(!test_support::render(&app, 140, 40).contains("ambiguous identity"));
+    // A real catalogue-only delta can change containment without changing either body.
+    let mut projection = ui_projection(app.scan.clone(), false);
+    projection.incremental = true;
+    projection.catalogue_changed = true;
+    projection.scan.snapshot.entries.clear();
+    projection
+        .scan
+        .investigation_roots
+        .insert("demo".into(), vec!["sample".into()]);
+    app.apply_projection(projection, ProjectionChange::Content);
+    let output = test_support::render(&app, 140, 40);
+    assert!(output.contains("ambiguous identity"), "{output}");
+    assert!(app.entry_indices.contains_key(nested));
+    assert!(
+        output.lines().next().unwrap().contains("2 diagnostic"),
+        "existing diagnostics lost: {output}"
+    );
 }

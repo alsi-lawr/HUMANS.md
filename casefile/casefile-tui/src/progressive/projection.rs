@@ -1,37 +1,18 @@
 use super::*;
 
 pub(super) fn build_projection(
-    catalogue: Option<&PresentationCatalogue>,
-    entries: &[&PresentationEntry],
+    catalogue: Option<&CatalogueFacts>,
+    entries: &[&Arc<PresentationEntry>],
     provisional: bool,
     relationships: &RelationshipState,
 ) -> UiProjection {
-    let activation = catalogue
-        .map(|catalogue| catalogue.activation)
-        .unwrap_or(ActivationState::Unactivated);
+    let activation = catalogue.map_or(ActivationState::Unactivated, |catalogue| {
+        catalogue.activation
+    });
     let investigation_roots = catalogue
-        .map(|catalogue| {
-            catalogue
-                .projects
-                .iter()
-                .map(|project| {
-                    (project.slug.clone(), {
-                        let mut roots = project
-                            .investigations
-                            .iter()
-                            .map(|investigation| investigation.identity.clone())
-                            .collect::<Vec<_>>();
-                        roots.sort();
-                        roots.dedup();
-                        roots
-                    })
-                })
-                .collect()
-        })
+        .map(|catalogue| catalogue.roots.clone())
         .unwrap_or_default();
-    let mut diagnostics = catalogue
-        .map(|catalogue| catalogue.diagnostics.clone())
-        .unwrap_or_default();
+    let mut diagnostics = Vec::new();
     for entry in entries {
         if let PresentationFact::Available(values) = &entry.diagnostics {
             diagnostics.extend(values.clone());
@@ -53,9 +34,9 @@ pub(super) fn build_projection(
             revision: revision.clone(),
             entries: snapshots,
         },
-        diagnostics: diagnostics.clone(),
+        diagnostics,
     };
-    let derived = presentation_derived(&revision, entries, &diagnostics);
+    let derived = presentation_derived(&revision, entries);
     let unavailable = entries
         .iter()
         .filter_map(|entry| {
@@ -63,6 +44,12 @@ pub(super) fn build_projection(
         })
         .collect();
     UiProjection {
+        body_owners: entries
+            .iter()
+            .map(|entry| (entry.path.clone(), Arc::clone(entry)))
+            .collect(),
+        catalogue_changed: catalogue.is_some(),
+        catalogue_diagnostics: catalogue.map(|catalogue| catalogue.diagnostics.clone()),
         relationship_updates: BTreeMap::new(),
         availability_changed: Vec::new(),
         removed: Vec::new(),
@@ -120,26 +107,19 @@ fn snapshot_entry(entry: &PresentationEntry) -> EntrySnapshot {
             PresentationFact::Available(Some(summary)) => Some(summary.record.clone()),
             PresentationFact::Available(None) | PresentationFact::Unavailable => None,
         },
-        original_bytes: match &entry.body {
-            PresentationFact::Available(bytes) => bytes.clone(),
-            PresentationFact::Unavailable => Vec::new(),
-        },
+        original_bytes: Vec::new(),
     }
 }
 
 fn presentation_derived(
     revision: &Revision,
-    entries: &[&PresentationEntry],
-    diagnostics: &[casefile_core::Diagnostic],
+    entries: &[&Arc<PresentationEntry>],
 ) -> DerivedSnapshot {
     let records = entries
         .iter()
         .filter_map(|entry| {
             let mut record = entry.derived.clone()?;
-            record.content = match &entry.body {
-                PresentationFact::Available(bytes) => String::from_utf8(bytes.clone()).ok(),
-                PresentationFact::Unavailable => None,
-            };
+            record.content = None;
             Some(record)
         })
         .collect();
@@ -154,6 +134,35 @@ fn presentation_derived(
         records,
         relationships: Vec::new(),
         boards,
-        diagnostics: diagnostics.to_vec(),
+        diagnostics: Vec::new(),
+    }
+}
+
+pub(super) struct CatalogueFacts {
+    activation: ActivationState,
+    roots: BTreeMap<String, Vec<String>>,
+    diagnostics: Vec<casefile_core::Diagnostic>,
+}
+
+impl CatalogueFacts {
+    pub(super) fn new(catalogue: &PresentationCatalogue) -> Self {
+        Self {
+            activation: catalogue.activation,
+            roots: catalogue
+                .projects
+                .iter()
+                .map(|project| {
+                    let mut roots = project
+                        .investigations
+                        .iter()
+                        .map(|scope| scope.identity.clone())
+                        .collect::<Vec<_>>();
+                    roots.sort();
+                    roots.dedup();
+                    (project.slug.clone(), roots)
+                })
+                .collect(),
+            diagnostics: catalogue.diagnostics.clone(),
+        }
     }
 }

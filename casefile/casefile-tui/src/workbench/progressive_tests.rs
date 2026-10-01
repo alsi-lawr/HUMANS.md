@@ -132,7 +132,7 @@ fn scoped_refresh_updates_rendered_boards_and_progress_without_losing_selection_
     assert!(rendered.contains("Updated delivery"));
     assert!(rendered.contains("HMD-011"));
     assert_eq!(
-        app.derived.boards[0].columns[0].cards[0].status,
+        app.board_records.values().next().unwrap().columns[0].cards[0].status,
         "in_progress"
     );
     assert_eq!(
@@ -160,6 +160,53 @@ fn scoped_refresh_updates_rendered_boards_and_progress_without_losing_selection_
         other_rows
     );
 
+    let board = fs::read_to_string(root.path().join(BOARD)).unwrap();
+    fs::write(
+        root.path().join(BOARD),
+        board
+            .replace("HMD-board", "HMD-renamed-board")
+            .replace("Updated delivery", "Renamed delivery"),
+    )
+    .unwrap();
+    coordinator
+        .refresh(PresentationTarget::Investigation {
+            project: "demo".into(),
+            path: ROOT.into(),
+        })
+        .unwrap();
+    finish(&mut coordinator, &mut app);
+    let renamed = test_support::render(&app, 180, 40);
+    assert!(renamed.contains("Renamed delivery"));
+    assert!(!renamed.contains("Updated delivery"));
+    assert!(renamed.lines().next().unwrap().contains("BOARDS 1"));
+    assert_eq!(app.browser.state(), selection);
+
+    let log_path = root.path().join(ROOT).join("progress/log.toml");
+    let valid_log = fs::read(&log_path).unwrap();
+    fs::write(&log_path, "malformed progress").unwrap();
+    coordinator
+        .refresh(PresentationTarget::Investigation {
+            project: "demo".into(),
+            path: ROOT.into(),
+        })
+        .unwrap();
+    finish(&mut coordinator, &mut app);
+    let invalid = test_support::render(&app, 180, 40);
+    assert!(
+        invalid.contains("Board definitions or the progress log are invalid."),
+        "{invalid}"
+    );
+    assert!(!invalid.contains("Renamed delivery"));
+    fs::write(&log_path, valid_log).unwrap();
+    coordinator
+        .refresh(PresentationTarget::Investigation {
+            project: "demo".into(),
+            path: ROOT.into(),
+        })
+        .unwrap();
+    finish(&mut coordinator, &mut app);
+    assert!(test_support::render(&app, 180, 40).contains("Renamed delivery"));
+
     fs::remove_file(root.path().join(BOARD)).unwrap();
     coordinator
         .refresh(PresentationTarget::Project {
@@ -167,7 +214,7 @@ fn scoped_refresh_updates_rendered_boards_and_progress_without_losing_selection_
         })
         .unwrap();
     finish(&mut coordinator, &mut app);
-    assert!(app.derived.boards.is_empty());
+    assert!(app.board_records.is_empty());
     assert!(
         !app.scan
             .snapshot
@@ -175,61 +222,94 @@ fn scoped_refresh_updates_rendered_boards_and_progress_without_losing_selection_
             .iter()
             .any(|entry| entry.path == BOARD)
     );
-    assert!(!test_support::render(&app, 180, 40).contains("Updated delivery"));
+    assert!(!test_support::render(&app, 180, 40).contains("Renamed delivery"));
 }
 
 #[test]
-fn detail_promotion_and_unchanged_refresh_leave_unrelated_record_payloads_in_place() {
+fn eager_and_lazy_detail_survive_promotion_refresh_and_external_edit() {
     let root = fixture();
     let store = Store::open(root.path()).unwrap();
     let mut coordinator = Coordinator::start(store.presentation_session(), None).unwrap();
     let mut app = App::from_projection(coordinator.projection(), None);
     finish(&mut coordinator, &mut app);
-    let original = app
-        .scan
-        .snapshot
-        .entries
-        .iter()
-        .find(|entry| entry.path == TICKET)
-        .unwrap()
-        .original_bytes
-        .as_ptr();
+    let original = fs::read(root.path().join(TICKET)).unwrap();
     let evidence = format!("{ROOT}/evidence/observation.md");
     assert!(coordinator.request_content(Some(&evidence)));
     finish(&mut coordinator, &mut app);
-    assert!(
-        !app.scan
-            .snapshot
-            .entries
-            .iter()
-            .find(|entry| entry.path == evidence)
-            .unwrap()
-            .original_bytes
-            .is_empty()
-    );
     assert_eq!(
-        app.scan
-            .snapshot
-            .entries
-            .iter()
-            .find(|entry| entry.path == TICKET)
-            .unwrap()
-            .original_bytes
-            .as_ptr(),
-        original
+        app.body_bytes(&evidence).unwrap(),
+        fs::read(root.path().join(&evidence)).unwrap()
     );
+    assert_eq!(app.body_bytes(TICKET).unwrap(), original);
     coordinator.refresh(PresentationTarget::Store).unwrap();
     finish(&mut coordinator, &mut app);
+    assert_eq!(app.body_bytes(TICKET).unwrap(), original);
+    app.set_view(View::Strategies);
+    app.focus = Focus::Detail;
+    app.handle(KeyCode::Right);
+    assert!(test_support::render(&app, 120, 40).contains("Flow unavailable"));
+    app.handle(KeyCode::Right);
+    assert!(test_support::render(&app, 120, 40).contains("schema_version = 1"));
+
+    fs::write(
+        root.path().join(&evidence),
+        "# Changed lazy evidence\n\nExternal edit wins",
+    )
+    .unwrap();
+    coordinator.refresh(PresentationTarget::Store).unwrap();
+    finish(&mut coordinator, &mut app);
+    assert!(coordinator.request_content(Some(&evidence)));
+    finish(&mut coordinator, &mut app);
     assert_eq!(
-        app.scan
-            .snapshot
-            .entries
-            .iter()
-            .find(|entry| entry.path == TICKET)
-            .unwrap()
-            .original_bytes
-            .as_ptr(),
-        original
+        app.body_bytes(&evidence).unwrap(),
+        b"# Changed lazy evidence\n\nExternal edit wins"
+    );
+    assert_eq!(app.body_bytes(TICKET).unwrap(), original);
+}
+
+#[test]
+fn parent_scope_refresh_keeps_nested_body_and_removes_only_parent_members() {
+    let root = fixture();
+    let nested = format!("{ROOT}/child");
+    copy_tree(
+        &Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../casefile-store/tests/fixtures/minimum")
+            .join(ROOT),
+        &root.path().join(&nested),
+    );
+    let activation = fs::read_to_string(root.path().join("casefile.toml")).unwrap();
+    fs::write(
+        root.path().join("casefile.toml"),
+        activation.replace(
+            "sample\"]",
+            "sample\", \"projects/demo/investigations/sample/child\"]",
+        ),
+    )
+    .unwrap();
+    let store = Store::open(root.path()).unwrap();
+    let mut coordinator = Coordinator::start(store.presentation_session(), None).unwrap();
+    let mut app = App::from_projection(coordinator.projection(), None);
+    finish(&mut coordinator, &mut app);
+    let child = format!("{nested}/evidence/observation.md");
+    assert!(coordinator.request_content(Some(&child)));
+    finish(&mut coordinator, &mut app);
+    let child_bytes = fs::read(root.path().join(&child)).unwrap();
+    fs::remove_file(root.path().join(TICKET)).unwrap();
+    coordinator
+        .refresh(PresentationTarget::Investigation {
+            project: "demo".into(),
+            path: ROOT.into(),
+        })
+        .unwrap();
+    finish(&mut coordinator, &mut app);
+    assert!(!app.entry_indices.contains_key(TICKET));
+    assert_eq!(app.body_bytes(&child).unwrap(), child_bytes);
+    assert_eq!(
+        coordinator.investigation_target("demo", "sample/child"),
+        Some(PresentationTarget::Investigation {
+            project: "demo".into(),
+            path: nested
+        })
     );
 }
 

@@ -72,6 +72,9 @@ fn binding_refresh_updates_chart_and_overview_without_changing_selection() {
     let before = test_support::render(&app, 120, 60);
     let selected = app.browser.selected(&app.scan).unwrap().path.clone();
     let mut projection = UiProjection {
+        body_owners: BTreeMap::new(),
+        catalogue_changed: true,
+        catalogue_diagnostics: None,
         relationship_updates: BTreeMap::new(),
         availability_changed: Vec::new(),
         removed: Vec::new(),
@@ -104,7 +107,9 @@ fn binding_refresh_updates_chart_and_overview_without_changing_selection() {
 
 #[test]
 fn changing_investigation_replaces_the_chart_even_when_source_revisions_match() {
-    let mut app = app();
+    let app = app();
+    let mut scan = app.scan.clone();
+    let mut derived = app.derived.clone();
     let mut other = app.browser.selected(&app.scan).unwrap().clone();
     other.path = other.path.replace("/sample/", "/sample-two/");
     let mut record = app.derived.records[0].clone();
@@ -116,12 +121,11 @@ fn changing_investigation_replaces_the_chart_even_when_source_revisions_match() 
             source: WriterBindingSource::Binding,
         },
     });
-    app.scan
-        .investigation_roots
+    scan.investigation_roots
         .get_mut("demo")
         .unwrap()
         .push("sample-two".into());
-    app.scan.snapshot.entries.push(other);
+    scan.snapshot.entries.push(other);
     record
         .strategy
         .as_mut()
@@ -129,7 +133,11 @@ fn changing_investigation_replaces_the_chart_even_when_source_revisions_match() 
         .matrix
         .workers
         .retain(|worker| worker.role != "verification-reviewer");
-    app.derived.records.push(record);
+    derived.records.push(record);
+    let mut app = App::new(scan, derived);
+    app.handle(KeyCode::Char('5'));
+    app.handle(KeyCode::Right);
+    app.handle(KeyCode::Tab);
     test_support::render(&app, 120, 60);
     app.handle(KeyCode::End);
     let original_end = app.detail.scroll_position();

@@ -3,7 +3,7 @@ use relationships::RelationshipState;
 mod content;
 mod loading;
 mod projection;
-use projection::build_projection;
+use projection::{CatalogueFacts, build_projection};
 
 use casefile_core::{CasefileSnapshot, Classification, EntrySnapshot, Revision};
 use casefile_store::{
@@ -96,7 +96,6 @@ struct ActiveLoad {
     stream: PresentationStream,
     catalogue: Option<PresentationCatalogue>,
     entries: BTreeMap<String, Arc<PresentationEntry>>,
-    entry_targets: BTreeMap<String, PresentationTarget>,
     started_observation_generation: u64,
     progress: PresentationProgress,
     coverage: Option<PresentationCoverage>,
@@ -110,6 +109,9 @@ struct ActiveContent {
 }
 
 pub(crate) struct UiProjection {
+    pub(crate) body_owners: BTreeMap<String, Arc<PresentationEntry>>,
+    pub(crate) catalogue_changed: bool,
+    pub(crate) catalogue_diagnostics: Option<Vec<casefile_core::Diagnostic>>,
     pub(crate) relationship_updates: BTreeMap<ScopedIdentity, Vec<DerivedRelationship>>,
     pub(crate) availability_changed: Vec<String>,
     pub(crate) removed: Vec<String>,
@@ -127,7 +129,10 @@ pub(crate) struct Coordinator {
     changed: BTreeSet<String>,
     removed: Vec<String>,
     complete_catalogue: Option<PresentationCatalogue>,
-    complete_entry_targets: BTreeMap<String, PresentationTarget>,
+    catalogue_facts: Option<CatalogueFacts>,
+    catalogue_pending: bool,
+    complete_entry_targets: BTreeMap<String, Arc<PresentationTarget>>,
+    catalogue_generation: u64,
     has_complete: bool,
     active: Option<ActiveLoad>,
     content: Option<ActiveContent>,
@@ -166,7 +171,10 @@ impl Coordinator {
             changed: BTreeSet::new(),
             removed: Vec::new(),
             complete_catalogue: None,
+            catalogue_facts: None,
+            catalogue_pending: false,
             complete_entry_targets: BTreeMap::new(),
+            catalogue_generation: 0,
             has_complete: false,
             active: None,
             content: None,
@@ -208,7 +216,6 @@ impl Coordinator {
             stream,
             catalogue: None,
             entries: BTreeMap::new(),
-            entry_targets: BTreeMap::new(),
             started_observation_generation,
             progress: PresentationProgress {
                 completed: 0,
@@ -292,7 +299,7 @@ impl Coordinator {
     }
 
     pub(crate) fn projection(&self) -> UiProjection {
-        let catalogue = self.visible_catalogue();
+        let catalogue = self.catalogue_facts.as_ref();
         let entries = self.visible_entries();
         let mut projection =
             build_projection(catalogue, &entries, !self.has_complete, &self.relationships);
@@ -307,7 +314,9 @@ impl Coordinator {
             .filter_map(|path| self.visible_entry(path))
             .collect::<Vec<_>>();
         let mut projection = build_projection(
-            self.visible_catalogue(),
+            self.catalogue_pending
+                .then_some(self.catalogue_facts.as_ref())
+                .flatten(),
             &entries,
             !self.has_complete,
             &self.relationships,
@@ -326,6 +335,7 @@ impl Coordinator {
         projection.incremental = true;
         projection.removed = std::mem::take(&mut self.removed);
         self.changed.clear();
+        self.catalogue_pending = false;
         projection
     }
 
@@ -335,6 +345,10 @@ impl Coordinator {
 
     pub(crate) fn status(&self) -> &str {
         self.content_status.as_deref().unwrap_or(&self.status)
+    }
+
+    pub(crate) fn catalogue_generation(&self) -> u64 {
+        self.catalogue_generation
     }
 
     pub(crate) fn catalogue(&self) -> Option<&PresentationCatalogue> {
@@ -367,33 +381,35 @@ impl Coordinator {
         })
     }
 
-    fn visible_entries(&self) -> Vec<&PresentationEntry> {
+    fn visible_entries(&self) -> Vec<&Arc<PresentationEntry>> {
         if self.has_complete {
-            return self.entries.values().map(AsRef::as_ref).collect();
+            return self.entries.values().collect();
         }
         self.active
             .as_ref()
-            .map(|active| active.entries.values().map(AsRef::as_ref).collect())
+            .map(|active| active.entries.values().collect())
             .unwrap_or_default()
     }
 
-    fn visible_entry(&self, path: &str) -> Option<&PresentationEntry> {
-        self.entries.get(path).map(AsRef::as_ref).or_else(|| {
+    fn visible_entry(&self, path: &str) -> Option<&Arc<PresentationEntry>> {
+        self.entries.get(path).or_else(|| {
             self.active
                 .as_ref()
                 .and_then(|active| active.entries.get(path))
-                .map(AsRef::as_ref)
         })
     }
 
     fn entry_target(&self, path: &str) -> Option<PresentationTarget> {
         if self.has_complete {
-            return self.complete_entry_targets.get(path).cloned();
+            return self
+                .complete_entry_targets
+                .get(path)
+                .map(|target| target.as_ref().clone());
         }
         self.active
             .as_ref()
-            .and_then(|active| active.entry_targets.get(path))
-            .cloned()
+            .filter(|active| active.entries.contains_key(path))
+            .map(|active| active.target.clone())
     }
 
     fn next_generation(&mut self) -> u64 {
@@ -428,19 +444,6 @@ fn target_name(target: &PresentationTarget) -> String {
         PresentationTarget::Investigation { project, path } => {
             format!("investigation {project} / {path}")
         }
-    }
-}
-
-fn target_contains(target: &PresentationTarget, path: &str) -> bool {
-    match target {
-        PresentationTarget::Store => true,
-        PresentationTarget::Project { project } => path
-            .strip_prefix("projects/")
-            .and_then(|rest| rest.strip_prefix(project))
-            .is_some_and(|rest| rest.is_empty() || rest.starts_with('/')),
-        PresentationTarget::Investigation { path: root, .. } => path
-            .strip_prefix(root)
-            .is_some_and(|rest| rest.is_empty() || rest.starts_with('/')),
     }
 }
 

@@ -1,0 +1,30 @@
+Gnuplot not found, using plotters backend
+Benchmarking tui_250_records_500_notes/selected_scope_navigation
+Benchmarking tui_250_records_500_notes/selected_scope_navigation: Warming up for 1.0000 s
+Benchmarking tui_250_records_500_notes/selected_scope_navigation: Collecting 10 samples in estimated 2.0109 s (2310 iterations)
+Benchmarking tui_250_records_500_notes/selected_scope_navigation: Analyzing
+tui_250_records_500_notes/selected_scope_navigation
+                        time:   [852.35 µs 853.19 µs 854.06 µs]
+                        change: [−23.258% −22.506% −21.753%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) high mild
+Benchmarking tui_250_records_500_notes/list_scroll_20_frames
+Benchmarking tui_250_records_500_notes/list_scroll_20_frames: Warming up for 1.0000 s
+Benchmarking tui_250_records_500_notes/list_scroll_20_frames: Collecting 10 samples in estimated 2.1202 s (330 iterations)
+Benchmarking tui_250_records_500_notes/list_scroll_20_frames: Analyzing
+tui_250_records_500_notes/list_scroll_20_frames
+                        time:   [6.4463 ms 6.4683 ms 6.4901 ms]
+                        change: [−42.457% −41.940% −41.541%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) high mild
+Benchmarking tui_250_records_500_notes/detail_scroll_20_frames
+Benchmarking tui_250_records_500_notes/detail_scroll_20_frames: Warming up for 1.0000 s
+Benchmarking tui_250_records_500_notes/detail_scroll_20_frames: Collecting 10 samples in estimated 2.2835 s (385 iterations)
+Benchmarking tui_250_records_500_notes/detail_scroll_20_frames: Analyzing
+tui_250_records_500_notes/detail_scroll_20_frames
+                        time:   [5.9413 ms 5.9513 ms 5.9641 ms]
+                        change: [−44.621% −44.363% −44.087%] (p = 0.00 < 0.05)
+                        Performance has improved.
+
