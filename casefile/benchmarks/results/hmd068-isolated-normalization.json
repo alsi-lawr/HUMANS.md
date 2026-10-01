@@ -1,0 +1,114 @@
+[
+  {
+    "path": "casefile/benchmarks/BASELINE.md",
+    "before_sha256": "ff1b320625f483e239acaccc5baadd98eedb2f4a90aca7a4efefb7eaefb75d68",
+    "after_ascii_sha256": "8ae5045ba9ad899f8204286a675442854e2f74d4aeaa4a4054561fedc5d90039",
+    "mapping": "ASCII typography/unit notation",
+    "final_formatted_sha256": "5b2dae645defbcbef77c21c8e351a82c7f02978f6899ad3c92c14c5677012a90"
+  },
+  {
+    "path": "casefile/benchmarks/HMD-057-BASELINE.md",
+    "before_sha256": "212e3c220957219fd3c8e3d624573b18e570ed03e7f1c06df734665e6fb9f249",
+    "after_ascii_sha256": "a6c1ddd7b6fa5a814e2946ea4c086afdbfe3f5d2028e4204ff408acbc45eb846",
+    "mapping": "ASCII typography/unit notation",
+    "final_formatted_sha256": "1a75f0e60f10e9a7f69b0a1c739b7d8fd9b7dfd62beeafb9219c1c53e7f58f10"
+  },
+  {
+    "path": "casefile/benchmarks/HMD-058-RESULTS.md",
+    "before_sha256": "cda5e55baf6cdbaea916f9f4c93efe234da2195717307a70f9e9ed532c8e283c",
+    "after_ascii_sha256": "6082ef0271b5c187216195d9e8a9351f90aa487ce3a3433590103dc2e3f3419e",
+    "mapping": "ASCII typography/unit notation",
+    "final_formatted_sha256": "6082ef0271b5c187216195d9e8a9351f90aa487ce3a3433590103dc2e3f3419e"
+  },
+  {
+    "path": "casefile/benchmarks/HMD-059-RESULTS.md",
+    "before_sha256": "fe85bd8c7564596851171100b99008b17cb6b414df40c7049d27b33055ad4395",
+    "after_ascii_sha256": "430a1ae70c3ca2e30289dad9583e5ae8d8dfd9a94230237d9d95a1bbf2f04086",
+    "mapping": "ASCII typography/unit notation",
+    "final_formatted_sha256": "8c0a323f8ab404e65b20e59f5968d07f876385525ce154db58259e60a692e8da"
+  },
+  {
+    "path": "casefile/benchmarks/HMD-060-RESULTS.md",
+    "before_sha256": "dac31acd9ce90acc33973efe81c184703c0692af69bc7b690fe9d416e02fc770",
+    "after_ascii_sha256": "243a9667777f6c52cc2adcdbaf7ec5c04148556896cddce8e5909ee10cb84302",
+    "mapping": "ASCII typography/unit notation",
+    "final_formatted_sha256": "c00b29f93caa80449baaac1137478f853fecf71ac260577d5c431ecd88d458e5"
+  },
+  {
+    "path": "casefile/benchmarks/HMD-061-RESULTS.md",
+    "before_sha256": "179939e13a6c4888733051f214a2b06bfe20e895e70e9df9db47e31093b885ec",
+    "after_ascii_sha256": "b920c1a074353e742080b89ee14470ab0fdade2e148e9f23cbd1cd868222b584",
+    "mapping": "ASCII typography/unit notation",
+    "final_formatted_sha256": "cfca9f0e0a9add6186619f9c4b1de3156bb5188f83122b0f350a583a5db68acb"
+  },
+  {
+    "path": "casefile/benchmarks/HMD-062-RESULTS.md",
+    "before_sha256": "37d9897d360895368ff374618c9ef1adaf5a22b08a53c448c9406d129dbebff3",
+    "after_ascii_sha256": "c1786f493619cd900e9725fb7a479454da09ac4797c5f7f3c62bf148e95719b2",
+    "mapping": "ASCII typography/unit notation",
+    "final_formatted_sha256": "03d3a917d3336a331992bc26612e0fa95155605a03a2bfcc50e8923e871d2827"
+  },
+  {
+    "path": "casefile/benchmarks/HMD-063-RESULTS.md",
+    "before_sha256": "0be75b8918029de9558665c7ba2ee11d8024916d28ea61c625dabbcefdf246fc",
+    "after_ascii_sha256": "81cf18c4659c9bf1c6c50a661c62dbf53811f6b90e41befaefb4f3e3520d8c7c",
+    "mapping": "ASCII typography/unit notation",
+    "final_formatted_sha256": "cc153f819da240c7dbbbe7d14ed771bc60acc0e7dd627e459f2e2ed8592acda0"
+  },
+  {
+    "path": "casefile/benchmarks/HMD-064-RESULTS.md",
+    "before_sha256": "a1967157688894a0c4a4a323ef3b4833fe46c5902bb7acd956041a9592137e72",
+    "after_ascii_sha256": "fe8cb0d336a33193a20a1e7e0dfd98d2f6d199ce9a5bcdaa584d6d83bb04ab03",
+    "mapping": "ASCII typography/unit notation",
+    "final_formatted_sha256": "427e973b8a9e69450f02cfee0aed2921a16e028772f84f4af8beff0e10a1d48b"
+  },
+  {
+    "path": "casefile/benchmarks/HMD-065-RESULTS.md",
+    "before_sha256": "af4f7922a4ebc74c7c3a26189b8ed1908795ae731108e11c33ed5eb9bccac978",
+    "after_ascii_sha256": "34f13ad290c56ccd386132e572d10451efe145e934d42f44beb34d6823918ea3",
+    "mapping": "ASCII typography/unit notation",
+    "final_formatted_sha256": "511176c7c6c3c354b1481cc79b67ee503a9eb30f8fa411cb1b814abeda0bc5e4"
+  },
+  {
+    "path": "casefile/benchmarks/HMD-066-RESULTS.md",
+    "before_sha256": "a769a7e820f9111b0b442d5515df4bd9ed1b371dd13be2f789972bf315e12150",
+    "after_ascii_sha256": "31a6d9f3cbe86e0d17a3d3372d151b00b593a190f73e680886648347f9122fbf",
+    "mapping": "ASCII typography/unit notation",
+    "final_formatted_sha256": "a397866fcedbb5ecc8c1a6e86e7808ce6d5fad5807d29c642deb6c7c8d5986f1"
+  },
+  {
+    "path": "casefile/benchmarks/results/hmd063-verification.txt",
+    "before_sha256": "d499604f22f22cf96e176dcaf7175c33175e50b286d00e71d808ebf2abfd77bf",
+    "after_ascii_sha256": "3cac102c2467e7035f304acc50aebab6de96896351fe87832a16634e28976144",
+    "mapping": "ASCII typography/unit notation",
+    "final_formatted_sha256": "3cac102c2467e7035f304acc50aebab6de96896351fe87832a16634e28976144"
+  },
+  {
+    "path": "casefile/benchmarks/results/hmd064-query-probe.py",
+    "before_sha256": "f4edf92632e78d9e3eb4b34c31f2a0abb5bfd507cf5a1761c8ebbe23b5079221",
+    "after_ascii_sha256": "e1ce2521e9e2000754e1cace670d2c7e1519299029279f0bf89926acc03ba9f9",
+    "mapping": "Python unicode escapes; AST identical",
+    "final_formatted_sha256": "e1ce2521e9e2000754e1cace670d2c7e1519299029279f0bf89926acc03ba9f9"
+  },
+  {
+    "path": "casefile/benchmarks/results/hmd066-verification.txt",
+    "before_sha256": "90fe950798d4e4f19d9a04ebac9be0b0bbf9dc6535648dc9d0dd0ecf1e93b413",
+    "after_ascii_sha256": "c79e557173cde65c4acf3fd4befe68e42860a14828281ab0ea1c652dd3071b30",
+    "mapping": "ASCII typography/unit notation",
+    "final_formatted_sha256": "c79e557173cde65c4acf3fd4befe68e42860a14828281ab0ea1c652dd3071b30"
+  },
+  {
+    "path": "casefile/benchmarks/results/hmd067-verification.txt",
+    "before_sha256": "d91f334701d0fc1a9a01ea198de81ba99081a394e18f44c878a6c6fbbcd5c973",
+    "after_ascii_sha256": "9bd4c72d5471d66020dfb732dfd800437e17379805b6949083b13a5017ba4e3f",
+    "mapping": "ASCII typography/unit notation",
+    "final_formatted_sha256": "9bd4c72d5471d66020dfb732dfd800437e17379805b6949083b13a5017ba4e3f"
+  },
+  {
+    "path": "casefile/benchmarks/results/hmd068-verification.txt",
+    "before_sha256": "15390f22d0f9990e64e46082acb8d1ab1698dc5837060d2afcd287bbeff55546",
+    "after_ascii_sha256": "0df204b602170f408338158ecc85278064717e31c41fe8a5c5a9ca1375d9bb4d",
+    "mapping": "ASCII typography/unit notation",
+    "final_formatted_sha256": "0df204b602170f408338158ecc85278064717e31c41fe8a5c5a9ca1375d9bb4d"
+  }
+]

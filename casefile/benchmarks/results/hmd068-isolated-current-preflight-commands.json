@@ -1,0 +1,66 @@
+[
+  {
+    "command": [
+      "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/boards-diagnostic/matched-reader/current/target/release/deps/priority-4c02a3bbca696e82",
+      "--list"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.002384185791015625
+  },
+  {
+    "command": [
+      "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/boards-diagnostic/matched-reader/current/target/release/deps/priority-4c02a3bbca696e82",
+      "--test"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.9675595760345459
+  },
+  {
+    "command": [
+      "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/boards-diagnostic/matched-reader/current/target/release/deps/baselines-79b66f38661bc100",
+      "--list"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.002254009246826172
+  },
+  {
+    "command": [
+      "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/boards-diagnostic/matched-reader/current/target/release/deps/baselines-79b66f38661bc100",
+      "--test"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 4.2426557540893555
+  },
+  {
+    "command": [
+      "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/boards-diagnostic/matched-reader/current/target/release/deps/http-5eb4c4006879e177",
+      "--list"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.0023651123046875
+  },
+  {
+    "command": [
+      "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/boards-diagnostic/matched-reader/current/target/release/deps/http-5eb4c4006879e177",
+      "--test"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 1.3346366882324219
+  },
+  {
+    "command": [
+      "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/boards-diagnostic/matched-reader/current/target/release/deps/interactions-023394bd4bbc43da",
+      "--list"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.002202749252319336
+  },
+  {
+    "command": [
+      "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/boards-diagnostic/matched-reader/current/target/release/deps/interactions-023394bd4bbc43da",
+      "--test"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.24376988410949707
+  }
+]

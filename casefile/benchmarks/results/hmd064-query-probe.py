@@ -4,7 +4,7 @@ repo=Path.cwd();scratch=repo/'.agent-workspace/20260930-speedup-implementation/w
 with tempfile.TemporaryDirectory(prefix='hmd064-sqlite-http-') as d:
  directory=Path(d);root=directory/'planning';db=directory/'index.sqlite'
  shutil.copytree(repo/'casefile/casefile-store/tests/fixtures/minimum',root)
- (root/'Unicode.md').write_text('İSTANBUL ΟΣ Straße 100% foo_bar left\0right')
+ (root/'Unicode.md').write_text('\u0130STANBUL \u039f\u03a3 Stra\xdfe 100% foo_bar left\0right')
  p=subprocess.Popen([str(repo/'.agent-workspace/20260930-speedup-implementation/writer/target/debug/casefile'),'--root',str(root),'serve','--index',str(db)],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
  try:
   lines=[p.stdout.readline().rstrip() for _ in range(4)];base=lines[0].removeprefix('Casefile server: ');assert base.startswith('http://127.0.0.1:')
@@ -13,8 +13,8 @@ with tempfile.TemporaryDirectory(prefix='hmd064-sqlite-http-') as d:
    with urllib.request.urlopen(request,timeout=30) as response:
     assert response.status==200;return json.load(response)['Current']['value']
   records=query(None,'i\u0307stanbul');assert len(records)==1 and records[0]['path']=='Unicode.md'
-  assert records[0]['content']=='İSTANBUL ΟΣ Straße 100% foo_bar left\0right'
-  assert records[0]['rendered_markdown'] and 'İSTANBUL' in records[0]['rendered_markdown']
+  assert records[0]['content']=='\u0130STANBUL \u039f\u03a3 Stra\xdfe 100% foo_bar left\0right'
+  assert records[0]['rendered_markdown'] and '\u0130STANBUL' in records[0]['rendered_markdown']
   assert query({'project':'demo','investigation':'sample'},'i\u0307stanbul')==[]
   assert query(None,'STRASSE')==[]
   assert len(query(None,'left\0right'))==1

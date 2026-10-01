@@ -735,7 +735,7 @@ src/app/app.browser.test.tsx 64ms
 src/record-detail/use-change-review.ts 7ms
 $ tsc --noEmit
 $ bun run build.ts
-≈ tailwindcss v4.3.3
+approximately tailwindcss v4.3.3
 
 Done in 47ms
 
@@ -876,7 +876,7 @@ src/app/app.browser.test.tsx:
 526 |     if (Date.now() >= deadline)
 527 |       throw new Error(`Timed out waiting for the workbench: ${document.body.textContent}`);
                       ^
-error: Timed out waiting for the workbench: CCasefilePlanning workbenchSearch recordsWrite capability loadedRefreshCasefileProjectsInvestigationsTicketsFilesStrategiesBoardsProjectsdemo1 invInvestigationssample2 ticketsDiagnosticsClearTicketsGoverned workgovernedepicMinimum epicHMD-E-001.mdgovernedticketConcurrent titleHMD-011.mdRecord detailgovernedticketConcurrent titleprojects/demo/investigations/sample/tickets/accepted/HMD-011.mdOverviewRenderedSourceDiagnosticsRelationshipsdecisionHMD-D-001demo / sampleContextScopedemo / sampleStatusacceptedRank1ConfidencehighEdit ticketHMD-011 · demo / sampleTitleReported by roleReported by agentSource commitCreated atUpdated atConfidenceRequirement and evidenceRequired.ImpactImpact.Resolution boundaryBoundary.Acceptance criteriaCriteria.VerificationTests.Relationships and duplicate analysisNone.Review and disposition historyAccepted.decision refsrelated ticketssupersedessuperseded byWrite capabilityHeld only in this page’s memory and sent only when applying a reviewed preview.Preview changesApplying…Preview diagnosticsNo host diagnostics.Exact diffdiff --git a/projects/demo/investigations/sample/tickets/accepted/HMD-011.md b/projects/demo/investigations/sample/tickets/accepted/HMD-011.md
+error: Timed out waiting for the workbench: CCasefilePlanning workbenchSearch recordsWrite capability loadedRefreshCasefileProjectsInvestigationsTicketsFilesStrategiesBoardsProjectsdemo1 invInvestigationssample2 ticketsDiagnosticsClearTicketsGoverned workgovernedepicMinimum epicHMD-E-001.mdgovernedticketConcurrent titleHMD-011.mdRecord detailgovernedticketConcurrent titleprojects/demo/investigations/sample/tickets/accepted/HMD-011.mdOverviewRenderedSourceDiagnosticsRelationshipsdecisionHMD-D-001demo / sampleContextScopedemo / sampleStatusacceptedRank1ConfidencehighEdit ticketHMD-011   demo / sampleTitleReported by roleReported by agentSource commitCreated atUpdated atConfidenceRequirement and evidenceRequired.ImpactImpact.Resolution boundaryBoundary.Acceptance criteriaCriteria.VerificationTests.Relationships and duplicate analysisNone.Review and disposition historyAccepted.decision refsrelated ticketssupersedessuperseded byWrite capabilityHeld only in this page's memory and sent only when applying a reviewed preview.Preview changesApplying...Preview diagnosticsNo host diagnostics.Exact diffdiff --git a/projects/demo/investigations/sample/tickets/accepted/HMD-011.md b/projects/demo/investigations/sample/tickets/accepted/HMD-011.md
 index 27d35e5..59e942f 100644
 --- a/projects/demo/investigations/sample/tickets/accepted/HMD-011.md
 +++ b/projects/demo/investigations/sample/tickets/accepted/HMD-011.md
@@ -952,7 +952,7 @@ humans-md development shell
   Rust:   cd casefile; cargo fmt --check; cargo clippy --workspace --all-targets -- -D warnings; cargo test --workspace
   CI:     act pull_request -j validate --pull=false -P ubuntu-latest=catthehacker/ubuntu:act-latest
 $ bun run build.ts
-≈ tailwindcss v4.3.3
+approximately tailwindcss v4.3.3
 
 Done in 86ms
 ../casefile-server/web/assets/app.js: OK

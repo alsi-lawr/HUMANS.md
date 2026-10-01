@@ -292,7 +292,7 @@ src/api-contract.test.ts:
  25 expect() calls
 Ran 9 tests across 1 file. [15.00ms]
 $ bun run build.ts
-≈ tailwindcss v4.3.3
+approximately tailwindcss v4.3.3
 
 Done in 59ms
 Checking formatting...

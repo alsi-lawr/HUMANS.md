@@ -3,10 +3,11 @@ use casefile_store::{
     DerivedBoard, DerivedIndex, DerivedRecord, DerivedRelationship, DerivedSnapshot,
     IndexPublicationId, Indexed, RecordScope, RevisionSource, ScopedIdentity, StoreError,
 };
-use rusqlite::{Connection, ToSql, params, params_from_iter};
+use rusqlite::{Connection, OpenFlags, ToSql, params, params_from_iter};
 use std::{
     fs,
     path::{Path, PathBuf},
+    sync::atomic::{AtomicBool, Ordering},
 };
 use tempfile::NamedTempFile;
 use thiserror::Error;
@@ -33,6 +34,7 @@ pub enum SqliteIndexError {
 
 pub struct SqliteIndex {
     path: PathBuf,
+    upgrade_pending: AtomicBool,
 }
 
 impl SqliteIndex {
@@ -47,7 +49,24 @@ impl SqliteIndex {
         if parent.starts_with(root) {
             return Err(SqliteIndexError::InsidePlanningRoot);
         }
-        Ok(Self { path })
+        let upgrade_pending = match fs::metadata(&path) {
+            Ok(_) => {
+                let connection =
+                    Connection::open_with_flags(&path, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
+                let version: i64 = connection.query_row(
+                    "SELECT source_revision, user_version FROM metadata CROSS JOIN pragma_user_version LIMIT 1",
+                    [],
+                    |row| row.get(1),
+                )?;
+                version != SCHEMA_VERSION
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => false,
+            Err(error) => return Err(error.into()),
+        };
+        Ok(Self {
+            path,
+            upgrade_pending: AtomicBool::new(upgrade_pending),
+        })
     }
 
     fn checked<T>(
@@ -55,23 +74,13 @@ impl SqliteIndex {
         current: &Revision,
         read: impl FnOnce(&Connection) -> Result<T, SqliteIndexError>,
     ) -> Result<Indexed<T>, SqliteIndexError> {
-        if !self.path.exists() {
+        if self.upgrade_pending.load(Ordering::Acquire) || !self.path.exists() {
             return Ok(Indexed::Missing);
         }
         let connection = Connection::open(&self.path)?;
-        let indexed = connection.query_row(
-            "SELECT source_revision, user_version FROM metadata CROSS JOIN pragma_user_version LIMIT 1",
-            [],
-            |row| {
-                if row.get::<_, i64>(1)? != SCHEMA_VERSION {
-                    return Ok(None);
-                }
-                Ok(Some(Revision(row.get(0)?)))
-            },
-        )?;
-        let Some(indexed) = indexed else {
-            return Ok(Indexed::Missing);
-        };
+        let indexed = connection.query_row("SELECT source_revision FROM metadata", [], |row| {
+            Ok(Revision(row.get(0)?))
+        })?;
         if indexed != *current {
             return Ok(Indexed::Stale {
                 indexed_revision: indexed,
@@ -96,14 +105,14 @@ impl DerivedIndex for SqliteIndex {
             .ok_or(SqliteIndexError::InsidePlanningRoot)?;
         let file = NamedTempFile::new_in(parent)?;
         let mut connection = Connection::open(file.path())?;
-        connection.pragma_update(None, "user_version", SCHEMA_VERSION)?;
-        connection.execute_batch("PRAGMA journal_mode=DELETE;
-            CREATE TABLE metadata (source_revision TEXT NOT NULL);
+        connection.execute_batch("PRAGMA journal_mode=DELETE;")?;
+        let transaction = connection.transaction()?;
+        transaction.pragma_update(None, "user_version", SCHEMA_VERSION)?;
+        transaction.execute_batch("CREATE TABLE metadata (source_revision TEXT NOT NULL);
             CREATE TABLE records (path TEXT PRIMARY KEY, project TEXT, investigation TEXT, identity TEXT, classification TEXT NOT NULL, kind TEXT, title TEXT NOT NULL, search_text TEXT NOT NULL, document TEXT NOT NULL);
             CREATE TABLE relationships (source_project TEXT NOT NULL, source_investigation TEXT, source_identity TEXT NOT NULL, target_project TEXT NOT NULL, target_investigation TEXT, target_identity TEXT NOT NULL, kind TEXT NOT NULL, document TEXT NOT NULL);
             CREATE TABLE boards (project TEXT NOT NULL, investigation TEXT, identity TEXT NOT NULL, title TEXT NOT NULL, document TEXT NOT NULL);
             CREATE TABLE diagnostics (path TEXT NOT NULL, code TEXT NOT NULL, document TEXT NOT NULL);")?;
-        let transaction = connection.transaction()?;
         transaction.execute(
             "INSERT INTO metadata VALUES (?)",
             [&snapshot.source_revision.0],
@@ -198,6 +207,7 @@ impl DerivedIndex for SqliteIndex {
             .0
             .persist(&self.path)
             .map_err(|error| error.error)?;
+        self.upgrade_pending.store(false, Ordering::Release);
         Ok(Indexed::Current {
             source_revision: current,
             value: (),

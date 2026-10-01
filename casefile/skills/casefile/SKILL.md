@@ -29,12 +29,12 @@ responses have a hard 8 MiB limit including the final newline; overflow fails be
 written. Use scoped reads instead of raising the limit or redirecting bulk output.
 
 Never request unscoped or bulk records, infer an investigation path by concatenation, or treat
-catalogue freshness as scoped-read authority. Snapshot freshness is a tagged catalogue
-token covering the complete metadata domain; narrow results carry a tagged scope-read token naming
-the exact query target and necessary dependencies. Compare tokens only for the same query target,
-scope, and (for detail) identity. Different targets legitimately have different revisions. Re-read
-that exact target when its affecting data/dependencies change; unrelated edits do not invalidate
-its context. These observation tokens are not mutation preconditions: preview/apply independently
+catalogue freshness as scoped-read authority. Snapshot freshness is a tagged catalogue token
+covering the complete metadata domain; narrow results carry a tagged scope-read token naming the
+exact query target and necessary dependencies. Compare tokens only for the same query target, scope,
+and (for detail) identity. Different targets legitimately have different revisions. Re-read that
+exact target when its affecting data/dependencies change; unrelated edits do not invalidate its
+context. These observation tokens are not mutation preconditions: preview/apply independently
 capture and validate their own freshness. Provider v5 is separate from MCP's dated transport
 protocol negotiation.
 

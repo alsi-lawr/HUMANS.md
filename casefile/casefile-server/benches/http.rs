@@ -79,39 +79,33 @@ impl Drop for Loopback {
 fn bench_http(criterion: &mut Criterion) {
     let mut group = criterion.benchmark_group("http_loopback_records");
     for count in [250, 1_000] {
-        let fixture = Fixture::new()
-            .tickets(count, false)
-            .progress_notes(500, false);
-        let store = Store::open(fixture.root.path()).unwrap();
-        assert_eq!(store.check(Some(INVESTIGATION)).unwrap().valid, Some(true));
-        let index = TempDir::new().unwrap();
-        let server = Loopback::new(store, &index.path().join("index.sqlite"));
         for (name, search) in [
             ("unchanged", None),
             ("search_hit", Some("HMD-100000")),
             ("search_miss", Some("no-such-record")),
         ] {
-            let body = serde_json::json!({
-                "query": "records", "scope": {"project": "demo", "investigation": "sample"}, "search": search,
-            }).to_string();
-            let response = String::from_utf8(server.request(&body)).unwrap();
-            let (headers, json) = response.split_once("\r\n\r\n").unwrap();
-            assert_eq!(
-                headers.lines().next().unwrap().split_whitespace().nth(1),
-                Some("200"),
-                "{response}"
-            );
-            let result: serde_json::Value = serde_json::from_str(json).unwrap();
-            let rows = result["Current"]["value"]
-                .as_array()
-                .expect("current indexed response");
-            match name {
-                "unchanged" => assert!(rows.len() >= count),
-                "search_hit" => assert!(!rows.is_empty()),
-                _ => assert!(rows.is_empty()),
-            }
-            group.bench_with_input(BenchmarkId::new(name, count), &body, |bench, body| {
-                bench.iter(|| black_box(server.request(black_box(body))));
+            group.bench_with_input(BenchmarkId::new(name, count), &(count, search), |bench, &(count, search)| {
+                let fixture = Fixture::new().tickets(count, false).progress_notes(500, false);
+                let store = Store::open(fixture.root.path()).unwrap();
+                assert_eq!(store.check(Some(INVESTIGATION)).unwrap().valid, Some(true));
+                let index = TempDir::new().unwrap();
+                let server = Loopback::new(store, &index.path().join("index.sqlite"));
+                let body = serde_json::json!({
+                    "query": "records", "scope": {"project": "demo", "investigation": "sample"}, "search": search,
+                }).to_string();
+                {
+                    let response = String::from_utf8(server.request(&body)).unwrap();
+                    let (headers, json) = response.split_once("\r\n\r\n").unwrap();
+                    assert_eq!(headers.lines().next().unwrap().split_whitespace().nth(1), Some("200"), "{response}");
+                    let result: serde_json::Value = serde_json::from_str(json).unwrap();
+                    let rows = result["Current"]["value"].as_array().expect("current indexed response");
+                    match name {
+                        "unchanged" => assert!(rows.len() >= count),
+                        "search_hit" => assert!(!rows.is_empty()),
+                        _ => assert!(rows.is_empty()),
+                    }
+                }
+                bench.iter(|| black_box(server.request(black_box(&body))));
             });
         }
     }

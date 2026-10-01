@@ -57,7 +57,7 @@ Same host/toolchain and fixture/timing definitions as [HMD-057](HMD-057-BASELINE
 x86_64, Ryzen 7 5700X3D, repository Nix shell rustc 1.95.0, Criterion 0.8.2, optimized bench
 profile, ten samples, one-second warm-up, two-second measurement target, default
 bootstrap/confidence settings. Warm filesystem caches; no CPU pinning or controlled frequency. No
-competing writer/root build ran during measurement. Run: 2026-09-30 12:54:47–12:54:59 UTC.
+competing writer/root build ran during measurement. Run: 2026-09-30 12:54:47-12:54:59 UTC.
 
 ```sh
 cd casefile
@@ -75,11 +75,11 @@ the target as active pipeline scratch and owns its eventual cleanup.
 Times below are **microseconds per operation**. Confidence intervals for the median and native
 Criterion's relative mean-time change are both 95%; mean changes need not equal median ratios.
 
-| Scenario                                | Before median (µs) | After median (µs) | After median 95% CI (µs) | Native mean-time change (95% CI) |
+| Scenario                                | Before median (us) | After median (us) | After median 95% CI (us) | Native mean-time change (95% CI) |
 | --------------------------------------- | -----------------: | ----------------: | -----------------------: | -------------------------------: |
-| `core_parsing/progress_parse_500_notes` |           2133.158 |          2143.347 |        2122.049–2156.684 |           +0.50% (-0.26%–+1.30%) |
-| `core_parsing/ticket_parse`             |             31.240 |            27.253 |            26.824–27.663 |        -13.44% (-15.14%–-11.96%) |
-| `core_parsing/ticket_render_roundtrip`  |             36.095 |            29.261 |            28.884–29.358 |        -19.32% (-20.08%–-18.65%) |
+| `core_parsing/progress_parse_500_notes` |           2133.158 |          2143.347 |        2122.049-2156.684 |           +0.50% (-0.26%-+1.30%) |
+| `core_parsing/ticket_parse`             |             31.240 |            27.253 |            26.824-27.663 |        -13.44% (-15.14%--11.96%) |
+| `core_parsing/ticket_render_roundtrip`  |             36.095 |            29.261 |            28.884-29.358 |        -19.32% (-20.08%--18.65%) |
 
 Criterion reports ticket parse and render-roundtrip improvements, and no detected performance change
 in the unmodified progress-parser control (`p=0.27`). No suspicious regression required repetition.

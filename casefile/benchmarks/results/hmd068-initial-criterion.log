@@ -1,0 +1,651 @@
+=== baselines original matched Criterion stdout/stderr (exit0) ===
+Gnuplot not found, using plotters backend
+Benchmarking inventory/metadata_summary/2000
+Benchmarking inventory/metadata_summary/2000: Warming up for 1.0000 s
+Benchmarking inventory/metadata_summary/2000: Collecting 10 samples in estimated 2.2300 s (330 iterations)
+Benchmarking inventory/metadata_summary/2000: Analyzing
+inventory/metadata_summary/2000
+                        time:   [6.7430 ms 6.7587 ms 6.7708 ms]
+                        thrpt:  [295.39 Kelem/s 295.91 Kelem/s 296.60 Kelem/s]
+                 change:
+                        time:   [−16.453% −16.208% −15.980%] (p = 0.00 < 0.05)
+                        thrpt:  [+19.019% +19.343% +19.693%]
+                        Performance has improved.
+Benchmarking inventory/scoped_check/2000
+Benchmarking inventory/scoped_check/2000: Warming up for 1.0000 s
+Benchmarking inventory/scoped_check/2000: Collecting 10 samples in estimated 2.0310 s (2255 iterations)
+Benchmarking inventory/scoped_check/2000: Analyzing
+inventory/scoped_check/2000
+                        time:   [895.06 µs 896.34 µs 898.01 µs]
+                        thrpt:  [2.2271 Melem/s 2.2313 Melem/s 2.2345 Melem/s]
+                 change:
+                        time:   [−94.858% −94.811% −94.761%] (p = 0.00 < 0.05)
+                        thrpt:  [+1808.8% +1827.1% +1844.8%]
+                        Performance has improved.
+Found 2 outliers among 10 measurements (20.00%)
+  1 (10.00%) high mild
+  1 (10.00%) high severe
+Benchmarking inventory/full_scan/2000
+Benchmarking inventory/full_scan/2000: Warming up for 1.0000 s
+
+Warning: Unable to complete 10 samples in 2.0s. You may wish to increase target time to 2.0s or enable flat sampling.
+Benchmarking inventory/full_scan/2000: Collecting 10 samples in estimated 2.0219 s (55 iterations)
+Benchmarking inventory/full_scan/2000: Analyzing
+inventory/full_scan/2000
+                        time:   [36.561 ms 36.604 ms 36.690 ms]
+                        thrpt:  [54.510 Kelem/s 54.638 Kelem/s 54.703 Kelem/s]
+                 change:
+                        time:   [−13.640% −13.390% −13.127%] (p = 0.00 < 0.05)
+                        thrpt:  [+15.110% +15.460% +15.795%]
+                        Performance has improved.
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) high severe
+Benchmarking inventory/metadata_summary/8000
+Benchmarking inventory/metadata_summary/8000: Warming up for 1.0000 s
+Benchmarking inventory/metadata_summary/8000: Collecting 10 samples in estimated 3.0637 s (110 iterations)
+Benchmarking inventory/metadata_summary/8000: Analyzing
+inventory/metadata_summary/8000
+                        time:   [26.883 ms 26.925 ms 26.970 ms]
+                        thrpt:  [296.63 Kelem/s 297.12 Kelem/s 297.59 Kelem/s]
+                 change:
+                        time:   [−15.182% −14.987% −14.774%] (p = 0.00 < 0.05)
+                        thrpt:  [+17.335% +17.629% +17.899%]
+                        Performance has improved.
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) high mild
+Benchmarking inventory/scoped_check/8000
+Benchmarking inventory/scoped_check/8000: Warming up for 1.0000 s
+Benchmarking inventory/scoped_check/8000: Collecting 10 samples in estimated 2.0434 s (2255 iterations)
+Benchmarking inventory/scoped_check/8000: Analyzing
+inventory/scoped_check/8000
+                        time:   [893.02 µs 895.37 µs 896.87 µs]
+                        thrpt:  [8.9199 Melem/s 8.9349 Melem/s 8.9584 Melem/s]
+                 change:
+                        time:   [−98.665% −98.660% −98.656%] (p = 0.00 < 0.05)
+                        thrpt:  [+7339.3% +7364.2% +7391.9%]
+                        Performance has improved.
+Benchmarking inventory/full_scan/8000
+Benchmarking inventory/full_scan/8000: Warming up for 1.0000 s
+Benchmarking inventory/full_scan/8000: Collecting 10 samples in estimated 2.9160 s (20 iterations)
+Benchmarking inventory/full_scan/8000: Analyzing
+inventory/full_scan/8000
+                        time:   [143.81 ms 144.32 ms 144.95 ms]
+                        thrpt:  [55.191 Kelem/s 55.431 Kelem/s 55.627 Kelem/s]
+                 change:
+                        time:   [−17.019% −16.101% −15.237%] (p = 0.00 < 0.05)
+                        thrpt:  [+17.975% +19.192% +20.510%]
+                        Performance has improved.
+Found 2 outliers among 10 measurements (20.00%)
+  1 (10.00%) high mild
+  1 (10.00%) high severe
+
+Benchmarking activation_roots/scoped_check/1
+Benchmarking activation_roots/scoped_check/1: Warming up for 1.0000 s
+Benchmarking activation_roots/scoped_check/1: Collecting 10 samples in estimated 2.0093 s (2255 iterations)
+Benchmarking activation_roots/scoped_check/1: Analyzing
+activation_roots/scoped_check/1
+                        time:   [889.20 µs 890.33 µs 891.87 µs]
+                        thrpt:  [2.2425 Melem/s 2.2464 Melem/s 2.2492 Melem/s]
+                 change:
+                        time:   [−94.793% −94.786% −94.778%] (p = 0.00 < 0.05)
+                        thrpt:  [+1815.2% +1817.9% +1820.6%]
+                        Performance has improved.
+Benchmarking activation_roots/scoped_check/100
+Benchmarking activation_roots/scoped_check/100: Warming up for 1.0000 s
+Benchmarking activation_roots/scoped_check/100: Collecting 10 samples in estimated 2.1027 s (825 iterations)
+Benchmarking activation_roots/scoped_check/100: Analyzing
+activation_roots/scoped_check/100
+                        time:   [2.5379 ms 2.5388 ms 2.5394 ms]
+                        thrpt:  [787.60 Kelem/s 787.77 Kelem/s 788.05 Kelem/s]
+                 change:
+                        time:   [−85.511% −85.476% −85.444%] (p = 0.00 < 0.05)
+                        thrpt:  [+587.03% +588.51% +590.16%]
+                        Performance has improved.
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) low mild
+
+Benchmarking records/scoped_check/250
+Benchmarking records/scoped_check/250: Warming up for 1.0000 s
+Benchmarking records/scoped_check/250: Collecting 10 samples in estimated 2.7678 s (165 iterations)
+Benchmarking records/scoped_check/250: Analyzing
+records/scoped_check/250
+                        time:   [17.543 ms 17.831 ms 18.016 ms]
+                        thrpt:  [13.877 Kelem/s 14.020 Kelem/s 14.250 Kelem/s]
+                 change:
+                        time:   [−30.313% −28.922% −27.471%] (p = 0.00 < 0.05)
+                        thrpt:  [+37.876% +40.691% +43.499%]
+                        Performance has improved.
+Benchmarking records/full_derived/250
+Benchmarking records/full_derived/250: Warming up for 1.0000 s
+Benchmarking records/full_derived/250: Collecting 10 samples in estimated 2.8469 s (165 iterations)
+Benchmarking records/full_derived/250: Analyzing
+records/full_derived/250
+                        time:   [17.259 ms 17.414 ms 17.729 ms]
+                        thrpt:  [14.101 Kelem/s 14.356 Kelem/s 14.485 Kelem/s]
+                 change:
+                        time:   [−50.937% −49.847% −48.571%] (p = 0.00 < 0.05)
+                        thrpt:  [+94.442% +99.391% +103.82%]
+                        Performance has improved.
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) high mild
+Benchmarking records/record_index/250
+Benchmarking records/record_index/250: Warming up for 1.0000 s
+Benchmarking records/record_index/250: Collecting 10 samples in estimated 2.3060 s (275 iterations)
+Benchmarking records/record_index/250: Analyzing
+records/record_index/250
+                        time:   [8.2114 ms 8.2289 ms 8.2420 ms]
+                        thrpt:  [30.333 Kelem/s 30.381 Kelem/s 30.446 Kelem/s]
+                 change:
+                        time:   [−49.944% −48.560% −47.299%] (p = 0.00 < 0.05)
+                        thrpt:  [+89.751% +94.402% +99.775%]
+                        Performance has improved.
+Found 2 outliers among 10 measurements (20.00%)
+  1 (10.00%) low mild
+  1 (10.00%) high mild
+Benchmarking records/boards/250
+Benchmarking records/boards/250: Warming up for 1.0000 s
+Benchmarking records/boards/250: Collecting 10 samples in estimated 2.3542 s (275 iterations)
+Benchmarking records/boards/250: Analyzing
+records/boards/250      time:   [8.5970 ms 8.7438 ms 8.8952 ms]
+                        thrpt:  [28.105 Kelem/s 28.592 Kelem/s 29.080 Kelem/s]
+                 change:
+                        time:   [−44.609% −43.857% −43.187%] (p = 0.00 < 0.05)
+                        thrpt:  [+76.016% +78.115% +80.533%]
+                        Performance has improved.
+Benchmarking records/scoped_check/1000
+Benchmarking records/scoped_check/1000: Warming up for 1.0000 s
+
+Warning: Unable to complete 10 samples in 2.0s. You may wish to increase target time to 3.6s or enable flat sampling.
+Benchmarking records/scoped_check/1000: Collecting 10 samples in estimated 3.6112 s (55 iterations)
+Benchmarking records/scoped_check/1000: Analyzing
+records/scoped_check/1000
+                        time:   [64.270 ms 65.241 ms 66.656 ms]
+                        thrpt:  [15.002 Kelem/s 15.328 Kelem/s 15.559 Kelem/s]
+                 change:
+                        time:   [−36.063% −34.547% −33.056%] (p = 0.00 < 0.05)
+                        thrpt:  [+49.379% +52.781% +56.405%]
+                        Performance has improved.
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) high severe
+Benchmarking records/full_derived/1000
+Benchmarking records/full_derived/1000: Warming up for 1.0000 s
+
+Warning: Unable to complete 10 samples in 2.0s. You may wish to increase target time to 3.6s or enable flat sampling.
+Benchmarking records/full_derived/1000: Collecting 10 samples in estimated 3.6410 s (55 iterations)
+Benchmarking records/full_derived/1000: Analyzing
+records/full_derived/1000
+                        time:   [66.085 ms 66.212 ms 66.325 ms]
+                        thrpt:  [15.077 Kelem/s 15.103 Kelem/s 15.132 Kelem/s]
+                 change:
+                        time:   [−50.686% −49.791% −48.864%] (p = 0.00 < 0.05)
+                        thrpt:  [+95.556% +99.168% +102.78%]
+                        Performance has improved.
+Benchmarking records/record_index/1000
+Benchmarking records/record_index/1000: Warming up for 1.0000 s
+Benchmarking records/record_index/1000: Collecting 10 samples in estimated 3.6064 s (110 iterations)
+Benchmarking records/record_index/1000: Analyzing
+records/record_index/1000
+                        time:   [32.413 ms 32.807 ms 33.667 ms]
+                        thrpt:  [29.703 Kelem/s 30.482 Kelem/s 30.851 Kelem/s]
+                 change:
+                        time:   [−47.507% −45.980% −44.546%] (p = 0.00 < 0.05)
+                        thrpt:  [+80.329% +85.116% +90.503%]
+                        Performance has improved.
+Benchmarking records/boards/1000
+Benchmarking records/boards/1000: Warming up for 1.0000 s
+Benchmarking records/boards/1000: Collecting 10 samples in estimated 3.6437 s (110 iterations)
+Benchmarking records/boards/1000: Analyzing
+records/boards/1000     time:   [32.444 ms 32.616 ms 32.750 ms]
+                        thrpt:  [30.534 Kelem/s 30.660 Kelem/s 30.823 Kelem/s]
+                 change:
+                        time:   [−47.310% −46.706% −46.269%] (p = 0.00 < 0.05)
+                        thrpt:  [+86.111% +87.640% +89.791%]
+                        Performance has improved.
+
+Benchmarking supersession/independent/250
+Benchmarking supersession/independent/250: Warming up for 1.0000 s
+Benchmarking supersession/independent/250: Collecting 10 samples in estimated 2.8660 s (165 iterations)
+Benchmarking supersession/independent/250: Analyzing
+supersession/independent/250
+                        time:   [17.027 ms 17.058 ms 17.111 ms]
+                        thrpt:  [14.611 Kelem/s 14.656 Kelem/s 14.682 Kelem/s]
+                 change:
+                        time:   [−32.483% −31.787% −31.221%] (p = 0.00 < 0.05)
+                        thrpt:  [+45.394% +46.600% +48.111%]
+                        Performance has improved.
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) high mild
+Benchmarking supersession/chain/250
+Benchmarking supersession/chain/250: Warming up for 1.0000 s
+Benchmarking supersession/chain/250: Collecting 10 samples in estimated 2.9096 s (165 iterations)
+Benchmarking supersession/chain/250: Analyzing
+supersession/chain/250  time:   [17.362 ms 17.467 ms 17.546 ms]
+                        thrpt:  [14.248 Kelem/s 14.313 Kelem/s 14.399 Kelem/s]
+                 change:
+                        time:   [−48.562% −47.749% −47.039%] (p = 0.00 < 0.05)
+                        thrpt:  [+88.818% +91.382% +94.410%]
+                        Performance has improved.
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) low severe
+Benchmarking supersession/independent/500
+Benchmarking supersession/independent/500: Warming up for 1.0000 s
+Benchmarking supersession/independent/500: Collecting 10 samples in estimated 3.6525 s (110 iterations)
+Benchmarking supersession/independent/500: Analyzing
+supersession/independent/500
+                        time:   [33.107 ms 33.177 ms 33.210 ms]
+                        thrpt:  [15.056 Kelem/s 15.071 Kelem/s 15.103 Kelem/s]
+                 change:
+                        time:   [−32.915% −32.671% −32.467%] (p = 0.00 < 0.05)
+                        thrpt:  [+48.075% +48.525% +49.066%]
+                        Performance has improved.
+Benchmarking supersession/chain/500
+Benchmarking supersession/chain/500: Warming up for 1.0000 s
+Benchmarking supersession/chain/500: Collecting 10 samples in estimated 3.7913 s (110 iterations)
+Benchmarking supersession/chain/500: Analyzing
+supersession/chain/500  time:   [34.407 ms 34.476 ms 34.555 ms]
+                        thrpt:  [14.470 Kelem/s 14.503 Kelem/s 14.532 Kelem/s]
+                 change:
+                        time:   [−60.084% −59.445% −58.810%] (p = 0.00 < 0.05)
+                        thrpt:  [+142.78% +146.58% +150.53%]
+                        Performance has improved.
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) high mild
+
+Benchmarking progress/accepted_target/250
+Benchmarking progress/accepted_target/250: Warming up for 1.0000 s
+Benchmarking progress/accepted_target/250: Collecting 10 samples in estimated 2.0661 s (1320 iterations)
+Benchmarking progress/accepted_target/250: Analyzing
+progress/accepted_target/250
+                        time:   [1.5402 ms 1.5505 ms 1.5605 ms]
+                        thrpt:  [160.21 Kelem/s 161.24 Kelem/s 162.32 Kelem/s]
+                 change:
+                        time:   [−86.619% −86.499% −86.378%] (p = 0.00 < 0.05)
+                        thrpt:  [+634.08% +640.66% +647.32%]
+                        Performance has improved.
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) low mild
+Benchmarking progress/missing_targets/250
+Benchmarking progress/missing_targets/250: Warming up for 1.0000 s
+Benchmarking progress/missing_targets/250: Collecting 10 samples in estimated 2.0167 s (1210 iterations)
+Benchmarking progress/missing_targets/250: Analyzing
+progress/missing_targets/250
+                        time:   [1.6508 ms 1.6541 ms 1.6616 ms]
+                        thrpt:  [150.45 Kelem/s 151.14 Kelem/s 151.44 Kelem/s]
+                 change:
+                        time:   [−94.283% −94.232% −94.174%] (p = 0.00 < 0.05)
+                        thrpt:  [+1616.5% +1633.8% +1649.2%]
+                        Performance has improved.
+Found 2 outliers among 10 measurements (20.00%)
+  2 (20.00%) high severe
+Benchmarking progress/accepted_target/500
+Benchmarking progress/accepted_target/500: Warming up for 1.0000 s
+Benchmarking progress/accepted_target/500: Collecting 10 samples in estimated 2.0928 s (990 iterations)
+Benchmarking progress/accepted_target/500: Analyzing
+progress/accepted_target/500
+                        time:   [2.0857 ms 2.0887 ms 2.0918 ms]
+                        thrpt:  [239.03 Kelem/s 239.39 Kelem/s 239.73 Kelem/s]
+                 change:
+                        time:   [−84.610% −84.558% −84.512%] (p = 0.00 < 0.05)
+                        thrpt:  [+545.67% +547.59% +549.79%]
+                        Performance has improved.
+Found 3 outliers among 10 measurements (30.00%)
+  1 (10.00%) low severe
+  1 (10.00%) high mild
+  1 (10.00%) high severe
+Benchmarking progress/missing_targets/500
+Benchmarking progress/missing_targets/500: Warming up for 1.0000 s
+Benchmarking progress/missing_targets/500: Collecting 10 samples in estimated 2.0279 s (880 iterations)
+Benchmarking progress/missing_targets/500: Analyzing
+progress/missing_targets/500
+                        time:   [2.3052 ms 2.3076 ms 2.3104 ms]
+                        thrpt:  [216.42 Kelem/s 216.68 Kelem/s 216.90 Kelem/s]
+                 change:
+                        time:   [−95.247% −95.222% −95.195%] (p = 0.00 < 0.05)
+                        thrpt:  [+1981.0% +1992.8% +2003.9%]
+                        Performance has improved.
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) high severe
+
+Benchmarking scoped_progress_250_records/record_index/0
+Benchmarking scoped_progress_250_records/record_index/0: Warming up for 1.0000 s
+Benchmarking scoped_progress_250_records/record_index/0: Collecting 10 samples in estimated 2.3593 s (275 iterations)
+Benchmarking scoped_progress_250_records/record_index/0: Analyzing
+scoped_progress_250_records/record_index/0
+                        time:   [8.9643 ms 9.0175 ms 9.0682 ms]
+                        change: [−45.710% −44.685% −43.547%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Benchmarking scoped_progress_250_records/disposition_boards/0
+Benchmarking scoped_progress_250_records/disposition_boards/0: Warming up for 1.0000 s
+Benchmarking scoped_progress_250_records/disposition_boards/0: Collecting 10 samples in estimated 2.4670 s (275 iterations)
+Benchmarking scoped_progress_250_records/disposition_boards/0: Analyzing
+scoped_progress_250_records/disposition_boards/0
+                        time:   [8.8732 ms 8.9807 ms 9.0683 ms]
+                        change: [−43.580% −43.070% −42.617%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Benchmarking scoped_progress_250_records/missing_detail/0
+Benchmarking scoped_progress_250_records/missing_detail/0: Warming up for 1.0000 s
+Benchmarking scoped_progress_250_records/missing_detail/0: Collecting 10 samples in estimated 2.0071 s (12k iterations)
+Benchmarking scoped_progress_250_records/missing_detail/0: Analyzing
+scoped_progress_250_records/missing_detail/0
+                        time:   [163.59 µs 164.44 µs 165.02 µs]
+                        change: [−94.462% −94.420% −94.379%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Benchmarking scoped_progress_250_records/record_index/500
+Benchmarking scoped_progress_250_records/record_index/500: Warming up for 1.0000 s
+Benchmarking scoped_progress_250_records/record_index/500: Collecting 10 samples in estimated 2.0864 s (220 iterations)
+Benchmarking scoped_progress_250_records/record_index/500: Analyzing
+scoped_progress_250_records/record_index/500
+                        time:   [9.2750 ms 9.3833 ms 9.4668 ms]
+                        change: [−53.687% −53.402% −53.071%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Benchmarking scoped_progress_250_records/disposition_boards/500
+Benchmarking scoped_progress_250_records/disposition_boards/500: Warming up for 1.0000 s
+Benchmarking scoped_progress_250_records/disposition_boards/500: Collecting 10 samples in estimated 2.3424 s (275 iterations)
+Benchmarking scoped_progress_250_records/disposition_boards/500: Analyzing
+scoped_progress_250_records/disposition_boards/500
+                        time:   [8.3927 ms 8.4602 ms 8.5775 ms]
+                        change: [−57.406% −56.827% −56.110%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Benchmarking scoped_progress_250_records/missing_detail/500
+Benchmarking scoped_progress_250_records/missing_detail/500: Warming up for 1.0000 s
+Benchmarking scoped_progress_250_records/missing_detail/500: Collecting 10 samples in estimated 2.0013 s (12k iterations)
+Benchmarking scoped_progress_250_records/missing_detail/500: Analyzing
+scoped_progress_250_records/missing_detail/500
+                        time:   [162.91 µs 166.16 µs 170.81 µs]
+                        change: [−96.658% −96.602% −96.561%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Found 3 outliers among 10 measurements (30.00%)
+  2 (20.00%) low severe
+  1 (10.00%) high mild
+
+Benchmarking core_parsing/ticket_parse
+Benchmarking core_parsing/ticket_parse: Warming up for 1.0000 s
+Benchmarking core_parsing/ticket_parse: Collecting 10 samples in estimated 2.0003 s (76k iterations)
+Benchmarking core_parsing/ticket_parse: Analyzing
+core_parsing/ticket_parse
+                        time:   [27.139 µs 27.437 µs 27.856 µs]
+                        change: [−14.358% −12.429% −10.786%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Benchmarking core_parsing/ticket_render_roundtrip
+Benchmarking core_parsing/ticket_render_roundtrip: Warming up for 1.0000 s
+Benchmarking core_parsing/ticket_render_roundtrip: Collecting 10 samples in estimated 2.0000 s (68k iterations)
+Benchmarking core_parsing/ticket_render_roundtrip: Analyzing
+core_parsing/ticket_render_roundtrip
+                        time:   [29.558 µs 29.594 µs 29.636 µs]
+                        change: [−18.836% −18.227% −17.709%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) low mild
+Benchmarking core_parsing/progress_parse_500_notes
+Benchmarking core_parsing/progress_parse_500_notes: Warming up for 1.0000 s
+Benchmarking core_parsing/progress_parse_500_notes: Collecting 10 samples in estimated 2.0102 s (1870 iterations)
+Benchmarking core_parsing/progress_parse_500_notes: Analyzing
+core_parsing/progress_parse_500_notes
+                        time:   [1.0744 ms 1.0756 ms 1.0767 ms]
+                        thrpt:  [464.37 Kelem/s 464.85 Kelem/s 465.36 Kelem/s]
+                 change:
+                        time:   [−50.144% −49.731% −49.350%] (p = 0.00 < 0.05)
+                        thrpt:  [+97.431% +98.930% +100.58%]
+                        Performance has improved.
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) low severe
+
+Benchmarking presentation_250_records/cold_session
+Benchmarking presentation_250_records/cold_session: Warming up for 1.0000 s
+Benchmarking presentation_250_records/cold_session: Collecting 10 samples in estimated 2.6942 s (165 iterations)
+Benchmarking presentation_250_records/cold_session: Analyzing
+presentation_250_records/cold_session
+                        time:   [16.399 ms 16.566 ms 16.714 ms]
+                        thrpt:  [14.958 Kelem/s 15.091 Kelem/s 15.245 Kelem/s]
+                 change:
+                        time:   [−53.333% −52.786% −52.244%] (p = 0.00 < 0.05)
+                        thrpt:  [+109.40% +111.80% +114.28%]
+                        Performance has improved.
+Benchmarking presentation_250_records/unchanged_refresh
+Benchmarking presentation_250_records/unchanged_refresh: Warming up for 1.0000 s
+Benchmarking presentation_250_records/unchanged_refresh: Collecting 10 samples in estimated 2.0036 s (1430 iterations)
+Benchmarking presentation_250_records/unchanged_refresh: Analyzing
+presentation_250_records/unchanged_refresh
+                        time:   [1.4023 ms 1.4049 ms 1.4093 ms]
+                        thrpt:  [177.40 Kelem/s 177.95 Kelem/s 178.28 Kelem/s]
+                 change:
+                        time:   [−1.6146% −1.1667% −0.7397%] (p = 0.00 < 0.05)
+                        thrpt:  [+0.7452% +1.1805% +1.6411%]
+                        Change within noise threshold.
+
+Benchmarking mutation_preview_250_records/replace_batch/1
+Benchmarking mutation_preview_250_records/replace_batch/1: Warming up for 1.0000 s
+Benchmarking mutation_preview_250_records/replace_batch/1: Collecting 10 samples in estimated 2.7301 s (110 iterations)
+Benchmarking mutation_preview_250_records/replace_batch/1: Analyzing
+mutation_preview_250_records/replace_batch/1
+                        time:   [23.294 ms 23.494 ms 23.887 ms]
+                        thrpt:  [41.864  elem/s 42.564  elem/s 42.929  elem/s]
+                 change:
+                        time:   [−8.5030% −6.2771% −4.0742%] (p = 0.00 < 0.05)
+                        thrpt:  [+4.2472% +6.6975% +9.2932%]
+                        Performance has improved.
+Benchmarking mutation_preview_250_records/replace_batch/10
+Benchmarking mutation_preview_250_records/replace_batch/10: Warming up for 1.0000 s
+
+Warning: Unable to complete 10 samples in 2.0s. You may wish to increase target time to 2.2s or enable flat sampling.
+Benchmarking mutation_preview_250_records/replace_batch/10: Collecting 10 samples in estimated 2.2302 s (55 iterations)
+Benchmarking mutation_preview_250_records/replace_batch/10: Analyzing
+mutation_preview_250_records/replace_batch/10
+                        time:   [39.244 ms 40.225 ms 40.834 ms]
+                        thrpt:  [244.89  elem/s 248.60  elem/s 254.82  elem/s]
+                 change:
+                        time:   [−12.472% −10.710% −9.0982%] (p = 0.00 < 0.05)
+                        thrpt:  [+10.009% +11.994% +14.249%]
+                        Performance has improved.
+
+Benchmarking sqlite_500_records/prepare_replacement
+Benchmarking sqlite_500_records/prepare_replacement: Warming up for 1.0000 s
+
+Warning: Unable to complete 10 samples in 2.0s. You may wish to increase target time to 4.1s.
+Benchmarking sqlite_500_records/prepare_replacement: Collecting 10 samples in estimated 4.0617 s (10 iterations)
+Benchmarking sqlite_500_records/prepare_replacement: Analyzing
+sqlite_500_records/prepare_replacement
+                        time:   [368.41 ms 390.67 ms 415.93 ms]
+                        change: [+460.33% +492.59% +541.38%] (p = 0.00 < 0.05)
+                        Performance has regressed.
+Benchmarking sqlite_500_records/records_all
+Benchmarking sqlite_500_records/records_all: Warming up for 1.0000 s
+Benchmarking sqlite_500_records/records_all: Collecting 10 samples in estimated 2.1019 s (990 iterations)
+Benchmarking sqlite_500_records/records_all: Analyzing
+sqlite_500_records/records_all
+                        time:   [1.9886 ms 2.0088 ms 2.0484 ms]
+                        change: [−40.326% −39.390% −38.379%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Found 2 outliers among 10 measurements (20.00%)
+  2 (20.00%) high mild
+Benchmarking sqlite_500_records/records_search_miss
+Benchmarking sqlite_500_records/records_search_miss: Warming up for 1.0000 s
+Benchmarking sqlite_500_records/records_search_miss: Collecting 10 samples in estimated 2.0293 s (2365 iterations)
+Benchmarking sqlite_500_records/records_search_miss: Analyzing
+sqlite_500_records/records_search_miss
+                        time:   [830.37 µs 842.00 µs 858.62 µs]
+                        change: [−74.907% −74.526% −74.166%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Benchmarking sqlite_500_records/relationships_miss
+Benchmarking sqlite_500_records/relationships_miss: Warming up for 1.0000 s
+Benchmarking sqlite_500_records/relationships_miss: Collecting 10 samples in estimated 2.0067 s (15k iterations)
+Benchmarking sqlite_500_records/relationships_miss: Analyzing
+sqlite_500_records/relationships_miss
+                        time:   [127.31 µs 130.84 µs 137.79 µs]
+                        change: [−35.273% −33.126% −30.505%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) high mild
+Benchmarking sqlite_500_records/boards
+Benchmarking sqlite_500_records/boards: Warming up for 1.0000 s
+Benchmarking sqlite_500_records/boards: Collecting 10 samples in estimated 2.0004 s (5170 iterations)
+Benchmarking sqlite_500_records/boards: Analyzing
+sqlite_500_records/boards
+                        time:   [377.90 µs 378.86 µs 380.10 µs]
+                        change: [+13.936% +14.388% +14.831%] (p = 0.00 < 0.05)
+                        Performance has regressed.
+
+
+=== priority original matched Criterion stdout/stderr (exit0) ===
+Gnuplot not found, using plotters backend
+Benchmarking priority_scope_500_notes/existing_detail/250
+Benchmarking priority_scope_500_notes/existing_detail/250: Warming up for 1.0000 s
+Benchmarking priority_scope_500_notes/existing_detail/250: Collecting 10 samples in estimated 2.0717 s (1540 iterations)
+Benchmarking priority_scope_500_notes/existing_detail/250: Analyzing
+priority_scope_500_notes/existing_detail/250
+                        time:   [1.3451 ms 1.3541 ms 1.3631 ms]
+                        change: [−80.956% −80.829% −80.674%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Benchmarking priority_scope_500_notes/missing_detail/250
+Benchmarking priority_scope_500_notes/missing_detail/250: Warming up for 1.0000 s
+Benchmarking priority_scope_500_notes/missing_detail/250: Collecting 10 samples in estimated 2.0063 s (11k iterations)
+Benchmarking priority_scope_500_notes/missing_detail/250: Analyzing
+priority_scope_500_notes/missing_detail/250
+                        time:   [165.40 µs 170.04 µs 177.16 µs]
+                        change: [−96.537% −96.465% −96.404%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Found 3 outliers among 10 measurements (30.00%)
+  2 (20.00%) low severe
+  1 (10.00%) high severe
+Benchmarking priority_scope_500_notes/selected_record_index/250
+Benchmarking priority_scope_500_notes/selected_record_index/250: Warming up for 1.0000 s
+Benchmarking priority_scope_500_notes/selected_record_index/250: Collecting 10 samples in estimated 2.2770 s (220 iterations)
+Benchmarking priority_scope_500_notes/selected_record_index/250: Analyzing
+priority_scope_500_notes/selected_record_index/250
+                        time:   [9.6876 ms 9.8064 ms 10.015 ms]
+                        change: [−50.538% −49.273% −47.819%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Benchmarking priority_scope_500_notes/existing_detail/1000
+Benchmarking priority_scope_500_notes/existing_detail/1000: Warming up for 1.0000 s
+Benchmarking priority_scope_500_notes/existing_detail/1000: Collecting 10 samples in estimated 2.0063 s (1485 iterations)
+Benchmarking priority_scope_500_notes/existing_detail/1000: Analyzing
+priority_scope_500_notes/existing_detail/1000
+                        time:   [1.3527 ms 1.3541 ms 1.3563 ms]
+                        change: [−90.421% −90.247% −90.087%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) high severe
+Benchmarking priority_scope_500_notes/missing_detail/1000
+Benchmarking priority_scope_500_notes/missing_detail/1000: Warming up for 1.0000 s
+Benchmarking priority_scope_500_notes/missing_detail/1000: Collecting 10 samples in estimated 2.0007 s (12k iterations)
+Benchmarking priority_scope_500_notes/missing_detail/1000: Analyzing
+priority_scope_500_notes/missing_detail/1000
+                        time:   [162.59 µs 162.84 µs 163.37 µs]
+                        change: [−98.584% −98.580% −98.576%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Benchmarking priority_scope_500_notes/selected_record_index/1000
+Benchmarking priority_scope_500_notes/selected_record_index/1000: Warming up for 1.0000 s
+Benchmarking priority_scope_500_notes/selected_record_index/1000: Collecting 10 samples in estimated 3.7915 s (110 iterations)
+Benchmarking priority_scope_500_notes/selected_record_index/1000: Analyzing
+priority_scope_500_notes/selected_record_index/1000
+                        time:   [33.822 ms 34.496 ms 34.950 ms]
+                        change: [−47.200% −46.436% −45.786%] (p = 0.00 < 0.05)
+                        Performance has improved.
+
+Benchmarking priority_single_record_250_records_500_notes/preview
+Benchmarking priority_single_record_250_records_500_notes/preview: Warming up for 1.0000 s
+Benchmarking priority_single_record_250_records_500_notes/preview: Collecting 10 samples in estimated 2.8648 s (110 iterations)
+Benchmarking priority_single_record_250_records_500_notes/preview: Analyzing
+priority_single_record_250_records_500_notes/preview
+                        time:   [25.952 ms 26.199 ms 26.531 ms]
+                        change: [−17.022% −15.587% −14.097%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) high severe
+Benchmarking priority_single_record_250_records_500_notes/apply
+Benchmarking priority_single_record_250_records_500_notes/apply: Warming up for 1.0000 s
+
+Warning: Unable to complete 10 samples in 2.0s. You may wish to increase target time to 2.9s or enable flat sampling.
+Benchmarking priority_single_record_250_records_500_notes/apply: Collecting 10 samples in estimated 2.9305 s (55 iterations)
+Benchmarking priority_single_record_250_records_500_notes/apply: Analyzing
+priority_single_record_250_records_500_notes/apply
+                        time:   [26.146 ms 26.482 ms 27.179 ms]
+                        change: [−13.262% −11.875% −10.632%] (p = 0.00 < 0.05)
+                        Performance has improved.
+
+
+=== http original matched Criterion stdout/stderr (exit0) ===
+Gnuplot not found, using plotters backend
+Benchmarking http_loopback_records/unchanged/250
+Benchmarking http_loopback_records/unchanged/250: Warming up for 1.0000 s
+Benchmarking http_loopback_records/unchanged/250: Collecting 10 samples in estimated 2.6701 s (165 iterations)
+Benchmarking http_loopback_records/unchanged/250: Analyzing
+http_loopback_records/unchanged/250
+                        time:   [16.261 ms 16.565 ms 16.842 ms]
+                        change: [−63.837% −63.200% −62.581%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Benchmarking http_loopback_records/search_hit/250
+Benchmarking http_loopback_records/search_hit/250: Warming up for 1.0000 s
+Benchmarking http_loopback_records/search_hit/250: Collecting 10 samples in estimated 2.3312 s (385 iterations)
+Benchmarking http_loopback_records/search_hit/250: Analyzing
+http_loopback_records/search_hit/250
+                        time:   [6.1502 ms 6.2722 ms 6.3686 ms]
+                        change: [−85.732% −85.431% −85.138%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Benchmarking http_loopback_records/search_miss/250
+Benchmarking http_loopback_records/search_miss/250: Warming up for 1.0000 s
+Benchmarking http_loopback_records/search_miss/250: Collecting 10 samples in estimated 2.0408 s (330 iterations)
+Benchmarking http_loopback_records/search_miss/250: Analyzing
+http_loopback_records/search_miss/250
+                        time:   [5.9887 ms 5.9962 ms 6.0077 ms]
+                        change: [−86.204% −85.970% −85.816%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Benchmarking http_loopback_records/unchanged/1000
+Benchmarking http_loopback_records/unchanged/1000: Warming up for 1.0000 s
+
+Warning: Unable to complete 10 samples in 2.0s. You may wish to increase target time to 3.2s or enable flat sampling.
+Benchmarking http_loopback_records/unchanged/1000: Collecting 10 samples in estimated 3.1562 s (55 iterations)
+Benchmarking http_loopback_records/unchanged/1000: Analyzing
+http_loopback_records/unchanged/1000
+                        time:   [56.687 ms 56.800 ms 56.887 ms]
+                        change: [−61.540% −61.428% −61.318%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Benchmarking http_loopback_records/search_hit/1000
+Benchmarking http_loopback_records/search_hit/1000: Warming up for 1.0000 s
+Benchmarking http_loopback_records/search_hit/1000: Collecting 10 samples in estimated 2.1856 s (110 iterations)
+Benchmarking http_loopback_records/search_hit/1000: Analyzing
+http_loopback_records/search_hit/1000
+                        time:   [19.543 ms 19.589 ms 19.653 ms]
+                        change: [−86.255% −86.214% −86.173%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Benchmarking http_loopback_records/search_miss/1000
+Benchmarking http_loopback_records/search_miss/1000: Warming up for 1.0000 s
+Benchmarking http_loopback_records/search_miss/1000: Collecting 10 samples in estimated 2.1818 s (110 iterations)
+Benchmarking http_loopback_records/search_miss/1000: Analyzing
+http_loopback_records/search_miss/1000
+                        time:   [19.858 ms 19.910 ms 19.968 ms]
+                        change: [−86.113% −86.064% −86.004%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) high mild
+
+
+=== interactions original matched Criterion stdout/stderr (exit0) ===
+Gnuplot not found, using plotters backend
+Benchmarking tui_250_records_500_notes/selected_scope_navigation
+Benchmarking tui_250_records_500_notes/selected_scope_navigation: Warming up for 1.0000 s
+Benchmarking tui_250_records_500_notes/selected_scope_navigation: Collecting 10 samples in estimated 2.0420 s (2420 iterations)
+Benchmarking tui_250_records_500_notes/selected_scope_navigation: Analyzing
+tui_250_records_500_notes/selected_scope_navigation
+                        time:   [841.21 µs 841.60 µs 841.93 µs]
+                        change: [−24.263% −23.525% −22.786%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) high severe
+Benchmarking tui_250_records_500_notes/list_scroll_20_frames
+Benchmarking tui_250_records_500_notes/list_scroll_20_frames: Warming up for 1.0000 s
+Benchmarking tui_250_records_500_notes/list_scroll_20_frames: Collecting 10 samples in estimated 2.2762 s (330 iterations)
+Benchmarking tui_250_records_500_notes/list_scroll_20_frames: Analyzing
+tui_250_records_500_notes/list_scroll_20_frames
+                        time:   [6.3811 ms 6.4341 ms 6.5428 ms]
+                        change: [−42.319% −41.162% −39.913%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Benchmarking tui_250_records_500_notes/detail_scroll_20_frames
+Benchmarking tui_250_records_500_notes/detail_scroll_20_frames: Warming up for 1.0000 s
+Benchmarking tui_250_records_500_notes/detail_scroll_20_frames: Collecting 10 samples in estimated 2.2722 s (385 iterations)
+Benchmarking tui_250_records_500_notes/detail_scroll_20_frames: Analyzing
+tui_250_records_500_notes/detail_scroll_20_frames
+                        time:   [5.9106 ms 5.9202 ms 5.9269 ms]
+                        change: [−44.951% −44.718% −44.475%] (p = 0.00 < 0.05)
+                        Performance has improved.
+

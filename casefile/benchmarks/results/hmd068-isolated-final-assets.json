@@ -1,0 +1,11 @@
+{
+  "before": {
+    "casefile/casefile-server/web/assets/app.js": "e41d8312c7c3222daaf018d9bc82c421fc9804b8639ccbb392b62d7f53bda149",
+    "casefile/casefile-server/web/assets/app.css": "0afb5a42418dcc1c5bb6cd221b1854bdd271352cfd3d05a05555af2bda610651"
+  },
+  "after": {
+    "casefile/casefile-server/web/assets/app.js": "e41d8312c7c3222daaf018d9bc82c421fc9804b8639ccbb392b62d7f53bda149",
+    "casefile/casefile-server/web/assets/app.css": "0afb5a42418dcc1c5bb6cd221b1854bdd271352cfd3d05a05555af2bda610651"
+  },
+  "equal": true
+}

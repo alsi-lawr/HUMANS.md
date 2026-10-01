@@ -694,17 +694,68 @@ fn failed_replacement_keeps_published_index_and_prior_schema_rebuilds_as_missing
         Indexed::Missing
     ));
     assert_eq!(fs::read(&old_path).unwrap(), bytes_before);
-    let provider = casefile_store::Provider::new(store, old_index);
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
-    loop {
-        if matches!(
-            provider.refresh_full_cache().unwrap(),
-            casefile_store::CacheState::Current { .. }
-        ) {
-            break;
+    assert!(matches!(
+        old_index.prepare(&duplicate_path),
+        Err(SqliteIndexError::Sql(_))
+    ));
+    assert_eq!(fs::read(&old_path).unwrap(), bytes_before);
+
+    struct UnavailableRevision;
+    impl casefile_store::RevisionSource for UnavailableRevision {
+        fn current_revision(&self) -> Result<casefile_core::Revision, casefile_store::StoreError> {
+            Err(std::io::Error::other("revision unavailable").into())
         }
-        assert!(std::time::Instant::now() < deadline);
-        std::thread::sleep(std::time::Duration::from_millis(10));
     }
+    assert!(matches!(
+        old_index.publish(old_index.prepare(&snapshot).unwrap(), &UnavailableRevision),
+        Err(SqliteIndexError::Revision(_))
+    ));
+    assert_eq!(fs::read(&old_path).unwrap(), bytes_before);
+    assert!(matches!(
+        old_index.state(&snapshot.source_revision).unwrap(),
+        Indexed::Missing
+    ));
+
+    let prepared = old_index.prepare(&snapshot).unwrap();
+    let ticket_path = root
+        .path()
+        .join("projects/demo/investigations/sample/tickets/accepted/HMD-011.md");
+    let mut ticket = fs::read_to_string(&ticket_path).unwrap();
+    ticket.push_str("\nExternal edit during cache upgrade.\n");
+    fs::write(ticket_path, ticket).unwrap();
+    assert!(matches!(
+        old_index.publish(prepared, &store).unwrap(),
+        Indexed::Stale { .. }
+    ));
+    assert_eq!(fs::read(&old_path).unwrap(), bytes_before);
+    let upgraded = store.derived_snapshot().unwrap();
+    assert!(matches!(
+        old_index.state(&upgraded.source_revision).unwrap(),
+        Indexed::Missing
+    ));
+
+    let provider = casefile_store::Provider::new(store, old_index);
+    let (first_token, first_records) = provider
+        .read_full_index(|index, token| index.records(&token.source_revision, None, None))
+        .unwrap();
+    assert!(matches!(
+        first_records,
+        Indexed::Current { source_revision, value }
+            if source_revision == upgraded.source_revision && value == upgraded.records
+    ));
     assert_ne!(fs::read(&old_path).unwrap(), bytes_before);
+    let upgraded_bytes = fs::read(&old_path).unwrap();
+    let (second_token, second_records) = provider
+        .read_full_index(|index, token| index.records(&token.source_revision, None, None))
+        .unwrap();
+    assert_eq!(first_token, second_token);
+    assert!(matches!(
+        second_records,
+        Indexed::Current { value, .. } if value == upgraded.records
+    ));
+    assert!(matches!(
+        provider.refresh_full_cache().unwrap(),
+        casefile_store::CacheState::Current { .. }
+    ));
+    assert_eq!(fs::read(&old_path).unwrap(), upgraded_bytes);
 }

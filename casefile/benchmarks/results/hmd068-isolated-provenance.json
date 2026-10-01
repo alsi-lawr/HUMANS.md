@@ -1,0 +1,81 @@
+{
+  "parent": "18b71c8bbd70db48b1f12832e41084c0e918a237",
+  "historical_runtime": "8e97fc4e368361d75b0323913ed4e56e745fc259",
+  "source_sha256": {
+    "casefile/Cargo.toml": "93faca5025855579badbd520ba05286857d27143c257c9ccb3d3a41d0549091d",
+    "casefile/Cargo.lock": "0728d84b97d2564f6a5798777e693abf68c8dd15f1cd053462bd65689a46334a",
+    "flake.lock": "f234df1016c591310e06512fcb042ad7f7a573b38382a02b625d56ef098900b9",
+    "casefile/benchmarks/support/mod.rs": "9a073d937a0aaef7d27be68b0dbc6821338a8bab29db2c91ffa4d248301e1361",
+    "casefile/casefile-store-sqlite/src/lib.rs": "9042552a7a76d208da551cc2afaf97c929c23abf579a1b60964486dbae7822d1",
+    "casefile/casefile-store-sqlite/tests/integration.rs": "d42268c23fefa05688899634a463257b3f0202d7f65ff541709389fea84528b9",
+    "casefile/casefile-store-sqlite/benches/baselines.rs": "ea40e241b53a6d6893bd16038b899643bfe6cea68a6216c44ad27d6158ab79e1",
+    "casefile/casefile-store-sqlite/benches/priority.rs": "b0c6354caed956a58f5a8dce12935fc1468cbc9b5d4942242fbbc627549b0386",
+    "casefile/casefile-server/benches/http.rs": "280f854f6e9a33f9e45193553ad8ef844949789958c0c84f0a58105611b9b62d",
+    "casefile/casefile-tui/benches/interactions.rs": "d254b25dd623d85601ec360015a97df087165aaaac4e8077ad0ee0d679472799",
+    "casefile/casefile-tui/src/benchmark.rs": "e13800c445aaf2e7c6fdfa316e1a9a35a690ee61bbb441a61770a62f7c51d53c",
+    "tests/test_smoke_casefile_mcp.py": "2ae0492b77a505610d4aec325f892bbe43e8214f081a4c5280884868fbcce7c8",
+    "casefile/skills/casefile/SKILL.md": "5608cf6a6e92360626d14cf71adbf38fa660249af179f85ffa18d39a919ba71e"
+  },
+  "executables": {
+    "historical": {
+      "priority": {
+        "path": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/boards-diagnostic/matched-reader/historical/target/release/deps/priority-e055286706c230ab",
+        "sha256": "0f5daacf4b3853fbb33d5a74dd796537ef06b07965d1a2d18fa0bbe701a2b95b"
+      },
+      "baselines": {
+        "path": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/boards-diagnostic/matched-reader/historical/target/release/deps/baselines-c4809f1d9a5e36eb",
+        "sha256": "8ecd9313ba18314ae81655ffd675d15439466be85b271a1a45e11c0470fdddc3"
+      },
+      "http": {
+        "path": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/boards-diagnostic/matched-reader/historical/target/release/deps/http-7588797662343eab",
+        "sha256": "8babd458d90ed3e091fb181065b7bafce0e5d42325930409a77f5a2a378de01f"
+      },
+      "interactions": {
+        "path": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/boards-diagnostic/matched-reader/historical/target/release/deps/interactions-a5a41a6618a92aa7",
+        "sha256": "73e233550d0a14dd35104b8f4e54d9b1ba171c144935975660d8d7ddf804995a"
+      }
+    },
+    "current": {
+      "priority": {
+        "path": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/boards-diagnostic/matched-reader/current/target/release/deps/priority-4c02a3bbca696e82",
+        "sha256": "0c43393c0cd1f4f6a8bdfca102cf438c9918edb55ce389bd9ebd8a5f850b3164"
+      },
+      "baselines": {
+        "path": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/boards-diagnostic/matched-reader/current/target/release/deps/baselines-79b66f38661bc100",
+        "sha256": "6cd072a2b64230a54a9ec44d5d3dc524d7265b0aa0860a87ff50fa51ea1547ca"
+      },
+      "http": {
+        "path": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/boards-diagnostic/matched-reader/current/target/release/deps/http-5eb4c4006879e177",
+        "sha256": "0abcb5a4d27ac2321dc1b1aefb71b3143f0e3881a21f20c7f68c6174c759c91b"
+      },
+      "interactions": {
+        "path": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/boards-diagnostic/matched-reader/current/target/release/deps/interactions-023394bd4bbc43da",
+        "sha256": "b73da3def39cdd47730254ae6d6426ba550c31d56872be1d5e2d546a35c403bf"
+      }
+    }
+  },
+  "historical_manifest_sha256": {
+    "casefile/Cargo.toml": "b8f0a810fc31e948296805e071f847b6701044460ecbf4782588fc3c511bba76",
+    "casefile/Cargo.lock": "d0613f103cbcacabf7546623b7626e97c1f9e68546316e7d8d1cd18a5df6ab35"
+  },
+  "exact_control_count": 59,
+  "samples_per_case": 10,
+  "warmup_seconds": 1,
+  "measurement_target_seconds": 2,
+  "confidence": 0.95,
+  "noise_threshold": 0.01,
+  "all_timing_exits_zero": true,
+  "timing_tmpdir": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/isolated/measurement-tmp",
+  "timing_output": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/isolated/criterion",
+  "runtime_counts": {
+    "rust": 285,
+    "python": 113,
+    "browser": 37
+  },
+  "asset_build_equal": true,
+  "final_copy_formatter_initial_exit": 126,
+  "copy_mode_corrected_formatter_packages_exit": 0,
+  "initial_driver_wrong_asset_path_exit": 1,
+  "original_native_before_untouched": true,
+  "normalization_preserves_semantic_samples": true
+}

@@ -1,0 +1,1068 @@
+{
+  "initial_current_root": [
+    {
+      "name": "bun-install",
+      "command": "cd casefile/web && bun install --frozen-lockfile",
+      "exit_code": 0,
+      "elapsed_seconds": 0.011280298233032227,
+      "log": "bun-install.log"
+    },
+    {
+      "name": "format-source",
+      "command": "scripts/format-source.sh --check",
+      "exit_code": 1,
+      "elapsed_seconds": 2.0610060691833496,
+      "log": "format-source.log"
+    },
+    {
+      "name": "ascii",
+      "command": "python scripts/strip-non-ascii.py --check .",
+      "exit_code": 1,
+      "elapsed_seconds": 0.15674686431884766,
+      "log": "ascii.log"
+    },
+    {
+      "name": "python-tests",
+      "command": "python scripts/test-all.py",
+      "exit_code": 1,
+      "elapsed_seconds": 0.7053892612457275,
+      "log": "python-tests.log"
+    },
+    {
+      "name": "web-typecheck",
+      "command": "cd casefile/web && bun run typecheck",
+      "exit_code": 0,
+      "elapsed_seconds": 0.19080471992492676,
+      "log": "web-typecheck.log"
+    },
+    {
+      "name": "web-tests",
+      "command": "cd casefile/web && bun run test",
+      "exit_code": 0,
+      "elapsed_seconds": 17.572922706604004,
+      "log": "web-tests.log"
+    },
+    {
+      "name": "web-build",
+      "command": "cd casefile/web && bun run build",
+      "exit_code": 0,
+      "elapsed_seconds": 0.1955580711364746,
+      "log": "web-build.log"
+    },
+    {
+      "name": "rust-fmt",
+      "command": "cd casefile && cargo fmt --check",
+      "exit_code": 0,
+      "elapsed_seconds": 0.7417497634887695,
+      "log": "rust-fmt.log"
+    },
+    {
+      "name": "rust-clippy",
+      "command": "cd casefile && cargo clippy --workspace --all-targets -- -D warnings",
+      "exit_code": 0,
+      "elapsed_seconds": 2.974113702774048,
+      "log": "rust-clippy.log"
+    },
+    {
+      "name": "rust-tests",
+      "command": "cd casefile && cargo test --workspace",
+      "exit_code": 0,
+      "elapsed_seconds": 74.52384543418884,
+      "log": "rust-tests.log"
+    },
+    {
+      "name": "package-roots",
+      "command": "python scripts/validate-package-roots.py",
+      "exit_code": 1,
+      "elapsed_seconds": 0.06308817863464355,
+      "log": "package-roots.log"
+    },
+    {
+      "name": "casefile-validator",
+      "command": "python casefile/scripts/validate-casefile.py --source casefile",
+      "exit_code": 1,
+      "elapsed_seconds": 0.07108807563781738,
+      "log": "casefile-validator.log"
+    },
+    {
+      "name": "coding-validator",
+      "command": "python coding/scripts/validate-skill.py --all --root coding",
+      "exit_code": 0,
+      "elapsed_seconds": 0.23483514785766602,
+      "log": "coding-validator.log"
+    },
+    {
+      "name": "release-cli",
+      "command": "cd casefile && cargo build --release -p casefile-cli",
+      "exit_code": 0,
+      "elapsed_seconds": 35.229398012161255,
+      "log": "release-cli.log"
+    },
+    {
+      "name": "bench-build",
+      "command": "cd casefile && cargo bench -p casefile-store-sqlite -p casefile-server -p casefile-tui --no-run",
+      "exit_code": 0,
+      "elapsed_seconds": 38.827211141586304,
+      "log": "bench-build.log"
+    }
+  ],
+  "initial_supplemental_attempt": [
+    {
+      "name": "python-humans",
+      "command": "python -m unittest discover -s humans-md/tests -v",
+      "exit_code": 0,
+      "elapsed_seconds": 0.9956021308898926,
+      "log": "python-humans.log"
+    },
+    {
+      "name": "python-casefile",
+      "command": "python -m unittest discover -s casefile/tests -v",
+      "exit_code": 0,
+      "elapsed_seconds": 48.62683653831482,
+      "log": "python-casefile.log"
+    },
+    {
+      "name": "python-coding",
+      "command": "python -m unittest discover -s coding/tests -v",
+      "exit_code": 0,
+      "elapsed_seconds": 0.9186573028564453,
+      "log": "python-coding.log"
+    },
+    {
+      "name": "humans-md-build",
+      "command": "python scripts/package-plugin.py build --root /home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/package-root --manifest /home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/package-root/humans-md/packaging/plugin.toml",
+      "exit_code": 0,
+      "elapsed_seconds": 0.16287708282470703,
+      "log": "humans-md-build.log"
+    },
+    {
+      "name": "humans-md-check",
+      "command": "python scripts/package-plugin.py check --root /home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/package-root --manifest /home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/package-root/humans-md/packaging/plugin.toml",
+      "exit_code": 0,
+      "elapsed_seconds": 0.12629318237304688,
+      "log": "humans-md-check.log"
+    },
+    {
+      "name": "coding-build",
+      "command": "python scripts/package-plugin.py build --root /home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/package-root --manifest /home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/package-root/coding/packaging/plugin.toml",
+      "exit_code": 0,
+      "elapsed_seconds": 0.1334376335144043,
+      "log": "coding-build.log"
+    },
+    {
+      "name": "coding-check",
+      "command": "python scripts/package-plugin.py check --root /home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/package-root --manifest /home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/package-root/coding/packaging/plugin.toml",
+      "exit_code": 0,
+      "elapsed_seconds": 0.12922263145446777,
+      "log": "coding-check.log"
+    }
+  ],
+  "corrected_owned_isolation": [
+    {
+      "name": "isolated-package-roots",
+      "command": "python scripts/validate-package-roots.py",
+      "cwd": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/verification-root",
+      "CARGO_TARGET_DIR": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target",
+      "exit_code": 0,
+      "elapsed_seconds": 0.03352808952331543,
+      "log": "isolated-package-roots.log"
+    },
+    {
+      "name": "isolated-casefile-validator",
+      "command": "python casefile/scripts/validate-casefile.py --source casefile",
+      "cwd": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/verification-root",
+      "CARGO_TARGET_DIR": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target",
+      "exit_code": 1,
+      "elapsed_seconds": 0.05312848091125488,
+      "log": "isolated-casefile-validator.log"
+    },
+    {
+      "name": "isolated-full-python",
+      "command": "python scripts/test-all.py",
+      "cwd": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/verification-root",
+      "CARGO_TARGET_DIR": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target",
+      "exit_code": 0,
+      "elapsed_seconds": 16.919611930847168,
+      "log": "isolated-full-python.log"
+    }
+  ],
+  "original_benchmarks": [
+    {
+      "command": [
+        "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/release/deps/baselines-79b66f38661bc100",
+        "--list"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 1.3633344173431396
+    },
+    {
+      "command": [
+        "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/release/deps/baselines-79b66f38661bc100",
+        "--test"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 2.235659599304199
+    },
+    {
+      "command": [
+        "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/release/deps/priority-4c02a3bbca696e82",
+        "--list"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.36963486671447754
+    },
+    {
+      "command": [
+        "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/release/deps/priority-4c02a3bbca696e82",
+        "--test"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.48669958114624023
+    },
+    {
+      "command": [
+        "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/release/deps/http-5eb4c4006879e177",
+        "--list"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.5455710887908936
+    },
+    {
+      "command": [
+        "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/release/deps/http-5eb4c4006879e177",
+        "--test"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.6755001544952393
+    },
+    {
+      "command": [
+        "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/release/deps/interactions-023394bd4bbc43da",
+        "--list"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.07332634925842285
+    },
+    {
+      "command": [
+        "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/release/deps/interactions-023394bd4bbc43da",
+        "--test"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.08575773239135742
+    },
+    {
+      "command": [
+        "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/release/deps/baselines-79b66f38661bc100",
+        "--bench",
+        "--baseline",
+        "hmd057-before"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 184.5145034790039
+    },
+    {
+      "command": [
+        "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/release/deps/priority-4c02a3bbca696e82",
+        "--bench",
+        "--baseline",
+        "hmd057-before"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 35.3300940990448
+    },
+    {
+      "command": [
+        "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/release/deps/http-5eb4c4006879e177",
+        "--bench",
+        "--baseline",
+        "hmd057-before"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 27.971465826034546
+    },
+    {
+      "command": [
+        "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/release/deps/interactions-023394bd4bbc43da",
+        "--bench",
+        "--baseline",
+        "hmd057-before"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 13.006024599075317
+    }
+  ],
+  "additional_successes": [
+    {
+      "command": "python -m unittest discover -s tests -p test_smoke_casefile_mcp.py -v",
+      "exit_code": 0,
+      "CARGO_TARGET_DIR": "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target"
+    },
+    {
+      "command": "bunx prettier --write ../skills/casefile/SKILL.md; bunx prettier --check ../skills/casefile/SKILL.md",
+      "exit_code": 0,
+      "wording_check": "before.split() == after.split() PASS"
+    },
+    {
+      "command": "python owned/probe.py: actual source adapter runtime.probe(binary,0.8.0,absoluteSyntheticRoot), then actual recorded subcommands",
+      "exit_code": 0
+    }
+  ],
+  "correction2_unpinned_tooling_failure": [
+    {
+      "name": "bun-install",
+      "command": "cd casefile/web && bun install --frozen-lockfile",
+      "exit_code": 0,
+      "elapsed_seconds": 0.14387726783752441,
+      "log": "bun-install.log"
+    },
+    {
+      "name": "format-source",
+      "command": "scripts/format-source.sh --check",
+      "exit_code": 1,
+      "elapsed_seconds": 2.018738269805908,
+      "log": "format-source.log"
+    },
+    {
+      "name": "ascii",
+      "command": "python scripts/strip-non-ascii.py --check .",
+      "exit_code": 1,
+      "elapsed_seconds": 0.17171621322631836,
+      "log": "ascii.log"
+    },
+    {
+      "name": "package-roots-isolated",
+      "command": "cd /home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/final/verification-root && python scripts/validate-package-roots.py",
+      "exit_code": 0,
+      "elapsed_seconds": 0.03115367889404297,
+      "log": "package-roots-isolated.log"
+    },
+    {
+      "name": "python-tests-isolated",
+      "command": "cd /home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/final/verification-root && python scripts/test-all.py",
+      "exit_code": 1,
+      "elapsed_seconds": 8.545056343078613,
+      "log": "python-tests-isolated.log"
+    },
+    {
+      "name": "web-typecheck",
+      "command": "cd casefile/web && bun run typecheck",
+      "exit_code": 0,
+      "elapsed_seconds": 0.20421123504638672,
+      "log": "web-typecheck.log"
+    },
+    {
+      "name": "web-tests",
+      "command": "cd casefile/web && bun run test",
+      "exit_code": 1,
+      "elapsed_seconds": 0.535006046295166,
+      "log": "web-tests.log"
+    },
+    {
+      "name": "web-build",
+      "command": "cd casefile/web && bun run build",
+      "exit_code": 0,
+      "elapsed_seconds": 0.22852134704589844,
+      "log": "web-build.log"
+    },
+    {
+      "name": "rust-fmt",
+      "command": "cd casefile && cargo fmt --check",
+      "exit_code": 1,
+      "elapsed_seconds": 0.01107168197631836,
+      "log": "rust-fmt.log"
+    },
+    {
+      "name": "rust-clippy",
+      "command": "cd casefile && cargo clippy --workspace --all-targets -- -D warnings",
+      "exit_code": 1,
+      "elapsed_seconds": 0.010617733001708984,
+      "log": "rust-clippy.log"
+    },
+    {
+      "name": "rust-tests",
+      "command": "cd casefile && cargo test --workspace",
+      "exit_code": 1,
+      "elapsed_seconds": 0.010890960693359375,
+      "log": "rust-tests.log"
+    },
+    {
+      "name": "casefile-validator",
+      "command": "python casefile/scripts/validate-casefile.py --source casefile",
+      "exit_code": 1,
+      "elapsed_seconds": 0.05414247512817383,
+      "log": "casefile-validator.log"
+    },
+    {
+      "name": "coding-validator",
+      "command": "python coding/scripts/validate-skill.py --all --root coding",
+      "exit_code": 0,
+      "elapsed_seconds": 0.22592926025390625,
+      "log": "coding-validator.log"
+    },
+    {
+      "name": "release-cli",
+      "command": "cd casefile && cargo build --release -p casefile-cli",
+      "exit_code": 1,
+      "elapsed_seconds": 0.011282920837402344,
+      "log": "release-cli.log"
+    },
+    {
+      "name": "bench-build",
+      "command": "cd casefile && cargo bench -p casefile-store-sqlite -p casefile-server -p casefile-tui --no-run",
+      "exit_code": 1,
+      "elapsed_seconds": 0.010446548461914062,
+      "log": "bench-build.log"
+    }
+  ],
+  "correction2_pinned_final": [
+    {
+      "name": "bun-install",
+      "command": "cd casefile/web && bun install --frozen-lockfile",
+      "exit_code": 0,
+      "elapsed_seconds": 0.007469654083251953,
+      "log": "bun-install.log"
+    },
+    {
+      "name": "format-source",
+      "command": "scripts/format-source.sh --check",
+      "exit_code": 1,
+      "elapsed_seconds": 2.104564666748047,
+      "log": "format-source.log"
+    },
+    {
+      "name": "ascii",
+      "command": "python scripts/strip-non-ascii.py --check .",
+      "exit_code": 1,
+      "elapsed_seconds": 0.1593916416168213,
+      "log": "ascii.log"
+    },
+    {
+      "name": "package-roots-isolated",
+      "command": "cd /home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/final-pinned/verification-root && python scripts/validate-package-roots.py",
+      "exit_code": 0,
+      "elapsed_seconds": 0.030740022659301758,
+      "log": "package-roots-isolated.log"
+    },
+    {
+      "name": "python-tests-isolated",
+      "command": "cd /home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/final-pinned/verification-root && python scripts/test-all.py",
+      "exit_code": 0,
+      "elapsed_seconds": 21.80294108390808,
+      "log": "python-tests-isolated.log"
+    },
+    {
+      "name": "web-typecheck",
+      "command": "cd casefile/web && bun run typecheck",
+      "exit_code": 0,
+      "elapsed_seconds": 0.1911182403564453,
+      "log": "web-typecheck.log"
+    },
+    {
+      "name": "web-tests",
+      "command": "cd casefile/web && bun run test",
+      "exit_code": 0,
+      "elapsed_seconds": 8.286097049713135,
+      "log": "web-tests.log"
+    },
+    {
+      "name": "web-build",
+      "command": "cd casefile/web && bun run build",
+      "exit_code": 0,
+      "elapsed_seconds": 0.20029735565185547,
+      "log": "web-build.log"
+    },
+    {
+      "name": "rust-fmt",
+      "command": "cd casefile && cargo fmt --check",
+      "exit_code": 0,
+      "elapsed_seconds": 0.7237062454223633,
+      "log": "rust-fmt.log"
+    },
+    {
+      "name": "rust-clippy",
+      "command": "cd casefile && cargo clippy --workspace --all-targets -- -D warnings",
+      "exit_code": 0,
+      "elapsed_seconds": 1.734769582748413,
+      "log": "rust-clippy.log"
+    },
+    {
+      "name": "rust-tests",
+      "command": "cd casefile && cargo test --workspace",
+      "exit_code": 0,
+      "elapsed_seconds": 52.88185143470764,
+      "log": "rust-tests.log"
+    },
+    {
+      "name": "casefile-validator",
+      "command": "python casefile/scripts/validate-casefile.py --source casefile",
+      "exit_code": 1,
+      "elapsed_seconds": 0.05305600166320801,
+      "log": "casefile-validator.log"
+    },
+    {
+      "name": "coding-validator",
+      "command": "python coding/scripts/validate-skill.py --all --root coding",
+      "exit_code": 0,
+      "elapsed_seconds": 0.22435283660888672,
+      "log": "coding-validator.log"
+    },
+    {
+      "name": "release-cli",
+      "command": "cd casefile && cargo build --release -p casefile-cli",
+      "exit_code": 0,
+      "elapsed_seconds": 10.106505155563354,
+      "log": "release-cli.log"
+    },
+    {
+      "name": "bench-build",
+      "command": "cd casefile && cargo bench -p casefile-store-sqlite -p casefile-server -p casefile-tui --no-run",
+      "exit_code": 0,
+      "elapsed_seconds": 11.293943405151367,
+      "log": "bench-build.log"
+    }
+  ],
+  "correction2_isolated_packages": [
+    {
+      "name": "humans-md-build",
+      "command": "python scripts/package-plugin.py build --root /home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/package-root --manifest /home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/package-root/humans-md/packaging/plugin.toml",
+      "exit_code": 0,
+      "elapsed_seconds": 0.07048797607421875,
+      "log": "humans-md-build.log"
+    },
+    {
+      "name": "humans-md-check",
+      "command": "python scripts/package-plugin.py check --root /home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/package-root --manifest /home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/package-root/humans-md/packaging/plugin.toml",
+      "exit_code": 0,
+      "elapsed_seconds": 0.06658267974853516,
+      "log": "humans-md-check.log"
+    },
+    {
+      "name": "coding-build",
+      "command": "python scripts/package-plugin.py build --root /home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/package-root --manifest /home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/package-root/coding/packaging/plugin.toml",
+      "exit_code": 0,
+      "elapsed_seconds": 0.07944774627685547,
+      "log": "coding-build.log"
+    },
+    {
+      "name": "coding-check",
+      "command": "python scripts/package-plugin.py check --root /home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/package-root --manifest /home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/package-root/coding/packaging/plugin.toml",
+      "exit_code": 0,
+      "elapsed_seconds": 0.07118892669677734,
+      "log": "coding-check.log"
+    }
+  ],
+  "correction2_toolchain_note": "Unpinned host cargo resolves rustup without cargo; Bun1.4.2/Python3.14.7 differed from initial verified shell. Actual pinned nix develop restores Rust/Cargo1.95.0/Bun1.3.13/Python3.14.6; no profile/toolchain/flake changes. Native browser/Python failures derivative of cargo launch failure, not product regressions; pinned production build reproduced accepted JS/CSS, no manual artifact restore.",
+  "correction2_final_original_benchmarks": [
+    {
+      "command": [
+        "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/release/deps/baselines-79b66f38661bc100",
+        "--list"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 1.2935693264007568
+    },
+    {
+      "command": [
+        "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/release/deps/baselines-79b66f38661bc100",
+        "--test"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 2.0435214042663574
+    },
+    {
+      "command": [
+        "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/release/deps/priority-4c02a3bbca696e82",
+        "--list"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.37058186531066895
+    },
+    {
+      "command": [
+        "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/release/deps/priority-4c02a3bbca696e82",
+        "--test"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.48656129837036133
+    },
+    {
+      "command": [
+        "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/release/deps/http-5eb4c4006879e177",
+        "--list"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.4547607898712158
+    },
+    {
+      "command": [
+        "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/release/deps/http-5eb4c4006879e177",
+        "--test"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.5816411972045898
+    },
+    {
+      "command": [
+        "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/release/deps/interactions-023394bd4bbc43da",
+        "--list"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.07531237602233887
+    },
+    {
+      "command": [
+        "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/release/deps/interactions-023394bd4bbc43da",
+        "--test"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.09025812149047852
+    },
+    {
+      "command": [
+        "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/release/deps/baselines-79b66f38661bc100",
+        "--bench",
+        "--baseline",
+        "hmd057-before"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 180.7700788974762
+    },
+    {
+      "command": [
+        "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/release/deps/priority-4c02a3bbca696e82",
+        "--bench",
+        "--baseline",
+        "hmd057-before"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 35.39280152320862
+    },
+    {
+      "command": [
+        "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/release/deps/http-5eb4c4006879e177",
+        "--bench",
+        "--baseline",
+        "hmd057-before"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 26.6268789768219
+    },
+    {
+      "command": [
+        "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/release/deps/interactions-023394bd4bbc43da",
+        "--bench",
+        "--baseline",
+        "hmd057-before"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 12.954960823059082
+    }
+  ],
+  "final_evidence_checks": {
+    "archive_object_count": 236,
+    "archive_original_byte_equality": true,
+    "before_manifest_exit": 0,
+    "original_four_artifacts_manifest_exit": 0,
+    "prior_84_tracked_hashes_equal": true,
+    "new_report_ascii": true,
+    "new_report_prettier_exit": 0,
+    "table_rows": 59,
+    "native_after_control_count": 59,
+    "remaining_policy_failures": [
+      "source formatter",
+      "source ASCII",
+      "Casefile source validator"
+    ],
+    "scratch_preserved_for_root_review": true,
+    "final_source_phase": "correction3-112+113",
+    "source_copy_current_746": true,
+    "sqlite_existing_tests": 8
+  },
+  "correction3_focused_sqlite": {
+    "command": "nix develop --command sh -ec: absolute CARGO_TARGET_DIR; cargo fmt -p casefile-store-sqlite; cargo test -p casefile-store-sqlite --test integration",
+    "exit_code": 0,
+    "tests": 8
+  },
+  "correction3_preliminary_full": [
+    {
+      "name": "bun-install",
+      "command": "cd casefile/web && bun install --frozen-lockfile",
+      "exit_code": 0,
+      "elapsed_seconds": 0.011712074279785156,
+      "log": "bun-install.log"
+    },
+    {
+      "name": "format-source",
+      "command": "scripts/format-source.sh --check",
+      "exit_code": 1,
+      "elapsed_seconds": 2.31439208984375,
+      "log": "format-source.log"
+    },
+    {
+      "name": "ascii",
+      "command": "python scripts/strip-non-ascii.py --check .",
+      "exit_code": 1,
+      "elapsed_seconds": 0.18108439445495605,
+      "log": "ascii.log"
+    },
+    {
+      "name": "package-roots-isolated",
+      "command": "cd /home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/correction3/verification-root && python scripts/validate-package-roots.py",
+      "exit_code": 0,
+      "elapsed_seconds": 0.0323638916015625,
+      "log": "package-roots-isolated.log"
+    },
+    {
+      "name": "python-tests-isolated",
+      "command": "cd /home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/correction3/verification-root && python scripts/test-all.py",
+      "exit_code": 0,
+      "elapsed_seconds": 18.08578586578369,
+      "log": "python-tests-isolated.log"
+    },
+    {
+      "name": "web-typecheck",
+      "command": "cd casefile/web && bun run typecheck",
+      "exit_code": 0,
+      "elapsed_seconds": 0.19899344444274902,
+      "log": "web-typecheck.log"
+    },
+    {
+      "name": "web-tests",
+      "command": "cd casefile/web && bun run test",
+      "exit_code": 0,
+      "elapsed_seconds": 7.977543115615845,
+      "log": "web-tests.log"
+    },
+    {
+      "name": "web-build",
+      "command": "cd casefile/web && bun run build",
+      "exit_code": 0,
+      "elapsed_seconds": 0.22727441787719727,
+      "log": "web-build.log"
+    },
+    {
+      "name": "rust-fmt",
+      "command": "cd casefile && cargo fmt --check",
+      "exit_code": 0,
+      "elapsed_seconds": 0.7662570476531982,
+      "log": "rust-fmt.log"
+    },
+    {
+      "name": "rust-clippy",
+      "command": "cd casefile && cargo clippy --workspace --all-targets -- -D warnings",
+      "exit_code": 0,
+      "elapsed_seconds": 1.4055781364440918,
+      "log": "rust-clippy.log"
+    },
+    {
+      "name": "rust-tests",
+      "command": "cd casefile && cargo test --workspace",
+      "exit_code": 0,
+      "elapsed_seconds": 55.88500452041626,
+      "log": "rust-tests.log"
+    },
+    {
+      "name": "casefile-validator",
+      "command": "python casefile/scripts/validate-casefile.py --source casefile",
+      "exit_code": 1,
+      "elapsed_seconds": 0.052715301513671875,
+      "log": "casefile-validator.log"
+    },
+    {
+      "name": "coding-validator",
+      "command": "python coding/scripts/validate-skill.py --all --root coding",
+      "exit_code": 0,
+      "elapsed_seconds": 0.22488141059875488,
+      "log": "coding-validator.log"
+    },
+    {
+      "name": "release-cli",
+      "command": "cd casefile && cargo build --release -p casefile-cli",
+      "exit_code": 0,
+      "elapsed_seconds": 10.454582691192627,
+      "log": "release-cli.log"
+    },
+    {
+      "name": "bench-build",
+      "command": "cd casefile && cargo bench -p casefile-store-sqlite -p casefile-server -p casefile-tui --no-run",
+      "exit_code": 0,
+      "elapsed_seconds": 11.92379903793335,
+      "log": "bench-build.log"
+    }
+  ],
+  "correction3_preliminary_packages": [
+    {
+      "name": "humans-md-build",
+      "command": "python scripts/package-plugin.py build --root /home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/package-root --manifest /home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/package-root/humans-md/packaging/plugin.toml",
+      "exit_code": 0,
+      "elapsed_seconds": 0.07163572311401367,
+      "log": "humans-md-build.log"
+    },
+    {
+      "name": "humans-md-check",
+      "command": "python scripts/package-plugin.py check --root /home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/package-root --manifest /home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/package-root/humans-md/packaging/plugin.toml",
+      "exit_code": 0,
+      "elapsed_seconds": 0.06807065010070801,
+      "log": "humans-md-check.log"
+    },
+    {
+      "name": "coding-build",
+      "command": "python scripts/package-plugin.py build --root /home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/package-root --manifest /home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/package-root/coding/packaging/plugin.toml",
+      "exit_code": 0,
+      "elapsed_seconds": 0.08077788352966309,
+      "log": "coding-build.log"
+    },
+    {
+      "name": "coding-check",
+      "command": "python scripts/package-plugin.py check --root /home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/package-root --manifest /home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/package-root/coding/packaging/plugin.toml",
+      "exit_code": 0,
+      "elapsed_seconds": 0.07821226119995117,
+      "log": "coding-check.log"
+    }
+  ],
+  "correction3_preliminary_note": "Successful checks preceded removal of discarded constructor metadata String; preserved preliminary evidence, not final-source claims; no Criterion measurement occurred on this intermediate source.",
+  "correction3_final_full": [
+    {
+      "name": "bun-install",
+      "command": "cd casefile/web && bun install --frozen-lockfile",
+      "exit_code": 0,
+      "elapsed_seconds": 0.007253885269165039,
+      "log": "bun-install.log"
+    },
+    {
+      "name": "format-source",
+      "command": "scripts/format-source.sh --check",
+      "exit_code": 1,
+      "elapsed_seconds": 2.0864269733428955,
+      "log": "format-source.log"
+    },
+    {
+      "name": "ascii",
+      "command": "python scripts/strip-non-ascii.py --check .",
+      "exit_code": 1,
+      "elapsed_seconds": 0.18731093406677246,
+      "log": "ascii.log"
+    },
+    {
+      "name": "package-roots-isolated",
+      "command": "cd /home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/correction3-final/verification-root && python scripts/validate-package-roots.py",
+      "exit_code": 0,
+      "elapsed_seconds": 0.036748409271240234,
+      "log": "package-roots-isolated.log"
+    },
+    {
+      "name": "python-tests-isolated",
+      "command": "cd /home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/correction3-final/verification-root && python scripts/test-all.py",
+      "exit_code": 0,
+      "elapsed_seconds": 18.3241548538208,
+      "log": "python-tests-isolated.log"
+    },
+    {
+      "name": "web-typecheck",
+      "command": "cd casefile/web && bun run typecheck",
+      "exit_code": 0,
+      "elapsed_seconds": 0.20731782913208008,
+      "log": "web-typecheck.log"
+    },
+    {
+      "name": "web-tests",
+      "command": "cd casefile/web && bun run test",
+      "exit_code": 0,
+      "elapsed_seconds": 9.20289659500122,
+      "log": "web-tests.log"
+    },
+    {
+      "name": "web-build",
+      "command": "cd casefile/web && bun run build",
+      "exit_code": 0,
+      "elapsed_seconds": 0.20392632484436035,
+      "log": "web-build.log"
+    },
+    {
+      "name": "rust-fmt",
+      "command": "cd casefile && cargo fmt --check",
+      "exit_code": 0,
+      "elapsed_seconds": 0.7730908393859863,
+      "log": "rust-fmt.log"
+    },
+    {
+      "name": "rust-clippy",
+      "command": "cd casefile && cargo clippy --workspace --all-targets -- -D warnings",
+      "exit_code": 0,
+      "elapsed_seconds": 1.329219102859497,
+      "log": "rust-clippy.log"
+    },
+    {
+      "name": "rust-tests",
+      "command": "cd casefile && cargo test --workspace",
+      "exit_code": 0,
+      "elapsed_seconds": 57.724100828170776,
+      "log": "rust-tests.log"
+    },
+    {
+      "name": "casefile-validator",
+      "command": "python casefile/scripts/validate-casefile.py --source casefile",
+      "exit_code": 1,
+      "elapsed_seconds": 0.05411219596862793,
+      "log": "casefile-validator.log"
+    },
+    {
+      "name": "coding-validator",
+      "command": "python coding/scripts/validate-skill.py --all --root coding",
+      "exit_code": 0,
+      "elapsed_seconds": 0.22549843788146973,
+      "log": "coding-validator.log"
+    },
+    {
+      "name": "release-cli",
+      "command": "cd casefile && cargo build --release -p casefile-cli",
+      "exit_code": 0,
+      "elapsed_seconds": 10.346931457519531,
+      "log": "release-cli.log"
+    },
+    {
+      "name": "bench-build",
+      "command": "cd casefile && cargo bench -p casefile-store-sqlite -p casefile-server -p casefile-tui --no-run",
+      "exit_code": 0,
+      "elapsed_seconds": 11.36027193069458,
+      "log": "bench-build.log"
+    }
+  ],
+  "correction3_final_packages": [
+    {
+      "name": "humans-md-build",
+      "command": "python scripts/package-plugin.py build --root /home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/package-root --manifest /home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/package-root/humans-md/packaging/plugin.toml",
+      "exit_code": 0,
+      "elapsed_seconds": 0.06997561454772949,
+      "log": "humans-md-build.log"
+    },
+    {
+      "name": "humans-md-check",
+      "command": "python scripts/package-plugin.py check --root /home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/package-root --manifest /home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/package-root/humans-md/packaging/plugin.toml",
+      "exit_code": 0,
+      "elapsed_seconds": 0.06824374198913574,
+      "log": "humans-md-check.log"
+    },
+    {
+      "name": "coding-build",
+      "command": "python scripts/package-plugin.py build --root /home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/package-root --manifest /home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/package-root/coding/packaging/plugin.toml",
+      "exit_code": 0,
+      "elapsed_seconds": 0.0786590576171875,
+      "log": "coding-build.log"
+    },
+    {
+      "name": "coding-check",
+      "command": "python scripts/package-plugin.py check --root /home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/package-root --manifest /home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/hmd068/package-root/coding/packaging/plugin.toml",
+      "exit_code": 0,
+      "elapsed_seconds": 0.07277560234069824,
+      "log": "coding-check.log"
+    }
+  ],
+  "correction3_final_original_benchmarks": [
+    {
+      "command": [
+        "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/release/deps/baselines-79b66f38661bc100",
+        "--list"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 1.3850224018096924
+    },
+    {
+      "command": [
+        "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/release/deps/baselines-79b66f38661bc100",
+        "--test"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 2.1934778690338135
+    },
+    {
+      "command": [
+        "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/release/deps/priority-4c02a3bbca696e82",
+        "--list"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.3754875659942627
+    },
+    {
+      "command": [
+        "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/release/deps/priority-4c02a3bbca696e82",
+        "--test"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.5138609409332275
+    },
+    {
+      "command": [
+        "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/release/deps/http-5eb4c4006879e177",
+        "--list"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.45852160453796387
+    },
+    {
+      "command": [
+        "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/release/deps/http-5eb4c4006879e177",
+        "--test"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.5937378406524658
+    },
+    {
+      "command": [
+        "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/release/deps/interactions-023394bd4bbc43da",
+        "--list"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.07520937919616699
+    },
+    {
+      "command": [
+        "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/release/deps/interactions-023394bd4bbc43da",
+        "--test"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.0956888198852539
+    },
+    {
+      "command": [
+        "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/release/deps/baselines-79b66f38661bc100",
+        "--bench",
+        "--baseline",
+        "hmd057-before"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 180.45873737335205
+    },
+    {
+      "command": [
+        "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/release/deps/priority-4c02a3bbca696e82",
+        "--bench",
+        "--baseline",
+        "hmd057-before"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 35.54161286354065
+    },
+    {
+      "command": [
+        "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/release/deps/http-5eb4c4006879e177",
+        "--bench",
+        "--baseline",
+        "hmd057-before"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 26.929964303970337
+    },
+    {
+      "command": [
+        "/home/alex/dev/HUMANS.md/.agent-workspace/20260930-speedup-implementation/writer/target/release/deps/interactions-023394bd4bbc43da",
+        "--bench",
+        "--baseline",
+        "hmd057-before"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 12.829158306121826
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+diff --git a/casefile/casefile-store-sqlite/src/lib.rs b/casefile/casefile-store-sqlite/src/lib.rs
+index 2ec99a0..f8b47a3 100644
+--- a/casefile/casefile-store-sqlite/src/lib.rs
++++ b/casefile/casefile-store-sqlite/src/lib.rs
+@@ -96,14 +96,14 @@ impl DerivedIndex for SqliteIndex {
+             .ok_or(SqliteIndexError::InsidePlanningRoot)?;
+         let file = NamedTempFile::new_in(parent)?;
+         let mut connection = Connection::open(file.path())?;
+-        connection.pragma_update(None, "user_version", SCHEMA_VERSION)?;
+-        connection.execute_batch("PRAGMA journal_mode=DELETE;
+-            CREATE TABLE metadata (source_revision TEXT NOT NULL);
++        connection.execute_batch("PRAGMA journal_mode=DELETE;")?;
++        let transaction = connection.transaction()?;
++        transaction.pragma_update(None, "user_version", SCHEMA_VERSION)?;
++        transaction.execute_batch("CREATE TABLE metadata (source_revision TEXT NOT NULL);
+             CREATE TABLE records (path TEXT PRIMARY KEY, project TEXT, investigation TEXT, identity TEXT, classification TEXT NOT NULL, kind TEXT, title TEXT NOT NULL, search_text TEXT NOT NULL, document TEXT NOT NULL);
+             CREATE TABLE relationships (source_project TEXT NOT NULL, source_investigation TEXT, source_identity TEXT NOT NULL, target_project TEXT NOT NULL, target_investigation TEXT, target_identity TEXT NOT NULL, kind TEXT NOT NULL, document TEXT NOT NULL);
+             CREATE TABLE boards (project TEXT NOT NULL, investigation TEXT, identity TEXT NOT NULL, title TEXT NOT NULL, document TEXT NOT NULL);
+             CREATE TABLE diagnostics (path TEXT NOT NULL, code TEXT NOT NULL, document TEXT NOT NULL);")?;
+-        let transaction = connection.transaction()?;
+         transaction.execute(
+             "INSERT INTO metadata VALUES (?)",
+             [&snapshot.source_revision.0],
