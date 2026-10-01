@@ -150,7 +150,7 @@ fn typed_scope_tokens_track_only_affecting_data_and_selected_mapping_values() {
         .unwrap();
     fs::write(
         root.path().join("projects.toml"),
-        "[projects]\ndemo = '/source/demo'\nforeign = 37\n",
+        "[projects]\ndemo = '//source/demo'\nforeign = 37\n",
     )
     .unwrap();
     assert_eq!(index(&provider), before);
@@ -167,7 +167,7 @@ fn typed_scope_tokens_track_only_affecting_data_and_selected_mapping_values() {
     );
     fs::write(
         root.path().join("projects.toml"),
-        "[projects]\ndemo = '/source/changed'\nforeign = 37\n",
+        "[projects]\ndemo = '//source/changed'\nforeign = 37\n",
     )
     .unwrap();
     assert_ne!(
@@ -292,10 +292,10 @@ fn flat_project_decisions_do_not_govern_nested_archives_and_activation_errors_ar
     assert_eq!(scan.diagnostics, store.check(None).unwrap().diagnostics);
 }
 
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 #[test]
-fn native_names_never_alias_and_opaque_symlinks_are_not_followed_in_deep_trees() {
-    use std::os::unix::{ffi::OsStringExt, fs::symlink};
+fn native_names_never_alias() {
+    use std::os::unix::ffi::OsStringExt;
     let root = fixture();
     for byte in [0x80, 0x81] {
         fs::write(
@@ -320,6 +320,14 @@ fn native_names_never_alias_and_opaque_symlinks_are_not_followed_in_deep_trees()
         )
         .unwrap();
     }
+}
+
+#[cfg(unix)]
+#[test]
+fn opaque_symlinks_are_not_followed_in_deep_trees() {
+    use std::os::unix::fs::symlink;
+    let root = fixture();
+    let store = Store::open(root.path()).unwrap();
     let external = tempfile::tempdir().unwrap();
     fs::write(external.path().join("secret"), "not canonical").unwrap();
     symlink(external.path(), root.path().join("opaque-directory")).unwrap();

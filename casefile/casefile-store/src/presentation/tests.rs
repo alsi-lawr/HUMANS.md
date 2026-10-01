@@ -1289,7 +1289,7 @@ fn lazy_handles_survive_unrelated_edits_but_changed_and_deleted_paths_are_invali
     }
 }
 
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 #[test]
 fn unrepresentable_native_names_fail_explicitly_instead_of_aliasing_a_replacement_name() {
     use std::os::unix::ffi::OsStringExt;

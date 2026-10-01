@@ -154,7 +154,7 @@ fn snapshot_and_exact_scoped_reads_are_bounded_protocol_v5() {
     assert_eq!(snapshot.catalogue.projects[0].name, "demo");
     assert_eq!(
         snapshot.catalogue.projects[0].source_root.as_deref(),
-        Some("/source/demo")
+        Some("//source/demo")
     );
     assert!(snapshot.catalogue.projects[0].governed);
     assert_eq!(
@@ -386,7 +386,7 @@ fn catalogue_union_keeps_mapping_only_and_governed_missing_mapping_projects() {
     let root = fixture();
     fs::write(
         root.path().join("projects.toml"),
-        "schema_version = 1\n[projects]\ndemo = '/source/demo'\nmapped = '/source/mapped'\n",
+        "schema_version = 1\n[projects]\ndemo = '//source/demo'\nmapped = '//source/mapped'\n",
     )
     .expect("project map");
     let mut activation = fs::read_to_string(root.path().join("casefile.toml")).expect("activation");
@@ -404,7 +404,7 @@ fn catalogue_union_keeps_mapping_only_and_governed_missing_mapping_projects() {
         .find(|project| project.name == "mapped")
         .expect("mapping-only");
     assert!(!mapped.governed);
-    assert_eq!(mapped.source_root.as_deref(), Some("/source/mapped"));
+    assert_eq!(mapped.source_root.as_deref(), Some("//source/mapped"));
     let governed = snapshot
         .catalogue
         .projects

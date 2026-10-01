@@ -1248,7 +1248,7 @@ mod hierarchy_tests {
         .expect("activation");
         fs::write(
             root.path().join("projects.toml"),
-            "schema_version = 1\n[projects]\ndemo = '/source/demo'\n",
+            "schema_version = 1\n[projects]\ndemo = '//source/demo'\n",
         )
         .expect("map");
         fs::write(

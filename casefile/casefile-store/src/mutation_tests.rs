@@ -94,7 +94,7 @@ fn provider_same_session_writes_survive_locked_validation_and_result_windows() {
                 write(
                     root.path(),
                     "projects.toml",
-                    "[projects]\ndemo = \"/source/demo\"\nother = \"/source/other\"\n",
+                    "[projects]\ndemo = \"//source/demo\"\nother = \"//source/other\"\n",
                 );
             }
             let provider = Arc::new(Provider::without_cache(Store::open(root.path()).unwrap()));
@@ -572,7 +572,7 @@ fn independent_processes_coordinate_disjoint_targets_replacement_creation_and_id
             write(
                 root.path(),
                 "projects.toml",
-                "[projects]\ndemo = \"/source/demo\"\nother = \"/source/other\"\n",
+                "[projects]\ndemo = \"//source/demo\"\nother = \"//source/other\"\n",
             );
         }
         let mut first = board("first");

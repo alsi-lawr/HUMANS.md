@@ -375,7 +375,7 @@ mod tests {
         let store = Store::open(root.path()).unwrap();
         fs::write(
             root.path().join("projects.toml"),
-            "[projects]\ndemo = '/source/demo'\n",
+            "[projects]\ndemo = '//source/demo'\n",
         )
         .unwrap();
         let body = format!("# Evidence\n{}", "x".repeat(4 * 1024 * 1024));

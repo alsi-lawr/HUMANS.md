@@ -17,7 +17,7 @@ fn long_supersession_chains_and_cycle_reachable_ancestors_preserve_diagnostics()
     .unwrap();
     fs::write(
         root.path().join("projects.toml"),
-        "[projects]\ndemo = '/offline/demo'\n",
+        "[projects]\ndemo = '//offline/demo'\n",
     )
     .unwrap();
     let source = include_str!(
