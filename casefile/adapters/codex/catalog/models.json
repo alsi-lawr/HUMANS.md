@@ -41,7 +41,7 @@
       "description": "Our most capable model for complex, demanding work.",
       "display_name": "GPT-6-Astra",
       "experimental_supported_tools": [],
-      "include_skills_usage_instructions": false,
+      "include_skills_usage_instructions": true,
       "input_modalities": [
         "text",
         "image"
@@ -140,7 +140,7 @@
       ],
       "include_apps_usage_instructions": false,
       "include_plugin_usage_instructions": false,
-      "include_skills_usage_instructions": false,
+      "include_skills_usage_instructions": true,
       "input_modalities": [
         "text",
         "image"
@@ -269,7 +269,7 @@
       "guardian": null,
       "include_apps_usage_instructions": false,
       "include_plugin_usage_instructions": false,
-      "include_skills_usage_instructions": false,
+      "include_skills_usage_instructions": true,
       "input_modalities": [
         "text",
         "image"
@@ -405,7 +405,7 @@
       "guardian": null,
       "include_apps_usage_instructions": false,
       "include_plugin_usage_instructions": false,
-      "include_skills_usage_instructions": false,
+      "include_skills_usage_instructions": true,
       "input_modalities": [
         "text",
         "image"
@@ -521,7 +521,7 @@
       "description": "Frontier agentic coding model.",
       "display_name": "GPT-5.6-Sol",
       "experimental_supported_tools": [],
-      "include_skills_usage_instructions": false,
+      "include_skills_usage_instructions": true,
       "input_modalities": [
         "text",
         "image"
@@ -633,7 +633,7 @@
       "description": "Balanced agentic coding model for everyday work.",
       "display_name": "GPT-5.6-Terra",
       "experimental_supported_tools": [],
-      "include_skills_usage_instructions": false,
+      "include_skills_usage_instructions": true,
       "input_modalities": [
         "text",
         "image"
@@ -745,7 +745,7 @@
       "description": "Fast and affordable agentic coding model.",
       "display_name": "GPT-5.6-Luna",
       "experimental_supported_tools": [],
-      "include_skills_usage_instructions": false,
+      "include_skills_usage_instructions": true,
       "input_modalities": [
         "text",
         "image"
