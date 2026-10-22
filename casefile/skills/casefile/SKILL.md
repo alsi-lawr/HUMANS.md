@@ -15,7 +15,7 @@ never clone or mirror the planning store in task scratch. Use the session's `.ag
 for disposable, non-authoritative previews, content-hash backups, isolated output, and command logs.
 Never infer a source path or replace the root.
 
-Establish read context hierarchically through Provider protocol v5: call `casefile_snapshot`, use
+Establish read context hierarchically through Provider protocol v6: call `casefile_snapshot`, use
 its catalogue to resolve the exact project and complete investigation scope, then request that
 scope's `record_index`. Request `record_detail` only for the exact identities necessary for the
 current step. For validation failures use the exact scope's `diagnostics` query, then the returned
@@ -24,26 +24,38 @@ most 1024 bytes, and a 256 KiB aggregate field budget. Never run `casefile scan`
 scans, or whole-document JSON parsing against live Stores. Before this fix, legacy
 `check --investigation` filtered a full Store read and was not resource-scoped; do not assume older
 installed binaries have the fixed behavior. Current `check --investigation` validates the exact
-scope plus project support summaries, and root check discards record bodies incrementally. CLI JSON
+investigation and its explicitly referenced dependencies. Bare work-item IDs resolve only in that
+investigation; bare decision IDs must resolve uniquely across that investigation and the project
+decision-log. This lookup requires access to the project decision-log even when a local candidate
+exists; an explicit local record path avoids that lookup. Cross-investigation references require
+contained Store-relative record paths in the same governed project, for example
+`projects/demo/investigations/other/tickets/accepted/HMD-099.md`. An unresolved bare reference is an
+error, not permission to search other investigations. Global duplicate-ID and incoming-reference
+validation require an explicitly requested whole-Store check; scoped diagnostics report
+`investigation_and_explicit_dependencies` coverage, not global completeness. Root check discards
+record bodies incrementally. CLI JSON
 responses have a hard 8 MiB limit including the final newline; overflow fails before any JSON is
 written. Use scoped reads instead of raising the limit or redirecting bulk output.
 
 Never request unscoped or bulk records, infer an investigation path by concatenation, or treat
 catalogue freshness as scoped-read authority. Snapshot freshness is a tagged catalogue token
-covering the complete metadata domain; narrow results carry a tagged scope-read token naming the
+covering only `casefile.toml` and `projects.toml`, not investigation contents. Snapshot cache state
+`not_observed` means full-index freshness was not assessed; use an explicitly requested whole-index
+operation for that domain. Narrow results carry a tagged scope-read token naming the
 exact query target and necessary dependencies. Compare tokens only for the same query target, scope,
 and (for detail) identity. Different targets legitimately have different revisions. Re-read that
 exact target when its affecting data/dependencies change; unrelated edits do not invalidate its
 context. These observation tokens are not mutation preconditions: preview/apply independently
-capture and validate their own freshness. Provider v5 is separate from MCP's dated transport
-protocol negotiation.
+capture and validate their own freshness. Provider v6 changes the read contract and refuses v5
+launchers; canonical planning formats are unchanged. Provider versions are separate from MCP's
+dated transport protocol negotiation.
 
 Route the current phase to `casefile-investigate`, `casefile-review`, `casefile-implement`, or
 `casefile-close`. Every governed phase requires an explicit compatible strategy. Present compatible
 choices and a recommendation, then wait for human selection.
 
 Review the Provider's compact preview envelope. Request confirmation only when
-`approval_required = true`, then apply only its `preview_id` in the same MCP session. Provider v5
+`approval_required = true`, then apply only its `preview_id` in the same MCP session. Provider v6
 retains the original once; returned review fields are not an approval payload and must not be sent
 back with the ID. Native filesystem events invalidate disposable caches, never authorize writes;
 Store applies independently revalidate canonical dependencies under their existing locks.

@@ -20,10 +20,18 @@ pub struct ScanSummary {
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct CheckResult {
+    pub diagnostic_coverage: DiagnosticCoverage,
     pub activation: ActivationState,
     pub valid: Option<bool>,
     pub freshness: crate::CheckFreshness,
     pub diagnostics: Vec<Diagnostic>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DiagnosticCoverage {
+    WholeStore,
+    InvestigationAndExplicitDependencies,
 }
 
 impl Store {
@@ -46,8 +54,8 @@ impl Store {
     }
 
     /// Validates canonical records one body at a time; opaque attachments are metadata only.
-    /// Scoped checks canonically read project work-item/decision support one record at a time,
-    /// retaining only parsed facts, never unrelated evidence or opaque bodies.
+    /// Scoped checks validate the selected investigation and its referenced dependencies.
+    /// Global identity and incoming-reference checks require an explicit whole-Store check.
     pub fn check(&self, investigation: Option<&str>) -> Result<CheckResult, StoreError> {
         let root = self.observation_root();
         if let Some(path) = investigation.map(checked_path).transpose()? {
@@ -84,6 +92,7 @@ impl Store {
             };
             let diagnostics = stable(diagnostics);
             return Ok(CheckResult {
+                diagnostic_coverage: DiagnosticCoverage::InvestigationAndExplicitDependencies,
                 activation: ActivationState::Active,
                 valid: Some(diagnostics.is_empty()),
                 freshness,
@@ -136,6 +145,7 @@ impl Store {
             ActivationState::Invalid => Some(false),
         };
         Ok(CheckResult {
+            diagnostic_coverage: DiagnosticCoverage::WholeStore,
             activation,
             valid,
             freshness: crate::CheckFreshness::Store {
@@ -192,13 +202,11 @@ fn check_scope<'a>(
             .is_some_and(|scope| crate::layout::scope_container(path, scope));
         if container {
             entry.classification = Classification::Invalid;
-            if selected {
-                diagnostics.push(Diagnostic::new(
-                    path,
-                    "unsafe_path",
-                    "governed container must be a non-symlink directory",
-                ));
-            }
+            diagnostics.push(Diagnostic::new(
+                path,
+                "unsafe_path",
+                "governed container must be a non-symlink directory",
+            ));
         } else if resolved.kind.is_some() {
             if file.kind == InventoryKind::Regular {
                 entry.original_bytes = crate::scanning::read_observed_entry(root, path, file)?;
@@ -215,19 +223,15 @@ fn check_scope<'a>(
                 entry.kind = kind;
                 entry.identity = identity;
                 entry.summary = summary;
-                if selected {
-                    diagnostics.extend(found);
-                }
+                diagnostics.extend(found);
                 parsed = classified.facts;
             } else {
                 entry.classification = Classification::Invalid;
-                if selected {
-                    diagnostics.push(Diagnostic::new(
-                        path,
-                        "unsafe_path",
-                        "governed paths must be regular non-symlink files",
-                    ));
-                }
+                diagnostics.push(Diagnostic::new(
+                    path,
+                    "unsafe_path",
+                    "governed paths must be regular non-symlink files",
+                ));
             }
         }
         facts.insert(&entry, resolved, parsed);
@@ -263,20 +267,13 @@ fn check_scope<'a>(
     if scope.is_some() {
         entries.sort_unstable_by(|left, right| left.path.cmp(&right.path));
     }
-    diagnostics.extend(
-        cross_validate_facts(&entries, active, &facts, |path| {
-            attachments.get(path) == Some(&crate::AttachmentState::Regular)
-        })
-        .into_iter()
-        .filter(|diagnostic| {
-            scope.is_none_or(|scope| {
-                facts
-                    .resolved
-                    .get(&diagnostic.path)
-                    .is_some_and(|resolved| resolved.scope == Some(scope))
-            })
-        }),
-    );
+    diagnostics.extend(cross_validate_facts(
+        &entries,
+        active,
+        &facts,
+        scope.is_none(),
+        |path| attachments.get(path) == Some(&crate::AttachmentState::Regular),
+    ));
     diagnostics.extend(crate::scanning::binding_diagnostics_facts(&entries, &facts));
     Ok((diagnostics, attachments))
 }
@@ -408,55 +405,6 @@ mod tests {
         }
     }
     #[test]
-    fn scoped_check_discards_each_canonical_support_body_before_opening_the_next() {
-        let root = tempfile::tempdir().unwrap();
-        copy_tree(
-            &Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/minimum"),
-            root.path(),
-        );
-        let scope = "projects/demo/investigations/sample";
-        let other = "projects/demo/investigations/other";
-        let config = fs::read_to_string(root.path().join("casefile.toml"))
-            .unwrap()
-            .replace(
-                &format!("investigations = [\"{scope}\"]"),
-                &format!("investigations = [\"{scope}\", \"{other}\"]"),
-            );
-        fs::write(root.path().join("casefile.toml"), config).unwrap();
-        let source = fs::read_to_string(
-            root.path()
-                .join(format!("{scope}/tickets/accepted/HMD-011.md")),
-        )
-        .unwrap();
-        let mut support_paths = Vec::new();
-        for index in 100..112 {
-            let path = root
-                .path()
-                .join(format!("{other}/tickets/accepted/HMD-{index}.md"));
-            fs::create_dir_all(path.parent().unwrap()).unwrap();
-            fs::write(
-                &path,
-                source
-                    .replace("HMD-011", &format!("HMD-{index}"))
-                    .replace("investigation: \"sample\"", "investigation: \"other\"")
-                    .replace("Required.", &"x".repeat(512 * 1024)),
-            )
-            .unwrap();
-            support_paths.push(path);
-        }
-        let store = Store::open(root.path()).unwrap();
-        OPENED.with(|paths| *paths.borrow_mut() = Some(Vec::new()));
-        BODY_PEAK.with(|peak| peak.set(0));
-        assert_eq!(store.check(Some(scope)).unwrap().valid, Some(true));
-        let opened = OPENED.with(|paths| paths.borrow_mut().take().unwrap());
-        assert!(
-            support_paths
-                .iter()
-                .all(|path| opened.iter().filter(|opened| *opened == path).count() == 1)
-        );
-        assert!(BODY_PEAK.with(|peak| peak.get()) < 2 * 1024 * 1024);
-    }
-    #[test]
     fn parent_checks_and_provider_diagnostics_exclude_activated_nested_scope_bodies() {
         use crate::{InvestigationScope, Provider, ProviderQuery, ProviderQueryResult};
 
@@ -545,10 +493,7 @@ mod tests {
                     result.diagnostics
                 };
                 let opened = OPENED.with(|paths| paths.borrow_mut().take().unwrap());
-                assert!(
-                    opened.contains(&ticket),
-                    "canonical same-project support remains available"
-                );
+                assert_eq!(opened.contains(&ticket), !is_parent);
                 assert_eq!(opened.contains(&evidence), !is_parent);
                 assert_eq!(opened.contains(&progress), !is_parent);
                 if is_parent {

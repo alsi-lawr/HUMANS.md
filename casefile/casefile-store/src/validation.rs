@@ -96,10 +96,16 @@ pub(super) fn cross_validate_facts(
     entries: &[EntrySnapshot],
     active: &Activation,
     facts: &ValidationFacts,
+    global_identities: bool,
     regular_target: impl Fn(&str) -> bool,
 ) -> Vec<Diagnostic> {
     let mut diagnostics = Vec::new();
-    let mut identities: BTreeMap<&str, &EntrySnapshot> = BTreeMap::new();
+    let mut identities = BTreeMap::new();
+    let mut local_identities: BTreeMap<_, Vec<&EntrySnapshot>> = BTreeMap::new();
+    let by_path = entries
+        .iter()
+        .map(|entry| (entry.path.as_str(), entry))
+        .collect::<BTreeMap<_, _>>();
     let paths: BTreeSet<&str> = entries.iter().map(|entry| entry.path.as_str()).collect();
     let mut supersedes = BTreeMap::new();
     let scopes = &facts.resolved;
@@ -108,7 +114,17 @@ pub(super) fn cross_validate_facts(
         .filter(|entry| entry.classification == Classification::Governed)
     {
         if let Some(identity) = entry.identity.as_deref() {
-            if let Some(previous) = identities.insert(identity, entry) {
+            let resolved = scopes[&entry.path];
+            local_identities
+                .entry((resolved.project, resolved.scope, identity))
+                .or_default()
+                .push(entry);
+            let domain = if global_identities {
+                None
+            } else {
+                resolved.scope.or(resolved.project)
+            };
+            if let Some(previous) = identities.insert((domain, identity), entry) {
                 diagnostics.push(Diagnostic::new(
                     &entry.path,
                     "duplicate_identity",
@@ -139,50 +155,84 @@ pub(super) fn cross_validate_facts(
         &facts.resolved,
         |path| facts.progress.get(path).map(Vec::as_slice),
     ));
+    let resolve = |entry: &EntrySnapshot, reference: &str, decision: bool| {
+        let source = scopes[&entry.path];
+        let mut targets = Vec::new();
+        if reference.contains('/') {
+            if let Some(target) = by_path.get(reference) {
+                if crate::references::matches(
+                    source,
+                    reference,
+                    &target.path,
+                    target.identity.as_deref(),
+                    scopes[&target.path],
+                ) {
+                    targets.push(*target);
+                }
+            }
+        } else {
+            targets.extend(
+                local_identities
+                    .get(&(source.project, source.scope, reference))
+                    .into_iter()
+                    .flatten()
+                    .copied(),
+            );
+            if decision && source.scope.is_some() {
+                targets.extend(
+                    local_identities
+                        .get(&(source.project, None, reference))
+                        .into_iter()
+                        .flatten()
+                        .copied(),
+                );
+            }
+        }
+        targets.retain(|target| {
+            target.classification == Classification::Governed
+                && if decision {
+                    target.kind == Some(Kind::Decision)
+                } else {
+                    matches!(target.kind, Some(Kind::Ticket | Kind::Epic))
+                }
+        });
+        if targets.len() == 1 {
+            Some(targets[0])
+        } else {
+            None
+        }
+    };
     for entry in entries
         .iter()
         .filter(|entry| matches!(entry.summary, Some(RecordSummary::WorkItem { .. })))
     {
-        let RecordSummary::WorkItem { id, .. } =
-            entry.summary.as_ref().expect("filtered work item")
-        else {
-            unreachable!()
-        };
         if let Some(item) = facts.work.get(&entry.path) {
-            let project = scopes[entry.path.as_str()].project;
             for reference in &item.decision_refs {
-                let resolves = identities.get(reference.as_str()).is_some_and(|target| {
-                    target.kind == Some(Kind::Decision)
-                        && scopes[target.path.as_str()].project == project
-                });
-                if reference == id || !resolves {
-                    diagnostics.push(Diagnostic::new(
-                        &entry.path,
-                        "unresolved_reference",
-                        "decision references must resolve within the governed project",
-                    ));
+                if resolve(entry, reference, true).is_none_or(|target| target.path == entry.path) {
+                    diagnostics.push(Diagnostic::new(&entry.path, "unresolved_reference",
+                        format!("decision reference {reference:?} must resolve uniquely in this investigation or project decision-log; use an explicit Store-relative record path for another investigation")));
                 }
             }
             for reference in item
                 .related_tickets
                 .iter()
-                .chain(item.supersedes.iter())
-                .chain(item.superseded_by.iter())
+                .chain(&item.supersedes)
+                .chain(&item.superseded_by)
             {
-                if reference == id
-                    || identities.get(reference.as_str()).is_none_or(|target| {
-                        !matches!(target.kind, Some(Kind::Ticket | Kind::Epic))
-                            || scopes[target.path.as_str()].project != project
-                    })
-                {
-                    diagnostics.push(Diagnostic::new(
-                        &entry.path,
-                        "unresolved_reference",
-                        "references must resolve to work items within the governed project",
-                    ));
+                if resolve(entry, reference, false).is_none_or(|target| target.path == entry.path) {
+                    diagnostics.push(Diagnostic::new(&entry.path, "unresolved_reference",
+                        format!("work-item reference {reference:?} must resolve uniquely in this investigation; use an explicit Store-relative record path for another investigation")));
                 }
             }
-            supersedes.insert(id.clone(), item.supersedes.clone());
+            supersedes.insert(
+                entry.path.clone(),
+                item.supersedes
+                    .iter()
+                    .filter_map(|reference| {
+                        resolve(entry, reference, false).map(|target| target.path.clone())
+                    })
+                    .collect(),
+            );
         }
     }
     for entry in entries
@@ -192,9 +242,10 @@ pub(super) fn cross_validate_facts(
         if let Some((refs, attachments)) = facts.metadata.get(&entry.path) {
             let scope = scopes[entry.path.as_str()].scope;
             for reference in refs {
-                if identities
-                    .get(reference.as_str())
-                    .is_none_or(|target| scopes[target.path.as_str()].scope != scope)
+                let source = scopes[&entry.path];
+                if local_identities
+                    .get(&(source.project, scope, reference.as_str()))
+                    .is_none_or(|targets| targets.len() != 1)
                 {
                     diagnostics.push(Diagnostic::new(
                         &entry.path,
@@ -219,7 +270,7 @@ pub(super) fn cross_validate_facts(
     }
     for start in cycle_reachable(&supersedes) {
         diagnostics.push(Diagnostic::new(
-            identities[start].path.clone(),
+            start,
             "supersession_cycle",
             "supersession references must not form a cycle",
         ));

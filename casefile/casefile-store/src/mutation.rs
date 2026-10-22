@@ -327,13 +327,17 @@ fn read_input(root: &Path, path: &str, body: bool) -> Result<Option<EntrySnapsho
     require_safe_target_parent(
         root,
         Path::new(&path).parent().unwrap_or(Path::new("")),
-        "mutation input",
-    )?;
+        &path,
+    )
+    .map_err(|error| match error {
+        StoreError::Io(error) => crate::scanning::path_error(&root.join(&path), error),
+        error => error,
+    })?;
     let target = root.join(&path);
     let metadata = match fs::symlink_metadata(&target) {
         Ok(value) => value,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(error) => return Err(error.into()),
+        Err(error) => return Err(crate::scanning::path_error(&target, error)),
     };
     if !metadata.is_file() || metadata.file_type().is_symlink() {
         return Err(StoreError::Invalid(format!(

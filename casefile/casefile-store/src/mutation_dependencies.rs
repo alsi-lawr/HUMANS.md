@@ -94,62 +94,51 @@ pub(super) fn discover(
         .cloned()
         .collect::<BTreeSet<_>>();
     paths.insert("casefile.toml".into());
-    let projects = paths
-        .iter()
-        .filter_map(|p| {
-            p.strip_prefix("projects/")?
-                .split_once('/')
-                .map(|(p, _)| p.to_owned())
-        })
-        .collect::<BTreeSet<_>>();
     let scopes = paths
         .iter()
         .filter_map(|path| scope_for(path, &active))
         .map(str::to_owned)
         .collect::<BTreeSet<_>>();
     let mut candidates = BTreeMap::<String, Header>::new();
-    for (project, config) in &active.projects {
-        let mut directories = vec![format!("projects/{project}/decision-log")];
-        for base in &config.investigations {
-            directories.push(format!("{base}/boards"));
-            directories.push(format!("{base}/decision-log"));
-            for kind in ["tickets", "epics"] {
-                for status in ["accepted", "provisional", "rejected"] {
-                    directories.push(format!("{base}/{kind}/{status}"));
-                }
-            }
-            if scopes.contains(base) {
-                directories.extend([format!("{base}/evidence"), format!("{base}/review")]);
+    let index = crate::activation::ScopeIndex::new(&active);
+    for base in &scopes {
+        let mut directories = vec![
+            format!("{base}/boards"),
+            format!("{base}/decision-log"),
+            format!("{base}/evidence"),
+            format!("{base}/review"),
+        ];
+        for kind in ["tickets", "epics"] {
+            for status in ["accepted", "provisional", "rejected"] {
+                directories.push(format!("{base}/{kind}/{status}"));
             }
         }
         for directory in directories {
-            for path in list(root, &directory, directory.ends_with("/review"))? {
+            for path in list(
+                root,
+                &directory,
+                directory.ends_with("/review"),
+                &index,
+                Some(base),
+            )? {
                 let Some(kind) = kind_for_path(&path, &active) else {
                     continue;
                 };
-                let mut header = match kind {
-                    Kind::Board => header(root, &path, kind)?,
-                    Kind::Ticket | Kind::Epic | Kind::Evidence | Kind::Review
-                        if projects.contains(project) =>
-                    {
-                        header(root, &path, kind)?
-                    }
-                    _ => Header::default(),
-                };
+                let mut found = header(root, &path, kind)?;
                 if matches!(kind, Kind::Ticket | Kind::Epic) {
-                    header.id = Some(stem(&path).into());
+                    found.id = Some(stem(&path).into());
                 }
-                if kind == Kind::Decision {
-                    // The canonical parser chooses a filename prefix using the H1; all prefixes
-                    // are candidates, and only selected candidates are canonically parsed.
-                    header.id = Some(stem(&path).into());
-                }
-                candidates.insert(path, header);
+                candidates.insert(path, found);
             }
         }
     }
     let mut written_identities = BTreeSet::new();
+    let mut written_targets = BTreeSet::new();
     for (path, bytes) in changes {
+        written_targets.insert((
+            path.clone(),
+            candidates.get(path).and_then(|header| header.id.clone()),
+        ));
         if let Some(old) = candidates.get(path).and_then(|h| h.id.as_ref()) {
             written_identities.insert(old.clone());
         }
@@ -157,10 +146,15 @@ pub(super) fn discover(
             let parsed = from_bytes(bytes, kind_for_path(path, &active));
             if let Some(id) = &parsed.id {
                 written_identities.insert(id.clone());
+                written_targets.insert((path.clone(), Some(id.clone())));
             }
             // Preserve both old and proposed edges for introduced-diagnostic comparisons.
             let old = candidates.entry(path.clone()).or_default();
-            old.refs.extend(parsed.references().cloned());
+            old.decision_refs.extend(parsed.decision_refs);
+            old.related_tickets.extend(parsed.related_tickets);
+            old.supersedes.extend(parsed.supersedes);
+            old.superseded_by.extend(parsed.superseded_by);
+            old.refs.extend(parsed.refs);
             old.attachments.extend(parsed.attachments);
             if parsed.id.is_some() {
                 old.id = parsed.id;
@@ -214,7 +208,13 @@ pub(super) fn discover(
                         .next()
                         .unwrap_or_default()
                         .trim_end_matches(".toml");
-                    for history in list(root, &format!("{base}/strategy/transitions"), false)? {
+                    for history in list(
+                        root,
+                        &format!("{base}/strategy/transitions"),
+                        false,
+                        &index,
+                        Some(base),
+                    )? {
                         if header(root, &history, Kind::StrategyTransition)?
                             .phase
                             .as_deref()
@@ -274,17 +274,31 @@ pub(super) fn discover(
             }
         }
     }
-    let mut identities = written_identities.clone();
     let mut validation_paths = changes
         .keys()
         .chain(extra)
         .cloned()
         .collect::<BTreeSet<_>>();
-    for (path, header) in &candidates {
-        if header
-            .references()
-            .any(|id| written_identities.contains(id))
-        {
+    for (path, candidate) in &candidates {
+        let source = index.resolve(path);
+        let incoming = candidate.references().any(|reference| {
+            written_targets.iter().any(|(target, id)| {
+                crate::references::matches(
+                    source,
+                    reference,
+                    target,
+                    id.as_deref(),
+                    index.resolve(target),
+                )
+            })
+        });
+        let duplicate = candidate.id.as_ref().is_some_and(|id| {
+            written_targets.iter().any(|(target, written_id)| {
+                written_id.as_deref() == Some(id.as_str())
+                    && source.scope == index.resolve(target).scope
+            })
+        });
+        if incoming || duplicate {
             paths.insert(path.clone());
             validation_paths.insert(path.clone());
         }
@@ -295,54 +309,81 @@ pub(super) fn discover(
             .filter(|path| kind_for_path(path, &active) == Some(Kind::Progress))
             .cloned(),
     );
-    let mut cycle_ids = BTreeSet::new();
-    for path in &paths {
-        if let Some(header) = candidates.get(path) {
-            identities.extend(header.id.iter().cloned());
-            if validation_paths.contains(path)
-                || kind_for_path(path, &active) == Some(Kind::Progress)
-            {
-                identities.extend(header.references().cloned());
-                cycle_ids.extend(header.id.iter().cloned());
-                cycle_ids.extend(header.supersedes.iter().cloned());
-            }
-        }
-    }
-    let mut by_identity = BTreeMap::<&str, Vec<&str>>::new();
-    for (path, header) in &candidates {
-        if let Some(id) = &header.id {
-            by_identity.entry(id).or_default().push(path);
-        }
-        if kind_for_path(path, &active) == Some(Kind::Decision) {
-            let stem = stem(path);
-            for (index, _) in stem.match_indices('-') {
-                by_identity.entry(&stem[..index]).or_default().push(path);
-            }
-        }
-    }
-    let mut frontier = identities
+    let mut frontier = paths
         .iter()
-        .map(|id| (id.clone(), cycle_ids.contains(id)))
+        .map(|path| (path.clone(), true))
         .collect::<VecDeque<_>>();
     let mut visited = BTreeSet::new();
-    while let Some((id, cycle)) = frontier.pop_front() {
-        if !visited.insert((id.clone(), cycle)) {
+    while let Some((source, full)) = frontier.pop_front() {
+        if !visited.insert((source.clone(), full)) {
             continue;
         }
-        if let Some(matching) = by_identity.get(id.as_str()) {
-            for path in matching {
-                paths.insert((*path).into());
-                let header = &candidates[*path];
-                if cycle && header.id.as_ref().is_some_and(|id| cycle_ids.contains(id)) {
-                    for next in &header.supersedes {
-                        identities.insert(next.clone());
-                        cycle_ids.insert(next.clone());
-                        frontier.push_back((next.clone(), true));
-                    }
+        let Some(candidate) = candidates.get(&source) else {
+            continue;
+        };
+        let references = if full {
+            candidate.references().cloned().collect::<BTreeSet<_>>()
+        } else {
+            candidate.supersedes.iter().cloned().collect()
+        };
+        let mut targets = BTreeMap::new();
+        for reference in references {
+            let cycle = candidate.supersedes.contains(&reference);
+            for (path, target) in &candidates {
+                if crate::references::matches(
+                    index.resolve(&source),
+                    &reference,
+                    path,
+                    target.id.as_deref(),
+                    index.resolve(path),
+                ) {
+                    targets.insert(path.clone(), cycle);
+                }
+            }
+            if candidate.decision_refs.contains(&reference)
+                || candidate.related_tickets.contains(&reference)
+                || candidate.supersedes.contains(&reference)
+                || candidate.superseded_by.contains(&reference)
+            {
+                for path in crate::references::candidates(
+                    root,
+                    &active,
+                    &source,
+                    &reference,
+                    candidate.decision_refs.contains(&reference),
+                )? {
+                    targets.insert(path, cycle);
                 }
             }
         }
+        for (target, cycle) in targets {
+            if !candidates.contains_key(&target) {
+                if let Some(kind) = kind_for_path(&target, &active) {
+                    candidates.insert(target.clone(), header(root, &target, kind)?);
+                }
+            }
+            paths.insert(target.clone());
+            if cycle {
+                frontier.push_back((target, false));
+            }
+        }
     }
+    let identity_key =
+        |path: &str, id: &str| format!("{}:{id}", index.resolve(path).scope.unwrap_or("project"));
+    let mut identities = paths
+        .iter()
+        .filter_map(|path| {
+            candidates
+                .get(path)
+                .and_then(|header| header.id.as_deref())
+                .map(|id| identity_key(path, id))
+        })
+        .collect::<BTreeSet<_>>();
+    let written_identities = written_targets
+        .iter()
+        .filter_map(|(path, id)| id.as_deref().map(|id| identity_key(path, id)))
+        .collect::<BTreeSet<_>>();
+    identities.extend(written_identities.iter().cloned());
     let mut existence = BTreeSet::new();
     for path in paths.clone() {
         if let Some(header) = candidates.get(&path) {
@@ -370,7 +411,14 @@ pub(super) fn discover(
 }
 
 pub(super) fn accepted_paths(root: &Path, investigation: &str) -> Result<Vec<String>, StoreError> {
-    list(root, &format!("{investigation}/tickets/accepted"), false)
+    let (_, active, _) = activation(root)?;
+    list(
+        root,
+        &format!("{investigation}/tickets/accepted"),
+        false,
+        &crate::activation::ScopeIndex::new(&active),
+        Some(investigation),
+    )
 }
 
 fn progress_input(root: &Path, path: &str, full: bool) -> Result<ProgressInput, StoreError> {

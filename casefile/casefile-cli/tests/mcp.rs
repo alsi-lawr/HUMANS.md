@@ -39,7 +39,7 @@ fn command(root: &Path) -> Command {
         .arg(root)
         .arg("--expected-root")
         .arg(root)
-        .args(["--expected-provider-protocol", "5"])
+        .args(["--expected-provider-protocol", "6"])
         .args(["--required-provider-operations", OPERATIONS]);
     command
 }
@@ -81,7 +81,7 @@ fn compatibility_contract_is_machine_readable_and_complete() {
     );
     let value: Value = serde_json::from_slice(&output.stdout).expect("JSON");
     assert_eq!(value["identity"], "casefile");
-    assert_eq!(value["provider_protocol_version"], 5);
+    assert_eq!(value["provider_protocol_version"], 6);
     assert_eq!(
         value["required_provider_operations"]
             .as_array()
@@ -217,7 +217,7 @@ fn fixed_root_session_negotiates_and_exposes_canonical_snapshot_and_query() {
     };
     let snapshot = &response(3)["result"]["structuredContent"];
     assert_eq!(snapshot["activation"], "active");
-    assert_eq!(snapshot["capabilities"]["protocol_version"], 5);
+    assert_eq!(snapshot["capabilities"]["protocol_version"], 6);
     assert_eq!(snapshot["catalogue"]["projects"][0]["name"], "demo");
     assert!(snapshot.get("projections").is_none());
     let query = &response(4)["result"]["structuredContent"];
@@ -277,8 +277,8 @@ fn root_protocol_and_capability_refusals_happen_before_tool_service() {
     for (flag, value, diagnostic) in [
         (
             "--expected-provider-protocol",
-            "4",
-            "requires provider protocol 4",
+            "5",
+            "requires provider protocol 5",
         ),
         (
             "--required-provider-operations",
@@ -733,4 +733,486 @@ fn unfit_worker_id_closes_with_stdin_open_without_accepting_following_ping() {
         "partial or unexpected following response"
     );
     assert!(String::from_utf8_lossy(&result.stderr).contains("cannot fit a bounded response"));
+}
+
+#[cfg(unix)]
+mod investigation_isolation {
+    use super::*;
+    use std::{
+        os::unix::fs::PermissionsExt,
+        path::PathBuf,
+        process::{Child, ChildStdin, ChildStdout},
+    };
+
+    const SELECTED: &str = "projects/demo/investigations/sample";
+    const OTHER: &str = "projects/demo/investigations/other";
+    const NESTED: &str = "projects/demo/investigations/sample/review/private";
+
+    struct Denied {
+        path: PathBuf,
+        permissions: fs::Permissions,
+    }
+    impl Denied {
+        fn new(path: PathBuf) -> Option<Self> {
+            let directory = path.is_dir();
+            let permissions = fs::metadata(&path).unwrap().permissions();
+            fs::set_permissions(&path, fs::Permissions::from_mode(0o0)).unwrap();
+            let denied = Self { path, permissions };
+            let error = if directory {
+                fs::read_dir(&denied.path).err()
+            } else {
+                fs::read(&denied.path).err()
+            };
+            let Some(error) = error else {
+                eprintln!("permission assertions UNEXERCISED: process bypasses mode 000");
+                return None;
+            };
+            assert_eq!(error.kind(), std::io::ErrorKind::PermissionDenied);
+            Some(denied)
+        }
+    }
+    impl Drop for Denied {
+        fn drop(&mut self) {
+            fs::set_permissions(&self.path, self.permissions.clone()).unwrap();
+        }
+    }
+
+    struct Mcp {
+        child: Child,
+        input: ChildStdin,
+        output: BufReader<ChildStdout>,
+        id: u64,
+    }
+    impl Mcp {
+        fn start(root: &Path) -> Self {
+            let mut child = package_command(root)
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .spawn()
+                .unwrap();
+            let mut session = Self {
+                input: child.stdin.take().unwrap(),
+                output: BufReader::new(child.stdout.take().unwrap()),
+                child,
+                id: 0,
+            };
+            let initialized =
+                session.request("initialize", json!({"protocolVersion":"2025-11-25"}));
+            assert_eq!(
+                initialized["result"]["protocolVersion"], "2025-11-25",
+                "{initialized}"
+            );
+            serde_json::to_writer(
+                &mut session.input,
+                &json!({"jsonrpc":"2.0","method":"notifications/initialized"}),
+            )
+            .unwrap();
+            session.input.write_all(b"\n").unwrap();
+            session
+        }
+        fn request(&mut self, method: &str, params: Value) -> Value {
+            self.id += 1;
+            serde_json::to_writer(
+                &mut self.input,
+                &json!({"jsonrpc":"2.0","id":self.id,"method":method,"params":params}),
+            )
+            .unwrap();
+            self.input.write_all(b"\n").unwrap();
+            self.input.flush().unwrap();
+            let mut line = String::new();
+            assert!(
+                self.output.read_line(&mut line).unwrap() > 0,
+                "MCP closed before response {}",
+                self.id
+            );
+            let result: Value = serde_json::from_str(&line).unwrap();
+            assert_eq!(result["id"], self.id, "{result}");
+            result
+        }
+        fn call(&mut self, name: &str, arguments: Value) -> Value {
+            self.request("tools/call", json!({"name":name,"arguments":arguments}))["result"].clone()
+        }
+        fn success(&mut self, name: &str, arguments: Value) -> Value {
+            let result = self.call(name, arguments);
+            assert_eq!(result["isError"], false, "{name}: {result}");
+            result["structuredContent"].clone()
+        }
+        fn query(&mut self, query: &str) -> Value {
+            self.success(
+                "casefile_query",
+                json!({"query":query,"scope":{"project":"demo","investigation":"sample"}}),
+            )
+        }
+        fn apply(&mut self, name: &str, arguments: Value) {
+            let preview = self.success(&format!("casefile_preview_{name}"), arguments);
+            assert_eq!(preview["approval_required"], false);
+            assert_eq!(preview["diagnostics"], json!([]));
+            self.success(
+                &format!("casefile_apply_{name}"),
+                json!({"preview_id":preview["preview_id"]}),
+            );
+        }
+    }
+    impl Drop for Mcp {
+        fn drop(&mut self) {
+            let _ = self.child.kill();
+            let _ = self.child.wait();
+        }
+    }
+
+    fn write(root: &Path, path: &str, text: impl AsRef<[u8]>) {
+        fs::create_dir_all(root.join(path).parent().unwrap()).unwrap();
+        fs::write(root.join(path), text).unwrap();
+    }
+    fn isolated_fixture() -> TempDir {
+        let root = fixture();
+        write(
+            root.path(),
+            "casefile.toml",
+            format!(
+                "schema_version=1\n[projects.demo]\nprefix='HMD'\ninvestigations=['{SELECTED}','{OTHER}','{NESTED}']\n"
+            ),
+        );
+        let source = fs::read_to_string(
+            root.path()
+                .join(format!("{SELECTED}/tickets/accepted/HMD-011.md")),
+        )
+        .unwrap();
+        for (base, id) in [(OTHER, "HMD-099"), (NESTED, "HMD-098")] {
+            write(
+                root.path(),
+                &format!("{base}/tickets/accepted/{id}.md"),
+                source
+                    .replace("HMD-011", id)
+                    .replace(
+                        "investigation: \"sample\"",
+                        &format!(
+                            "investigation: \"{}\"",
+                            base.strip_prefix("projects/demo/investigations/").unwrap()
+                        ),
+                    )
+                    .replace("decision_refs: [HMD-D-001]", "decision_refs: []"),
+            );
+        }
+        write(
+            root.path(),
+            &format!("{OTHER}/epics/accepted/HMD-E-099.md"),
+            source
+                .replace("HMD-011", "HMD-E-099")
+                .replace("investigation: \"sample\"", "investigation: \"other\"")
+                .replace("decision_refs: [HMD-D-001]", "decision_refs: []"),
+        );
+        write(
+            root.path(),
+            &format!("{OTHER}/decision-log/HMD-D-099-private.md"),
+            "# HMD-D-099\n\n## Status\naccepted\n\n## Decision\nPrivate.\n",
+        );
+        write(
+            root.path(),
+            &format!("{OTHER}/boards/private.toml"),
+            "private malformed board\n",
+        );
+        fs::copy(
+            Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../adapters/codex/matrices/casefile-implement-ticket-batch.toml"),
+            root.path()
+                .join(format!("{SELECTED}/strategy/implementation.toml")),
+        )
+        .unwrap();
+        for args in [
+            &["init", "-q"][..],
+            &["config", "user.email", "casefile@example.test"],
+            &["config", "user.name", "Casefile Test"],
+            &["add", "."],
+            &["commit", "-qm", "fixture"],
+        ] {
+            assert!(
+                Command::new("git")
+                    .current_dir(root.path())
+                    .args(args)
+                    .status()
+                    .unwrap()
+                    .success()
+            );
+        }
+        root
+    }
+
+    #[test]
+    fn mcp_scoped_reads_and_all_mutation_families_ignore_denied_sibling_support_and_directories() {
+        for directory in [false, true] {
+            let root = isolated_fixture();
+            let sibling_before = directory_state(&root.path().join(OTHER));
+            let nested_before = directory_state(&root.path().join(NESTED));
+            let mut denied = Vec::new();
+            let Some(nested) = Denied::new(root.path().join(NESTED)) else {
+                return;
+            };
+            denied.push(nested);
+            let paths = if directory {
+                vec![OTHER.to_owned()]
+            } else {
+                vec![
+                    format!("{OTHER}/tickets/accepted/HMD-099.md"),
+                    format!("{OTHER}/epics/accepted/HMD-E-099.md"),
+                    format!("{OTHER}/decision-log/HMD-D-099-private.md"),
+                ]
+            };
+            for path in paths {
+                let Some(guard) = Denied::new(root.path().join(path)) else {
+                    return;
+                };
+                denied.push(guard);
+            }
+            let mut mcp = Mcp::start(root.path());
+            assert!(
+                mcp.request("tools/list", json!({}))["result"]["tools"]
+                    .as_array()
+                    .unwrap()
+                    .len()
+                    > 1
+            );
+            let catalogue = mcp.success("casefile_snapshot", json!({}));
+            assert_eq!(
+                catalogue["catalogue"]["projects"][0]["investigations"]
+                    .as_array()
+                    .unwrap()
+                    .len(),
+                3
+            );
+            assert_eq!(
+                mcp.query("record_index")["records"]
+                    .as_array()
+                    .unwrap()
+                    .len(),
+                2
+            );
+            mcp.success("casefile_query", json!({"query":"record_detail","identity":{"scope":{"project":"demo","investigation":"sample"},"identity":"HMD-011"}}));
+            mcp.query("boards");
+            mcp.query("strategy_transitions");
+            let diagnostics = mcp.query("diagnostics");
+            assert_eq!(diagnostics["diagnostics"], json!([]));
+            assert_eq!(
+                diagnostics["diagnostic_coverage"],
+                "investigation_and_explicit_dependencies"
+            );
+            let selected = format!("{SELECTED}/tickets/accepted/HMD-011.md");
+            let source = fs::read_to_string(root.path().join(&selected)).unwrap();
+            let mut draft =
+                casefile_core::parse_draft(&selected, casefile_core::Kind::Ticket, &source)
+                    .unwrap();
+            if let casefile_core::RecordDraft::Ticket(item) = &mut draft {
+                item.id = "HMD-100".into();
+                item.title = "Isolated MCP mutation".into();
+            }
+            let created = format!("{SELECTED}/tickets/accepted/HMD-100.md");
+            mcp.apply(
+                "record",
+                json!({"request":{"operation":"create","path":created,"draft":draft}}),
+            );
+            assert!(
+                fs::read_to_string(root.path().join(&created))
+                    .unwrap()
+                    .contains("Isolated MCP mutation")
+            );
+            mcp.apply(
+                "progress",
+                json!({"operation":{"operation":"bootstrap","investigation":SELECTED}}),
+            );
+            mcp.apply("default_delivery_board", json!({"investigation":SELECTED}));
+            let matrix = fs::read_to_string(
+                Path::new(env!("CARGO_MANIFEST_DIR"))
+                    .join("../adapters/codex/matrices/casefile-implement-pipeline.toml"),
+            )
+            .unwrap();
+            mcp.apply("strategy_transition", json!({"request":{"investigation":SELECTED,"operation_id":"isolation-pipeline","recorded_at":"2026-10-22T01:00:00Z","selected_matrix_origin":"adapters/codex/matrices/casefile-implement-pipeline.toml","selected_matrix_source":matrix,"available_capabilities":["exclusive_writer","shared_writable_planning","subagents"],"preserved_work_paths":[],"active_ownership":[],"rationale":"Selected pipeline in isolated fixture."}}));
+            let binding = "schema_version=1\nadapter='codex'\nrole='implementation-writer'\nmodel='gpt-6.1-sol'\nreasoning_effort='xhigh'\n[resolution]\nmode='runtime_override'\nvalue='pipeline=writer'\n";
+            mcp.apply(
+                "writer_binding",
+                json!({"request":{"investigation":SELECTED,"binding_source":binding}}),
+            );
+            mcp.apply("progress", json!({"operation":{"operation":"append","investigation":SELECTED,"entries":[{"kind":"transition","id":"isolation-start","recorded_at":"2026-10-22T01:00:01Z","recorded_by":"test","ticket_id":"HMD-011","from":"unknown","to":"in_progress"}]}}));
+            let index = mcp.query("record_index");
+            let ticket = index["records"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|record| record["identity"] == "HMD-011")
+                .unwrap();
+            assert_eq!(ticket["progress"]["status"], "in_progress");
+            assert_eq!(mcp.query("diagnostics")["diagnostics"], json!([]));
+            drop(mcp);
+            drop(denied);
+            assert_eq!(directory_state(&root.path().join(OTHER)), sibling_before);
+            assert_eq!(directory_state(&root.path().join(NESTED)), nested_before);
+        }
+    }
+
+    #[test]
+    fn mcp_explicit_local_decision_avoids_bare_ids_required_project_lookup() {
+        let root = isolated_fixture();
+        let project_log = "projects/demo/decision-log";
+        write(
+            root.path(),
+            &format!("{project_log}/HMD-D-099-shared.md"),
+            "# HMD-D-099\n\n## Status\naccepted\n\n## Decision\nShared.\n",
+        );
+        let before = directory_state(&root.path().join(project_log));
+        let Some(denied) = Denied::new(root.path().join(project_log)) else {
+            return;
+        };
+        let selected = format!("{SELECTED}/tickets/accepted/HMD-011.md");
+        let original = fs::read_to_string(root.path().join(&selected)).unwrap();
+        let mut mcp = Mcp::start(root.path());
+        mcp.query("record_index");
+        let failed = mcp.call(
+            "casefile_query",
+            json!({"query":"diagnostics","scope":{"project":"demo","investigation":"sample"}}),
+        );
+        assert_eq!(failed["isError"], true);
+        assert!(failed.to_string().contains(project_log), "{failed}");
+        let draft =
+            casefile_core::parse_draft(&selected, casefile_core::Kind::Ticket, &original).unwrap();
+        let failed = mcp.call(
+            "casefile_preview_record",
+            json!({"request":{"operation":"replace","path":selected,"draft":draft}}),
+        );
+        assert_eq!(failed["isError"], true);
+        assert!(failed.to_string().contains(project_log), "{failed}");
+        assert_eq!(
+            fs::read_to_string(root.path().join(&selected)).unwrap(),
+            original
+        );
+        let local = format!("{SELECTED}/decision-log/HMD-D-001-scope.md");
+        for path in [
+            selected.clone(),
+            format!("{SELECTED}/epics/accepted/HMD-E-001.md"),
+        ] {
+            let source = fs::read_to_string(root.path().join(&path)).unwrap();
+            write(
+                root.path(),
+                &path,
+                source.replace(
+                    "decision_refs: [HMD-D-001]",
+                    &format!("decision_refs: [{local}]"),
+                ),
+            );
+        }
+        assert_eq!(mcp.query("diagnostics")["diagnostics"], json!([]));
+        let source = fs::read_to_string(root.path().join(&selected)).unwrap();
+        let mut draft =
+            casefile_core::parse_draft(&selected, casefile_core::Kind::Ticket, &source).unwrap();
+        if let casefile_core::RecordDraft::Ticket(item) = &mut draft {
+            item.title = "Explicit local decision".into();
+        }
+        mcp.apply(
+            "record",
+            json!({"request":{"operation":"replace","path":selected,"draft":draft}}),
+        );
+        assert!(
+            fs::read_to_string(root.path().join(&selected))
+                .unwrap()
+                .contains("Explicit local decision")
+        );
+        drop(mcp);
+        drop(denied);
+        assert_eq!(directory_state(&root.path().join(project_log)), before);
+        write(
+            root.path(),
+            &format!("{project_log}/HMD-D-001-duplicate.md"),
+            "# HMD-D-001\n\n## Status\naccepted\n\n## Decision\nAmbiguous.\n",
+        );
+        write(root.path(), &selected, original);
+        let mut mcp = Mcp::start(root.path());
+        assert!(
+            mcp.query("diagnostics")["diagnostics"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|diagnostic| diagnostic["code"] == "unresolved_reference")
+        );
+    }
+
+    #[test]
+    fn mcp_denied_selected_and_required_paths_and_stale_previews_remain_failures() {
+        for directory in [false, true] {
+            let root = isolated_fixture();
+            let selected = format!("{SELECTED}/tickets/accepted/HMD-011.md");
+            let dependency = format!("{OTHER}/tickets/accepted/HMD-099.md");
+            let original = fs::read_to_string(root.path().join(&selected)).unwrap();
+            let Some(denied) =
+                Denied::new(
+                    root.path()
+                        .join(if directory { OTHER } else { &dependency }),
+                )
+            else {
+                return;
+            };
+            let mut mcp = Mcp::start(root.path());
+            let Some(selected_denied) = Denied::new(root.path().join(&selected)) else {
+                return;
+            };
+            let failed = mcp.call(
+                "casefile_query",
+                json!({"query":"diagnostics","scope":{"project":"demo","investigation":"sample"}}),
+            );
+            assert_eq!(failed["isError"], true);
+            assert!(failed.to_string().contains(&selected), "{failed}");
+            drop(selected_denied);
+            write(
+                root.path(),
+                &selected,
+                original.replace("related_tickets: []", "related_tickets: [HMD-099]"),
+            );
+            let bare = mcp.query("diagnostics");
+            assert!(
+                bare["diagnostics"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|diagnostic| diagnostic["code"] == "unresolved_reference")
+            );
+            let explicit = original.replace(
+                "related_tickets: []",
+                &format!("related_tickets: [{dependency}]"),
+            );
+            write(root.path(), &selected, &explicit);
+            let failed = mcp.call(
+                "casefile_query",
+                json!({"query":"diagnostics","scope":{"project":"demo","investigation":"sample"}}),
+            );
+            assert_eq!(failed["isError"], true);
+            assert!(failed.to_string().contains(&dependency), "{failed}");
+            let draft =
+                casefile_core::parse_draft(&selected, casefile_core::Kind::Ticket, &explicit)
+                    .unwrap();
+            let failed = mcp.call(
+                "casefile_preview_record",
+                json!({"request":{"operation":"replace","path":selected,"draft":draft}}),
+            );
+            assert_eq!(failed["isError"], true);
+            assert!(failed.to_string().contains(&dependency), "{failed}");
+            assert_eq!(
+                fs::read_to_string(root.path().join(&selected)).unwrap(),
+                explicit
+            );
+            write(root.path(), &selected, original);
+            let target = format!("{SELECTED}/boards/stale.toml");
+            let preview = mcp.success("casefile_preview_record", json!({"request":{"operation":"create","path":target,"draft":{"kind":"board","id":"HMD-stale","title":"Preview","status_source":"disposition","columns":[{"name":"Accepted","statuses":["accepted"]}]}}}));
+            let external = "schema_version=1\nid='HMD-stale'\ntitle='External edit'\n[[columns]]\nname='Accepted'\nstatuses=['accepted']\n";
+            write(root.path(), &target, external);
+            let failed = mcp.call(
+                "casefile_apply_record",
+                json!({"preview_id":preview["preview_id"]}),
+            );
+            assert_eq!(failed["isError"], true);
+            assert_eq!(
+                fs::read_to_string(root.path().join(&target)).unwrap(),
+                external
+            );
+            drop(mcp);
+            drop(denied);
+        }
+    }
 }

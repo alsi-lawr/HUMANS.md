@@ -83,3 +83,104 @@ fn long_supersession_chains_and_cycle_reachable_ancestors_preserve_diagnostics()
             .any(|diagnostic| diagnostic.code == "duplicate_identity")
     );
 }
+
+#[test]
+fn explicit_same_id_cross_scope_supersession_edges_detect_cycles_and_invalid_required_records() {
+    use casefile_core::ChangeRequest;
+    let root = tempfile::tempdir().unwrap();
+    let first_scope = "projects/demo/investigations/first";
+    let second_scope = "projects/demo/investigations/second";
+    fs::write(root.path().join("casefile.toml"), format!("schema_version=1\n[projects.demo]\nprefix='HMD'\ninvestigations=['{first_scope}','{second_scope}']\n")).unwrap();
+    fs::write(
+        root.path().join("projects.toml"),
+        "[projects]\ndemo='//source/demo'\n",
+    )
+    .unwrap();
+    assert!(
+        std::process::Command::new("git")
+            .args(["init", "-q"])
+            .current_dir(root.path())
+            .status()
+            .unwrap()
+            .success()
+    );
+    let source = include_str!(
+        "fixtures/minimum/projects/demo/investigations/sample/tickets/accepted/HMD-011.md"
+    )
+    .replace("decision_refs: [HMD-D-001]", "decision_refs: []");
+    let first = format!("{first_scope}/tickets/accepted/HMD-011.md");
+    let second = format!("{second_scope}/tickets/accepted/HMD-011.md");
+    for (path, investigation) in [(&first, "first"), (&second, "second")] {
+        fs::create_dir_all(root.path().join(path).parent().unwrap()).unwrap();
+        fs::write(
+            root.path().join(path),
+            source.replace(
+                "investigation: \"sample\"",
+                &format!("investigation: \"{investigation}\""),
+            ),
+        )
+        .unwrap();
+    }
+    let store = Store::open(root.path()).unwrap();
+    assert_eq!(store.check(Some(first_scope)).unwrap().valid, Some(true));
+    assert!(
+        store
+            .check(None)
+            .unwrap()
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.code == "duplicate_identity")
+    );
+    let mut draft = casefile_core::parse_draft(
+        &first,
+        Kind::Ticket,
+        &fs::read_to_string(root.path().join(&first)).unwrap(),
+    )
+    .unwrap();
+    if let RecordDraft::Ticket(item) = &mut draft {
+        item.supersedes = vec![second.clone()];
+    }
+    let preview = store
+        .preview(ChangeRequest::Replace {
+            path: first.clone(),
+            draft,
+        })
+        .unwrap();
+    assert!(preview.diagnostics.is_empty(), "{:?}", preview.diagnostics);
+    store.apply(preview).unwrap();
+    let unchanged = fs::read_to_string(root.path().join(&second)).unwrap();
+    let mut draft = casefile_core::parse_draft(&second, Kind::Ticket, &unchanged).unwrap();
+    if let RecordDraft::Ticket(item) = &mut draft {
+        item.supersedes = vec![first.clone()];
+    }
+    let preview = store
+        .preview(ChangeRequest::Replace {
+            path: second.clone(),
+            draft,
+        })
+        .unwrap();
+    assert!(
+        preview
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.code == "supersession_cycle")
+    );
+    assert!(store.apply(preview).is_err());
+    assert_eq!(
+        fs::read_to_string(root.path().join(&second)).unwrap(),
+        unchanged
+    );
+    fs::write(
+        root.path().join(&second),
+        unchanged.replace("# HMD-011", "# Wrong identity"),
+    )
+    .unwrap();
+    let checked = store.check(Some(first_scope)).unwrap();
+    assert_eq!(checked.valid, Some(false));
+    assert!(
+        checked
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.path == second && diagnostic.code == "identity_heading")
+    );
+}

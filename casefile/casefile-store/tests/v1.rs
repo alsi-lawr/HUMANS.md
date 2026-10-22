@@ -887,7 +887,7 @@ fn project_decisions_resolve_within_the_project_only() {
 }
 
 #[test]
-fn work_item_references_may_cross_investigations_within_one_project_only() {
+fn cross_investigation_work_references_require_explicit_same_project_paths() {
     let root = fixture();
     fs::write(
         root.path().join("casefile.toml"),
@@ -912,12 +912,35 @@ fn work_item_references_may_cross_investigations_within_one_project_only() {
             .replace("HMD-D-001", "HMD-D-002"),
     )
     .expect("other ticket");
-    let cross_investigation = original
+    let bare = original
         .replace("HMD-D-001", "HMD-D-002")
         .replace("related_tickets: []", "related_tickets: [HMD-012]");
-    fs::write(&source_path, &cross_investigation).expect("cross-investigation references");
-
+    fs::write(&source_path, &bare).expect("bare cross-investigation references");
     let store = Store::open(root.path()).expect("store");
+    assert_eq!(
+        store
+            .check(Some("projects/demo/investigations/sample"))
+            .unwrap()
+            .diagnostics
+            .iter()
+            .filter(|diagnostic| diagnostic.code == "unresolved_reference")
+            .count(),
+        2
+    );
+    let decision_ref = "projects/demo/investigations/other/decision-log/HMD-D-002-other.md";
+    let work_ref = "projects/demo/investigations/other/tickets/accepted/HMD-012.md";
+    let cross_investigation = original.replace("HMD-D-001", decision_ref).replace(
+        "related_tickets: []",
+        &format!("related_tickets: [{work_ref}]"),
+    );
+    fs::write(&source_path, &cross_investigation).expect("explicit cross-investigation references");
+    assert_eq!(
+        store
+            .check(Some("projects/demo/investigations/sample"))
+            .unwrap()
+            .valid,
+        Some(true)
+    );
     let scan = store.scan().expect("scan");
     assert!(scan.diagnostics.is_empty(), "{:#?}", scan.diagnostics);
     let relationships = store
@@ -939,7 +962,7 @@ fn work_item_references_may_cross_investigations_within_one_project_only() {
 
     fs::write(
         &source_path,
-        cross_investigation.replace("related_tickets: [HMD-012]", "related_tickets: [HMD-D-002]"),
+        cross_investigation.replace(work_ref, decision_ref),
     )
     .expect("wrong-kind reference");
     scan_has(root.path(), "unresolved_reference");
@@ -969,8 +992,8 @@ fn work_item_references_may_cross_investigations_within_one_project_only() {
     fs::write(
         &source_path,
         original
-            .replace("HMD-D-001", "EXT-D-001")
-            .replace("related_tickets: []", "related_tickets: [EXT-012]"),
+            .replace("HMD-D-001", "projects/external/investigations/other/decision-log/EXT-D-001-external.md")
+            .replace("related_tickets: []", "related_tickets: [projects/external/investigations/other/tickets/accepted/EXT-012.md]"),
     )
     .expect("cross-project references");
     let diagnostics = Store::open(root.path())

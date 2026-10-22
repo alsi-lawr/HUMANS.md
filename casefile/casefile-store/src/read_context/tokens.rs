@@ -51,7 +51,7 @@ pub enum ReadDependency {
         path: String,
         revision: Option<Revision>,
     },
-    ProjectSupport {
+    ReferencedRecords {
         revision: Revision,
     },
     Attachments {

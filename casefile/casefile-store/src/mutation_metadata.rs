@@ -75,17 +75,26 @@ pub(super) fn from_bytes(bytes: &[u8], kind: Option<Kind>) -> Header {
 
 pub(super) fn header(root: &Path, path: &str, kind: Kind) -> Result<Header, StoreError> {
     let target = root.join(path);
+    require_safe_target_parent(
+        root,
+        Path::new(path).parent().unwrap_or(Path::new("")),
+        path,
+    )
+    .map_err(|error| match error {
+        StoreError::Io(error) => crate::scanning::path_error(&target, error),
+        error => error,
+    })?;
     let metadata = match fs::symlink_metadata(&target) {
         Ok(metadata) if metadata.is_file() && !metadata.file_type().is_symlink() => metadata,
         Ok(_) => return Ok(Header::default()),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Header::default()),
-        Err(error) => return Err(error.into()),
+        Err(error) => return Err(crate::scanning::path_error(&target, error)),
     };
     let expected = crate::revision::metadata_revision(&target, &metadata)?;
     let file = match File::open(&target) {
         Ok(file) => file,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Header::default()),
-        Err(error) => return Err(error.into()),
+        Err(error) => return Err(crate::scanning::path_error(&target, error)),
     };
     let opened = file.metadata()?;
     if !opened.is_file() || crate::revision::open_file_revision(&file, &opened)? != expected {
@@ -125,20 +134,37 @@ pub(super) fn list(
     root: &Path,
     directory: &str,
     recursive: bool,
+    scopes: &crate::activation::ScopeIndex<'_>,
+    scope: Option<&str>,
 ) -> Result<Vec<String>, StoreError> {
+    if scopes.resolve(directory).scope != scope {
+        return Ok(Vec::new());
+    }
     match require_safe_target_parent(root, Path::new(directory), "mutation discovery") {
         Ok(()) => {}
         Err(StoreError::Invalid(_)) => return Ok(Vec::new()),
+        Err(StoreError::Io(error)) => {
+            return Err(crate::scanning::path_error(&root.join(directory), error));
+        }
         Err(error) => return Err(error),
     }
     let entries = match fs::read_dir(root.join(directory)) {
         Ok(entries) => entries,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
-        Err(error) => return Err(error.into()),
+        Err(error) => return Err(crate::scanning::path_error(&root.join(directory), error)),
     };
     let mut paths = Vec::new();
     for entry in entries {
         let entry = entry?;
+        let name = entry.file_name().into_string().map_err(|_| {
+            StoreError::Invalid(format!(
+                "mutation dependency name in {directory} is not UTF-8"
+            ))
+        })?;
+        let path = format!("{directory}/{name}");
+        if scopes.resolve(&path).scope != scope {
+            continue;
+        }
         let kind = entry.file_type()?;
         let extension = if directory.ends_with("/boards") || directory.ends_with("/transitions") {
             "toml"
@@ -154,16 +180,10 @@ pub(super) fn list(
         {
             continue;
         }
-        let name = entry.file_name().into_string().map_err(|_| {
-            StoreError::Invalid(format!(
-                "mutation dependency name in {directory} is not UTF-8"
-            ))
-        })?;
-        let path = format!("{directory}/{name}");
         if kind.is_file() {
             paths.push(path);
         } else {
-            paths.extend(list(root, &path, true)?);
+            paths.extend(list(root, &path, true, scopes, scope)?);
         }
     }
     Ok(paths)
