@@ -26,7 +26,7 @@ struct Cli {
 enum Command {
     /// Metadata counts only; never reads or emits file bodies. JSON limit: 8 MiB, no partial stdout. Do not use scan or whole-document parsing to diagnose live Stores: use snapshot, scoped record_index, exact record_detail and diagnostics.
     Scan,
-    /// Validate one exact investigation plus project support summaries, or all scopes incrementally. Opaque bodies are not opened. JSON limit: 8 MiB, no partial stdout. Never use raw/full scans or whole-document parsing on live Stores; recover through snapshot, scoped record_index, exact record_detail and diagnostics.
+    /// Validate one exact investigation plus explicitly referenced dependencies, or all scopes incrementally. Opaque bodies are not opened. JSON limit: 8 MiB, no partial stdout. Never use raw/full scans or whole-document parsing on live Stores; recover through snapshot, scoped record_index, exact record_detail and diagnostics.
     Check {
         #[arg(long)]
         require_activation: bool,

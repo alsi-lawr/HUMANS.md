@@ -33,15 +33,18 @@ impl RelationshipState {
         for record in [old, new].into_iter().flatten() {
             let identity = record.identity.as_ref().expect("reference identity");
             self.dirty.insert(identity.clone());
-            let key = target_key(record);
-            if let Some(paths) = self.reverse.get(&key) {
-                self.availability_changed.extend(paths.iter().cloned());
+            for key in target_keys(record) {
+                if let Some(paths) = self.reverse.get(&key) {
+                    self.availability_changed.extend(paths.iter().cloned());
+                }
             }
         }
         if let Some(record) = old {
             let identity = record.identity.as_ref().expect("reference identity");
             remove_path(&mut self.sources, identity, path);
-            remove_path(&mut self.targets, &target_key(record), path);
+            for key in target_keys(record) {
+                remove_path(&mut self.targets, &key, path);
+            }
             for key in reference_keys(record) {
                 remove_path(&mut self.reverse, &key, path);
             }
@@ -52,10 +55,9 @@ impl RelationshipState {
                 .entry(identity.clone())
                 .or_default()
                 .insert(path.into());
-            self.targets
-                .entry(target_key(record))
-                .or_default()
-                .insert(path.into());
+            for key in target_keys(record) {
+                self.targets.entry(key).or_default().insert(path.into());
+            }
             for key in reference_keys(record) {
                 self.reverse.entry(key).or_default().insert(path.into());
             }
@@ -87,8 +89,10 @@ impl RelationshipState {
             }
         }
         for record in [old, new].into_iter().flatten() {
-            if let Some(paths) = self.reverse.get(&target_key(record)) {
-                self.availability_changed.extend(paths.iter().cloned());
+            for key in target_keys(record) {
+                if let Some(paths) = self.reverse.get(&key) {
+                    self.availability_changed.extend(paths.iter().cloned());
+                }
             }
         }
     }
@@ -226,13 +230,15 @@ fn remove_path<K: Ord>(map: &mut BTreeMap<K, BTreeSet<String>>, key: &K, path: &
         }
     }
 }
-fn target_key(record: &DerivedRecord) -> TargetKey {
+fn target_keys(record: &DerivedRecord) -> [TargetKey; 2] {
     let identity = record.identity.as_ref().expect("reference identity");
-    (
-        identity.scope.project.clone(),
-        record.kind == Some(Kind::Decision),
-        identity.identity.clone(),
-    )
+    [identity.identity.as_str(), record.path.as_str()].map(|reference| {
+        (
+            identity.scope.project.clone(),
+            record.kind == Some(Kind::Decision),
+            reference.into(),
+        )
+    })
 }
 fn reference_keys(record: &DerivedRecord) -> impl Iterator<Item = TargetKey> + '_ {
     references(record)

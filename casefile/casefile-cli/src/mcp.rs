@@ -415,7 +415,7 @@ impl Session {
                 "protocolVersion": protocol,
                 "capabilities": {"tools": {"listChanged": false}},
                 "serverInfo": {"name": "casefile", "version": env!("CARGO_PKG_VERSION")},
-                "instructions": "Casefile tools operate only on the explicit planning root. Read in order: snapshot catalogue, select one exact project and investigation, request its record_index, then request only necessary exact record_detail identities. Never request unscoped or bulk record bodies and compare freshness only for the same typed target; catalogue/global revisions and scoped dependencies are different domains. Never run casefile scan, raw/full scans or whole-document parsing on live Stores. For validation failures use the exact scope diagnostics query and its safe next query. Legacy check --investigation read the full Store; current check reads only exact scope and project support summaries. JSON responses are limited to 8 MiB before stdout. Every preview states approval_required. Request external approval only when true; apply an exact live-session preview with preview_id."
+                "instructions": "Casefile tools operate only on the explicit planning root. Read in order: snapshot catalogue, select one exact project and investigation, request its record_index, then request only necessary exact record_detail identities. Never request unscoped or bulk record bodies and compare freshness only for the same typed target; catalogue/global revisions and scoped dependencies are different domains. Never run casefile scan, raw/full scans or whole-document parsing on live Stores. For validation failures use the exact scope diagnostics query and its safe next query. Legacy check --investigation read the full Store; current check validates only the exact investigation and explicitly referenced dependencies. Bare work-item IDs resolve locally; bare decision IDs must resolve uniquely across the investigation and project decision-log, making that lookup a required dependency. An explicit local record path avoids the project lookup. Cross-investigation references require contained Store-relative record paths. Global duplicate-ID and incoming-reference checks require an explicit whole-Store check. Snapshot cache not_observed does not assess full-index freshness. JSON responses are limited to 8 MiB before stdout. Every preview states approval_required. Request external approval only when true; apply an exact live-session preview with preview_id."
             }),
         )
     }
@@ -599,7 +599,7 @@ fn tool_definitions() -> Vec<Value> {
     vec![
         tool(
             "casefile_snapshot",
-            "Read only bounded root capabilities, global catalogue freshness, diagnostic coverage counts, and project/investigation catalogue. Then select one exact investigation before querying records.",
+            "Read only bounded root capabilities, configuration/registry catalogue freshness, diagnostic coverage counts, and project/investigation catalogue. Then select one exact investigation before querying records.",
             object_schema(json!({}), &[]),
         ),
         tool(
@@ -1130,10 +1130,18 @@ fn query_output_schema() -> Value {
         object_schema(
             json!({
                 "result": {"const": "diagnostics"}, "freshness": scope_token_schema("diagnostics"),
+                "diagnostic_coverage": {"const": "investigation_and_explicit_dependencies"},
                 "scope": scope_schema(), "diagnostics": {"type": "array", "maxItems": 128, "items": diagnostic_schema()},
                 "total_count": {"type": "integer", "minimum": 0},
             }),
-            &["result", "freshness", "scope", "diagnostics", "total_count"],
+            &[
+                "result",
+                "freshness",
+                "scope",
+                "diagnostics",
+                "total_count",
+                "diagnostic_coverage",
+            ],
         ),
         object_schema(
             json!({
@@ -1208,7 +1216,7 @@ fn scope_token_schema(query: &str) -> Value {
     let dependency = one_of_object(vec![
         stamped("activation_selection"),
         stamped("selected_records"),
-        stamped("project_support"),
+        stamped("referenced_records"),
         object_schema(
             json!({"dependency": {"const": "attachments"}, "targets": {"type": "object", "additionalProperties": {"type": "string", "enum": ["missing", "regular", "unsafe"]}}}),
             &["dependency", "targets"],
@@ -1580,6 +1588,7 @@ fn diagnostic_schema() -> Value {
 fn cache_schema() -> Value {
     one_of_object(vec![
         object_schema(json!({"state": {"const": "not_configured"}}), &["state"]),
+        object_schema(json!({"state": {"const": "not_observed"}}), &["state"]),
         object_schema(json!({"state": {"const": "missing"}}), &["state"]),
         object_schema(
             json!({

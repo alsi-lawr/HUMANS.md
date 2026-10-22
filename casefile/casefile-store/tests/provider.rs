@@ -64,7 +64,7 @@ fn new_ticket(root: &Path) -> (String, RecordDraft) {
 }
 
 #[test]
-fn snapshot_and_exact_scoped_reads_are_bounded_protocol_v5() {
+fn snapshot_and_exact_scoped_reads_are_bounded_protocol_v6() {
     let root = fixture();
     let store = Store::open(root.path()).expect("store");
     let provider = Provider::without_cache(store.clone());
@@ -94,9 +94,9 @@ fn snapshot_and_exact_scoped_reads_are_bounded_protocol_v5() {
                 .preview_id,
         )
         .expect("progress apply");
-    let snapshot = provider.snapshot_for_protocol(5).expect("snapshot");
+    let snapshot = provider.snapshot_for_protocol(6).expect("snapshot");
     assert_eq!(snapshot.activation, ActivationState::Active);
-    assert_eq!(snapshot.capabilities.protocol_version, 5);
+    assert_eq!(snapshot.capabilities.protocol_version, 6);
     assert_eq!(snapshot.capabilities.planning_format_versions, [1]);
     assert_eq!(
         snapshot.capabilities.mutation,
@@ -133,7 +133,7 @@ fn snapshot_and_exact_scoped_reads_are_bounded_protocol_v5() {
             .contains(&ProviderOperation::ApplyProgress)
     );
     assert!(matches!(
-        provider.snapshot_for_protocol(4),
+        provider.snapshot_for_protocol(5),
         Err(ProviderError::UnsupportedProtocol { .. })
     ));
 
@@ -940,7 +940,7 @@ impl ProviderCache for FailingCache {
 }
 
 #[test]
-fn cache_refresh_failure_after_a_confirmed_write_is_degraded_not_authoritative() {
+fn cache_failure_is_assessed_only_by_explicit_refresh_after_scoped_write() {
     let root = fixture();
     let provider = Provider::new(Store::open(root.path()).expect("store"), FailingCache);
     let (path, draft) = new_ticket(root.path());
@@ -954,17 +954,164 @@ fn cache_refresh_failure_after_a_confirmed_write_is_degraded_not_authoritative()
         .apply_record(&preview.preview_id)
         .expect("canonical write succeeds");
     assert!(root.path().join(path).is_file());
-    assert!(
-        matches!(outcome.cache, CacheState::Degraded { ref message } if message.contains("injected"))
-    );
+    assert_eq!(outcome.cache, CacheState::NotObserved);
     assert!(matches!(
         provider.snapshot().expect("canonical snapshot").cache,
-        CacheState::Degraded { .. }
+        CacheState::NotObserved
     ));
     assert!(matches!(
         provider.refresh_full_cache().expect("explicit refresh"),
         CacheState::Degraded { .. }
     ));
+}
+
+#[cfg(unix)]
+#[test]
+fn configured_scoped_apply_ignores_denied_siblings_until_explicit_full_refresh() {
+    use casefile_store::DerivedSnapshot;
+    use std::{cell::RefCell, os::unix::fs::PermissionsExt, path::PathBuf, rc::Rc};
+
+    #[derive(Clone, Default)]
+    struct MemoryCache(Rc<RefCell<Option<DerivedSnapshot>>>);
+    impl ProviderCache for MemoryCache {
+        fn observe(&self, current: &Revision) -> CacheState {
+            match self.0.borrow().as_ref() {
+                Some(snapshot) if &snapshot.source_revision == current => CacheState::Current {
+                    source_revision: current.clone(),
+                },
+                Some(snapshot) => CacheState::Stale {
+                    indexed_revision: snapshot.source_revision.clone(),
+                    current_revision: current.clone(),
+                },
+                None => CacheState::Missing,
+            }
+        }
+        fn refresh(
+            &self,
+            snapshot: &DerivedSnapshot,
+            _: &dyn casefile_store::RevisionSource,
+        ) -> Result<(), String> {
+            *self.0.borrow_mut() = Some(snapshot.clone());
+            Ok(())
+        }
+    }
+    fn refresh_current(provider: &Provider<MemoryCache>) -> Revision {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        loop {
+            let state = provider.refresh_full_cache().expect("explicit refresh");
+            if let CacheState::Current { source_revision } = state {
+                return source_revision;
+            }
+            assert!(std::time::Instant::now() < deadline, "{state:?}");
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+    }
+    struct RestorePermissions(PathBuf, fs::Permissions);
+    impl Drop for RestorePermissions {
+        fn drop(&mut self) {
+            fs::set_permissions(&self.0, self.1.clone()).unwrap();
+        }
+    }
+
+    for directory in [false, true] {
+        let root = fixture();
+        let external = independent_investigation(root.path());
+        let external_bytes = fs::read(root.path().join(&external)).unwrap();
+        let target = root.path().join(if directory {
+            "projects/demo/investigations/other"
+        } else {
+            &external
+        });
+        let denied =
+            RestorePermissions(target.clone(), fs::metadata(&target).unwrap().permissions());
+        fs::set_permissions(&target, fs::Permissions::from_mode(0o0)).unwrap();
+        let error = if directory {
+            fs::read_dir(&target).err()
+        } else {
+            fs::read(&target).err()
+        };
+        let Some(error) = error else {
+            eprintln!("permission assertions UNEXERCISED: process bypasses mode 000");
+            return;
+        };
+        assert_eq!(error.kind(), std::io::ErrorKind::PermissionDenied);
+
+        let cache = MemoryCache::default();
+        let published = cache.0.clone();
+        let provider = Provider::new(Store::open(root.path()).unwrap(), cache);
+        assert_eq!(provider.snapshot().unwrap().cache, CacheState::NotObserved);
+        let path = format!("{INVESTIGATION}/tickets/accepted/HMD-011.md");
+        let source = fs::read_to_string(root.path().join(&path)).unwrap();
+        let mut draft = casefile_core::parse_draft(&path, Kind::Ticket, &source).unwrap();
+        for title in [
+            "Scoped write with denied sibling",
+            "Scoped write with readable sibling",
+        ] {
+            if let RecordDraft::Ticket(item) = &mut draft {
+                item.title = title.into();
+            }
+            let previous = published.borrow().clone();
+            let preview = provider
+                .preview_record(ChangeRequest::Replace {
+                    path: path.clone(),
+                    draft: draft.clone(),
+                })
+                .unwrap();
+            assert!(preview.diagnostics.is_empty());
+            let outcome = provider.apply_record(&preview.preview_id).unwrap();
+            assert!(!outcome.result.no_op);
+            assert_eq!(outcome.cache, CacheState::NotObserved);
+            assert_eq!(*published.borrow(), previous);
+            assert_eq!(
+                casefile_core::parse_draft(
+                    &path,
+                    Kind::Ticket,
+                    &fs::read_to_string(root.path().join(&path)).unwrap()
+                )
+                .unwrap(),
+                draft
+            );
+            if previous.is_none() {
+                let error = provider.refresh_full_cache().unwrap_err();
+                assert!(
+                    matches!(&error, ProviderError::Store(casefile_store::StoreError::Io(error)) if error.kind() == std::io::ErrorKind::PermissionDenied)
+                );
+                assert!(
+                    error
+                        .to_string()
+                        .contains("projects/demo/investigations/other"),
+                    "{error}"
+                );
+                assert!(published.borrow().is_none());
+                fs::set_permissions(&denied.0, denied.1.clone()).unwrap();
+            }
+            let revision = refresh_current(&provider);
+            let publication = published.borrow();
+            let publication = publication.as_ref().unwrap();
+            assert_eq!(publication.source_revision, revision);
+            assert!(
+                publication
+                    .records
+                    .iter()
+                    .any(|record| record.path == path && record.title == title)
+            );
+            assert!(
+                publication
+                    .records
+                    .iter()
+                    .any(|record| record.path == external
+                        && record.content.as_deref().map(str::as_bytes)
+                            == Some(external_bytes.as_slice()))
+            );
+            if let Some(previous) = previous {
+                assert_ne!(publication.source_revision, previous.source_revision);
+            }
+        }
+        assert_eq!(
+            fs::read(root.path().join(&external)).unwrap(),
+            external_bytes
+        );
+    }
 }
 
 #[test]
@@ -1052,6 +1199,7 @@ fn scoped_diagnostics_report_exact_progress_target_and_bounded_follow_up() {
         scope: found,
         diagnostics,
         total_count,
+        ..
     } = &result
     else {
         panic!("diagnostics")
@@ -1265,4 +1413,187 @@ fn preview_count_eviction_is_oldest_first_and_newest_id_still_applies_original()
         .unwrap(),
         draft
     );
+}
+
+fn independent_investigation(root: &Path) -> String {
+    let other = "projects/demo/investigations/other";
+    let config = fs::read_to_string(root.join("casefile.toml"))
+        .unwrap()
+        .replace(
+            &format!("investigations = [\"{INVESTIGATION}\"]"),
+            &format!("investigations = [\"{INVESTIGATION}\", \"{other}\"]"),
+        );
+    fs::write(root.join("casefile.toml"), config).unwrap();
+    let source =
+        fs::read_to_string(root.join(format!("{INVESTIGATION}/tickets/accepted/HMD-011.md")))
+            .unwrap();
+    let path = format!("{other}/tickets/accepted/HMD-099.md");
+    fs::create_dir_all(root.join(&path).parent().unwrap()).unwrap();
+    fs::write(
+        root.join(&path),
+        source
+            .replace("HMD-011", "HMD-099")
+            .replace("investigation: \"sample\"", "investigation: \"other\"")
+            .replace("decision_refs: [HMD-D-001]", "decision_refs: []"),
+    )
+    .unwrap();
+    path
+}
+
+fn diagnostics(
+    provider: &Provider<NoCache>,
+) -> (
+    casefile_store::ScopeReadToken,
+    Vec<casefile_core::Diagnostic>,
+) {
+    let ProviderQueryResult::Diagnostics {
+        freshness,
+        diagnostics,
+        diagnostic_coverage,
+        ..
+    } = provider
+        .query(ProviderQuery::Diagnostics {
+            scope: InvestigationScope {
+                project: "demo".into(),
+                investigation: "sample".into(),
+            },
+        })
+        .unwrap()
+    else {
+        panic!("diagnostics")
+    };
+    assert_eq!(
+        diagnostic_coverage,
+        casefile_store::DiagnosticCoverage::InvestigationAndExplicitDependencies
+    );
+    (freshness, diagnostics)
+}
+
+#[test]
+fn catalogue_and_scoped_freshness_ignore_sibling_edits_but_required_dependencies_stale_mutations() {
+    let root = fixture();
+    let external = independent_investigation(root.path());
+    let provider = Provider::without_cache(Store::open(root.path()).unwrap());
+    let catalogue = provider.snapshot().unwrap().freshness;
+    let baseline = diagnostics(&provider);
+    assert!(baseline.1.is_empty());
+    let (path, mut draft) = new_ticket(root.path());
+    if let RecordDraft::Ticket(item) = &mut draft {
+        item.id = "HMD-100".into();
+    }
+    let path = path.replace("HMD-099", "HMD-100");
+    let preview = provider
+        .preview_record(ChangeRequest::Create {
+            path: path.clone(),
+            draft,
+        })
+        .unwrap();
+    let outside = fs::read_to_string(root.path().join(&external)).unwrap();
+    fs::write(
+        root.path().join(&external),
+        outside.replace("Minimum ticket", "Unrelated edit"),
+    )
+    .unwrap();
+    assert_eq!(provider.snapshot().unwrap().freshness, catalogue);
+    assert_eq!(diagnostics(&provider), baseline);
+    provider.apply_record(&preview.preview_id).unwrap();
+    let selected = format!("{INVESTIGATION}/tickets/accepted/HMD-011.md");
+    let linked = fs::read_to_string(root.path().join(&selected))
+        .unwrap()
+        .replace(
+            "related_tickets: []",
+            &format!("related_tickets: [{external}]"),
+        );
+    fs::write(root.path().join(&selected), &linked).unwrap();
+    let required = diagnostics(&provider);
+    assert!(required.1.is_empty(), "{:?}", required.1);
+    let mut draft = casefile_core::parse_draft(&selected, Kind::Ticket, &linked).unwrap();
+    if let RecordDraft::Ticket(item) = &mut draft {
+        item.title = "Pending dependency edit".into();
+    }
+    let preview = provider
+        .preview_record(ChangeRequest::Replace {
+            path: selected.clone(),
+            draft,
+        })
+        .unwrap();
+    fs::write(
+        root.path().join(&external),
+        outside.replace("Minimum ticket", "Required dependency edit"),
+    )
+    .unwrap();
+    assert_ne!(diagnostics(&provider).0, required.0);
+    assert!(provider.apply_record(&preview.preview_id).is_err());
+    assert_eq!(
+        fs::read_to_string(root.path().join(&selected)).unwrap(),
+        linked
+    );
+    assert_eq!(provider.snapshot().unwrap().freshness, catalogue);
+    let scoped = diagnostics(&provider).0;
+    let config = fs::read_to_string(root.path().join("casefile.toml"))
+        .unwrap()
+        .replace(
+            "\"projects/demo/investigations/other\"",
+            "\"projects/demo/investigations/other\", \"projects/demo/investigations/unrelated\"",
+        );
+    fs::write(root.path().join("casefile.toml"), config).unwrap();
+    assert_ne!(provider.snapshot().unwrap().freshness, catalogue);
+    assert_eq!(diagnostics(&provider).0, scoped);
+}
+
+#[test]
+fn scoped_mutations_leave_foreign_duplicate_ids_and_incoming_edges_to_explicit_whole_store_checks()
+{
+    let root = fixture();
+    let external = independent_investigation(root.path());
+    let store = Store::open(root.path()).unwrap();
+    let provider = Provider::without_cache(store.clone());
+    let (path, mut draft) = new_ticket(root.path());
+    if let RecordDraft::Ticket(item) = &mut draft {
+        item.id = "HMD-100".into();
+    }
+    let path = path.replace("HMD-099", "HMD-100");
+    let preview = provider
+        .preview_record(ChangeRequest::Create {
+            path: path.clone(),
+            draft,
+        })
+        .unwrap();
+    provider.apply_record(&preview.preview_id).unwrap();
+    let linked = fs::read_to_string(root.path().join(&external))
+        .unwrap()
+        .replace("related_tickets: []", &format!("related_tickets: [{path}]"));
+    fs::write(root.path().join(&external), &linked).unwrap();
+    fs::write(
+        root.path().join(external.replace("HMD-099", "HMD-011")),
+        linked.replace("HMD-099", "HMD-011"),
+    )
+    .unwrap();
+    assert!(diagnostics(&provider).1.is_empty());
+    let deletion = provider
+        .preview_record(ChangeRequest::Delete { path: path.clone() })
+        .unwrap();
+    assert!(deletion.approval_required);
+    assert!(deletion.diagnostics.is_empty());
+    provider.apply_record(&deletion.preview_id).unwrap();
+    assert!(!root.path().join(path).exists());
+    let whole = store.check(None).unwrap();
+    assert_eq!(
+        whole.diagnostic_coverage,
+        casefile_store::DiagnosticCoverage::WholeStore
+    );
+    assert!(
+        whole
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.code == "duplicate_identity")
+    );
+    assert!(
+        whole
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.path == external
+                && diagnostic.code == "unresolved_reference")
+    );
+    assert!(diagnostics(&provider).1.is_empty());
 }

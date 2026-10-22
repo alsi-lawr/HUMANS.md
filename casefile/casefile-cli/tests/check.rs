@@ -207,6 +207,7 @@ fn assert_result(value: &Value, activation: &str, valid: Value, diagnostics: Val
     assert!(revision.starts_with("fsmeta-tree-v1:"), "{revision}");
     assert_eq!(
         json!({
+            "diagnostic_coverage": "whole_store",
             "activation": activation,
             "valid": valid,
             "freshness": {"kind": "store", "revision": revision},

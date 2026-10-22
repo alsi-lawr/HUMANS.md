@@ -146,7 +146,7 @@ impl Projection<'_> {
             entries.push(entry);
         }
         diagnostics.extend(
-            cross_validate_facts(&entries, active, &validation, |_| true)
+            cross_validate_facts(&entries, active, &validation, false, |_| true)
                 .into_iter()
                 .filter(|diagnostic| {
                     validation_paths.contains(&diagnostic.path)

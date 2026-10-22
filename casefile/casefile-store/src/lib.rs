@@ -21,6 +21,7 @@ mod presentation;
 mod progress;
 mod provider;
 mod read_context;
+mod references;
 mod revision;
 mod scanning;
 mod store;
@@ -28,7 +29,7 @@ mod validation;
 mod writing;
 
 pub use activation::ActivationState;
-pub use checking::{CheckResult, ScanSummary};
+pub use checking::{CheckResult, DiagnosticCoverage, ScanSummary};
 pub use derived::{
     DerivedBoard, DerivedBoardColumn, DerivedCard, DerivedProgressNote, DerivedProgressTransition,
     DerivedRecord, DerivedRelationship, DerivedSnapshot, DerivedStrategy, DerivedStrategyBinding,

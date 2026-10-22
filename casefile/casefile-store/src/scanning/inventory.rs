@@ -72,10 +72,11 @@ fn collect_walk(
     let relative_directory = directory
         .strip_prefix(root)
         .map_err(|_| StoreError::Invalid("traversal escaped root".into()))?;
-    crate::store::require_safe_target_parent(root, relative_directory, "Store traversal")?;
+    crate::store::require_safe_target_parent(root, relative_directory, "Store traversal")
+        .map_err(|error| dependency_error(directory, error))?;
     match fs::symlink_metadata(directory) {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
-        Err(error) => return Err(error.into()),
+        Err(error) => return Err(path_error(directory, error)),
         Ok(metadata) if !metadata.is_dir() || metadata.file_type().is_symlink() => {
             return Err(StoreError::Invalid(
                 "Store traversal target must be a non-symlink directory".into(),
@@ -97,7 +98,9 @@ fn collect_walk(
         })
     {
         let item = item.map_err(|error| {
-            StoreError::Io(
+            let path = error.path().unwrap_or(directory).to_owned();
+            path_error(
+                &path,
                 error
                     .into_io_error()
                     .unwrap_or_else(|| std::io::Error::other("Store traversal failed")),
@@ -149,7 +152,8 @@ pub(crate) fn inventory_target(
             .parent()
             .unwrap_or_else(|| Path::new("")),
         relative,
-    )?;
+    )
+    .map_err(|error| dependency_error(&path, error))?;
     match fs::symlink_metadata(&path) {
         Ok(metadata) => {
             let kind = if metadata.file_type().is_symlink() {
@@ -166,7 +170,7 @@ pub(crate) fn inventory_target(
             }))
         }
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(error) => Err(error.into()),
+        Err(error) => Err(path_error(&path, error)),
     }
 }
 
@@ -185,14 +189,15 @@ pub(crate) fn read_observed_entry(
             .parent()
             .unwrap_or_else(|| Path::new("")),
         relative,
-    )?;
+    )
+    .map_err(|error| dependency_error(&entry.path, error))?;
     read_entry(entry, false)
 }
 
 fn read_entry(entry: &InventoryEntry, verify_path: bool) -> Result<Vec<u8>, StoreError> {
     #[cfg(test)]
     crate::checking::observe_open(&entry.path);
-    let mut file = File::open(&entry.path)?;
+    let mut file = File::open(&entry.path).map_err(|error| path_error(&entry.path, error))?;
     let opened_metadata = file.metadata()?;
     if !opened_metadata.is_file() {
         return Err(StoreError::Invalid(
@@ -206,7 +211,8 @@ fn read_entry(entry: &InventoryEntry, verify_path: bool) -> Result<Vec<u8>, Stor
         ));
     }
     let mut bytes = Vec::new();
-    file.read_to_end(&mut bytes)?;
+    file.read_to_end(&mut bytes)
+        .map_err(|error| path_error(&entry.path, error))?;
     let after_open_revision = if verify_path {
         open_file_revision(&file, &file.metadata()?)?
     } else {
@@ -224,6 +230,20 @@ fn read_entry(entry: &InventoryEntry, verify_path: bool) -> Result<Vec<u8>, Stor
         ));
     }
     Ok(bytes)
+}
+
+pub(crate) fn path_error(path: &Path, error: std::io::Error) -> StoreError {
+    StoreError::Io(std::io::Error::new(
+        error.kind(),
+        format!("{}: {error}", path.display()),
+    ))
+}
+
+fn dependency_error(path: &Path, error: StoreError) -> StoreError {
+    match error {
+        StoreError::Io(error) => path_error(path, error),
+        error => error,
+    }
 }
 
 pub(crate) fn require_inventory_unchanged(

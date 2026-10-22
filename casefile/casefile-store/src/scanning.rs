@@ -206,9 +206,13 @@ fn scan_with_facts(
         }
         entries.push(entry);
     }
-    diagnostics.extend(cross_validate_facts(&entries, &active, &facts, |path| {
-        !nonregular_paths.contains(path)
-    }));
+    diagnostics.extend(cross_validate_facts(
+        &entries,
+        &active,
+        &facts,
+        true,
+        |path| !nonregular_paths.contains(path),
+    ));
     diagnostics.extend(binding_diagnostics_facts(&entries, &facts));
     require_inventory_unchanged(root, &inventory)?;
     let revision = if overlay.is_empty() {
@@ -262,9 +266,12 @@ pub(super) struct CatalogueBaseline {
 }
 
 pub(super) fn catalogue_baseline(root: &Path) -> Result<CatalogueBaseline, StoreError> {
-    let inventory = metadata_inventory(root)?;
-    let activation_bytes = read_optional_regular(&inventory, "casefile.toml")?;
-    let projects_bytes = read_optional_regular(&inventory, "projects.toml")?;
+    let entries = ["casefile.toml", "projects.toml"]
+        .into_iter()
+        .map(|path| Ok((path.to_owned(), inventory_target(root, path)?)))
+        .collect::<Result<BTreeMap<_, _>, StoreError>>()?;
+    let activation_bytes = read_optional_regular(&entries, "casefile.toml")?;
+    let projects_bytes = read_optional_regular(&entries, "projects.toml")?;
     let (activation, active, mut diagnostics) = activation_content(activation_bytes.as_deref());
     let projects = match projects_bytes {
         Some(bytes) => match parse_project_map_values("projects.toml", &bytes) {
@@ -295,9 +302,25 @@ pub(super) fn catalogue_baseline(root: &Path) -> Result<CatalogueBaseline, Store
             );
         }
     }
-    require_inventory_unchanged(root, &inventory)?;
+    for (path, entry) in &entries {
+        if inventory_target(root, path)?
+            .as_ref()
+            .map(|entry| &entry.revision)
+            != entry.as_ref().map(|entry| &entry.revision)
+        {
+            return Err(StoreError::Invalid(format!(
+                "{path}: catalogue changed during read"
+            )));
+        }
+    }
+    let revision = store_revision(
+        entries.iter().filter_map(|(path, entry)| {
+            entry.as_ref().map(|entry| (path.as_str(), &entry.revision))
+        }),
+        false,
+    );
     Ok(CatalogueBaseline {
-        revision: inventory.revision,
+        revision,
         activation,
         active,
         projects,
@@ -306,10 +329,10 @@ pub(super) fn catalogue_baseline(root: &Path) -> Result<CatalogueBaseline, Store
 }
 
 fn read_optional_regular(
-    inventory: &MetadataInventory,
+    entries: &BTreeMap<String, Option<InventoryEntry>>,
     path: &str,
 ) -> Result<Option<Vec<u8>>, StoreError> {
-    match inventory.entries.get(path) {
+    match entries.get(path).and_then(Option::as_ref) {
         Some(entry) if entry.kind == InventoryKind::Regular => {
             read_inventory_entry(entry).map(Some)
         }
@@ -323,7 +346,8 @@ fn read_optional_regular(
 mod inventory;
 pub(super) use inventory::{
     InventoryEntry, InventoryKind, MetadataInventory, collect_selected, inventory_target,
-    metadata_inventory, read_inventory_entry, read_observed_entry, require_inventory_unchanged,
+    metadata_inventory, path_error, read_inventory_entry, read_observed_entry,
+    require_inventory_unchanged,
 };
 mod scoped;
 pub(super) use scoped::{ScopedRead, scoped_detail_scan, scoped_scan};

@@ -393,17 +393,17 @@ pub fn derive_relationships<'a>(
     records: impl IntoIterator<Item = &'a DerivedRecord>,
 ) -> Vec<DerivedRelationship> {
     let records = records.into_iter().collect::<Vec<_>>();
-    let mut decisions: BTreeMap<(&str, &str), Vec<&ScopedIdentity>> = BTreeMap::new();
-    let mut work_items: BTreeMap<(&str, &str), Vec<&ScopedIdentity>> = BTreeMap::new();
+    let mut by_identity = BTreeMap::<(&str, &str), Vec<&DerivedRecord>>::new();
+    let by_path = records
+        .iter()
+        .map(|record| (record.path.as_str(), *record))
+        .collect::<BTreeMap<_, _>>();
     for record in &records {
-        let Some(identity) = record.identity.as_ref() else {
-            continue;
-        };
-        let key = (identity.scope.project.as_str(), identity.identity.as_str());
-        if record.kind == Some(Kind::Decision) {
-            decisions.entry(key).or_default().push(identity);
-        } else if matches!(record.kind, Some(Kind::Ticket | Kind::Epic)) {
-            work_items.entry(key).or_default().push(identity);
+        if let Some(identity) = &record.identity {
+            by_identity
+                .entry((&identity.scope.project, &identity.identity))
+                .or_default()
+                .push(record);
         }
     }
     let mut result = Vec::new();
@@ -418,17 +418,44 @@ pub fn derive_relationships<'a>(
             (&item.superseded_by, RelationshipKind::SupersededBy),
         ] {
             for reference in references {
-                let key = (source.scope.project.as_str(), reference.as_str());
-                let targets = if kind == RelationshipKind::Decision {
-                    decisions.get(&key)
+                let targets = if reference.contains('/') {
+                    by_path
+                        .get(reference.as_str())
+                        .copied()
+                        .into_iter()
+                        .collect::<Vec<_>>()
                 } else {
-                    work_items.get(&key)
+                    by_identity
+                        .get(&(source.scope.project.as_str(), reference.as_str()))
+                        .into_iter()
+                        .flatten()
+                        .copied()
+                        .filter(|target| {
+                            target.identity.as_ref().is_some_and(|identity| {
+                                identity.scope.investigation == source.scope.investigation
+                                    || kind == RelationshipKind::Decision
+                                        && identity.scope.investigation.is_none()
+                            })
+                        })
+                        .collect()
                 };
-                let targets = targets.map(Vec::as_slice).unwrap_or_default();
+                let targets =
+                    targets
+                        .into_iter()
+                        .filter(|target| {
+                            target.identity.as_ref().is_some_and(|identity| {
+                                identity.scope.project == source.scope.project
+                            }) && if kind == RelationshipKind::Decision {
+                                target.kind == Some(Kind::Decision)
+                            } else {
+                                matches!(target.kind, Some(Kind::Ticket | Kind::Epic))
+                            }
+                        })
+                        .collect::<Vec<_>>();
                 if targets.len() == 1 {
                     result.push(DerivedRelationship {
                         source: source.clone(),
-                        target: (*targets[0]).clone(),
+                        target: targets[0].identity.as_ref().unwrap().clone(),
                         kind,
                     });
                 }

@@ -18,7 +18,7 @@ use std::{
 };
 use thiserror::Error;
 
-pub const PROVIDER_PROTOCOL_VERSION: u32 = 5;
+pub const PROVIDER_PROTOCOL_VERSION: u32 = 6;
 
 mod indexed;
 pub use indexed::WorkspaceReadToken;
@@ -100,6 +100,7 @@ pub struct InvestigationScopedIdentity {
 #[serde(tag = "state", rename_all = "snake_case")]
 pub enum CacheState {
     NotConfigured,
+    NotObserved,
     Missing,
     Stale {
         indexed_revision: Revision,
@@ -222,6 +223,7 @@ pub enum ProviderQuery {
 #[serde(tag = "result", rename_all = "snake_case")]
 pub enum ProviderQueryResult {
     Diagnostics {
+        diagnostic_coverage: crate::DiagnosticCoverage,
         freshness: crate::ScopeReadToken,
         scope: InvestigationScope,
         diagnostics: Vec<Diagnostic>,
@@ -401,14 +403,11 @@ impl Provider<NoCache> {
 
 impl<C: ProviderCache> Provider<C> {
     pub fn new(store: Store, cache: C) -> Self {
-        let watch = cache
-            .configured()
-            .then(|| watching::CacheWatch::new(store.observation_root()));
         Self {
             store,
             cache,
             previews: Mutex::new(PreviewVault::default()),
-            watch: Mutex::new(watch),
+            watch: Mutex::new(None),
         }
     }
 
@@ -445,7 +444,11 @@ impl<C: ProviderCache> Provider<C> {
             })
             .collect();
         let diagnostic_count = baseline.diagnostics.len();
-        let cache = self.cache.observe(&baseline.revision);
+        let cache = if self.cache.configured() {
+            CacheState::NotObserved
+        } else {
+            CacheState::NotConfigured
+        };
         Ok(ProviderSnapshot {
             capabilities: capabilities(baseline.activation),
             activation: baseline.activation,
@@ -510,6 +513,7 @@ impl<C: ProviderCache> Provider<C> {
                     .into());
                 };
                 ProviderQueryResult::Diagnostics {
+                    diagnostic_coverage: result.diagnostic_coverage,
                     freshness,
                     scope,
                     diagnostics,
@@ -997,10 +1001,7 @@ impl<C: ProviderCache> Provider<C> {
 
     fn outcome<T>(&self, result: T) -> Result<ProviderApplyOutcome<T>, ProviderError> {
         let cache = if self.cache.configured() {
-            self.refresh_full_cache()
-                .unwrap_or_else(|error| CacheState::Degraded {
-                    message: error.to_string(),
-                })
+            CacheState::NotObserved
         } else {
             CacheState::NotConfigured
         };
@@ -1210,26 +1211,30 @@ mod outcome_tests;
 #[cfg(test)]
 mod hierarchy_tests {
     use super::*;
-    use std::{
-        fs,
-        sync::{
-            Arc,
-            atomic::{AtomicUsize, Ordering},
-        },
-    };
+    use std::fs;
     use tempfile::TempDir;
 
-    struct CountingCache {
-        observes: Arc<AtomicUsize>,
-        refreshes: Arc<AtomicUsize>,
-    }
-    impl ProviderCache for CountingCache {
-        fn observe(&self, _: &Revision) -> CacheState {
-            self.observes.fetch_add(1, Ordering::SeqCst);
-            CacheState::Missing
+    #[derive(Default)]
+    struct TestCache(Mutex<Option<Revision>>);
+    impl ProviderCache for TestCache {
+        fn observe(&self, current: &Revision) -> CacheState {
+            match self.0.lock().unwrap().as_ref() {
+                Some(revision) if revision == current => CacheState::Current {
+                    source_revision: revision.clone(),
+                },
+                Some(revision) => CacheState::Stale {
+                    indexed_revision: revision.clone(),
+                    current_revision: current.clone(),
+                },
+                None => CacheState::Missing,
+            }
         }
-        fn refresh(&self, _: &DerivedSnapshot, _: &dyn RevisionSource) -> Result<(), String> {
-            self.refreshes.fetch_add(1, Ordering::SeqCst);
+        fn refresh(
+            &self,
+            snapshot: &DerivedSnapshot,
+            _: &dyn RevisionSource,
+        ) -> Result<(), String> {
+            *self.0.lock().unwrap() = Some(snapshot.source_revision.clone());
             Ok(())
         }
     }
@@ -1260,19 +1265,17 @@ mod hierarchy_tests {
     }
 
     #[test]
-    fn snapshot_and_index_observe_cache_without_refreshing_it() {
+    fn scoped_reads_leave_full_index_cache_unobserved_until_explicit_refresh() {
         let root = root();
-        let observes = Arc::new(AtomicUsize::new(0));
-        let refreshes = Arc::new(AtomicUsize::new(0));
         let provider = Provider::new(
             Store::open(root.path()).expect("store"),
-            CountingCache {
-                observes: observes.clone(),
-                refreshes: refreshes.clone(),
-            },
+            TestCache::default(),
         );
-        provider.snapshot().expect("snapshot");
-        provider
+        assert_eq!(
+            provider.snapshot().expect("snapshot").cache,
+            CacheState::NotObserved
+        );
+        let query = provider
             .query(ProviderQuery::RecordIndex {
                 scope: InvestigationScope {
                     project: "demo".into(),
@@ -1280,9 +1283,20 @@ mod hierarchy_tests {
                 },
             })
             .expect("index");
-        assert_eq!(observes.load(Ordering::SeqCst), 1);
-        assert_eq!(refreshes.load(Ordering::SeqCst), 0);
-        provider.refresh_full_cache().expect("explicit refresh");
-        assert_eq!(refreshes.load(Ordering::SeqCst), 1);
+        assert!(
+            matches!(query, ProviderQueryResult::RecordIndex { records, .. }
+            if records.len() == 1 && records[0].identity.as_deref() == Some("HMD-011"))
+        );
+        assert!(matches!(
+            provider.refresh_full_cache().expect("explicit refresh"),
+            CacheState::Current { .. }
+        ));
+        assert_eq!(
+            provider
+                .snapshot()
+                .expect("catalogue after full refresh")
+                .cache,
+            CacheState::NotObserved
+        );
     }
 }

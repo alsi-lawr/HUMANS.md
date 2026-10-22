@@ -215,64 +215,7 @@ impl ScopeObservation {
         entries.sort_unstable_by(|left, right| left.0.cmp(&right.0));
         let mut mapping_diagnostics = Vec::new();
         let mapping_revision = if matches!(target, ScopeReadTarget::Diagnostics { .. }) {
-            for base in &project.investigations {
-                collect_selected(root, &root.join(base), &mut support, |relative, is_dir| {
-                    let local = relative.strip_prefix(base).expect("support traversal");
-                    let included = local.components().next().is_none_or(|component| matches!(component, Component::Normal(value) if value == "tickets" || value == "epics" || value == "decision-log"));
-                    included
-                        && (is_dir
-                            || local.to_str().is_none_or(|local| {
-                                crate::layout::scope_container_native_relative_path(local)
-                                    || matches!(
-                                        crate::layout::kind_in_native_relative_path(local),
-                                        Some(
-                                            casefile_core::Kind::Ticket
-                                                | casefile_core::Kind::Epic
-                                                | casefile_core::Kind::Decision
-                                        )
-                                    )
-                            }))
-                })?;
-                require_directory_containers(&support, base)?;
-            }
-            let decision_path = format!("projects/{}/decision-log", scope.project);
-            collect_selected(
-                root,
-                &root.join(&decision_path),
-                &mut support,
-                |relative, is_dir| {
-                    let local = relative
-                        .strip_prefix(&decision_path)
-                        .expect("decision traversal");
-                    !is_dir
-                        && local
-                            .to_str()
-                            .is_none_or(|name| name.ends_with(".md") && name.contains('-'))
-                },
-            )?;
-            let index = crate::activation::ScopeIndex::new(&active);
-            support.sort_by(|left, right| left.0.cmp(&right.0));
-            support.dedup_by(|later, previous| {
-                if later.0 == previous.0 {
-                    std::mem::swap(later, previous);
-                    true
-                } else {
-                    false
-                }
-            });
-            support.retain(|(relative, _)| {
-                entries
-                    .binary_search_by(|entry| entry.0.cmp(relative))
-                    .is_err()
-                    && matches!(
-                        index.resolve(relative).kind,
-                        Some(
-                            casefile_core::Kind::Ticket
-                                | casefile_core::Kind::Epic
-                                | casefile_core::Kind::Decision
-                        )
-                    )
-            });
+            support = crate::references::observe_dependencies(root, &active, &entries)?;
             let bytes = read_optional(root, "projects.toml")?;
             let value = bytes
                 .as_deref()
@@ -374,7 +317,7 @@ impl ScopeObservation {
             let support = inventory_digest(&self.support);
             fields.push(("support".into(), support.clone()));
             fields.push(("mapping".into(), mapping.clone()));
-            dependencies.push(ReadDependency::ProjectSupport { revision: support });
+            dependencies.push(ReadDependency::ReferencedRecords { revision: support });
             dependencies.push(ReadDependency::ProjectMapping {
                 project: self.target.scope().project.clone(),
                 revision: mapping.clone(),

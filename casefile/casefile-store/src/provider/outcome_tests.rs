@@ -93,38 +93,21 @@ fn unconfigured_outcomes_do_not_read_the_store_after_commit_or_replay() {
     );
 }
 
-#[derive(Default)]
-struct CountingCache {
-    refreshes: Cell<usize>,
-}
-
-impl ProviderCache for CountingCache {
-    fn observe(&self, _: &Revision) -> CacheState {
-        CacheState::Missing
-    }
-
-    fn refresh(&self, _: &DerivedSnapshot, _: &dyn RevisionSource) -> Result<(), String> {
-        self.refreshes.set(self.refreshes.get() + 1);
-        Ok(())
-    }
-}
-
 #[test]
-fn cache_preparation_failure_preserves_committed_receipt_bytes_and_supported_replay() {
-    let (temporary, provider, preview, committed) = committed_progress(CountingCache::default());
+fn configured_outcomes_preserve_committed_receipts_without_assessing_cache() {
+    let (temporary, provider, preview, committed) = committed_progress(RetainedCache::default());
     let root = temporary.path().join("store");
     let hidden = temporary.path().join("committed");
     let bytes = fs::read(root.join(&committed.path)).expect("committed bytes");
 
-    // The failure is before cache.refresh(), not a failure of cache publication.
+    // An unavailable Store cannot turn a committed scoped receipt into a cache failure.
     fs::rename(&root, &hidden).expect("inject unavailable root");
     assert!(provider.store.scan().is_err());
     let outcome = provider
         .outcome(committed.clone())
         .expect("committed outcome");
     assert_eq!(outcome.result, committed);
-    assert!(matches!(outcome.cache, CacheState::Degraded { .. }));
-    assert_eq!(provider.cache.refreshes.get(), 0);
+    assert_eq!(outcome.cache, CacheState::NotObserved);
     assert_eq!(
         fs::read(hidden.join(&committed.path)).expect("bytes"),
         bytes
@@ -137,6 +120,7 @@ fn cache_preparation_failure_preserves_committed_receipt_bytes_and_supported_rep
         .apply_progress(&preview.preview_id)
         .expect("supported replay");
     assert!(replay.result.no_op);
+    assert_eq!(replay.cache, CacheState::NotObserved);
     assert_eq!(
         replay.result.resulting_target_revision,
         committed.resulting_target_revision

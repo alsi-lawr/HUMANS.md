@@ -29,7 +29,8 @@ impl<C: ProviderCache> Provider<C> {
             return Ok((CacheState::NotConfigured, None));
         }
         let mut watch = self.watch.lock().expect("cache refresh");
-        let watch = watch.as_mut().expect("configured cache watcher");
+        let watch =
+            watch.get_or_insert_with(|| watching::CacheWatch::new(self.store.observation_root()));
         let observation = watch.observe();
         if !observation.dirty {
             let baseline = metadata_inventory(self.store.observation_root())?;
