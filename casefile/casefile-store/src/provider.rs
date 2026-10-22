@@ -1001,10 +1001,7 @@ impl<C: ProviderCache> Provider<C> {
 
     fn outcome<T>(&self, result: T) -> Result<ProviderApplyOutcome<T>, ProviderError> {
         let cache = if self.cache.configured() {
-            self.refresh_full_cache()
-                .unwrap_or_else(|error| CacheState::Degraded {
-                    message: error.to_string(),
-                })
+            CacheState::NotObserved
         } else {
             CacheState::NotConfigured
         };

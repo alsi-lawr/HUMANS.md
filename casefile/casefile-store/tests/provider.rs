@@ -940,7 +940,7 @@ impl ProviderCache for FailingCache {
 }
 
 #[test]
-fn cache_refresh_failure_after_a_confirmed_write_is_degraded_not_authoritative() {
+fn cache_failure_is_assessed_only_by_explicit_refresh_after_scoped_write() {
     let root = fixture();
     let provider = Provider::new(Store::open(root.path()).expect("store"), FailingCache);
     let (path, draft) = new_ticket(root.path());
@@ -954,9 +954,7 @@ fn cache_refresh_failure_after_a_confirmed_write_is_degraded_not_authoritative()
         .apply_record(&preview.preview_id)
         .expect("canonical write succeeds");
     assert!(root.path().join(path).is_file());
-    assert!(
-        matches!(outcome.cache, CacheState::Degraded { ref message } if message.contains("injected"))
-    );
+    assert_eq!(outcome.cache, CacheState::NotObserved);
     assert!(matches!(
         provider.snapshot().expect("canonical snapshot").cache,
         CacheState::NotObserved
@@ -965,6 +963,155 @@ fn cache_refresh_failure_after_a_confirmed_write_is_degraded_not_authoritative()
         provider.refresh_full_cache().expect("explicit refresh"),
         CacheState::Degraded { .. }
     ));
+}
+
+#[cfg(unix)]
+#[test]
+fn configured_scoped_apply_ignores_denied_siblings_until_explicit_full_refresh() {
+    use casefile_store::DerivedSnapshot;
+    use std::{cell::RefCell, os::unix::fs::PermissionsExt, path::PathBuf, rc::Rc};
+
+    #[derive(Clone, Default)]
+    struct MemoryCache(Rc<RefCell<Option<DerivedSnapshot>>>);
+    impl ProviderCache for MemoryCache {
+        fn observe(&self, current: &Revision) -> CacheState {
+            match self.0.borrow().as_ref() {
+                Some(snapshot) if &snapshot.source_revision == current => CacheState::Current {
+                    source_revision: current.clone(),
+                },
+                Some(snapshot) => CacheState::Stale {
+                    indexed_revision: snapshot.source_revision.clone(),
+                    current_revision: current.clone(),
+                },
+                None => CacheState::Missing,
+            }
+        }
+        fn refresh(
+            &self,
+            snapshot: &DerivedSnapshot,
+            _: &dyn casefile_store::RevisionSource,
+        ) -> Result<(), String> {
+            *self.0.borrow_mut() = Some(snapshot.clone());
+            Ok(())
+        }
+    }
+    fn refresh_current(provider: &Provider<MemoryCache>) -> Revision {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        loop {
+            let state = provider.refresh_full_cache().expect("explicit refresh");
+            if let CacheState::Current { source_revision } = state {
+                return source_revision;
+            }
+            assert!(std::time::Instant::now() < deadline, "{state:?}");
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+    }
+    struct RestorePermissions(PathBuf, fs::Permissions);
+    impl Drop for RestorePermissions {
+        fn drop(&mut self) {
+            fs::set_permissions(&self.0, self.1.clone()).unwrap();
+        }
+    }
+
+    for directory in [false, true] {
+        let root = fixture();
+        let external = independent_investigation(root.path());
+        let external_bytes = fs::read(root.path().join(&external)).unwrap();
+        let target = root.path().join(if directory {
+            "projects/demo/investigations/other"
+        } else {
+            &external
+        });
+        let denied =
+            RestorePermissions(target.clone(), fs::metadata(&target).unwrap().permissions());
+        fs::set_permissions(&target, fs::Permissions::from_mode(0o0)).unwrap();
+        let error = if directory {
+            fs::read_dir(&target).err()
+        } else {
+            fs::read(&target).err()
+        };
+        let Some(error) = error else {
+            eprintln!("permission assertions UNEXERCISED: process bypasses mode 000");
+            return;
+        };
+        assert_eq!(error.kind(), std::io::ErrorKind::PermissionDenied);
+
+        let cache = MemoryCache::default();
+        let published = cache.0.clone();
+        let provider = Provider::new(Store::open(root.path()).unwrap(), cache);
+        assert_eq!(provider.snapshot().unwrap().cache, CacheState::NotObserved);
+        let path = format!("{INVESTIGATION}/tickets/accepted/HMD-011.md");
+        let source = fs::read_to_string(root.path().join(&path)).unwrap();
+        let mut draft = casefile_core::parse_draft(&path, Kind::Ticket, &source).unwrap();
+        for title in [
+            "Scoped write with denied sibling",
+            "Scoped write with readable sibling",
+        ] {
+            if let RecordDraft::Ticket(item) = &mut draft {
+                item.title = title.into();
+            }
+            let previous = published.borrow().clone();
+            let preview = provider
+                .preview_record(ChangeRequest::Replace {
+                    path: path.clone(),
+                    draft: draft.clone(),
+                })
+                .unwrap();
+            assert!(preview.diagnostics.is_empty());
+            let outcome = provider.apply_record(&preview.preview_id).unwrap();
+            assert!(!outcome.result.no_op);
+            assert_eq!(outcome.cache, CacheState::NotObserved);
+            assert_eq!(*published.borrow(), previous);
+            assert_eq!(
+                casefile_core::parse_draft(
+                    &path,
+                    Kind::Ticket,
+                    &fs::read_to_string(root.path().join(&path)).unwrap()
+                )
+                .unwrap(),
+                draft
+            );
+            if previous.is_none() {
+                let error = provider.refresh_full_cache().unwrap_err();
+                assert!(
+                    matches!(&error, ProviderError::Store(casefile_store::StoreError::Io(error)) if error.kind() == std::io::ErrorKind::PermissionDenied)
+                );
+                assert!(
+                    error
+                        .to_string()
+                        .contains("projects/demo/investigations/other"),
+                    "{error}"
+                );
+                assert!(published.borrow().is_none());
+                fs::set_permissions(&denied.0, denied.1.clone()).unwrap();
+            }
+            let revision = refresh_current(&provider);
+            let publication = published.borrow();
+            let publication = publication.as_ref().unwrap();
+            assert_eq!(publication.source_revision, revision);
+            assert!(
+                publication
+                    .records
+                    .iter()
+                    .any(|record| record.path == path && record.title == title)
+            );
+            assert!(
+                publication
+                    .records
+                    .iter()
+                    .any(|record| record.path == external
+                        && record.content.as_deref().map(str::as_bytes)
+                            == Some(external_bytes.as_slice()))
+            );
+            if let Some(previous) = previous {
+                assert_ne!(publication.source_revision, previous.source_revision);
+            }
+        }
+        assert_eq!(
+            fs::read(root.path().join(&external)).unwrap(),
+            external_bytes
+        );
+    }
 }
 
 #[test]
