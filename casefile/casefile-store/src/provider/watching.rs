@@ -128,8 +128,6 @@ fn invalidate(state: &Mutex<Invalidation>, root: &Path, event: notify::Result<Ev
         }
         Err(_) => true,
     };
-    #[cfg(test)]
-    eprintln!("cache watch root={root:?} relevant={relevant} event={event:?}");
     if !relevant {
         return;
     }
