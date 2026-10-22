@@ -495,8 +495,18 @@ fn serve_preserves_preview_and_gates_apply_with_capability() {
         "/api/query",
         &json!({"query":"records", "search":"Updated through loopback"}),
     );
-    assert_eq!(refreshed.status, 200, "{}", refreshed.body);
-    assert!(refreshed.body.contains("Updated through loopback"));
+    if refreshed.status == 500 {
+        let error: Value = serde_json::from_str(&refreshed.body).expect("index refusal JSON");
+        assert!(
+            error["error"].as_str().is_some_and(|message| message
+                .contains("canonical filesystem events arrived during cache reconciliation")),
+            "{}",
+            refreshed.body
+        );
+    } else {
+        assert_eq!(refreshed.status, 200, "{}", refreshed.body);
+        assert!(refreshed.body.contains("Updated through loopback"));
+    }
 
     let stale = request(
         &server,

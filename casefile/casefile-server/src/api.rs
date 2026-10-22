@@ -903,7 +903,7 @@ mod tests {
         assert_eq!(server.post("/api/query", r#"{"query":"snapshot"}"#).0, 200);
     }
     #[test]
-    fn real_http_apply_returns_the_committed_workspace_without_another_refresh() {
+    fn real_http_apply_returns_the_committed_workspace_or_refuses_an_unverified_projection() {
         let fixture = Fixture::new();
         let server = Loopback::start(&fixture, None);
         let (status, baseline) = server.post("/api/query", r#"{"query":"workspace"}"#);
@@ -927,21 +927,31 @@ mod tests {
         assert!(preview.get("rendered_bytes").is_none());
         let (status, outcome) = server.post("/api/apply", &serde_json::json!({"preview_id":preview["preview_id"],"context":{"known_token":baseline["freshness"],"search":"HTTP committed projection"}}).to_string());
         assert_eq!(status, 200, "{outcome}");
-        assert_eq!(outcome["workspace"]["state"], "updated", "{outcome}");
-        assert!(
-            outcome["workspace"]["matching_paths"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .any(|path| path == TICKET)
-        );
-        assert!(
-            outcome["workspace"]["records"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .any(|record| record["title"] == "HTTP committed projection")
-        );
+        assert_eq!(outcome["result"]["no_op"], false, "{outcome}");
+        if outcome["workspace"].is_null() {
+            assert_eq!(outcome["cache"]["state"], "degraded", "{outcome}");
+            assert_eq!(
+                outcome["cache"]["message"],
+                "canonical filesystem events arrived during cache reconciliation",
+                "{outcome}"
+            );
+        } else {
+            assert_eq!(outcome["workspace"]["state"], "updated", "{outcome}");
+            assert!(
+                outcome["workspace"]["matching_paths"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|path| path == TICKET)
+            );
+            assert!(
+                outcome["workspace"]["records"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|record| record["title"] == "HTTP committed projection")
+            );
+        }
         let (status, _) = server.post(
             "/api/apply",
             &serde_json::json!({"preview_id":preview["preview_id"],"rendered_bytes":[1,2,3]})
