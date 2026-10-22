@@ -399,6 +399,7 @@ fn native_watch_keeps_opaque_symlink_descendant_changes_outside_canonical_cache(
     let outside = TempDir::new().unwrap();
     std::os::unix::fs::symlink(outside.path(), temporary.path().join("opaque-link")).unwrap();
     reconcile(&provider);
+    eprintln!("opaque link reconciled; outside={:?}", outside.path());
     provider.cache.refuse_publication.set(true);
     fs::write(
         outside.path().join("external.md"),
@@ -407,10 +408,11 @@ fn native_watch_keeps_opaque_symlink_descendant_changes_outside_canonical_cache(
     .unwrap();
     let deadline = std::time::Instant::now() + std::time::Duration::from_millis(200);
     while std::time::Instant::now() < deadline {
-        assert!(matches!(
-            provider.refresh_full_cache().unwrap(),
-            CacheState::Current { .. }
-        ));
+        let state = provider.refresh_full_cache().unwrap();
+        assert!(
+            matches!(state, CacheState::Current { .. }),
+            "unexpected cache state: {state:?}"
+        );
         std::thread::sleep(std::time::Duration::from_millis(10));
     }
     assert!(
