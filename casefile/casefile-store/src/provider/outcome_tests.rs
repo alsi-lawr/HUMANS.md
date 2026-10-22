@@ -181,12 +181,34 @@ fn configured_fixture() -> (TempDir, Provider<RetainedCache>) {
 
 fn reconcile<C: ProviderCache>(provider: &Provider<C>) {
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    let mut stable = None;
     loop {
         if matches!(
             provider.refresh_full_cache().unwrap(),
             CacheState::Current { .. }
         ) {
-            return;
+            // Current is not a native-event delivery barrier. FSEvents can still deliver
+            // fixture-creation notifications after the first successful publication.
+            let epoch = provider
+                .watch
+                .lock()
+                .unwrap()
+                .as_mut()
+                .unwrap()
+                .observe()
+                .epoch;
+            match stable {
+                Some((previous, since)) if previous == epoch => {
+                    if std::time::Instant::now().duration_since(since)
+                        >= std::time::Duration::from_millis(200)
+                    {
+                        return;
+                    }
+                }
+                _ => stable = Some((epoch, std::time::Instant::now())),
+            }
+        } else {
+            stable = None;
         }
         assert!(
             std::time::Instant::now() < deadline,
@@ -407,10 +429,11 @@ fn native_watch_keeps_opaque_symlink_descendant_changes_outside_canonical_cache(
     .unwrap();
     let deadline = std::time::Instant::now() + std::time::Duration::from_millis(200);
     while std::time::Instant::now() < deadline {
-        assert!(matches!(
-            provider.refresh_full_cache().unwrap(),
-            CacheState::Current { .. }
-        ));
+        let state = provider.refresh_full_cache().unwrap();
+        assert!(
+            matches!(state, CacheState::Current { .. }),
+            "unexpected cache state: {state:?}"
+        );
         std::thread::sleep(std::time::Duration::from_millis(10));
     }
     assert!(
@@ -423,6 +446,20 @@ fn native_watch_keeps_opaque_symlink_descendant_changes_outside_canonical_cache(
             .records
             .iter()
             .any(|record| record.path.ends_with("external.md"))
+    );
+
+    // Prove that staying Current above was not caused by an inactive native watcher.
+    fs::write(
+        temporary.path().join("canonical.md"),
+        "inside canonical Store",
+    )
+    .unwrap();
+    wait_for_native_invalidation(&provider);
+    assert_eq!(
+        provider.refresh_full_cache().unwrap(),
+        CacheState::Degraded {
+            message: "cache publication unavailable".into(),
+        }
     );
 }
 
