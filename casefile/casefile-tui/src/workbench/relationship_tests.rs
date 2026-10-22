@@ -86,7 +86,7 @@ fn canonical_relationships_follow_cross_scope_targets_without_replacing_source_b
     refresh_target(&mut coordinator, &mut app);
     assert_canonical(&store, &app);
     assert!(
-        !source_edges(&app)
+        source_edges(&app)
             .iter()
             .any(|edge| edge.kind == RelationshipKind::Related)
     );
@@ -94,7 +94,7 @@ fn canonical_relationships_follow_cross_scope_targets_without_replacing_source_b
     refresh_target(&mut coordinator, &mut app);
     assert_canonical(&store, &app);
     assert!(
-        source_edges(&app)
+        !source_edges(&app)
             .iter()
             .any(|edge| edge.kind == RelationshipKind::Related)
     );
@@ -297,10 +297,16 @@ fn relationship_fixture() -> TempDir {
             )
             .replace(
                 "related_tickets: []",
-                "related_tickets: [HMD-012, HMD-012, HMD-099, OTHER-001]",
+                &format!("related_tickets: [{TARGET}, {TARGET}, HMD-099, OTHER-001]"),
             )
-            .replace("supersedes: []", "supersedes: [HMD-013]")
-            .replace("superseded_by: []", "superseded_by: [HMD-014]"),
+            .replace(
+                "supersedes: []",
+                &format!("supersedes: [{}]", TARGET.replace("HMD-012", "HMD-013")),
+            )
+            .replace(
+                "superseded_by: []",
+                &format!("superseded_by: [{}]", TARGET.replace("HMD-012", "HMD-014")),
+            ),
     );
     root
 }

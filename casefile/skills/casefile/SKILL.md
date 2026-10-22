@@ -33,22 +33,22 @@ contained Store-relative record paths in the same governed project, for example
 error, not permission to search other investigations. Global duplicate-ID and incoming-reference
 validation require an explicitly requested whole-Store check; scoped diagnostics report
 `investigation_and_explicit_dependencies` coverage, not global completeness. Root check discards
-record bodies incrementally. CLI JSON
-responses have a hard 8 MiB limit including the final newline; overflow fails before any JSON is
-written. Use scoped reads instead of raising the limit or redirecting bulk output.
+record bodies incrementally. CLI JSON responses have a hard 8 MiB limit including the final newline;
+overflow fails before any JSON is written. Use scoped reads instead of raising the limit or
+redirecting bulk output.
 
 Never request unscoped or bulk records, infer an investigation path by concatenation, or treat
 catalogue freshness as scoped-read authority. Snapshot freshness is a tagged catalogue token
 covering only `casefile.toml` and `projects.toml`, not investigation contents. Snapshot cache state
 `not_observed` means full-index freshness was not assessed; use an explicitly requested whole-index
-operation for that domain. Narrow results carry a tagged scope-read token naming the
-exact query target and necessary dependencies. Compare tokens only for the same query target, scope,
-and (for detail) identity. Different targets legitimately have different revisions. Re-read that
-exact target when its affecting data/dependencies change; unrelated edits do not invalidate its
-context. These observation tokens are not mutation preconditions: preview/apply independently
-capture and validate their own freshness. Provider v6 changes the read contract and refuses v5
-launchers; canonical planning formats are unchanged. Provider versions are separate from MCP's
-dated transport protocol negotiation.
+operation for that domain. Narrow results carry a tagged scope-read token naming the exact query
+target and necessary dependencies. Compare tokens only for the same query target, scope, and (for
+detail) identity. Different targets legitimately have different revisions. Re-read that exact target
+when its affecting data/dependencies change; unrelated edits do not invalidate its context. These
+observation tokens are not mutation preconditions: preview/apply independently capture and validate
+their own freshness. Provider v6 changes the read contract and refuses v5 launchers; canonical
+planning formats are unchanged. Provider versions are separate from MCP's dated transport protocol
+negotiation.
 
 Route the current phase to `casefile-investigate`, `casefile-review`, `casefile-implement`, or
 `casefile-close`. Every governed phase requires an explicit compatible strategy. Present compatible

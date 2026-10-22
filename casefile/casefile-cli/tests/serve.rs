@@ -484,10 +484,7 @@ fn serve_preserves_preview_and_gates_apply_with_capability() {
     assert_eq!(applied.status, 200, "{}", applied.body);
     let value: Value = serde_json::from_str(&applied.body).expect("apply JSON");
     assert_eq!(value["result"]["path"], path);
-    assert!(matches!(
-        value["cache"]["state"].as_str(),
-        Some("current" | "degraded")
-    ));
+    assert_eq!(value["cache"]["state"], "not_observed");
     assert!(
         fs::read_to_string(root.path().join(path))
             .expect("applied")
