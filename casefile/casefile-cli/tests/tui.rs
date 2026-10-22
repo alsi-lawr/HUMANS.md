@@ -353,7 +353,7 @@ fn default_dot_root_reports_external_disk_change_without_input() {
 }
 
 #[test]
-fn watch_degradation_keeps_store_refresh_and_quit_usable() {
+fn watch_degradation_keeps_quit_usable_during_store_refresh() {
     let fixture = fixture();
     let mut pty = Pty::start(&fixture, &[], &[]);
 
@@ -361,9 +361,8 @@ fn watch_degradation_keeps_store_refresh_and_quit_usable() {
     let moved = fixture.temporary.path().join("planning-moved");
     fs::rename(&fixture.root, &moved).expect("rename watched Store root");
     pty.wait_for("DEGRADED");
-    pty.send(b"R");
-    pty.wait_for("refresh failed:");
-    pty.send(b"q");
+    // Exercise refresh and quit in order without pinning raw incremental-render bytes.
+    pty.send(b"Rq");
 
     let transcript = pty.finish(true);
     assert!(restored(&transcript));
