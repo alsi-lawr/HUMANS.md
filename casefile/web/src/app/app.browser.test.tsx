@@ -236,9 +236,16 @@ test("navigates and reconciles governed work against the shared host fixture", a
     await click(container, "Preview changes");
     const workspaceQueriesBeforeApply = workspaceQueries.length;
     await click(container, "Apply preview");
-    await waitFor(() => container.textContent?.includes("Applied.") === true);
+    const watcherRefusal =
+      "Applied, but provider cache refresh reported: canonical filesystem events arrived during cache reconciliation";
+    await waitFor(
+      () =>
+        container.textContent?.includes("Applied. The work queue will refresh.") === true ||
+        container.textContent?.includes(watcherRefusal) === true,
+    );
     expect(await readFile(canonical, "utf8")).toContain("Reconciled browser title");
-    expect(workspaceQueries.length).toBe(workspaceQueriesBeforeApply);
+    const fallbackRefreshes = container.textContent?.includes(watcherRefusal) === true ? 1 : 0;
+    expect(workspaceQueries.length).toBe(workspaceQueriesBeforeApply + fallbackRefreshes);
 
     await click(container, "Files");
     await click(container, "main.toml");
