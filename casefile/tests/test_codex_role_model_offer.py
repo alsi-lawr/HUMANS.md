@@ -70,6 +70,7 @@ class CodexRoleModelOfferTests(unittest.TestCase):
                     "fork_values": [fresh, full],
                     "named_role_overrides": True,
                     "roles": {ROLE: {}},
+                    "models_scope": "exhaustive",
                     "models": {
                         "matching": ["high", "xhigh"],
                         "hidden": ["high"],
@@ -103,6 +104,7 @@ class CodexRoleModelOfferTests(unittest.TestCase):
             "fork_values": [False, True],
             "named_role_overrides": False,
             "roles": {ROLE: {}, fixed: {"model": "matching", "reasoning_effort": "high"}},
+            "models_scope": "exhaustive",
             "models": {"matching": ["high", "medium"]},
         }
         available = [provider_model("matching", ["high", "medium"])]
@@ -131,6 +133,7 @@ class CodexRoleModelOfferTests(unittest.TestCase):
             "fork_values": ["all"],
             "named_role_overrides": True,
             "roles": {ROLE: {}},
+            "models_scope": "exhaustive",
             "models": {"matching": ["high"]},
         }
         matching = [provider_model("matching", ["high"])]
@@ -138,6 +141,45 @@ class CodexRoleModelOfferTests(unittest.TestCase):
         evidence["fork_values"].append("none")
         different_effort = [provider_model("matching", ["medium"])]
         self.assertEqual([], self.query(evidence, different_effort, ROLE)[ROLE]["pairs"])
+
+    def test_example_list_reports_unknown_pairs_until_verified_evidence_is_available(self):
+        models = [f"model-{index}" for index in range(8)]
+        available = [provider_model(model, ["high"]) for model in models]
+        evidence = {
+            "provider": "fixture-provider",
+            "runtime": "v1",
+            "parameters": ["agent_type", "fork_context", "model", "reasoning_effort"],
+            "fork_values": [False, True],
+            "named_role_overrides": True,
+            "roles": {ROLE: {}},
+            "models_scope": "examples",
+            "models": {model: ["high"] for model in models[:5]},
+        }
+        examples = self.query(evidence, available, ROLE)[ROLE]
+        self.assertEqual(models[:5], [pair["model"] for pair in examples["pairs"]])
+        self.assertEqual(3, examples["unverified_pair_count"])
+
+        additional = {models[5]: ["high"], models[6]: ["medium"], "stale": ["high"]}
+        verified = self.query({**evidence, "verified_models": additional}, available, ROLE)[ROLE]
+        self.assertEqual(models[:6], [pair["model"] for pair in verified["pairs"]])
+        self.assertEqual(2, verified["unverified_pair_count"])
+        self.assertEqual(
+            {
+                "agent_type": ROLE,
+                "fork_context": False,
+                "model": models[5],
+                "reasoning_effort": "high",
+            },
+            verified["pairs"][-1]["spawn"],
+        )
+
+        exhaustive_evidence = {**evidence, "models_scope": "exhaustive"}
+        exhaustive = self.query(exhaustive_evidence, available, ROLE)[ROLE]
+        self.assertEqual({"pairs": examples["pairs"]}, exhaustive)
+        invalid_evidence = {**exhaustive_evidence, "verified_models": additional}
+        with mock.patch.object(sys, "stdin", io.StringIO(json.dumps(invalid_evidence))):
+            with self.assertRaises(offer.OfferError):
+                offer.read_evidence()
 
     def test_model_projection_retains_the_provider_runtime_selector_when_supplied(self):
         raw = provider_model("matching", ["high"], selector="v2")

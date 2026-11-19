@@ -26,6 +26,7 @@ this shape.
     "roles": {"unpinned-role": {}, "fixed-role": {
       "model": "model-id", "reasoning_effort": "medium"
     }},
+    "models_scope": "exhaustive",
     "models": {"model-id": ["medium", "high"]}
   }
 
@@ -36,8 +37,20 @@ as thread.modelProvider. Use the same Codex home and working directory.
 Inspect the current turn's spawn_agent tool, using native tool discovery if
 the tool is deferred. V1 has fork_context and V2 has fork_turns. Copy the
 available parameter names, permitted fork values, named role registrations
-and locks, and advertised model overrides and efforts from that callable.
-A role provider override, when present, goes in the role's provider field.
+and locks from that callable. A role provider override, when present, goes
+in the role's provider field.
+
+Mark models_scope exhaustive for the active callable's explicit allowlist
+or a verified complete snapshot of its model and effort registry. Native V1
+and V2 may advertise a short list in prose for a string model argument. Mark
+those lists examples. The offer reports unverified_pair_count for visible
+provider pairs whose eligibility is unknown for an unpinned role. With
+examples you can add exact pairs in a verified_models map of the same shape
+as models. Use the current callable's validator registry or an authorized
+named-role launch through this callable with verified child model and effort
+for the same provider and runtime. Provider model/list alone supplies no
+evidence for verified_models. Keep an explicit callable allowlist exhaustive
+and within its declared bounds.
 
 Set named_role_overrides only when the current host's tool contract or an
 authorized launch with verified child settings establishes that an unpinned
@@ -71,10 +84,21 @@ def read_evidence() -> dict:
     ):
         if not isinstance(evidence.get(key), expected_type):
             raise OfferError(f"current-session evidence is missing valid {key}")
+    scope = evidence.get("models_scope")
+    if scope not in ("exhaustive", "examples"):
+        raise OfferError("current-session evidence must mark models_scope exhaustive or examples")
+    verified_models = evidence.get("verified_models", {})
+    if not isinstance(verified_models, dict) or (scope == "exhaustive" and verified_models):
+        raise OfferError("verified_models must be a model map and can only supplement examples")
     return evidence
 
 
-def role_offer(role: str, evidence: dict, provider_pairs: set[tuple[str, str]]) -> dict:
+def role_offer(
+    role: str,
+    evidence: dict,
+    provider_pairs: set[tuple[str, str]],
+    override_pairs: set[tuple[str, str]],
+) -> dict:
     def unavailable(reason: str) -> dict:
         return {"pairs": [], "unavailable_reason": reason}
 
@@ -100,6 +124,7 @@ def role_offer(role: str, evidence: dict, provider_pairs: set[tuple[str, str]]) 
     fixed_effort = registration.get("reasoning_effort")
     spawn = {"agent_type": role, fork_arg: fork_value}
     pairs = []
+    coverage = {}
     if fixed_model is not None and fixed_effort is not None:
         if (
             isinstance(fixed_model, str)
@@ -116,24 +141,28 @@ def role_offer(role: str, evidence: dict, provider_pairs: set[tuple[str, str]]) 
         and "model" in parameters
         and "reasoning_effort" in parameters
     ):
-        for model, effort in sorted(provider_pairs):
-            active_efforts = evidence["models"].get(model)
-            if isinstance(active_efforts, list) and effort in active_efforts:
-                pairs.append(
-                    {
-                        "model": model,
-                        "reasoning_effort": effort,
-                        "spawn": {**spawn, "model": model, "reasoning_effort": effort},
-                    }
-                )
+        eligible = provider_pairs & override_pairs
+        for model, effort in sorted(eligible):
+            pairs.append(
+                {
+                    "model": model,
+                    "reasoning_effort": effort,
+                    "spawn": {**spawn, "model": model, "reasoning_effort": effort},
+                }
+            )
+        if evidence["models_scope"] == "examples":
+            coverage = {"unverified_pair_count": len(provider_pairs - eligible)}
     else:
         return unavailable(
             "This spawn tool has no verified override path for an unpinned named role."
         )
 
     if not pairs:
-        return unavailable("No visible model and effort match the provider and the named role.")
-    return {"pairs": pairs}
+        return {
+            **unavailable("No visible provider pair is verified for the named role."),
+            **coverage,
+        }
+    return {"pairs": pairs, **coverage}
 
 
 def main() -> int:
@@ -166,10 +195,21 @@ def main() -> int:
             for level in model["supported_reasoning_levels"]
             if isinstance(level["effort"], str) and level["effort"]
         }
+        override_pairs = {
+            (model, effort)
+            for models in (evidence["models"], evidence.get("verified_models", {}))
+            for model, efforts in models.items()
+            if isinstance(efforts, list)
+            for effort in efforts
+            if isinstance(effort, str) and effort
+        }
         offer = {
             "provider": evidence["provider"],
             "runtime": evidence["runtime"],
-            "roles": {role: role_offer(role, evidence, provider_pairs) for role in arguments.roles},
+            "roles": {
+                role: role_offer(role, evidence, provider_pairs, override_pairs)
+                for role in arguments.roles
+            },
         }
     except (
         OfferError, lister["ProjectionError"], OSError, ValueError, subprocess.SubprocessError
