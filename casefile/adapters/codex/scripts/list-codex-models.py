@@ -14,9 +14,18 @@ class ProjectionError(RuntimeError):
     pass
 
 
-def project(executable: str, timeout: float, environment: dict[str, str] | None = None) -> list[dict]:
+def project(
+    executable: str,
+    timeout: float,
+    environment: dict[str, str] | None = None,
+    *,
+    provider: str | None = None,
+) -> list[dict]:
+    command = [executable, "app-server"]
+    if provider is not None:
+        command.extend(["-c", f"model_provider={json.dumps(provider, ensure_ascii=False)}"])
     process = subprocess.Popen(
-        [executable, "app-server"],
+        command,
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.DEVNULL,
@@ -84,21 +93,22 @@ def normalize(models: list[dict]) -> list[dict]:
     """Map the app-server shape onto the field names the catalog comparison reads."""
     result = []
     for model in models:
-        identifier = model.get("id")
+        identifier = model.get("model", model.get("id"))
         if not isinstance(identifier, str) or not identifier:
             raise ProjectionError("app-server model/list contains a model without an ID")
-        result.append(
-            {
-                "slug": identifier,
-                "display_name": model.get("displayName"),
-                "visibility": "hide" if model.get("hidden") else "list",
-                "supported_reasoning_levels": [
-                    {"effort": effort.get("reasoningEffort")}
-                    for effort in model.get("supportedReasoningEfforts") or []
-                    if isinstance(effort, dict)
-                ],
-            }
-        )
+        entry = {
+            "slug": identifier,
+            "display_name": model.get("displayName"),
+            "visibility": "hide" if model.get("hidden") else "list",
+            "supported_reasoning_levels": [
+                {"effort": effort.get("reasoningEffort")}
+                for effort in model.get("supportedReasoningEfforts") or []
+                if isinstance(effort, dict)
+            ],
+        }
+        if "multiAgentVersion" in model:
+            entry["multi_agent_version"] = model["multiAgentVersion"]
+        result.append(entry)
     return result
 
 
