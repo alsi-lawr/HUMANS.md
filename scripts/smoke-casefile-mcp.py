@@ -5,45 +5,13 @@ from __future__ import annotations
 import argparse
 import json
 import shutil
-import subprocess
 import sys
 import tempfile
-from os import PathLike
 from pathlib import Path
-from typing import Sequence
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "casefile/adapters/shared"))
-from casefile_runtime import RuntimeError as ProbeError, probe
-
-
-class SmokeError(RuntimeError):
-    pass
-
-
-def run_checked(arguments: Sequence[str | PathLike[str]]) -> subprocess.CompletedProcess[str]:
-    command = [str(argument) for argument in arguments]
-    result = subprocess.run(
-        command,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="backslashreplace",
-    )
-    if result.returncode:
-        raise SmokeError(
-            json.dumps(
-                {
-                    "command": command,
-                    "exit_code": result.returncode,
-                    "stderr": result.stderr,
-                    "stdout": result.stdout,
-                },
-                ensure_ascii=True,
-                sort_keys=True,
-            )
-        )
-    return result
+from casefile_runtime import RuntimeError as SmokeError, probe, run_checked
 
 
 def main() -> int:
@@ -71,10 +39,7 @@ def main() -> int:
         check = json.loads(validation.stdout)
         if check.get("activation") != "active" or check.get("valid") is not True:
             raise SystemExit(f"unexpected scoped Casefile validation result: {validation.stdout}")
-        try:
-            tool_count = probe(executable, args.version, root)
-        except ProbeError as error:
-            raise SmokeError(str(error)) from error
+        tool_count = probe(executable, args.version, root)
     print(json.dumps({"identity": "casefile", "tools": tool_count, "version": args.version}, sort_keys=True))
     return 0
 
