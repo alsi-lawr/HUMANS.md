@@ -43,7 +43,7 @@ guidance. Removing one plugin never removes the shared marketplace or another pl
 The Casefile plugin bundles the complete supported Linux, macOS, and Windows x64/ARM64 executable
 matrix. After installing it, invoke its host-specific Casefile setup skill with one absolute
 activated current-v1 planning Store. Setup verifies and installs the matching executable, probes its
-identity and 12-tool Provider contract, and receipt-binds the host directly to
+identity, required Provider operations, and MCP tools, then receipt-binds the host directly to
 `casefile mcp-package`. MCP startup then needs no Cargo, Python, Node, network, or `PATH` lookup.
 MCP retains exact previews in the live session and returns compact review envelopes that apply by
 `preview_id`. Routine writes proceed without a second confirmation; record deletions require one.

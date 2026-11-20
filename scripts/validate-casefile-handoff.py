@@ -6,6 +6,7 @@ import argparse
 import importlib.util
 import json
 import re
+import sys
 from pathlib import Path
 
 try:
@@ -20,6 +21,10 @@ except ModuleNotFoundError:
     TARGETS = _artifact_module.TARGETS
     ArtifactError = _artifact_module.ArtifactError
     load = _artifact_module.load
+
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "casefile/adapters/shared"))
+from casefile_runtime import REQUIRED_MCP_TOOLS
 
 
 WORKFLOW_NAME = "Build Casefile executable matrix"
@@ -101,12 +106,10 @@ def validate_handoff(
     actual_smoke = {path.name for path in smoke_root.iterdir()} if smoke_root.is_dir() else set()
     if not expected_smoke.issubset(actual_smoke):
         raise HandoffError("retained native smoke inventory is incomplete")
+    expected_result = {"identity": "casefile", "tools": len(REQUIRED_MCP_TOOLS), "version": version}
     for target in TARGETS:
         smoke = read_json(smoke_root / f"{target}.json", f"native smoke for {target}")
-        if any(
-            smoke.get(key) != value
-            for key, value in {"identity": "casefile", "tools": 12, "version": version}.items()
-        ):
+        if any(smoke.get(key) != value for key, value in expected_result.items()):
             raise HandoffError(f"native smoke result is invalid for {target}")
 
 def main() -> int:

@@ -29,6 +29,16 @@ REQUIRED_OPERATIONS = {
     "apply_writer_binding",
     "project_strategy_assignments", "preview_strategy_assignments", "apply_strategy_assignments",
 }
+REQUIRED_MCP_TOOLS = {
+    "casefile_snapshot", "casefile_query",
+    "casefile_preview_record", "casefile_apply_record",
+    "casefile_preview_progress", "casefile_apply_progress",
+    "casefile_preview_default_delivery_board", "casefile_apply_default_delivery_board",
+    "casefile_preview_strategy_transition", "casefile_apply_strategy_transition",
+    "casefile_preview_writer_binding", "casefile_apply_writer_binding",
+    "casefile_project_strategy_assignments",
+    "casefile_preview_strategy_assignments", "casefile_apply_strategy_assignments",
+}
 
 
 class RuntimeError(ValueError):
@@ -158,7 +168,7 @@ def planning_root(path: Path) -> Path:
     return root
 
 
-def probe(binary: Path, version: str, root: Path) -> None:
+def probe(binary: Path, version: str, root: Path) -> int:
     version_result = subprocess.run([binary, "--version"], capture_output=True, text=True, timeout=15)
     if version_result.returncode or version not in version_result.stdout:
         raise RuntimeError("Casefile executable version probe failed")
@@ -189,5 +199,13 @@ def probe(binary: Path, version: str, root: Path) -> None:
         raise RuntimeError("Casefile MCP probe failed")
     if responses[0].get("result", {}).get("serverInfo", {}).get("name") != "casefile":
         raise RuntimeError("Casefile MCP identity probe failed")
-    if len(responses[1].get("result", {}).get("tools", [])) != 12:
+    tools = responses[1].get("result", {}).get("tools", [])
+    if not isinstance(tools, list):
+        raise RuntimeError("Casefile MCP probe returned no tool list")
+    names = {
+        tool["name"] for tool in tools
+        if isinstance(tool, dict) and isinstance(tool.get("name"), str)
+    }
+    if names != REQUIRED_MCP_TOOLS or len(tools) != len(names):
         raise RuntimeError("Casefile MCP tool probe failed")
+    return len(names)

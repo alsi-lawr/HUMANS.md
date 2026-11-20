@@ -1,7 +1,7 @@
 # Strategy Binding Schema
 
-The [strategy assignments](strategy-assignments.md) schema records explicit choices for a full
-Codex strategy. This schema covers the historic implementation-writer binding.
+The [strategy assignments](strategy-assignments.md) schema records explicit choices for a full Codex
+strategy. This schema covers the historic implementation-writer binding.
 
 `strategy/bindings.toml` is the governed, Casefile-wide implementation-writer overlay. It does not
 modify a selected phase matrix. Schema version 1 requires `adapter`, the literal

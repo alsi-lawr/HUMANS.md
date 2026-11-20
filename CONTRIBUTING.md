@@ -113,7 +113,7 @@ and its artifact manifest. They contain no `.mcp.json`, package-local Cargo work
 launcher. Host-specific receipt-backed setup requires one explicit absolute planning root, checks
 that every expected matrix artifact is a regular non-empty file at its normalized contained path,
 atomically installs the matching executable in a stable versioned user path, probes the exact
-identity, protocol, capabilities, and 12-tool stdio surface, then registers
+identity, protocol, required Provider operations, and named MCP tools, then registers
 `casefile mcp-package --planning-root <absolute-root>` directly. Runtime startup needs no Cargo,
 Rust, Python, Node, network, or `PATH` lookup.
 
