@@ -535,6 +535,50 @@ class CodexSetupTests(unittest.TestCase):
                     setup.uninstall(home, "codex", *old)
                 self.assertEqual(original if missing_config else source.replace(b"pragmatic", b"friendly"), config.read_bytes())
 
+    def test_surviving_agent_preserves_its_relative_catalog_during_recovery(self):
+        for operation in ("install", "uninstall"):
+            with self.subTest(operation=operation), tempfile.TemporaryDirectory() as temporary:
+                plugin, home, _, catalog, _ = self.fixture(Path(temporary))
+                config = home / "config.toml"
+                v1, v2 = (home / f"models-casefile-{version}.json" for version in ("v1", "v2"))
+                old = self.legacy_install(
+                    plugin, home, version="v1", catalogs={v1.name: b"used by custom agent", v2.name: b"unused"},
+                )
+                role = home / "roles/nested/custom.toml"
+                role.parent.mkdir(parents=True)
+                role.write_text('model_catalog_json = "../../models-casefile-v1.json"\n')
+                registration = b'\n[agents.custom]\nconfig_file = "roles/nested/custom.toml"\n'
+                removed = b'\n[agents.casefile-retired]\nconfig_file = "missing.toml"\n'
+                config.write_bytes(config.read_bytes() + removed)
+                if operation == "install":
+                    config.write_bytes(config.read_bytes() + registration)
+                else:
+                    (home / "custom.config.toml").write_bytes(registration)
+                with self.fake_command(FakeCodex(catalog)):
+                    if operation == "install":
+                        setup.install(setup.prepare(plugin, home, "codex"))
+                    else:
+                        setup.uninstall(home, "codex", *old)
+                source = config if operation == "install" else home / "custom.config.toml"
+                agents = tomllib.loads(source.read_text())["agents"]
+                self.assertEqual("roles/nested/custom.toml", agents["custom"]["config_file"])
+                self.assertEqual(b"used by custom agent", v1.read_bytes())
+                self.assertFalse(v2.exists())
+
+    def test_unavailable_surviving_agent_config_keeps_receipt_catalog_recoverable(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            plugin, home, _, catalog, _ = self.fixture(Path(temporary))
+            config = home / "config.toml"
+            v1 = home / "models-casefile-v1.json"
+            old = self.legacy_install(plugin, home, version="v1", catalogs={v1.name: b"legacy catalog"})
+            config.write_bytes(config.read_bytes() + b'\n[agents.custom]\nconfig_file = "missing.toml"\n')
+            with self.fake_command(FakeCodex(catalog)):
+                setup.uninstall(home, "codex", *old)
+            document = tomllib.loads(config.read_text())
+            self.assertNotIn("model_catalog_json", document)
+            self.assertEqual("missing.toml", document["agents"]["custom"]["config_file"])
+            self.assertEqual(b"legacy catalog", v1.read_bytes())
+
     def test_upgrade_preserves_active_runtime_when_it_differs_from_the_receipt(self):
         with tempfile.TemporaryDirectory() as temporary:
             plugin, home, _, catalog, _ = self.fixture(Path(temporary))

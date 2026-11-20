@@ -624,22 +624,36 @@ def catalog_path(home: Path, value: object) -> Path | None:
         return None
 
 
+def registered_agent_catalogs(home: Path, document: dict) -> list[Path | None]:
+    paths = []
+    agents = document.get("agents", {})
+    if not isinstance(agents, dict):
+        raise ValueError("registered agents are invalid")
+    for agent in agents.values():
+        if not isinstance(agent, dict) or "config_file" not in agent:
+            continue
+        source = catalog_path(home, agent["config_file"])
+        if source is None or not source.is_file():
+            raise ValueError("registered agent config is unavailable")
+        definition = tomllib.loads(source.read_text(encoding="utf-8"))
+        paths.append(catalog_path(source.parent, definition.get(CATALOG_KEY)))
+    return paths
+
+
 def catalog_references(home: Path, document: dict, active: Path | None) -> set[Path] | None:
-    paths = [active]
+    profiles_to_check = []
     profiles = document.get("profiles", {})
     if isinstance(profiles, dict):
-        paths.extend(
-            catalog_path(home, profile.get(CATALOG_KEY))
-            for profile in profiles.values()
-            if isinstance(profile, dict)
-        )
-    for source in home.glob("*.config.toml"):
-        try:
-            profile = tomllib.loads(source.read_text(encoding="utf-8"))
-        except (OSError, UnicodeError, tomllib.TOMLDecodeError):
-            return None
-        paths.append(catalog_path(home, profile.get(CATALOG_KEY)))
+        profiles_to_check.extend(profile for profile in profiles.values() if isinstance(profile, dict))
     try:
+        for source in home.glob("*.config.toml"):
+            if not source.is_file():
+                return None
+            profiles_to_check.append(tomllib.loads(source.read_text(encoding="utf-8")))
+        paths = [active, *registered_agent_catalogs(home, document)]
+        for profile in profiles_to_check:
+            paths.append(catalog_path(home, profile.get(CATALOG_KEY)))
+            paths.extend(registered_agent_catalogs(home, profile))
         return {path.resolve() for path in paths if path is not None}
     except (OSError, RuntimeError, ValueError):
         return None
@@ -687,7 +701,8 @@ def legacy_catalog_recovery(home: Path, config: bytes, previous: tuple[Path, dic
                     detached = original_setting.rstrip(b"\r\n") + b"\n" + detached
             config = detached
             active = None
-    references = catalog_references(home, document, active)
+    surviving = tomllib.loads(unowned_config(config).decode("utf-8"))
+    references = catalog_references(home, surviving, active)
     if references is None:
         return config, []
     recovery = []
