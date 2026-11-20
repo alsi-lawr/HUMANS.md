@@ -19,8 +19,8 @@ ${CLAUDE_PLUGIN_ROOT}/scripts/setup-claude.py install \
   --overwrite
 ```
 
-Codex reinstalls over an active receipt and keeps its selected multi-agent runtime unless the
-command explicitly selects another. Review any legacy catalog recovery in the preview.
+Codex reinstalls over an active receipt and keeps the active multi-agent runtime. When the flags are
+ambiguous, select a runtime explicitly. Review any legacy catalog recovery in the preview.
 
 ```
 ${CODEX_PLUGIN_ROOT}/scripts/setup-codex.py install \

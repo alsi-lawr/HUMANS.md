@@ -440,20 +440,135 @@ class CodexSetupTests(unittest.TestCase):
                 self.assertFalse(v2.exists())
                 self.assertFalse(pointer.exists())
 
-    def test_old_receipt_cannot_reclaim_a_reused_catalog_after_upgrade(self):
+    def test_uninstall_rejects_a_stale_receipt_without_tearing_down_current_install(self):
         with tempfile.TemporaryDirectory() as temporary:
-            plugin, home, original, catalog, _ = self.fixture(Path(temporary))
+            plugin, home, _, catalog, _ = self.fixture(Path(temporary))
             catalog_path = home / "models-casefile-v1.json"
             old_path, old = self.legacy_install(
                 plugin, home, version="v1", catalogs={catalog_path.name: b"owned"},
             )
-            with self.fake_command(FakeCodex(catalog)):
+            fake = FakeCodex(catalog)
+            with self.fake_command(fake):
                 setup.install(setup.prepare(plugin, home, "codex"))
                 self.assertFalse(catalog_path.exists())
                 catalog_path.write_bytes(b"new host file")
-                setup.uninstall(home, "codex", old_path, old)
-            self.assertEqual(b"new host file", catalog_path.read_bytes())
-            self.assertEqual(original, (home / "config.toml").read_bytes())
+                active_path, active = setup.receipt(home, None)
+                paths = [catalog_path, home / "config.toml", home / active["casefile_binary"], setup.pointer(home), active_path]
+                before = {path: path.read_bytes() for path in paths}
+                with self.assertRaisesRegex(setup.SetupError, "uninstall receipt is stale"):
+                    setup.receipt(home, old_path)
+                with self.assertRaisesRegex(setup.SetupError, "uninstall receipt is stale"):
+                    setup.uninstall(home, "codex", old_path, old)
+                self.assertTrue(fake.installed)
+                self.assertEqual(before, {path: path.read_bytes() for path in paths})
+
+    def test_foreign_catalog_symlink_preserves_setting_and_managed_target(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            plugin, home, source, catalog, _ = self.fixture(Path(temporary))
+            config = home / "config.toml"
+            config.write_bytes(b'model_catalog_json = "earlier.json"\n' + source)
+            target = home / "models-casefile-v2.json"
+            target.write_bytes(b"displaced original bytes")
+            self.legacy_install(plugin, home, version="v2", catalogs={target.name: b"live target"})
+            alias = home / "user-selected.json"
+            try:
+                alias.symlink_to(target.name)
+            except OSError:
+                self.skipTest("file symlinks are unavailable")
+            config.write_bytes(config.read_bytes().replace(
+                json.dumps(str(target)).encode(), json.dumps(str(alias)).encode(),
+            ))
+            with self.fake_command(FakeCodex(catalog)):
+                plan = setup.prepare(plugin, home, "codex")
+                self.assertEqual([], setup.preview(plan)["legacy_catalog_recovery"])
+                setup.install(plan)
+                self.assertEqual(str(alias), tomllib.loads(config.read_text())["model_catalog_json"])
+                setup.uninstall(home, "codex", *setup.receipt(home, None))
+            self.assertTrue(alias.is_symlink())
+            self.assertEqual(b"live target", alias.read_bytes())
+            self.assertEqual(str(alias), tomllib.loads(config.read_text())["model_catalog_json"])
+
+    def test_inline_and_file_profiles_keep_their_referenced_catalogs(self):
+        for operation in ("install", "uninstall"):
+            with self.subTest(operation=operation), tempfile.TemporaryDirectory() as temporary:
+                plugin, home, _, catalog, _ = self.fixture(Path(temporary))
+                config = home / "config.toml"
+                v1, v2 = (home / f"models-casefile-{version}.json" for version in ("v1", "v2"))
+                old = self.legacy_install(
+                    plugin, home, version="v2", catalogs={v1.name: b"legacy v1", v2.name: b"legacy v2"},
+                )
+                inline = f'\n[profiles.inline]\nmodel_catalog_json = "{v1.name}"\n'.encode()
+                config.write_bytes(config.read_bytes() + inline)
+                named = home / "named.config.toml"
+                named.write_text(f'model_catalog_json = {json.dumps(str(v2))}\n')
+                with self.fake_command(FakeCodex(catalog)):
+                    if operation == "install":
+                        plan = setup.prepare(plugin, home, "codex")
+                        self.assertEqual([], setup.preview(plan)["legacy_catalog_recovery"])
+                        setup.install(plan)
+                    else:
+                        setup.uninstall(home, "codex", *old)
+                document = tomllib.loads(config.read_text())
+                self.assertNotIn("model_catalog_json", document)
+                self.assertEqual(v1.name, document["profiles"]["inline"]["model_catalog_json"])
+                self.assertEqual(str(v2), tomllib.loads(named.read_text())["model_catalog_json"])
+                self.assertEqual(b"legacy v1", v1.read_bytes())
+                self.assertEqual(b"legacy v2", v2.read_bytes())
+
+    def test_uninstall_recovers_missing_config_but_keeps_an_existing_override_removal(self):
+        for missing_config in (False, True):
+            with self.subTest(missing_config=missing_config), tempfile.TemporaryDirectory() as temporary:
+                plugin, home, source, catalog, _ = self.fixture(Path(temporary))
+                config = home / "config.toml"
+                original = b'model_catalog_json = "earlier.json"\n' + source
+                config.write_bytes(original)
+                old = self.legacy_install(
+                    plugin, home, version="v1", catalogs={"models-casefile-v1.json": b"legacy"},
+                )
+                if missing_config:
+                    config.unlink()
+                else:
+                    current = config.read_bytes()
+                    detached, _ = setup.detach_catalog_setting(current, tomllib.loads(current.decode()))
+                    config.write_bytes(detached.replace(b"pragmatic", b"friendly"))
+                with self.fake_command(FakeCodex(catalog)):
+                    setup.uninstall(home, "codex", *old)
+                self.assertEqual(original if missing_config else source.replace(b"pragmatic", b"friendly"), config.read_bytes())
+
+    def test_upgrade_preserves_active_runtime_when_it_differs_from_the_receipt(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            plugin, home, _, catalog, _ = self.fixture(Path(temporary))
+            self.legacy_install(plugin, home, version="v1", catalogs={"models-casefile-v1.json": b"legacy"})
+            config = home / "config.toml"
+            config.write_bytes(config.read_bytes().replace(
+                b"multi_agent = true\nmulti_agent_v2 = false", b"multi_agent = false\nmulti_agent_v2 = true",
+            ))
+            with self.fake_command(FakeCodex(catalog)):
+                self.assertEqual("v1", setup.receipt_multi_agent_version(setup.receipt(home, None)[1]))
+                plan = setup.prepare(plugin, home, "codex")
+                self.assertEqual("v2", setup.preview(plan)["multi_agent_version"])
+                setup.install(plan)
+                self.assertEqual("v2", setup.receipt_multi_agent_version(setup.receipt(home, None)[1]))
+                self.assertTrue(tomllib.loads(config.read_text())["features"]["multi_agent_v2"])
+
+    def test_upgrade_requires_explicit_runtime_when_active_flags_are_ambiguous(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            plugin, home, _, catalog, _ = self.fixture(Path(temporary))
+            self.legacy_install(plugin, home, version="v1", catalogs={"models-casefile-v1.json": b"legacy"})
+            config = home / "config.toml"
+            with self.fake_command(FakeCodex(catalog)):
+                plan = setup.prepare(plugin, home, "codex")
+                ambiguous = config.read_bytes().replace(b"multi_agent_v2 = false", b"multi_agent_v2 = true")
+                config.write_bytes(ambiguous)
+                with self.assertRaisesRegex(setup.SetupError, "active multi-agent runtime is ambiguous"):
+                    setup.prepare(plugin, home, "codex")
+                with self.assertRaisesRegex(setup.SetupError, "active multi-agent runtime is ambiguous"):
+                    setup.install(plan)
+                self.assertEqual(ambiguous, config.read_bytes())
+                setup.install(setup.prepare(plugin, home, "codex", version="v2"))
+                features = tomllib.loads(config.read_text())["features"]
+                self.assertIs(features["multi_agent"], False)
+                self.assertIs(features["multi_agent_v2"], True)
 
     def test_config_replaces_owned_keys_but_preserves_host_thread_count(self):
         prior = (

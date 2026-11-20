@@ -615,11 +615,32 @@ def restore(home: Path, source: Path, entries: list[dict]) -> None:
             raise SetupError(f"restore verification failed: {path}")
 
 
-def catalog_target(home: Path, value: object) -> Path | None:
+def catalog_path(home: Path, value: object) -> Path | None:
     if not isinstance(value, str) or not value:
         return None
     try:
-        return (home / Path(value).expanduser()).resolve()
+        return home / Path(value).expanduser()
+    except (RuntimeError, ValueError):
+        return None
+
+
+def catalog_references(home: Path, document: dict, active: Path | None) -> set[Path] | None:
+    paths = [active]
+    profiles = document.get("profiles", {})
+    if isinstance(profiles, dict):
+        paths.extend(
+            catalog_path(home, profile.get(CATALOG_KEY))
+            for profile in profiles.values()
+            if isinstance(profile, dict)
+        )
+    for source in home.glob("*.config.toml"):
+        try:
+            profile = tomllib.loads(source.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, tomllib.TOMLDecodeError):
+            return None
+        paths.append(catalog_path(home, profile.get(CATALOG_KEY)))
+    try:
+        return {path.resolve() for path in paths if path is not None}
     except (OSError, RuntimeError, ValueError):
         return None
 
@@ -645,9 +666,14 @@ def legacy_catalog_recovery(home: Path, config: bytes, previous: tuple[Path, dic
         return config, []
     home = home.resolve()
     document = tomllib.loads(config.decode("utf-8"))
-    active = catalog_target(home, document.get(CATALOG_KEY))
+    active = catalog_path(home, document.get(CATALOG_KEY))
     selected = f"models-casefile-{receipt_multi_agent_version(receipt_data)}.json"
-    if selected in tracked and active == home / selected and (active.is_file() or not active.exists()):
+    if (
+        selected in tracked
+        and active == home / selected
+        and not active.is_symlink()
+        and (active.is_file() or not active.exists())
+    ):
         detached, setting = detach_catalog_setting(config, document)
         if setting:
             original = receipt_path.parent / "before/config.toml"
@@ -661,10 +687,13 @@ def legacy_catalog_recovery(home: Path, config: bytes, previous: tuple[Path, dic
                     detached = original_setting.rstrip(b"\r\n") + b"\n" + detached
             config = detached
             active = None
+    references = catalog_references(home, document, active)
+    if references is None:
+        return config, []
     recovery = []
     for name, entry in tracked.items():
         path = home / name
-        if path == active or path.is_symlink() or (path.exists() and not path.is_file()):
+        if path in references or path.is_symlink() or (path.exists() and not path.is_file()):
             continue
         if path.is_file() or entry["existed"]:
             recovery.append(entry)
@@ -757,6 +786,17 @@ def verify_catalog_selectors(document: dict, version: str, label: str) -> None:
                 raise SetupError(f"{label} did not activate V2 for {model_id}")
 
 
+def active_runtime(config: bytes) -> str:
+    features = tomllib.loads(config.decode("utf-8")).get("features", {})
+    if isinstance(features, dict):
+        v1, v2 = features.get("multi_agent", False), features.get("multi_agent_v2", False)
+        if v1 is True and v2 is False:
+            return "v1"
+        if v1 is False and v2 is True:
+            return "v2"
+    raise SetupError("active multi-agent runtime is ambiguous; pass --multi-agent-version v1 or v2")
+
+
 def prepare(
     root: Path,
     home: Path,
@@ -765,8 +805,11 @@ def prepare(
     version: str | None = None,
 ) -> dict:
     previous = receipt(home, None) if pointer(home).is_file() else None
+    config_path = home / "config.toml"
+    current = config_path.read_bytes() if config_path.is_file() else b""
+    requested_version = version
     if version is None:
-        version = receipt_multi_agent_version(previous[1]) if previous else "v1"
+        version = active_runtime(current) if previous else "v1"
     version = multi_agent_version(version)
     root, manifest = plugin_root(root)
     planning = casefile_runtime.planning_root(planning_root or root)
@@ -775,9 +818,8 @@ def prepare(
     casefile_runtime.probe(runtime["source"], manifest["version"], planning)
     environment = {**os.environ, "CODEX_HOME": str(home)}
     plugin = discover(executable, environment, manifest["version"])
-    config_path = home / "config.toml"
-    current = config_path.read_bytes() if config_path.is_file() else b""
-    config, catalog_recovery = legacy_catalog_recovery(home, current, previous)
+    recovered_config, catalog_recovery = legacy_catalog_recovery(home, current, previous)
+    config = recovered_config
     if previous is not None:
         config = unowned_config(config)
     config = config_candidate(config, root, version, binary, planning)
@@ -788,7 +830,9 @@ def prepare(
         "environment": environment,
         "version": plugin["version"],
         "multi_agent_version": version,
+        "requested_multi_agent_version": requested_version,
         "current_config": current,
+        "recovered_config": recovered_config,
         "config": config,
         "catalog_recovery": catalog_recovery,
         "planning_root": planning,
@@ -845,7 +889,7 @@ def doctor(plan: dict) -> None:
 def install(plan: dict) -> dict:
     plan = prepare(
         plan["root"], plan["home"], plan["executable"], plan["planning_root"],
-        plan["multi_agent_version"],
+        plan["requested_multi_agent_version"],
     )
     home = plan["home"]
     secure_dir(home / "backups/casefile")
@@ -876,6 +920,10 @@ def install(plan: dict) -> dict:
     if (config.read_bytes() if config.is_file() else b"") != plan["current_config"]:
         raise SetupError("Codex configuration changed during setup; preview again")
     require_unchanged(home, rollback_paths, receipt_dir / "rollback", "setup")
+    if legacy_catalog_recovery(home, plan["current_config"], plan["previous"]) != (
+        plan["recovered_config"], plan["catalog_recovery"],
+    ):
+        raise SetupError("Codex catalog references changed during setup; preview again")
     try:
         casefile_runtime.atomic_copy(plan["runtime"]["source"], plan["binary"])
         casefile_runtime.require_landed(plan["binary"])
@@ -954,7 +1002,14 @@ def receipt(home: Path, explicit: Path | None) -> tuple[Path, dict]:
     value = read_json(path)
     if value.get("status") != "installed":
         raise SetupError("receipt is not an installed receipt")
+    if explicit is not None:
+        require_current_receipt(home, path)
     return path, value
+
+
+def require_current_receipt(home: Path, path: Path) -> None:
+    if pointer(home).is_file() and receipt(home, None)[0] != path.resolve():
+        raise SetupError("uninstall receipt is stale; use the active Casefile receipt")
 
 
 def uninstall_preview(path: Path, value: dict) -> dict:
@@ -972,14 +1027,18 @@ def uninstall_preview(path: Path, value: dict) -> dict:
 
 
 def uninstall_recovery(home: Path, path: Path, value: dict, current: bytes | None) -> tuple[bytes | None, list[dict]]:
+    require_current_receipt(home, path)
     before = value["before"]
     if not before or before[0].get("path") != "config.toml":
         raise SetupError("receipt config inventory is invalid")
-    previous = None
-    if pointer(home).is_file() and receipt(home, None)[0] == path.resolve():
-        previous = (path, value)
+    previous = (path, value) if pointer(home).is_file() else None
     config, catalogs = legacy_catalog_recovery(home, current or b"", previous)
     entries = [entry for entry in before[1:] if entry["path"] not in LEGACY_CATALOGS]
+    config_path = home / "config.toml"
+    if current is None and before[0]["existed"] and not config_path.exists() and not config_path.is_symlink():
+        original = (path.parent / "before/config.toml").read_text(encoding="utf-8")
+        tomllib.loads(original)
+        entries.insert(0, before[0])
     return unowned_config(config) if current is not None else None, [*entries, *catalogs]
 
 
@@ -997,7 +1056,7 @@ def show_uninstall_diffs(home: Path, path: Path, value: dict) -> None:
             restored.write_bytes(restored_config)
             targets.append((config, restored))
         for entry in recovery:
-            if entry["path"] in LEGACY_CATALOGS:
+            if entry["path"] == "config.toml" or entry["path"] in LEGACY_CATALOGS:
                 relative = receipt_relative(entry)
                 original = path.parent / "before" / relative if entry["existed"] else missing
                 targets.append((home / relative, original))
@@ -1041,6 +1100,8 @@ def uninstall(home: Path, executable: str, path: Path, value: dict) -> dict:
     if (config.read_bytes() if config.is_file() else None) != initial_config:
         raise SetupError(f"managed file changed after uninstall snapshot: {config}")
     require_unchanged(home, rollback_paths, rollback_dir / "before", "uninstall")
+    if uninstall_recovery(home, path, value, initial_config) != (restored_config, recovery):
+        raise SetupError("Codex catalog references changed during uninstall; preview again")
     try:
         restore(home, path.parent / "before", recovery)
         if restored_config is not None:
