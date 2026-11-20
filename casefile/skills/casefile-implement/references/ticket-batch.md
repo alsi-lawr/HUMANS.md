@@ -14,5 +14,5 @@ release candidate unless this ticket explicitly owns that surface.
 
 For Codex, resolve the Casefile writer binding with strategy ID `casefile-implement-ticket-batch`
 immediately before the initial writer, each resumed batch, and each correction spawn. Use only the
-returned spawn arguments; an unavailable pair stops the batch before mutation pending explicit
-inactive reselection.
+returned spawn arguments for the exact confirmed writer pair. Route an unavailable selection through
+the `casefile` assignment flow before delegation.

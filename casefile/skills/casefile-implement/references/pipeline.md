@@ -24,6 +24,6 @@ release candidate unless this ticket explicitly owns that surface.
 
 For Codex, resolve the Casefile writer binding with strategy ID `casefile-implement-pipeline`
 immediately before the initial writer, each permitted next-ticket spawn, every resume, and every
-correction. Use only the returned spawn arguments. Binding unavailability preempts forward work and
-stops before mutation pending explicit inactive reselection; it never changes reviewer or look-ahead
-bindings.
+correction. Use only the returned spawn arguments for the exact confirmed writer pair. An
+unavailable writer pair preempts forward work. Route replacement through the `casefile` assignment
+flow before delegation and retain eligible saved selections for the other roles.

@@ -255,24 +255,15 @@ multi-agent runtime and have a verified packaged resolution for all three implem
 V1 requires an exact generated named profile for the pair. V2 requires each strategy's runtime
 wrapper, a positive fork context, and explicit model and effort overrides at spawn.
 
-The shipped implementation matrices default to Astra/high. For a new explicit writer binding,
-Astra/high is a recommendation, not an automatic selection. For a newly selected implementation
-strategy, offer writer bindings only after the dependency-safe plan is accepted and the exact
-implementation matrix is persisted and valid. Never pre-create a matrix or binding during startup,
-investigation, or review. The offer reports whether Astra/high is available and always requires an
-explicit exact selection. If it is unavailable, present the remaining offered pairs without
-recommending a substitute. Before ticket-batch, pipeline, resumed, or correction work, resolve the
-canonical projection and revalidate the pair against a fresh offer. Stop before delegation for
-pending, unresolved, invalid, or newly unavailable state; obtain explicit reselection while
-implementation is inactive.
+The [Codex role assignment flow](casefile/skills/casefile/references/codex-role-assignments.md) uses
+the live eligible pairs for every distinct role in the exact selected strategy. Only explicit human
+confirmation of the full set authorizes the typed assignment preview and apply. Keep eligible saved
+selections on re-entry. A strategy with zero workers needs no assignment write.
 
-Binding replacement remains a root-authorized decision. Use the resolver's `select` command only to
-materialize the confirmed typed request, pass that request to the Provider's writer-binding preview,
-review the compact envelope, and apply its `preview_id`. The explicit selection is the authority for
-persistence. The Provider derives inactivity from one valid canonical progress log: accepted tickets
-may be `unknown` or `complete`, active non-complete stages refuse the replacement, and missing,
-malformed, or conflicting progress fails closed. Git history is the only history boundary: do not
-add an archive, journal, second state file, or client-side write path.
+The legacy writer-binding replacement API derives inactivity from canonical ticket progress. For
+current selection, use the
+[strategy assignments schema](casefile/casefile-workflow/schemas/strategy-assignments.md) and the
+corresponding Provider tools. Use the existing progress gate for implementation delegation.
 
 ### Workbench development
 
