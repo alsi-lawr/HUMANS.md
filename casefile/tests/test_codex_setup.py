@@ -80,6 +80,8 @@ class FakeCodex:
 
 class CodexSetupTests(unittest.TestCase):
     def fixture(self, root: Path):
+        # Both the legacy and current CLI resolve Codex home before recording paths.
+        root = root.resolve()
         plugin = root / "plugin"
         (plugin / ".codex-plugin").mkdir(parents=True)
         (plugin / ".codex-plugin/plugin.json").write_text(
