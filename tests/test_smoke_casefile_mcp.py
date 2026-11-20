@@ -10,7 +10,27 @@ from pathlib import Path
 from _load import ROOT, script
 
 
+runtime = script("casefile/adapters/shared/casefile_runtime.py")
 smoke = script("scripts/smoke-casefile-mcp.py")
+
+
+def write_executable(executable: Path, commands: str) -> None:
+    compatibility = json.dumps({
+        "identity": "casefile",
+        "provider_protocol_version": 6,
+        "required_provider_operations": sorted(runtime.REQUIRED_OPERATIONS),
+    })
+    executable.write_text(
+        f"""#!/usr/bin/env python3
+import json, sys
+if sys.argv[1:] == ['--version']:
+    print('casefile 0.4.0')
+elif sys.argv[1:] == ['mcp-compatibility']:
+    print({compatibility!r})
+""" + commands,
+        encoding="ascii",
+    )
+    executable.chmod(0o755)
 
 
 class CasefileSmokeTests(unittest.TestCase):
@@ -33,23 +53,16 @@ class CasefileSmokeTests(unittest.TestCase):
     def test_cli_failure_prints_mcp_command_and_captured_streams_without_traceback(self):
         with tempfile.TemporaryDirectory() as temporary:
             executable = Path(temporary) / "casefile"
-            executable.write_text(
-                """#!/usr/bin/env python3
-import json, sys
-if sys.argv[1:] == ['--version']:
-    print('casefile 0.4.0')
-elif sys.argv[1:] == ['mcp-compatibility']:
-    print(json.dumps({'identity':'casefile','provider_protocol_version':6}))
-elif len(sys.argv) == 7 and sys.argv[1] == '--root' and sys.argv[3:] == ['check','--require-activation','--investigation','projects/demo/investigations/sample']:
+            write_executable(
+                executable,
+                """elif len(sys.argv) == 7 and sys.argv[1] == '--root' and sys.argv[3:] == ['check','--require-activation','--investigation','projects/demo/investigations/sample']:
     print(json.dumps({'activation':'active','valid':True,'diagnostics':[]}))
 else:
     print('partial response')
     print('native error\\x1b[31m', file=sys.stderr)
     raise SystemExit(9)
 """,
-                encoding="ascii",
             )
-            executable.chmod(0o755)
             result = subprocess.run(
                 [
                     sys.executable,
@@ -82,23 +95,16 @@ else:
     def test_cli_failure_prints_scoped_store_diagnostics_before_mcp_startup(self):
         with tempfile.TemporaryDirectory() as temporary:
             executable = Path(temporary) / "casefile"
-            executable.write_text(
-                """#!/usr/bin/env python3
-import json, sys
-if sys.argv[1:] == ['--version']:
-    print('casefile 0.4.0')
-elif sys.argv[1:] == ['mcp-compatibility']:
-    print(json.dumps({'identity':'casefile','provider_protocol_version':6}))
-elif len(sys.argv) == 7 and sys.argv[1] == '--root' and sys.argv[3:] == ['check','--require-activation','--investigation','projects/demo/investigations/sample']:
+            write_executable(
+                executable,
+                """elif len(sys.argv) == 7 and sys.argv[1] == '--root' and sys.argv[3:] == ['check','--require-activation','--investigation','projects/demo/investigations/sample']:
     print(json.dumps({'activation':'active','valid':False,'diagnostics':[{'code':'missing_frontmatter','path':'projects/demo/investigations/sample/tickets/accepted/HMD-011.md'}]}))
     raise SystemExit(1)
 else:
     print('MCP must not start', file=sys.stderr)
     raise SystemExit(99)
 """,
-                encoding="ascii",
             )
-            executable.chmod(0o755)
             result = subprocess.run(
                 [
                     sys.executable,

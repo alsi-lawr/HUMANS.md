@@ -22,8 +22,7 @@ or amends the governing decision or ticket.
 Keep ticket checks focused. Run full workspace, package, and authenticated verification at the
 release candidate unless this ticket explicitly owns that surface.
 
-For Codex, resolve the Casefile writer binding with strategy ID `casefile-implement-pipeline`
-immediately before the initial writer, each permitted next-ticket spawn, every resume, and every
-correction. Use only the returned spawn arguments. Binding unavailability preempts forward work and
-stops before mutation pending explicit inactive reselection; it never changes reviewer or look-ahead
-bindings.
+For Codex, follow the delegation check in `casefile` for each writer, look-ahead investigator,
+atomic ticket reviewer, and verification reviewer under `casefile-implement-pipeline`. Apply it
+before assigning a next ticket to an existing writer and before each resumed or correction
+assignment. An unavailable writer pair preempts forward work.

@@ -12,6 +12,9 @@ use tempfile::TempDir;
 const INVESTIGATION: &str = "projects/demo/investigations/sample";
 const BINDING: &str = "schema_version = 1\nadapter = \"codex\"\nrole = \"implementation-writer\"\nmodel = \"gpt-5.6-terra\"\nreasoning_effort = \"medium\"\n\n[resolution]\nmode = \"runtime_override\"\nvalue = \"ticket-batch=writer\"\n";
 
+#[path = "governance/strategy_assignments.rs"]
+mod strategy_assignments;
+
 fn fixture() -> TempDir {
     let temporary = TempDir::new().expect("temporary root");
     copy_tree(

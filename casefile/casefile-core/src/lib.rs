@@ -13,6 +13,7 @@ mod rendering;
 mod request;
 mod snapshot;
 mod strategy;
+mod strategy_assignments;
 mod strategy_transition;
 mod work_item;
 
@@ -44,7 +45,7 @@ pub use snapshot::{CasefileSnapshot, EntrySnapshot, Revision};
 pub use strategy::{
     BindingResolution, SelectedStrategyMatrix, StrategyBinding, StrategyCoordination,
     StrategyLimits, StrategyPipeline, StrategyProjection, StrategyRequirements, StrategyWorker,
-    parse_selected_matrix as parse_selected_strategy_matrix,
+    is_strategy_id, parse_selected_matrix as parse_selected_strategy_matrix,
 };
 #[doc(hidden)]
 pub use strategy::{
@@ -52,6 +53,9 @@ pub use strategy::{
     parse_projection as parse_strategy_projection,
     parse_with_projection as parse_strategy_with_projection,
     validate_matrix as validate_strategy_matrix,
+};
+pub use strategy_assignments::{
+    AssignmentPhase, RoleAssignment, StrategyAssignments, parse_strategy_assignments,
 };
 pub use strategy_transition::{
     ActiveOwnership, StrategyTransitionRecord, parse_strategy_transition,

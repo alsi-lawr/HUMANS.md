@@ -23,6 +23,7 @@ use std::{
 const MCP_PROTOCOL_VERSIONS: &[&str] = &["2024-11-05", "2025-03-26", "2025-06-18", "2025-11-25"];
 const MAX_MESSAGE_BYTES: usize = 8 * 1024 * 1024;
 const TOOL_WORKERS: usize = 16;
+mod strategy_assignments;
 const REQUIRED_PROVIDER_OPERATIONS: &[&str] = &[
     "snapshot",
     "record_index",
@@ -41,6 +42,9 @@ const REQUIRED_PROVIDER_OPERATIONS: &[&str] = &[
     "apply_strategy_transition",
     "preview_writer_binding",
     "apply_writer_binding",
+    "project_strategy_assignments",
+    "preview_strategy_assignments",
+    "apply_strategy_assignments",
 ];
 
 #[derive(Serialize)]
@@ -205,6 +209,9 @@ fn operation_name(operation: &ProviderOperation) -> &'static str {
         ProviderOperation::ApplyStrategyTransition => "apply_strategy_transition",
         ProviderOperation::PreviewWriterBinding => "preview_writer_binding",
         ProviderOperation::ApplyWriterBinding => "apply_writer_binding",
+        ProviderOperation::ProjectStrategyAssignments => "project_strategy_assignments",
+        ProviderOperation::PreviewStrategyAssignments => "preview_strategy_assignments",
+        ProviderOperation::ApplyStrategyAssignments => "apply_strategy_assignments",
     }
 }
 
@@ -485,7 +492,8 @@ impl ToolService {
                     ProviderPreviewKind::Progress
                     | ProviderPreviewKind::DefaultDeliveryBoard
                     | ProviderPreviewKind::StrategyTransition
-                    | ProviderPreviewKind::WriterBinding => {
+                    | ProviderPreviewKind::WriterBinding
+                    | ProviderPreviewKind::StrategyAssignments => {
                         bail!("preview was produced by a different Casefile tool")
                     }
                 }
@@ -549,6 +557,11 @@ impl ToolService {
                 self.provider
                     .apply_writer_binding(&preview_id(arguments)?)?,
             ),
+            "casefile_project_strategy_assignments"
+            | "casefile_preview_strategy_assignments"
+            | "casefile_apply_strategy_assignments" => {
+                strategy_assignments::dispatch(&self.provider, name, arguments)
+            }
             _ => bail!("unknown Casefile tool {name}"),
         }
     }
@@ -596,7 +609,7 @@ fn is_tool_call(request: &Value) -> bool {
 }
 
 fn tool_definitions() -> Vec<Value> {
-    vec![
+    let mut tools = vec![
         tool(
             "casefile_snapshot",
             "Read only bounded root capabilities, configuration/registry catalogue freshness, diagnostic coverage counts, and project/investigation catalogue. Then select one exact investigation before querying records.",
@@ -689,7 +702,9 @@ fn tool_definitions() -> Vec<Value> {
             "Apply one exact live-session writer-binding preview by preview_id after the human has selected the binding, without a second apply confirmation.",
             apply_schema(),
         ),
-    ]
+    ];
+    tools.extend(strategy_assignments::definitions());
+    tools
 }
 
 fn object_schema(properties: Value, required: &[&str]) -> Value {
@@ -1037,6 +1052,9 @@ fn tool_output_schema(name: &str) -> Value {
     if name == "casefile_query" {
         return query_output_schema();
     }
+    if name == "casefile_project_strategy_assignments" {
+        return strategy_assignments::projection_schema();
+    }
     if name.starts_with("casefile_preview_") {
         return preview_output_schema();
     }
@@ -1044,25 +1062,6 @@ fn tool_output_schema(name: &str) -> Value {
 }
 
 fn capabilities_schema() -> Value {
-    let operations = [
-        "snapshot",
-        "record_index",
-        "diagnostics",
-        "record_detail",
-        "boards",
-        "strategy_transitions",
-        "preview_record_draft",
-        "apply_record_draft",
-        "bootstrap_progress",
-        "preview_progress",
-        "apply_progress",
-        "preview_default_delivery_board",
-        "apply_default_delivery_board",
-        "preview_strategy_transition",
-        "apply_strategy_transition",
-        "preview_writer_binding",
-        "apply_writer_binding",
-    ];
     object_schema(
         json!({
             "protocol_version": {"const": PROVIDER_PROTOCOL_VERSION},
@@ -1074,7 +1073,7 @@ fn capabilities_schema() -> Value {
                     &["state", "reason"],
                 ),
             ]),
-            "operations": {"type": "array", "items": {"type": "string", "enum": operations}},
+            "operations": {"type": "array", "items": {"type": "string", "enum": REQUIRED_PROVIDER_OPERATIONS}},
             "approval_policy": {"const": "record_deletes_only"},
             "writes_require_external_approval": {"type": "boolean"},
         }),
@@ -1434,7 +1433,7 @@ fn preview_output_schema() -> Value {
     object_schema(
         json!({
             "preview_id": non_empty_string(),
-            "kind": {"type":"string", "enum":["record", "record_batch", "progress", "default_delivery_board", "strategy_transition", "writer_binding"]},
+            "kind": {"type":"string", "enum":["record", "record_batch", "progress", "default_delivery_board", "strategy_transition", "writer_binding", "strategy_assignments"]},
             "approval_required": {"type": "boolean"},
             "no_op": {"type": "boolean"},
             "operation_counts": {
@@ -1500,7 +1499,7 @@ fn apply_output_schema(name: &str) -> Value {
     );
     let governed = object_schema(
         json!({
-            "operation": {"type": "string", "enum": ["strategy_transition", "writer_binding"]},
+            "operation": {"type": "string", "enum": ["strategy_transition", "writer_binding", "strategy_assignments"]},
             "paths": {"type": "array", "items": {"type": "string"}},
             "resulting_target_revisions": revision_map_schema(),
             "diffs": {"type": "object", "additionalProperties": {"type": "string"}},
@@ -1517,7 +1516,9 @@ fn apply_output_schema(name: &str) -> Value {
     let result = match name {
         "casefile_apply_record" => one_of_object(vec![single, batch]),
         "casefile_apply_progress" | "casefile_apply_default_delivery_board" => single,
-        "casefile_apply_strategy_transition" | "casefile_apply_writer_binding" => governed,
+        "casefile_apply_strategy_transition"
+        | "casefile_apply_writer_binding"
+        | "casefile_apply_strategy_assignments" => governed,
         _ => unreachable!("every Casefile tool has an explicit output schema"),
     };
     let success = object_schema(

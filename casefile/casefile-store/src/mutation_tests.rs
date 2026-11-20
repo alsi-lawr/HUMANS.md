@@ -511,6 +511,68 @@ fn governed_mid_transaction_failure_restores_the_matrix() {
 }
 
 #[test]
+fn failed_assignment_verification_restores_the_prior_complete_selection() {
+    let root = fixture();
+    write(
+        root.path(),
+        &format!("{BASE}/strategy/implementation.toml"),
+        matrix("casefile-implement-ticket-batch.toml"),
+    );
+    let provider = Provider::without_cache(Store::open(root.path()).unwrap());
+    let target = crate::StrategyAssignmentTarget {
+        investigation: BASE.into(),
+        phase: casefile_core::AssignmentPhase::Implementation,
+        strategy_id: "casefile-implement-ticket-batch".into(),
+    };
+    let preview = |model: &str| {
+        let projected = provider
+            .project_strategy_assignments(target.clone())
+            .unwrap();
+        provider
+            .preview_strategy_assignments(crate::StrategyAssignmentRequest {
+                target: projected.target,
+                expected_revisions: projected.revisions,
+                roles: projected
+                    .roles
+                    .into_keys()
+                    .map(|role| casefile_core::RoleAssignment {
+                        role,
+                        model: model.into(),
+                        reasoning_effort: "high".into(),
+                    })
+                    .collect(),
+            })
+            .unwrap()
+    };
+    let first = preview("original-model");
+    provider
+        .apply_strategy_assignments(&first.preview_id)
+        .unwrap();
+    let replacement = preview("replacement-model");
+    let path = root.path().join(&replacement.operations[0].path);
+    let prior = fs::read(&path).unwrap();
+    mutation_hooks::fail_result();
+    assert!(
+        provider
+            .apply_strategy_assignments(&replacement.preview_id)
+            .is_err()
+    );
+    mutation_hooks::clear();
+    assert_eq!(fs::read(&path).unwrap(), prior);
+    let retry = preview("replacement-model");
+    provider
+        .apply_strategy_assignments(&retry.preview_id)
+        .unwrap();
+    let saved = provider.project_strategy_assignments(target).unwrap();
+    assert!(
+        saved
+            .roles
+            .values()
+            .all(|role| role.selection.as_ref().unwrap().model == "replacement-model")
+    );
+}
+
+#[test]
 fn process_writer() {
     let Some(manifest) = std::env::var_os("CASEFILE_MUTATION_CHILD") else {
         return;

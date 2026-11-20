@@ -447,7 +447,11 @@ fn writer_projection_uses_canonical_matrix_and_binding_states() {
         .join("../adapters/codex/matrices/casefile-implement-ticket-batch.toml");
     let historical = fs::read_to_string(shipped)
         .expect("shipped matrix")
-        .replacen("model = \"gpt-6-astra\"", "model = \"gpt-5.6-terra\"", 1);
+        .replacen(
+            "role = \"implementation-writer\"",
+            "role = \"implementation-writer\"\nmodel = \"gpt-5.6-terra\"\nreasoning = \"high\"",
+            1,
+        );
     fs::write(&implementation, historical).expect("historical implementation matrix");
 
     #[cfg(unix)]

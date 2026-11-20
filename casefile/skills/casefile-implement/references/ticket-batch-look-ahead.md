@@ -22,8 +22,6 @@ review flow accepts it.
 Keep ticket checks focused. Run full workspace, package, and authenticated verification at the
 release candidate unless this ticket explicitly owns that surface.
 
-For Codex, resolve the Casefile writer binding with strategy ID
-`casefile-implement-ticket-batch-look-ahead` immediately before the initial writer, each resumed
-batch, and each correction spawn. Use only the returned spawn arguments; an unavailable pair stops
-the batch before mutation pending explicit inactive reselection. Writer resolution does not grant
-the look-ahead investigator write authority.
+For Codex, follow the delegation check in `casefile` for each writer, look-ahead investigator,
+atomic ticket reviewer, and verification reviewer under
+`casefile-implement-ticket-batch-look-ahead`. Repeat it for resumed batches and corrections.

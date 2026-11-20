@@ -89,6 +89,15 @@ enum Command {
         #[arg(long)]
         strategy_id: String,
     },
+    /// Read the explicit role assignments for one exact selected strategy.
+    ProjectStrategyAssignments {
+        #[arg(long)]
+        investigation: String,
+        #[arg(long)]
+        phase: casefile_core::AssignmentPhase,
+        #[arg(long)]
+        strategy_id: String,
+    },
     /// Print the adapter/provider compatibility contract for explicit launcher verification.
     McpCompatibility,
     /// Serve the packaged MCP contract with one explicit planning Store root.

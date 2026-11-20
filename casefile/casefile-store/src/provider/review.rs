@@ -9,6 +9,7 @@ pub enum ProviderPreviewKind {
     DefaultDeliveryBoard,
     StrategyTransition,
     WriterBinding,
+    StrategyAssignments,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -85,6 +86,9 @@ pub(super) fn preview(id: &str, original: &StoredPreview) -> ProviderPreview {
             governed(&value.changes, &value.diagnostics, value.no_op)
         }
         StoredPreview::WriterBinding(value) => {
+            governed(&value.changes, &value.diagnostics, value.no_op)
+        }
+        StoredPreview::StrategyAssignments(value) => {
             governed(&value.changes, &value.diagnostics, value.no_op)
         }
     };

@@ -4,3 +4,5 @@ Require the selected `casefile-investigate-atomic` matrix and shared writable pl
 each investigator one disjoint source surface or question and batch excess work to matrix capacity.
 Investigators cannot spawn children. The root arbitrates duplicates, verifies evidence, reserves
 ticket paths, and performs disposition.
+
+Run the delegation check in `casefile` before each Codex detective assignment.

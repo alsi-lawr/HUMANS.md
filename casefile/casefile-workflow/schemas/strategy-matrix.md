@@ -8,8 +8,8 @@ are planning, investigation, review, implementation, and closeout. `[orchestrato
 effort. `[limits]` declares positive concurrency and non-negative nesting depth.
 `[requirements].capabilities` lists runtime capabilities that must already be available. Each worker
 declares role, adapter profile, minimum and maximum count, and whether it may spawn children.
-Adapter matrices may add exact runtime bindings for workers; the portable workflow never supplies
-them.
+Shipped Codex matrices use named behavioral profiles with model and effort supplied by a confirmed
+strategy assignment. The parser still reads model and effort fields in historical matrices.
 
 `[coordination]` records batching, candidate review, and shared-store requirements. An
 implementation pipeline adds `[coordination.pipeline]` with a positive active-ticket limit and

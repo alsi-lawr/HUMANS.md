@@ -7,7 +7,7 @@ use std::{
 };
 use tempfile::TempDir;
 
-const OPERATIONS: &str = "snapshot,record_index,diagnostics,record_detail,boards,strategy_transitions,preview_record_draft,apply_record_draft,bootstrap_progress,preview_progress,apply_progress,preview_default_delivery_board,apply_default_delivery_board,preview_strategy_transition,apply_strategy_transition,preview_writer_binding,apply_writer_binding";
+const OPERATIONS: &str = "snapshot,record_index,diagnostics,record_detail,boards,strategy_transitions,preview_record_draft,apply_record_draft,bootstrap_progress,preview_progress,apply_progress,preview_default_delivery_board,apply_default_delivery_board,preview_strategy_transition,apply_strategy_transition,preview_writer_binding,apply_writer_binding,project_strategy_assignments,preview_strategy_assignments,apply_strategy_assignments";
 
 fn copy_tree(from: &Path, to: &Path) {
     for entry in fs::read_dir(from).expect("fixture entries") {
@@ -87,7 +87,7 @@ fn compatibility_contract_is_machine_readable_and_complete() {
             .as_array()
             .expect("operations")
             .len(),
-        17
+        OPERATIONS.split(',').count()
     );
 }
 
@@ -127,7 +127,7 @@ fn fixed_root_session_negotiates_and_exposes_canonical_snapshot_and_query() {
     assert_eq!(responses.len(), 7);
     assert_eq!(responses[0]["result"]["protocolVersion"], "2025-11-25");
     let tools = responses[1]["result"]["tools"].as_array().expect("tools");
-    assert_eq!(tools.len(), 12);
+    assert_eq!(tools.len(), 15);
     assert!(
         tools
             .iter()
@@ -396,7 +396,7 @@ fn packaged_command_internalizes_the_launcher_contract() {
             .as_array()
             .expect("tools")
             .len(),
-        12
+        15
     );
 }
 
@@ -1046,6 +1046,64 @@ mod investigation_isolation {
             drop(denied);
             assert_eq!(directory_state(&root.path().join(OTHER)), sibling_before);
             assert_eq!(directory_state(&root.path().join(NESTED)), nested_before);
+        }
+    }
+
+    #[test]
+    fn packaged_mcp_persists_a_confirmed_multi_role_set_for_the_exact_strategy() {
+        let root = isolated_fixture();
+        let matrix = "casefile-implement-ticket-batch";
+        let source = fs::read_to_string(
+            Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join(format!("../adapters/codex/matrices/{matrix}.toml")),
+        )
+        .unwrap();
+        write(
+            root.path(),
+            &format!("{SELECTED}/strategy/implementation.toml"),
+            source,
+        );
+        let mut mcp = Mcp::start(root.path());
+        let target =
+            json!({"investigation":SELECTED,"phase":"implementation","strategy_id":matrix});
+        let projected = mcp.success(
+            "casefile_project_strategy_assignments",
+            json!({"target":target}),
+        );
+        let mut roles = Vec::new();
+        for (role, details) in projected["roles"].as_object().unwrap() {
+            assert_eq!(details["selection"], Value::Null);
+            roles.push(
+                json!({"role":role,"model":format!("selected-{role}"),"reasoning_effort":"medium"}),
+            );
+        }
+        assert!(roles.len() > 1);
+        let preview = mcp.success("casefile_preview_strategy_assignments", json!({"request":{
+            "target":projected["target"],"expected_revisions":projected["revisions"],"roles":roles
+        }}));
+        assert_eq!(preview["approval_required"], false);
+        assert_eq!(preview["diagnostics"], json!([]));
+        let path = preview["operations"][0]["path"].as_str().unwrap();
+        assert!(!root.path().join(path).exists());
+        let output = mcp.success(
+            "casefile_apply_strategy_assignments",
+            json!({"preview_id":preview["preview_id"]}),
+        );
+        assert_eq!(output["result"]["paths"], json!([path]));
+        let retry = mcp.success(
+            "casefile_apply_strategy_assignments",
+            json!({"preview_id":preview["preview_id"]}),
+        );
+        assert_eq!(retry["result"]["no_op"], true);
+        let after = mcp.success(
+            "casefile_project_strategy_assignments",
+            json!({"target":target}),
+        );
+        for role in roles {
+            let selection = &after["roles"][role["role"].as_str().unwrap()]["selection"];
+            assert_eq!(selection["model"], role["model"]);
+            assert_eq!(selection["reasoning_effort"], role["reasoning_effort"]);
+            assert_eq!(selection["source"], "strategy_assignment");
         }
     }
 

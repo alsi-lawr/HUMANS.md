@@ -122,7 +122,7 @@ class CasefileHandoffTests(unittest.TestCase):
                 json.dumps(
                     {
                         "identity": "casefile",
-                        "tools": 12,
+                        "tools": len(handoff.REQUIRED_MCP_TOOLS),
                         "version": "0.4.0",
                         "ignored_metadata": "na\u00efve",
                     },
@@ -227,6 +227,16 @@ class CasefileHandoffTests(unittest.TestCase):
             root, run = self.fixture(Path(temporary))
             next((root / "casefile-runtime/bin").glob("*/*")).unlink()
             with self.assertRaisesRegex(artifacts.ArtifactError, "missing"):
+                handoff.validate_handoff(root, run, RUN_ID, "0.4.0", SOURCE)
+
+    def test_rejects_smoke_evidence_from_the_prior_tool_contract(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root, run = self.fixture(Path(temporary))
+            smoke = next((root / "native-smoke").iterdir())
+            evidence = json.loads(smoke.read_text(encoding="utf-8"))
+            evidence["tools"] = 12
+            smoke.write_text(json.dumps(evidence), encoding="ascii")
+            with self.assertRaisesRegex(handoff.HandoffError, "native smoke result is invalid"):
                 handoff.validate_handoff(root, run, RUN_ID, "0.4.0", SOURCE)
 
 

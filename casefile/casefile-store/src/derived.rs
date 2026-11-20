@@ -302,6 +302,9 @@ fn summary_title(summary: &RecordSummary) -> String {
         | RecordSummary::Board { title, .. } => title.clone(),
         RecordSummary::Strategy { strategy_id, .. } => strategy_id.clone(),
         RecordSummary::StrategyBinding { binding } => format!("{} writer binding", binding.adapter),
+        RecordSummary::StrategyAssignments { assignments } => {
+            format!("{} role assignments", assignments.strategy_id)
+        }
         RecordSummary::StrategyTransition { record } => {
             format!("{} strategy transition", record.selected_strategy_id)
         }

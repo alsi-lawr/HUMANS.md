@@ -10,9 +10,6 @@ description:
 Reinstall Casefile over its own installed state. Use this to re-apply a setup after changing the
 planning root or repairing a partial install.
 
-For a Codex model-catalog/profile-only refresh, use `casefile-codex-model-migrate` instead. That
-operation preserves the active multi-agent runtime and MCP binding; a full reinstall below does not.
-
 Claude refuses to reinstall an installed version unless `--overwrite` is passed:
 
 ```
@@ -22,7 +19,8 @@ ${CLAUDE_PLUGIN_ROOT}/scripts/setup-claude.py install \
   --overwrite
 ```
 
-Codex reinstalls over an active receipt without a flag:
+Codex reinstalls over an active receipt and keeps the active multi-agent runtime. When the flags are
+ambiguous, select a runtime explicitly. Review any legacy catalog recovery in the preview.
 
 ```
 ${CODEX_PLUGIN_ROOT}/scripts/setup-codex.py install \

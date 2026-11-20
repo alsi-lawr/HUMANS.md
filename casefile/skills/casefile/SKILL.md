@@ -51,25 +51,26 @@ planning formats are unchanged. Provider versions are separate from MCP's dated 
 negotiation.
 
 Route the current phase to `casefile-investigate`, `casefile-review`, `casefile-implement`, or
-`casefile-close`. Every governed phase requires an explicit compatible strategy. Present compatible
-choices and a recommendation, then wait for human selection.
+`casefile-close`. Every governed phase requires an explicit compatible strategy. On entry without
+one, present compatible choices and a recommendation, then wait for human selection. Keep the
+explicitly selected compatible strategy on re-entry unless the human requests a change.
 
-Review the Provider's compact preview envelope. Request confirmation only when
-`approval_required = true`, then apply only its `preview_id` in the same MCP session. Provider v6
-retains the original once; returned review fields are not an approval payload and must not be sent
-back with the ID. Native filesystem events invalidate disposable caches, never authorize writes;
-Store applies independently revalidate canonical dependencies under their existing locks.
+Review the Provider's compact preview envelope. Request additional confirmation for the apply only
+when `approval_required = true`, then apply only its `preview_id` in the same MCP session. Provider
+v6 retains the original once; returned review fields are not an approval payload and must not be
+sent back with the ID. Native filesystem events invalidate disposable caches, never authorize
+writes; Store applies independently revalidate canonical dependencies under their existing locks.
 
 When starting a new Casefile, activate the new investigation root, then call
 `casefile_preview_default_delivery_board`, review its envelope, and apply its `preview_id`. The
 request to start the Casefile authorizes this canonical board setup but not a ticket-progress
 transition. Stop before delegation if provisioning fails; never replace a differing board.
 
-Do not offer, select, preview, or persist an implementation-writer binding during startup,
-investigation, or review. A binding is implementation-phase state: its selection requires an
-accepted dependency-safe plan, the human's explicit implementation-strategy choice, and the exact
-selected implementation matrix to be persisted and valid. Route binding selection through
-`casefile-implement`; never pre-create a matrix to satisfy the binding Provider.
+Follow [Codex role assignments](references/codex-role-assignments.md) after persisting the exact
+selected governed Codex matrix and on re-entry before delegation. Offer only roles of that strategy.
+The implementation phase requires the accepted dependency-safe plan and explicit strategy before
+offering role assignments. Follow [Codex delegation](references/codex-delegation.md) for each
+governed spawn, follow-up, or resume, including when a nested worker makes the call.
 
 Keep investigation source access read-only. The root alone arbitrates duplicate findings, reserves
 ticket IDs and paths, records decisions, and disposes tickets. Reviewers write evidence only.

@@ -1,20 +1,18 @@
 ---
 name: casefile-codex-setup
 description:
-  "Use after installing casefile for Codex to preview and install Casefile model, multi-agent
-  runtime, profile, and role integration."
+  "Use after installing casefile for Codex to preview and install the Casefile runtime, named roles,
+  and planning Store binding."
 ---
 
 # Casefile Codex setup
 
 Require one explicit absolute activated planning Store root. Run
 `${CODEX_PLUGIN_ROOT}/scripts/setup-codex.py install --plugin-root ${CODEX_PLUGIN_ROOT} --planning-root <absolute-root>`
-without `--apply`, review the plan, then ask once before applying. Omit `--multi-agent-version` for
-the V1 default, or pass `--multi-agent-version v2`. This lifecycle owns only Casefile model-catalog,
-selected multi-agent feature, profile, and role configuration; it never installs or replaces
-`AGENTS.md`. Codex discovery only confirms required-model availability. It never supplies or alters
-the Casefile-owned replacement catalog, and projected IDs outside that catalog do not block setup.
+without `--apply`, review the plan, then ask once before applying. Setup keeps the active runtime on
+an upgrade and defaults to V1 on a first install. If the active flags are ambiguous, choose a
+runtime with `--multi-agent-version v1` or `--multi-agent-version v2`.
 
-For an existing integration that only needs the current catalog and profile registrations, use
-`casefile-codex-model-migrate`. It preserves the selected runtime and MCP binding rather than
-reinstalling them.
+Setup uses the host's model configuration. When upgrading an old integration, review any catalog
+files the receipt proves Casefile owned and any earlier catalog setting it will restore. The
+recovery snapshot retains the bytes present before the upgrade.

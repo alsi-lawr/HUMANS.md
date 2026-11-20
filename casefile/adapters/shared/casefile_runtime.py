@@ -9,6 +9,7 @@ import shutil
 import subprocess
 import tempfile
 from pathlib import Path, PurePosixPath
+from typing import Sequence
 
 
 TARGETS = {
@@ -27,11 +28,54 @@ REQUIRED_OPERATIONS = {
     "preview_default_delivery_board", "apply_default_delivery_board",
     "preview_strategy_transition", "apply_strategy_transition", "preview_writer_binding",
     "apply_writer_binding",
+    "project_strategy_assignments", "preview_strategy_assignments", "apply_strategy_assignments",
+}
+REQUIRED_MCP_TOOLS = {
+    "casefile_snapshot", "casefile_query",
+    "casefile_preview_record", "casefile_apply_record",
+    "casefile_preview_progress", "casefile_apply_progress",
+    "casefile_preview_default_delivery_board", "casefile_apply_default_delivery_board",
+    "casefile_preview_strategy_transition", "casefile_apply_strategy_transition",
+    "casefile_preview_writer_binding", "casefile_apply_writer_binding",
+    "casefile_project_strategy_assignments",
+    "casefile_preview_strategy_assignments", "casefile_apply_strategy_assignments",
 }
 
 
 class RuntimeError(ValueError):
     pass
+
+
+def run_checked(
+    arguments: Sequence[str | os.PathLike[str]],
+    *,
+    input_text: str | None = None,
+    timeout: float | None = None,
+) -> subprocess.CompletedProcess[str]:
+    command = [str(argument) for argument in arguments]
+    result = subprocess.run(
+        command,
+        input=input_text,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="backslashreplace",
+        timeout=timeout,
+    )
+    if result.returncode:
+        raise RuntimeError(
+            json.dumps(
+                {
+                    "command": command,
+                    "exit_code": result.returncode,
+                    "stderr": result.stderr,
+                    "stdout": result.stdout,
+                },
+                ensure_ascii=True,
+                sort_keys=True,
+            )
+        )
+    return result
 
 
 def canonical(value: object) -> bytes:
@@ -157,18 +201,16 @@ def planning_root(path: Path) -> Path:
     return root
 
 
-def probe(binary: Path, version: str, root: Path) -> None:
-    version_result = subprocess.run([binary, "--version"], capture_output=True, text=True, timeout=15)
-    if version_result.returncode or version not in version_result.stdout:
+def probe(binary: Path, version: str, root: Path) -> int:
+    version_result = run_checked([binary, "--version"], timeout=15)
+    if version not in version_result.stdout:
         raise RuntimeError("Casefile executable version probe failed")
-    compatibility = subprocess.run(
-        [binary, "mcp-compatibility"], capture_output=True, text=True, timeout=15
-    )
+    compatibility = run_checked([binary, "mcp-compatibility"], timeout=15)
     try:
         contract = json.loads(compatibility.stdout)
     except json.JSONDecodeError as error:
         raise RuntimeError("Casefile executable returned invalid compatibility JSON") from error
-    if compatibility.returncode or contract.get("identity") != "casefile" or contract.get("provider_protocol_version") != 6:
+    if contract.get("identity") != "casefile" or contract.get("provider_protocol_version") != 6:
         raise RuntimeError("Casefile executable compatibility probe failed")
     if set(contract.get("required_provider_operations", [])) != REQUIRED_OPERATIONS:
         raise RuntimeError("Casefile executable capability contract is incomplete")
@@ -176,17 +218,24 @@ def probe(binary: Path, version: str, root: Path) -> None:
         {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25"}},
         {"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}},
     )) + "\n"
-    process = subprocess.run(
-        [binary, "mcp-package", "--planning-root", root], input=requests,
-        capture_output=True, text=True, timeout=30,
+    process = run_checked(
+        [binary, "mcp-package", "--planning-root", root], input_text=requests, timeout=30,
     )
     try:
         responses = [json.loads(line) for line in process.stdout.splitlines() if line]
     except json.JSONDecodeError as error:
         raise RuntimeError("Casefile MCP probe returned invalid JSON") from error
-    if process.returncode or len(responses) != 2:
+    if len(responses) != 2:
         raise RuntimeError("Casefile MCP probe failed")
     if responses[0].get("result", {}).get("serverInfo", {}).get("name") != "casefile":
         raise RuntimeError("Casefile MCP identity probe failed")
-    if len(responses[1].get("result", {}).get("tools", [])) != 12:
+    tools = responses[1].get("result", {}).get("tools", [])
+    if not isinstance(tools, list):
+        raise RuntimeError("Casefile MCP probe returned no tool list")
+    names = {
+        tool["name"] for tool in tools
+        if isinstance(tool, dict) and isinstance(tool.get("name"), str)
+    }
+    if names != REQUIRED_MCP_TOOLS or len(tools) != len(names):
         raise RuntimeError("Casefile MCP tool probe failed")
+    return len(names)

@@ -5,44 +5,13 @@ from __future__ import annotations
 import argparse
 import json
 import shutil
-import subprocess
 import sys
 import tempfile
-from os import PathLike
 from pathlib import Path
-from typing import Sequence
 
-
-class SmokeError(RuntimeError):
-    pass
-
-
-def run_checked(
-    arguments: Sequence[str | PathLike[str]], input_text: str | None = None
-) -> subprocess.CompletedProcess[str]:
-    command = [str(argument) for argument in arguments]
-    result = subprocess.run(
-        command,
-        input=input_text,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="backslashreplace",
-    )
-    if result.returncode:
-        raise SmokeError(
-            json.dumps(
-                {
-                    "command": command,
-                    "exit_code": result.returncode,
-                    "stderr": result.stderr,
-                    "stdout": result.stdout,
-                },
-                ensure_ascii=True,
-                sort_keys=True,
-            )
-        )
-    return result
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "casefile/adapters/shared"))
+from casefile_runtime import RuntimeError as SmokeError, probe, run_checked
 
 
 def main() -> int:
@@ -51,23 +20,16 @@ def main() -> int:
     parser.add_argument("--version", required=True)
     args = parser.parse_args()
     executable = args.executable.resolve(strict=True)
-    version = run_checked([executable, "--version"])
-    if args.version not in version.stdout:
-        raise SystemExit(f"version output does not contain {args.version!r}: {version.stdout!r}")
-    compatibility = run_checked([executable, "mcp-compatibility"])
-    contract = json.loads(compatibility.stdout)
-    if contract.get("identity") != "casefile" or contract.get("provider_protocol_version") != 6:
-        raise SystemExit("unexpected Casefile compatibility contract")
     with tempfile.TemporaryDirectory(prefix="casefile-mcp-smoke-") as directory:
-        root = Path(directory)
-        fixture = Path(__file__).resolve().parent.parent / "casefile/casefile-store/tests/fixtures/minimum"
+        root = Path(directory).resolve()
+        fixture = ROOT / "casefile/casefile-store/tests/fixtures/minimum"
         shutil.copytree(fixture, root, dirs_exist_ok=True)
         investigation = "projects/demo/investigations/sample"
         validation = run_checked(
             [
                 executable,
                 "--root",
-                root.resolve(),
+                root,
                 "check",
                 "--require-activation",
                 "--investigation",
@@ -77,23 +39,8 @@ def main() -> int:
         check = json.loads(validation.stdout)
         if check.get("activation") != "active" or check.get("valid") is not True:
             raise SystemExit(f"unexpected scoped Casefile validation result: {validation.stdout}")
-        requests = "\n".join(
-            json.dumps(value, separators=(",", ":"))
-            for value in (
-                {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25"}},
-                {"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}},
-            )
-        ) + "\n"
-        result = run_checked(
-            [executable, "mcp-package", "--planning-root", root.resolve()],
-            input_text=requests,
-        )
-    responses = [json.loads(line) for line in result.stdout.splitlines()]
-    if responses[0]["result"]["serverInfo"]["name"] != "casefile":
-        raise SystemExit("unexpected MCP server identity")
-    if len(responses[1]["result"]["tools"]) != 12:
-        raise SystemExit("Casefile MCP did not expose exactly 12 tools")
-    print(json.dumps({"identity":"casefile","tools":12,"version":args.version}, sort_keys=True))
+        tool_count = probe(executable, args.version, root)
+    print(json.dumps({"identity": "casefile", "tools": tool_count, "version": args.version}, sort_keys=True))
     return 0
 
 

@@ -2,6 +2,7 @@ use super::{
     InventoryEntry, classification::ParsedFacts, inventory_target, scoped::selected_entry,
 };
 use crate::{
+    StrategyAssignmentProjection, StrategyAssignmentRevisions, StrategyAssignmentTarget,
     activation::{Activation, ScopeIndex},
     derived::{StrategyBindingState, resolve_binding},
     layout::checked_path,
@@ -17,6 +18,61 @@ pub struct WriterBindingProjection {
     pub strategy_id: String,
     pub adapter: String,
     pub binding: StrategyBindingState,
+}
+
+pub(crate) fn project_strategy_assignments(
+    root: &Path,
+    target: StrategyAssignmentTarget,
+) -> Result<StrategyAssignmentProjection, StoreError> {
+    let target = target.canonical()?;
+    let matrix_path = target.matrix_path();
+    let assignments_path = target.assignments_path();
+    let legacy_path = target.legacy_path();
+    let mut read = SelectedRead::begin(root, 3)?;
+    let scopes = ScopeIndex::new(&read.active);
+    if scopes.resolve(&target.investigation).scope != Some(target.investigation.as_str())
+        || scopes.resolve(&matrix_path).kind != Some(Kind::Strategy)
+        || scopes.resolve(&assignments_path).kind != Some(Kind::StrategyAssignments)
+    {
+        return Err(StoreError::Invalid(
+            "assignment target must be an exact activated investigation".into(),
+        ));
+    }
+    let (entry, facts) = read
+        .entry(&matrix_path, Kind::Strategy)?
+        .ok_or_else(|| StoreError::Invalid("selected assignment strategy is missing".into()))?;
+    let (adapter, matrix) = target.matrix(&entry, facts.strategy.as_ref())?;
+    let mut revisions = StrategyAssignmentRevisions {
+        matrix: entry.content_revision.clone(),
+        assignments: None,
+        legacy_writer_binding: None,
+    };
+    let roles = if adapter == "codex" {
+        let assignments = read
+            .entry(&assignments_path, Kind::StrategyAssignments)?
+            .map(|(entry, _)| entry);
+        let legacy = match legacy_path.as_deref() {
+            Some(path) => read
+                .entry(path, Kind::StrategyBinding)?
+                .map(|(entry, _)| entry),
+            None => None,
+        };
+        revisions.assignments = assignments
+            .as_ref()
+            .map(|entry| entry.content_revision.clone());
+        revisions.legacy_writer_binding =
+            legacy.as_ref().map(|entry| entry.content_revision.clone());
+        target.project_roles(matrix, assignments.as_ref(), legacy.as_ref())?
+    } else {
+        Default::default()
+    };
+    read.verify()?;
+    Ok(StrategyAssignmentProjection {
+        target,
+        adapter: adapter.into(),
+        revisions,
+        roles,
+    })
 }
 
 struct SelectedRead<'a, 'p> {

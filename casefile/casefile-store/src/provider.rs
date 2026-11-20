@@ -2,8 +2,9 @@ use crate::layout::checked_path;
 use crate::{
     ActivationState, DerivedBoard, DerivedIndex, DerivedSnapshot, DerivedTicketProgress,
     GovernedApplyResult, Indexed, ProgressApplyResult, ProgressChangeRequest, ProgressPreview,
-    RevisionSource, Store, StoreError, StrategyTransitionPreview, StrategyTransitionRequest,
-    WriterBindingPreview, WriterBindingRequest,
+    RevisionSource, Store, StoreError, StrategyAssignmentPreview, StrategyAssignmentProjection,
+    StrategyAssignmentRequest, StrategyAssignmentTarget, StrategyTransitionPreview,
+    StrategyTransitionRequest, WriterBindingPreview, WriterBindingRequest,
 };
 use casefile_core::{
     ApplyResult, BoardColumn, BoardDraft, BoardStatusSource, ChangeBatchApplyResult,
@@ -39,6 +40,7 @@ pub enum ProviderOperation {
     RecordDetail,
     Boards,
     StrategyTransitions,
+    ProjectStrategyAssignments,
     PreviewRecordDraft,
     ApplyRecordDraft,
     BootstrapProgress,
@@ -50,6 +52,8 @@ pub enum ProviderOperation {
     ApplyStrategyTransition,
     PreviewWriterBinding,
     ApplyWriterBinding,
+    PreviewStrategyAssignments,
+    ApplyStrategyAssignments,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -961,6 +965,34 @@ impl<C: ProviderCache> Provider<C> {
         self.outcome(result)
     }
 
+    pub fn project_strategy_assignments(
+        &self,
+        target: StrategyAssignmentTarget,
+    ) -> Result<StrategyAssignmentProjection, ProviderError> {
+        Ok(self.store.project_strategy_assignments(target)?)
+    }
+
+    pub fn preview_strategy_assignments(
+        &self,
+        request: StrategyAssignmentRequest,
+    ) -> Result<ProviderPreview, ProviderError> {
+        self.require_mutation()?;
+        let preview = self.store.preview_strategy_assignments(request)?;
+        Ok(self.remember(StoredPreview::StrategyAssignments(preview)))
+    }
+
+    pub fn apply_strategy_assignments(
+        &self,
+        preview_id: &str,
+    ) -> Result<ProviderApplyOutcome<GovernedApplyResult>, ProviderError> {
+        self.require_mutation()?;
+        let original = self.retained(preview_id)?;
+        let StoredPreview::StrategyAssignments(preview) = original.as_ref() else {
+            return Err(ProviderError::PreviewIntegrity);
+        };
+        self.outcome(self.store.apply_strategy_assignments(preview)?)
+    }
+
     fn require_mutation(&self) -> Result<(), ProviderError> {
         let (activation, _, _) = crate::activation::activation(self.store.observation_root())?;
         if activation == ActivationState::Active {
@@ -1072,6 +1104,7 @@ fn capabilities(activation: ActivationState) -> ProviderCapabilities {
         ProviderOperation::RecordDetail,
         ProviderOperation::Boards,
         ProviderOperation::StrategyTransitions,
+        ProviderOperation::ProjectStrategyAssignments,
     ];
     let (mutation, operations) = if activation == ActivationState::Active {
         let mut operations = reads;
@@ -1087,6 +1120,8 @@ fn capabilities(activation: ActivationState) -> ProviderCapabilities {
             ProviderOperation::ApplyStrategyTransition,
             ProviderOperation::PreviewWriterBinding,
             ProviderOperation::ApplyWriterBinding,
+            ProviderOperation::PreviewStrategyAssignments,
+            ProviderOperation::ApplyStrategyAssignments,
         ]);
         (ProviderMutationState::ReadWrite, operations)
     } else {

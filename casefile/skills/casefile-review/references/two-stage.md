@@ -4,3 +4,6 @@ Persist the `casefile-review-two-stage` matrix. Give the primary reviewer the co
 bounded batch. Give its concrete findings and acceptance result to a verifier, who confirms or
 rejects those points without repeating the full review. Store both reports for root reconciliation
 and correction routing.
+
+For Codex, run the delegation check in `casefile` separately for the atomic ticket reviewer and the
+verification reviewer.

@@ -113,7 +113,7 @@ and its artifact manifest. They contain no `.mcp.json`, package-local Cargo work
 launcher. Host-specific receipt-backed setup requires one explicit absolute planning root, checks
 that every expected matrix artifact is a regular non-empty file at its normalized contained path,
 atomically installs the matching executable in a stable versioned user path, probes the exact
-identity, protocol, capabilities, and 12-tool stdio surface, then registers
+identity, protocol, required Provider operations, and named MCP tools, then registers
 `casefile mcp-package --planning-root <absolute-root>` directly. Runtime startup needs no Cargo,
 Rust, Python, Node, network, or `PATH` lookup.
 
@@ -144,8 +144,7 @@ Activated current-v1 Stores operate in place without conversion. Unactivated, in
 and early legacy activation layouts remain read-only or unsupported with actionable diagnostics; do
 not automatically activate, repair, upgrade, or infer history. The CLI remains the human and
 recovery adapter, including malformed-progress repair that is intentionally absent from MCP. The
-project-map validator, package and CI validators, model-drift checks, and Codex writer catalog
-resolver retain their distinct responsibilities.
+project-map, package, and CI validators check their respective source and artifact boundaries.
 
 The Provider owns governed strategy transitions and writer-binding replacement. The only ad-hoc
 strategy path is `casefile scratch-strategy`, a bounded CLI-only operation requiring an explicit
@@ -242,37 +241,27 @@ authority and projects these client-visible states:
 - `unresolved`: the overlay or matrix cannot identify one applicable effective writer; and
 - `invalid`: the binding source failed canonical validation.
 
-Historical Casefiles without `bindings.toml` remain valid and use the matrix writer pair. A present
-invalid or unresolved overlay never falls back silently. The TUI, server, and browser consume the
-Rust-owned typed projection and diagnostics; do not add another TOML parser to a client.
+The historical writer binding projection still displays the matrix writer pair when `bindings.toml`
+is absent. An invalid or unresolved overlay produces diagnostics. The TUI, server, and browser
+consume the Rust-owned typed projection and diagnostics.
 
 ### Codex offer and spawn resolution
 
-`casefile/adapters/codex/scripts/resolve-writer-binding.py` reads visible models and reasoning
-efforts through Codex app-server's stable `model/list` method, then validates runtime selectors from
-the configured receipt-owned Casefile catalog. It offers only pairs that match the selected
-multi-agent runtime and have a verified packaged resolution for all three implementation strategies.
-V1 requires an exact generated named profile for the pair. V2 requires each strategy's runtime
-wrapper, a positive fork context, and explicit model and effort overrides at spawn.
+The [Codex role assignment flow](casefile/skills/casefile/references/codex-role-assignments.md) uses
+the live eligible pairs for every distinct role in the exact selected strategy. Only explicit human
+confirmation of the full set authorizes the typed assignment preview and apply. Keep eligible saved
+selections on re-entry. A strategy with zero workers needs no assignment write.
 
-The shipped implementation matrices default to Astra/high. For a new explicit writer binding,
-Astra/high is a recommendation, not an automatic selection. For a newly selected implementation
-strategy, offer writer bindings only after the dependency-safe plan is accepted and the exact
-implementation matrix is persisted and valid. Never pre-create a matrix or binding during startup,
-investigation, or review. The offer reports whether Astra/high is available and always requires an
-explicit exact selection. If it is unavailable, present the remaining offered pairs without
-recommending a substitute. Before ticket-batch, pipeline, resumed, or correction work, resolve the
-canonical projection and revalidate the pair against a fresh offer. Stop before delegation for
-pending, unresolved, invalid, or newly unavailable state; obtain explicit reselection while
-implementation is inactive.
+Before each governed Codex delegation, `resolve-role-assignment.py` checks the explicit saved pair
+against live provider discovery and the current caller's named role capabilities. It returns the
+spawn arguments for that registration and runtime. A writer also needs canonical `in_progress` state
+for the exact ticket. See the
+[Codex delegation procedure](casefile/skills/casefile/references/codex-delegation.md).
 
-Binding replacement remains a root-authorized decision. Use the resolver's `select` command only to
-materialize the confirmed typed request, pass that request to the Provider's writer-binding preview,
-review the compact envelope, and apply its `preview_id`. The explicit selection is the authority for
-persistence. The Provider derives inactivity from one valid canonical progress log: accepted tickets
-may be `unknown` or `complete`, active non-complete stages refuse the replacement, and missing,
-malformed, or conflicting progress fails closed. Git history is the only history boundary: do not
-add an archive, journal, second state file, or client-side write path.
+Use the [strategy assignments schema](casefile/casefile-workflow/schemas/strategy-assignments.md)
+and its Provider tools for current selection. A historical explicit writer binding can use the
+ordinary named writer registration when its saved pair passes the current delegation check. The old
+alias entry in `[resolution]` identifies the applicable strategy for historical records.
 
 ### Workbench development
 
@@ -345,37 +334,24 @@ pressed state, labelled regions, and a polite detail announcement. Selection rev
 effective runtime facts plus limits, requirements, coordination, and pipeline constraints; it does
 not edit a strategy or binding.
 
-The Codex adapter owns the selected Casefile model catalog and multi-agent runtime. Setup defaults
-to V1; V2 requires Codex 0.145.0 or newer. `agents.max_threads` is a host-owned capacity setting.
-Casefile treats it as a minimum requirement, not a value it owns. Setup requires at least six
-threads, preserves a sufficient existing value, and initializes the setting to the minimum only when
-absent. An insufficient explicit value stops setup without changing the host configuration.
-Reinstall and uninstall retain the current host value, including values inside older Casefile setup
-markers.
+Codex setup binds the Casefile executable to the selected Store and registers the named roles and
+runtime. The first install defaults to V1. Reinstall keeps the active runtime unless the operator
+explicitly selects another. If the active flags are ambiguous, require an explicit choice. Setup
+requires at least six agent threads and initializes `agents.max_threads` when absent. Reinstall and
+uninstall preserve the host's current capacity setting.
 
-Setup and model migration confirm required model IDs through app-server `model/list` in a temporary
-configuration-free home, so an older replacement catalog cannot hide a newly shipped model. GPT-6
-Sol and Luna are carried as optional additions, not prerequisites for setup. No selected-home
-credentials or configuration are copied; environment authentication remains available. The
-projection confirms advertised IDs, not successful model execution or account entitlement. The
-temporary home is removed after discovery.
+Model availability comes from app-server `model/list` for the active provider. The offer checks that
+metadata against the current caller's named-role spawn capabilities. Recommendations use model
+classes and suggested efforts. The human confirms the concrete model and effort for each role, and
+Casefile rechecks the saved values before delegation. Use the normal
+[role assignment procedure](casefile/skills/casefile/references/codex-role-assignments.md).
 
-The complete replacement catalog comes from `casefile/adapters/codex/catalog/models.json`, not
-Codex's cache or the reduced app-server projection. Setup sets its runtime selectors to null for V1
-or `v2` for V2. The `models-casefile-v1.json` and `models-casefile-v2.json` names identify runtimes,
-not model releases. Casefile never directly edits or distributes Codex's `models_cache.json`.
-
-The Codex-only `casefile-codex-model-migrate` skill previews and applies a catalog/profile refresh
-through `setup-codex.py migrate-models`. Use the installed target package, and pass `--codex-home`
-when selecting a non-default home. Preview first, then explicitly approve its `approval_digest` and
-repeat with `--apply --expect-digest <approved-digest>`. Changed inputs require another preview. The
-operation replaces the selected owned catalog and Casefile profile registrations, preserving
-unrelated configuration, the root model, runtime flags, other catalog variant, MCP binding and
-binary, investigation selections, and original pre-install recovery state. Matching state is a
-no-op; failed apply restores the prior integration and receipt pointer. Runtime/receipt disagreement
-or missing catalog recovery state requires explicit setup reconciliation. Migration never switches
-runtimes or claims ownership of a foreign catalog. Restart Codex after a changed migration, then
-check the resolver's current offer without automatically selecting a binding.
+The provider and host configuration supply models for fresh setup. On upgrade or uninstall of an
+older installation, the active receipt identifies the legacy catalog files Casefile managed. Review
+the recovery preview for any file changes or prior setting it will restore. Host catalog settings,
+catalogs referenced by surviving profiles or agents, and Codex's `models_cache.json` stay with the
+host. Recovery snapshots retain the live bytes displaced during the operation. Use the installed
+[Codex setup and update guidance](casefile/adapters/codex/skills/codex-setup/SKILL.md).
 
 The Claude adapter supplies workflow skills, matrices, role agents, and a separate Casefile MCP
 binding transaction without owning the standing contract. Neither adapter removes the shared
@@ -397,7 +373,7 @@ workspace, package, or authenticated smoke gate on a local correction.
 
 For a release candidate, pin one exact source commit and run the complete commands in
 [Development environment](#development-environment), followed by the generated-marketplace checks
-below. Inspect all six generated vendor metadata manifests, both regenerated catalogs, generated
+below. Inspect all six generated vendor metadata manifests, both marketplace catalogs, generated
 Codex and Claude Casefile validation, and embedded-asset cleanliness. Run authenticated,
 configuration-isolated runtime smoke only when the release ticket requires it, and retain sanitized
 evidence without credentials, caches, or raw session logs.

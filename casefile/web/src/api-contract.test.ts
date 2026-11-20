@@ -82,6 +82,21 @@ test("accepts the canonical strategy transition record kind", () => {
   expect(decodeRecords([transition])[0]?.kind).toBe("strategy_transition");
 });
 
+test("reads existing records alongside saved strategy assignments", () => {
+  const assignments = {
+    path: "projects/demo/investigations/sample/strategy/assignments/review/two-stage.toml",
+    scope: { project: "demo", investigation: "sample" },
+    classification: "governed",
+    kind: "strategy_assignments",
+    title: "Two-stage review role assignments",
+  };
+
+  expect(decodeRecords([projectDecision, assignments]).map((record) => record.path)).toEqual([
+    projectDecision.path,
+    assignments.path,
+  ]);
+});
+
 test("preserves the host stale-revision failure code", () => {
   expect(
     decodeHostFailure({ error: "stale target revision", code: "stale_revision" }, 409),

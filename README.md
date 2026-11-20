@@ -16,11 +16,11 @@ coding guidance.
 
 ## Install
 
-Add the `humans-md` marketplace at `v0.10.0`, then install the identities you need. Start with core;
+Add the `humans-md` marketplace at `v0.11.0`, then install the identities you need. Start with core;
 Casefile and coding remain optional siblings.
 
 ```sh
-codex plugin marketplace add alsi-lawr/humans-md-marketplace --ref v0.10.0
+codex plugin marketplace add alsi-lawr/humans-md-marketplace --ref v0.11.0
 codex plugin add humans-md@humans-md
 # optional siblings
 codex plugin add casefile@humans-md
@@ -28,7 +28,7 @@ codex plugin add coding@humans-md
 ```
 
 ```sh
-claude plugin marketplace add alsi-lawr/humans-md-marketplace@v0.10.0
+claude plugin marketplace add alsi-lawr/humans-md-marketplace@v0.11.0
 claude plugin install humans-md@humans-md --scope user
 # optional siblings
 claude plugin install casefile@humans-md --scope user
@@ -36,17 +36,21 @@ claude plugin install coding@humans-md --scope user
 ```
 
 `humans-md` owns only the standing `AGENTS.md` / `CLAUDE.md` contract lifecycle and recovery.
-`casefile` owns Casefile workflows and Codex model, selected multi-agent runtime, profile, and role
-integration. `coding` owns Git contribution, README, skill-generation, and generic verification
-guidance. Removing one plugin never removes the shared marketplace or another plugin.
+`casefile` owns Casefile workflows, runtime setup, and named agent integration. `coding` owns Git
+contribution, README, skill-generation, and generic verification guidance. Removing one plugin never
+removes the shared marketplace or another plugin.
 
 The Casefile plugin bundles the complete supported Linux, macOS, and Windows x64/ARM64 executable
 matrix. After installing it, invoke its host-specific Casefile setup skill with one absolute
 activated current-v1 planning Store. Setup verifies and installs the matching executable, probes its
-identity and 12-tool Provider contract, and receipt-binds the host directly to
+identity, required Provider operations, and MCP tools, then receipt-binds the host directly to
 `casefile mcp-package`. MCP startup then needs no Cargo, Python, Node, network, or `PATH` lookup.
 MCP retains exact previews in the live session and returns compact review envelopes that apply by
 `preview_id`. Routine writes proceed without a second confirmation; record deletions require one.
+
+For Codex, confirm a model and reasoning effort for each delegated role. Casefile recommends a model
+class and effort, shows choices from the current provider and spawn tool, and rechecks saved choices
+before delegation.
 
 Implementation offers three explicit governed shapes: a strictly serial ticket batch, a serial
 ticket batch with one read-only look-ahead, and a bounded pipeline that may overlap one independent,

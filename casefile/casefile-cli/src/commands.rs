@@ -3,7 +3,8 @@ use anyhow::{Context, Result};
 use casefile_core::ChangeRequest;
 use casefile_store::{
     ProgressChangeRequest, ProgressOperation, ProgressPreview, Provider, Store,
-    StrategyTransitionRequest, WriterBindingRequest, normalize_planning_relative,
+    StrategyAssignmentTarget, StrategyTransitionRequest, WriterBindingRequest,
+    normalize_planning_relative,
 };
 use serde::Serialize;
 use std::{
@@ -220,6 +221,20 @@ pub(super) fn execute(root: PathBuf, command: Command) -> Result<ExitCode> {
         } => {
             let investigation = canonical_investigation(&investigation)?;
             print_json(&store.project_writer_binding(&investigation, &strategy_id)?)?;
+            Ok(ExitCode::SUCCESS)
+        }
+        Command::ProjectStrategyAssignments {
+            investigation,
+            phase,
+            strategy_id,
+        } => {
+            print_json(
+                &store.project_strategy_assignments(StrategyAssignmentTarget {
+                    investigation,
+                    phase,
+                    strategy_id,
+                })?,
+            )?;
             Ok(ExitCode::SUCCESS)
         }
         Command::Serve { .. } => unreachable!("serve handled before opening the store"),

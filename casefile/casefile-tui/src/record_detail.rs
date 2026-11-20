@@ -385,6 +385,23 @@ fn overview_lines(
                     lines.extend(binding_state_lines(state));
                 }
             }
+            RecordSummary::StrategyAssignments { assignments } => {
+                lines.push(label_line("Phase", assignments.phase.to_string()));
+                lines.push(label_line(
+                    "Strategy",
+                    safe_inline(&assignments.strategy_id),
+                ));
+                for role in &assignments.roles {
+                    lines.push(label_line(
+                        &safe_inline(&role.role),
+                        format!(
+                            "{} / {}",
+                            safe_inline(&role.model),
+                            safe_inline(&role.reasoning_effort)
+                        ),
+                    ));
+                }
+            }
             RecordSummary::StrategyTransition { record } => {
                 lines.push(
                     Line::from(safe_inline(&record.operation_id))

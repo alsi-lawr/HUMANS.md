@@ -1,5 +1,4 @@
 use crate::{SCHEMA_VERSION, diagnostic::Diagnostic, record::RecordSummary};
-use regex::Regex;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -517,6 +516,14 @@ pub fn validate_matrix(text: &str) -> Result<(), Vec<Diagnostic>> {
     parse_selected_matrix(text).map(|_| ())
 }
 
+pub fn is_strategy_id(value: &str) -> bool {
+    let mut bytes = value.bytes();
+    bytes
+        .next()
+        .is_some_and(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit())
+        && bytes.all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
+}
+
 pub fn parse_selected_matrix(text: &str) -> Result<SelectedStrategyMatrix, Vec<Diagnostic>> {
     let path = "strategy matrix";
     let value: toml::Value = toml::from_str(text)
@@ -524,10 +531,7 @@ pub fn parse_selected_matrix(text: &str) -> Result<SelectedStrategyMatrix, Vec<D
     let table = table(path, &value, "strategy")?;
     schema(path, table)?;
     let strategy_id = string(path, table, "strategy_id", "invalid_strategy")?;
-    if !Regex::new(r"^[a-z0-9][a-z0-9-]*$")
-        .expect("fixed expression")
-        .is_match(&strategy_id)
-    {
+    if !is_strategy_id(&strategy_id) {
         return Err(vec![
             Diagnostic::new(path, "invalid_strategy", "strategy_id is invalid")
                 .field("strategy_id"),

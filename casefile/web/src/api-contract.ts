@@ -95,6 +95,7 @@ const decodeKind = (value: unknown): Kind => {
     case "closeout":
     case "strategy":
     case "strategy_binding":
+    case "strategy_assignments":
     case "strategy_transition":
     case "progress":
     case "ticket":

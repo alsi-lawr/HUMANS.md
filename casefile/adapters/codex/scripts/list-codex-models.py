@@ -1,22 +1,29 @@
 #!/usr/bin/env python3
-"""List the models Codex offers, with pinned models added, for catalog comparison."""
+"""List the models reported by the current Codex provider."""
 from __future__ import annotations
 
 import argparse
 import json
 import subprocess
 import sys
-import tomllib
-from pathlib import Path
 
 
 class ProjectionError(RuntimeError):
     pass
 
 
-def project(executable: str, timeout: float, environment: dict[str, str] | None = None) -> list[dict]:
+def project(
+    executable: str,
+    timeout: float,
+    environment: dict[str, str] | None = None,
+    *,
+    provider: str | None = None,
+) -> list[dict]:
+    command = [executable, "app-server"]
+    if provider is not None:
+        command.extend(["-c", f"model_provider={json.dumps(provider, ensure_ascii=False)}"])
     process = subprocess.Popen(
-        [executable, "app-server"],
+        command,
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.DEVNULL,
@@ -81,82 +88,40 @@ def _exchange(process: subprocess.Popen) -> list[dict]:
 
 
 def normalize(models: list[dict]) -> list[dict]:
-    """Map the app-server shape onto the field names the catalog comparison reads."""
+    """Project the app-server model metadata used by role selection."""
     result = []
     for model in models:
-        identifier = model.get("id")
+        identifier = model.get("model", model.get("id"))
         if not isinstance(identifier, str) or not identifier:
             raise ProjectionError("app-server model/list contains a model without an ID")
-        result.append(
-            {
-                "slug": identifier,
-                "display_name": model.get("displayName"),
-                "visibility": "hide" if model.get("hidden") else "list",
-                "supported_reasoning_levels": [
-                    {"effort": effort.get("reasoningEffort")}
-                    for effort in model.get("supportedReasoningEfforts") or []
-                    if isinstance(effort, dict)
-                ],
-            }
-        )
+        entry = {
+            "slug": identifier,
+            "display_name": model.get("displayName"),
+            "visibility": "hide" if model.get("hidden") else "list",
+            "supported_reasoning_levels": [
+                {"effort": effort.get("reasoningEffort")}
+                for effort in model.get("supportedReasoningEfforts") or []
+                if isinstance(effort, dict)
+            ],
+        }
+        if "multiAgentVersion" in model:
+            entry["multi_agent_version"] = model["multiAgentVersion"]
+        result.append(entry)
     return result
-
-
-def targets(profile_path: Path) -> list[dict]:
-    profile = tomllib.loads(profile_path.read_text(encoding="ascii"))
-    return profile.get("catalog", {}).get("targets", [])
-
-
-def pinned_entries(profile_path: Path) -> list[dict]:
-    """Pinned models are account-gated, so an unauthenticated listing omits them."""
-    entries = []
-    for target in targets(profile_path):
-        if target.get("pinned") is not True:
-            continue
-        expected = target.get("expected", {})
-        entries.append(
-            {
-                "slug": target["id"],
-                "display_name": expected.get("display_name"),
-                "visibility": expected.get("visibility"),
-                "supported_reasoning_levels": [
-                    {"effort": effort} for effort in target.get("required_reasoning", [])
-                ],
-            }
-        )
-    return entries
-
-
-def listing(
-    executable: str,
-    profile_path: Path,
-    timeout: float = 20.0,
-    *,
-    environment: dict[str, str] | None = None,
-) -> dict:
-    models = normalize(project(executable, timeout, environment))
-    listed = {model["slug"] for model in models}
-    models.extend(entry for entry in pinned_entries(profile_path) if entry["slug"] not in listed)
-    return {"models": sorted(models, key=lambda model: model["slug"])}
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--codex-executable", default="codex")
-    parser.add_argument("--profiles", type=Path, required=True)
-    parser.add_argument("--output", type=Path)
+    parser.add_argument("--provider", help="provider ID to select for app-server discovery")
     parser.add_argument("--timeout", type=float, default=20.0)
     arguments = parser.parse_args()
     try:
-        document = listing(arguments.codex_executable, arguments.profiles, arguments.timeout)
-    except (ProjectionError, OSError, ValueError) as error:
+        models = normalize(project(arguments.codex_executable, arguments.timeout, provider=arguments.provider))
+    except (ProjectionError, OSError, ValueError, subprocess.SubprocessError) as error:
         print(f"Codex model listing failed: {error}", file=sys.stderr)
         return 1
-    text = json.dumps(document, indent=2, sort_keys=True) + "\n"
-    if arguments.output is None:
-        sys.stdout.write(text)
-    else:
-        arguments.output.write_text(text, encoding="ascii")
+    print(json.dumps({"models": sorted(models, key=lambda model: model["slug"])}, indent=2))
     return 0
 
 

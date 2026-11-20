@@ -10,6 +10,7 @@ export type Kind =
   | "closeout"
   | "strategy"
   | "strategy_binding"
+  | "strategy_assignments"
   | "strategy_transition"
   | "progress"
   | "ticket"

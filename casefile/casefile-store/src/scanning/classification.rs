@@ -130,6 +130,14 @@ fn classify_parsed(
         Kind::StrategyBinding => {
             parse_strategy_binding(path, text).map(|summary| (None, Some(summary)))
         }
+        Kind::StrategyAssignments => {
+            casefile_core::parse_strategy_assignments(path, text).map(|assignments| {
+                (
+                    None,
+                    Some(RecordSummary::StrategyAssignments { assignments }),
+                )
+            })
+        }
         Kind::StrategyTransition => {
             let value = match toml::from_str::<toml::Value>(text) {
                 Ok(value) => value,
