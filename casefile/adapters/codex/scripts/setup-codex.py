@@ -10,7 +10,6 @@ import os
 import re
 import shutil
 import subprocess
-import sys
 import tempfile
 import tomllib
 from pathlib import Path, PurePosixPath
@@ -25,32 +24,9 @@ except ModuleNotFoundError:
     casefile_runtime = importlib.util.module_from_spec(_runtime_spec)
     _runtime_spec.loader.exec_module(casefile_runtime)
 
-try:
-    import list_codex_models
-except ModuleNotFoundError:
-    _lister_path = Path(__file__).resolve().with_name("list-codex-models.py")
-    _lister_spec = importlib.util.spec_from_file_location(
-        "list_codex_models", _lister_path
-    )
-    if _lister_spec is None or _lister_spec.loader is None:
-        raise
-    list_codex_models = importlib.util.module_from_spec(_lister_spec)
-    _lister_spec.loader.exec_module(list_codex_models)
-
-
 PLUGIN_ID = "casefile@humans-md"
 MARKETPLACE = "humans-md"
 RECEIPT_SCHEMA = 6
-REQUIRED_MODELS = {
-    "gpt-6-astra",
-    "gpt-5.6-sol",
-    "gpt-5.6-terra",
-    "gpt-5.6-luna",
-}
-V1_SELECTOR_MODELS = {
-    "gpt-6-astra", "gpt-6.1-sol", "gpt-6-sol", "gpt-6-luna",
-    "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna",
-}
 MULTI_AGENT_VERSIONS = {"v1", "v2"}
 LEGACY_CATALOGS = {f"models-casefile-{version}.json" for version in MULTI_AGENT_VERSIONS}
 CATALOG_KEY = "model_catalog_json"
@@ -58,40 +34,6 @@ CATALOG_ASSIGNMENT = re.compile(
     rb'''(?m)^[ \t]*(?:model_catalog_json|"model_catalog_json"|'model_catalog_json')[ \t]*=[^\n]*(?:\n|$)'''
 )
 MINIMUM_AGENT_THREADS = 6
-REQUIRED_CATALOG_FIELDS = {
-    "additional_speed_tiers",
-    "apply_patch_tool_type",
-    "availability_nux",
-    "base_instructions",
-    "comp_hash",
-    "context_window",
-    "default_reasoning_level",
-    "default_reasoning_summary",
-    "default_verbosity",
-    "description",
-    "display_name",
-    "experimental_supported_tools",
-    "include_skills_usage_instructions",
-    "input_modalities",
-    "max_context_window",
-    "model_messages",
-    "multi_agent_version",
-    "priority",
-    "service_tiers",
-    "shell_type",
-    "slug",
-    "support_verbosity",
-    "supported_in_api",
-    "supported_reasoning_levels",
-    "supports_image_detail_original",
-    "supports_parallel_tool_calls",
-    "supports_search_tool",
-    "truncation_policy",
-    "upgrade",
-    "use_responses_lite",
-    "visibility",
-    "web_search_tool_type",
-}
 SCALAR_BEGIN = b"# >>> casefile setup scalars >>>\n"
 SCALAR_END = b"# <<< casefile setup scalars <<<\n"
 TABLE_BEGIN = b"\n# >>> casefile setup tables >>>\n"
@@ -216,128 +158,10 @@ def discover(executable: str, environment: dict[str, str], version: str) -> dict
     return plugin
 
 
-def profile_resource(profile: Path, value: object) -> bytes:
-    if not isinstance(value, str) or not value:
-        raise SetupError("catalog file is not configured")
-    relative = PurePosixPath(value.replace("\\", "/"))
-    if relative.is_absolute() or ".." in relative.parts:
-        raise SetupError(f"unsafe catalog resource: {value}")
-    path = (profile.parent / Path(*relative.parts)).resolve(strict=True)
-    if profile.parent.resolve() not in path.parents or not path.is_file() or path.is_symlink():
-        raise SetupError(f"unsafe catalog resource: {value}")
-    data = path.read_bytes()
-    if not data:
-        raise SetupError(f"catalog resource is empty: {value}")
-    return data
-
-
-def set_selector(model: dict, dotted: str, value: object = None) -> None:
-    current = model
-    parts = dotted.split(".")
-    for part in parts[:-1]:
-        current = current[part]
-    current[parts[-1]] = value
-
-
 def multi_agent_version(value: str) -> str:
     if value not in MULTI_AGENT_VERSIONS:
         raise SetupError(f"unsupported multi-agent version: {value!r}")
     return value
-
-
-def carried_models(profile_path: Path) -> set[str]:
-    """Models the packaged catalog carries."""
-    profile = tomllib.loads(profile_path.read_text(encoding="ascii"))
-    return {
-        target["id"]
-        for target in profile.get("catalog", {}).get("targets", [])
-        if isinstance(target.get("id"), str)
-    }
-
-
-def pinned_models(profile_path: Path) -> set[str]:
-    """Models this repository requires that upstream may no longer list."""
-    profile = tomllib.loads(profile_path.read_text(encoding="ascii"))
-    return {
-        target["id"]
-        for target in profile.get("catalog", {}).get("targets", [])
-        if target.get("pinned") is True and isinstance(target.get("id"), str)
-    }
-
-
-def catalog_replacement(profile_path: Path, version: str) -> tuple[bytes, list[str]]:
-    version = multi_agent_version(version)
-    profile = tomllib.loads(profile_path.read_text(encoding="ascii"))
-    policy = profile.get("catalog", {})
-    if profile.get("schema_version") != 1:
-        raise SetupError("unsupported catalog or profile schema")
-    if (
-        policy.get("id_field") != "slug"
-        or policy.get("selector_fields") != ["multi_agent_version"]
-    ):
-        raise SetupError("unsupported catalog policy")
-    targets = policy.get("targets", [])
-    identifiers = [target.get("id") for target in targets]
-    if None in identifiers or len(set(identifiers)) != len(identifiers):
-        raise SetupError("catalog has missing or duplicate model IDs")
-    missing = sorted(REQUIRED_MODELS - set(identifiers))
-    if missing:
-        raise SetupError(f"catalog lacks required models: {', '.join(missing)}")
-
-    try:
-        result = json.loads(profile_resource(profile_path, policy.get("file")))
-    except (UnicodeError, json.JSONDecodeError) as error:
-        raise SetupError(f"maintained catalog is invalid: {error}") from error
-    if not isinstance(result, dict):
-        raise SetupError("maintained catalog is not an object")
-    catalog_ids(result, "maintained catalog")
-    output = {model["slug"]: model for model in result["models"]}
-    missing = sorted(set(identifiers) - set(output))
-    extra = sorted(set(output) - set(identifiers))
-    if missing or extra:
-        details = []
-        if missing:
-            details.append("missing " + ", ".join(missing))
-        if extra:
-            details.append("unexpected " + ", ".join(extra))
-        raise SetupError("maintained catalog differs from targets: " + "; ".join(details))
-
-    for target in targets:
-        model_id = target.get("id")
-        model = output[model_id]
-        absent = sorted(REQUIRED_CATALOG_FIELDS - set(model))
-        if absent:
-            raise SetupError(
-                f"maintained catalog model {model_id} lacks fields: {', '.join(absent)}"
-            )
-        if not isinstance(model["base_instructions"], str) or not model["base_instructions"]:
-            raise SetupError(f"maintained catalog has invalid instructions: {model_id}")
-        if not isinstance(model["model_messages"], dict):
-            raise SetupError(f"maintained catalog has invalid model messages: {model_id}")
-        levels = model["supported_reasoning_levels"]
-        if not isinstance(levels, list) or any(
-            not isinstance(level, dict)
-            or not isinstance(level.get("effort"), str)
-            or not isinstance(level.get("description"), str)
-            or not level["description"]
-            for level in levels
-        ):
-            raise SetupError(f"maintained catalog has invalid reasoning levels: {model_id}")
-        efforts = {level["effort"] for level in levels}
-        absent_efforts = sorted(set(target.get("required_reasoning", [])) - efforts)
-        if absent_efforts:
-            raise SetupError(
-                f"maintained catalog model {model_id} lacks reasoning: "
-                + ", ".join(absent_efforts)
-            )
-        for field, expected in target.get("expected", {}).items():
-            if model.get(field) != expected:
-                raise SetupError(
-                    f"maintained catalog model {model_id} field {field} "
-                    f"differs from {expected!r}"
-                )
-        set_selector(model, "multi_agent_version", "v2" if version == "v2" else None)
-    return canonical(result), sorted(output)
 
 
 def marked(begin: bytes, payload: bytes, end: bytes) -> bytes:
@@ -461,35 +285,28 @@ def unowned_config(data: bytes) -> bytes:
     return result
 
 
-def split_owned_tables(data: bytes, *, only_agents: bool = False) -> tuple[bytes, bytes]:
+def remove_owned_tables(data: bytes) -> bytes:
     output = []
-    removed = []
     owned = False
     for line in data.splitlines(keepends=True):
         stripped = line.strip()
-        if stripped == TABLE_BEGIN.strip() and not only_agents:
+        if stripped == TABLE_BEGIN.strip():
             if output and not output[-1].strip():
                 output.pop()
             continue
         if stripped == TABLE_END.strip():
-            if only_agents:
-                output.append(line)
             continue
         match = re.fullmatch(rb"\s*\[\[?([^\]\r\n]+)\]\]?\s*(?:#.*)?\r?\n?", line)
         if match:
             name = match.group(1).decode("utf-8")
             owned = (
-                (not only_agents and (
-                    name == "mcp_servers.casefile" or name.startswith("mcp_servers.casefile.")
-                ))
+                name == "mcp_servers.casefile"
+                or name.startswith("mcp_servers.casefile.")
                 or name.startswith("agents.casefile-")
             )
-        (removed if owned else output).append(line)
-    return b"".join(output), b"".join(removed)
-
-
-def remove_owned_tables(data: bytes) -> bytes:
-    return split_owned_tables(data)[0]
+        if not owned:
+            output.append(line)
+    return b"".join(output)
 
 
 def verify_config(
@@ -717,88 +534,6 @@ def legacy_catalog_recovery(home: Path, config: bytes, previous: tuple[Path, dic
 
 def pointer(home: Path) -> Path:
     return home / "state/casefile/current.json"
-
-
-def acquire_models(executable: str, profile_path: Path) -> dict:
-    try:
-        # An old replacement catalog must not hide a newly shipped model during upgrade.
-        with tempfile.TemporaryDirectory(prefix="casefile-model-discovery-") as temporary:
-            return list_codex_models.listing(
-                executable, profile_path,
-                environment={**os.environ, "CODEX_HOME": temporary},
-            )
-    except list_codex_models.ProjectionError as error:
-        raise SetupError(f"Codex model availability failed: {error}") from error
-
-
-def catalog_ids(document: dict, label: str) -> set[str]:
-    models = document.get("models")
-    if not isinstance(models, list):
-        raise SetupError(f"{label} has no model list")
-    identifiers: list[str] = []
-    for model in models:
-        identifier = model.get("slug") if isinstance(model, dict) else None
-        if not isinstance(identifier, str) or not identifier:
-            raise SetupError(f"{label} has a model without an ID")
-        identifiers.append(identifier)
-    if len(set(identifiers)) != len(identifiers):
-        raise SetupError(f"{label} has duplicate model IDs")
-    return set(identifiers)
-
-
-def require_available_models(
-    projection: dict, pinned: set[str] | None = None
-) -> set[str]:
-    identifiers = catalog_ids(projection, "Codex model projection")
-    missing = sorted(REQUIRED_MODELS - identifiers - (pinned or set()))
-    if missing:
-        raise SetupError(f"Codex lacks required models: {', '.join(missing)}")
-    return identifiers
-
-
-def read_catalog(path: Path) -> dict:
-    if path.is_symlink() or not path.is_file():
-        raise SetupError(f"Codex catalog source is missing or unsafe: {path}")
-    try:
-        data = path.read_bytes()
-        value = json.loads(data)
-    except (OSError, UnicodeError, json.JSONDecodeError) as error:
-        raise SetupError(f"Codex catalog source is invalid: {path}: {error}") from error
-    if not isinstance(value, dict):
-        raise SetupError(f"Codex catalog source is not an object: {path}")
-    return value
-
-
-def cross_check_catalog(expected_ids: set[str], catalog: dict, label: str) -> None:
-    actual_ids = catalog_ids(catalog, label)
-    missing = sorted(expected_ids - actual_ids)
-    extra = sorted(actual_ids - expected_ids)
-    if missing or extra:
-        details = []
-        if missing:
-            details.append("missing " + ", ".join(missing))
-        if extra:
-            details.append("unexpected " + ", ".join(extra))
-        raise SetupError(f"{label} differs from the packaged catalog: {'; '.join(details)}")
-
-
-def verify_catalog_selectors(document: dict, version: str, label: str) -> None:
-    version = multi_agent_version(version)
-    models = document.get("models")
-    if not isinstance(models, list):
-        raise SetupError(f"{label} has no model list")
-    selected = {
-        model.get("slug"): model for model in models if isinstance(model, dict)
-    }
-    if version == "v1":
-        for model_id in V1_SELECTOR_MODELS:
-            model = selected.get(model_id)
-            if not isinstance(model, dict) or model.get("multi_agent_version") is not None:
-                raise SetupError(f"{label} did not activate V1 for {model_id}")
-    else:
-        for model_id, model in selected.items():
-            if model.get("multi_agent_version") != "v2":
-                raise SetupError(f"{label} did not activate V2 for {model_id}")
 
 
 def active_runtime(config: bytes) -> str:
@@ -1150,12 +885,6 @@ def main() -> int:
     install_parser.add_argument("--codex-executable", default=shutil.which("codex"))
     install_parser.add_argument("--multi-agent-version", choices=("v1", "v2"), action="append")
     install_parser.add_argument("--apply", action="store_true")
-    migration_parser = subparsers.add_parser("migrate-models")
-    migration_parser.add_argument("--plugin-root", type=Path, required=True)
-    migration_parser.add_argument("--codex-home", type=Path, default=default_home)
-    migration_parser.add_argument("--codex-executable", default=shutil.which("codex"))
-    migration_parser.add_argument("--expect-digest")
-    migration_parser.add_argument("--apply", action="store_true")
     uninstall_parser = subparsers.add_parser("uninstall")
     uninstall_parser.add_argument("--codex-home", type=Path, default=default_home)
     uninstall_parser.add_argument("--codex-executable", default=shutil.which("codex"))
@@ -1166,8 +895,6 @@ def main() -> int:
         home = arguments.codex_home.expanduser().resolve(strict=True)
         if not arguments.codex_executable:
             raise SetupError("Codex executable was not found")  # kept: nothing can run without it
-        if arguments.operation == "migrate-models":
-            raise SetupError("use Casefile setup to retire an earlier Casefile catalog")
         if arguments.operation == "install":
             selections = arguments.multi_agent_version or []
             selected_version = selections[-1] if selections else None

@@ -93,7 +93,7 @@ jobs:
         run: |
           python -m unittest discover -s tests -p 'test_casefile_artifacts.py' -v
           python -m unittest discover -s casefile/tests -p 'test_codex_setup.py' -v
-          python -m unittest discover -s casefile/tests -p 'test_codex_model_migration.py' -v
+          python -m unittest discover -s casefile/tests -p 'test_codex_role_model_offer.py' -v
           python -m unittest discover -s casefile/tests -p 'test_claude_setup.py' -v
           python -m unittest discover -s casefile/tests -p 'test_mcp_package.py' -v
       - uses: dtolnay/rust-toolchain@stable

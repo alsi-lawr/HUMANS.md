@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 import struct
 import sys
@@ -33,6 +34,17 @@ def executable(target: str) -> bytes:
 
 
 class McpPackageTests(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name).resolve()
+        source = self.root / "casefile"
+        for directory in ("adapters", "casefile-workflow", "skills", "verification", "packaging"):
+            shutil.copytree(ROOT / "casefile" / directory, source / directory)
+        (source / "scripts").mkdir()
+        for relative in ("LICENSE", "scripts/validate-casefile.py"):
+            shutil.copy2(ROOT / "casefile" / relative, source / relative)
+
     def artifacts(self, root: Path) -> Path:
         artifact = root / "artifacts"
         rows = []
@@ -62,11 +74,18 @@ class McpPackageTests(unittest.TestCase):
         )
         return artifact
 
-    def build(self, artifact: Path) -> subprocess.CompletedProcess[str]:
+    def package(self, *arguments: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run([
-            sys.executable, str(ROOT / "scripts/package-plugin.py"), "build", "--manifest",
-            "casefile/packaging/plugin.toml", "--casefile-artifact-root", str(artifact),
-            "--casefile-source-commit", SOURCE,
+            sys.executable, str(ROOT / "scripts/package-plugin.py"), "build", "--root",
+            str(self.root), "--manifest", "casefile/packaging/plugin.toml", *arguments,
+        ], cwd=ROOT, capture_output=True, text=True)
+
+    def build(self, artifact: Path) -> subprocess.CompletedProcess[str]:
+        return self.package("--casefile-artifact-root", str(artifact), "--casefile-source-commit", SOURCE)
+
+    def validate(self, package: Path) -> subprocess.CompletedProcess[str]:
+        return subprocess.run([
+            sys.executable, str(package / "scripts/validate-casefile.py"), "--source", str(package),
         ], cwd=ROOT, capture_output=True, text=True)
 
     def test_packages_land_complete_matrix_without_automatic_launcher(self):
@@ -74,8 +93,8 @@ class McpPackageTests(unittest.TestCase):
             artifact = self.artifacts(Path(temporary))
             result = self.build(artifact)
             self.assertEqual(0, result.returncode, result.stdout + result.stderr)
-            codex = ROOT / "build/marketplace/plugins/codex/casefile"
-            claude = ROOT / "build/marketplace/plugins/claude/casefile"
+            codex = self.root / "build/marketplace/plugins/codex/casefile"
+            claude = self.root / "build/marketplace/plugins/claude/casefile"
             for package in (codex, claude):
                 self.assertFalse((package / ".mcp.json").exists())
                 self.assertFalse((package / "Cargo.toml").exists())
@@ -102,17 +121,7 @@ class McpPackageTests(unittest.TestCase):
                         + "\r\n"
                     ).encode("utf-8")
                 )
-                validated = subprocess.run(
-                    [
-                        sys.executable,
-                        str(ROOT / "casefile/scripts/validate-casefile.py"),
-                        "--source",
-                        str(package),
-                    ],
-                    cwd=ROOT,
-                    capture_output=True,
-                    text=True,
-                )
+                validated = self.validate(package)
                 self.assertEqual(0, validated.returncode, validated.stdout + validated.stderr)
             for package in (codex, claude):
                 self.assertTrue(all(path.stat().st_size > 0 for path in (package / "runtime").rglob("*") if path.is_file()))
@@ -143,6 +152,12 @@ class McpPackageTests(unittest.TestCase):
                 )
                 self.assertNotIn('[executable, "debug", "models"]', scripts)
                 self.assertNotIn("codex debug models", scripts)
+            stale = codex / "config/catalog"
+            stale.mkdir()
+            (stale / "models.json").write_text('{"models": []}\n', encoding="ascii")
+            validated = self.validate(codex)
+            self.assertNotEqual(0, validated.returncode)
+            self.assertIn("retired model catalog input", validated.stdout)
 
     def test_missing_empty_unsafe_wrong_source_and_absent_matrix_fail_before_build(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -167,23 +182,11 @@ class McpPackageTests(unittest.TestCase):
             self.assertNotEqual(0, self.build(artifact).returncode)
         with tempfile.TemporaryDirectory() as temporary:
             artifact = self.artifacts(Path(temporary))
-            result = subprocess.run([
-                sys.executable, str(ROOT / "scripts/package-plugin.py"), "build", "--manifest",
-                "casefile/packaging/plugin.toml", "--casefile-artifact-root", str(artifact),
-                "--casefile-source-commit", "2" * 40,
-            ], cwd=ROOT, capture_output=True, text=True)
+            result = self.package("--casefile-artifact-root", str(artifact), "--casefile-source-commit", "2" * 40)
             self.assertNotEqual(0, result.returncode)
-        result = subprocess.run([
-            sys.executable, str(ROOT / "scripts/package-plugin.py"), "build", "--manifest",
-            "casefile/packaging/plugin.toml",
-        ], cwd=ROOT, capture_output=True, text=True)
+        result = self.package()
         self.assertNotEqual(0, result.returncode)
         self.assertIn("requires --casefile-artifact-root", result.stdout)
-
-    @staticmethod
-    def inventory(root: Path) -> list[tuple[str, bytes]]:
-        return sorted((path.relative_to(root).as_posix(), path.read_bytes()) for path in root.rglob("*") if path.is_file())
-
 
 if __name__ == "__main__":
     unittest.main()

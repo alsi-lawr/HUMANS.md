@@ -144,8 +144,7 @@ Activated current-v1 Stores operate in place without conversion. Unactivated, in
 and early legacy activation layouts remain read-only or unsupported with actionable diagnostics; do
 not automatically activate, repair, upgrade, or infer history. The CLI remains the human and
 recovery adapter, including malformed-progress repair that is intentionally absent from MCP. The
-project-map validator, package and CI validators, model-drift checks, and Codex writer catalog
-resolver retain their distinct responsibilities.
+project-map, package, and CI validators check their respective source and artifact boundaries.
 
 The Provider owns governed strategy transitions and writer-binding replacement. The only ad-hoc
 strategy path is `casefile scratch-strategy`, a bounded CLI-only operation requiring an explicit
@@ -335,37 +334,24 @@ pressed state, labelled regions, and a polite detail announcement. Selection rev
 effective runtime facts plus limits, requirements, coordination, and pipeline constraints; it does
 not edit a strategy or binding.
 
-The Codex adapter owns the selected Casefile model catalog and multi-agent runtime. Setup defaults
-to V1; V2 requires Codex 0.145.0 or newer. `agents.max_threads` is a host-owned capacity setting.
-Casefile treats it as a minimum requirement, not a value it owns. Setup requires at least six
-threads, preserves a sufficient existing value, and initializes the setting to the minimum only when
-absent. An insufficient explicit value stops setup without changing the host configuration.
-Reinstall and uninstall retain the current host value, including values inside older Casefile setup
-markers.
+Codex setup binds the Casefile executable to the selected Store and registers the named roles and
+runtime. The first install defaults to V1. Reinstall keeps the active runtime unless the operator
+explicitly selects another. If the active flags are ambiguous, require an explicit choice. Setup
+requires at least six agent threads and initializes `agents.max_threads` when absent. Reinstall and
+uninstall preserve the host's current capacity setting.
 
-Setup and model migration confirm required model IDs through app-server `model/list` in a temporary
-configuration-free home, so an older replacement catalog cannot hide a newly shipped model. GPT-6
-Sol and Luna are carried as optional additions, not prerequisites for setup. No selected-home
-credentials or configuration are copied; environment authentication remains available. The
-projection confirms advertised IDs, not successful model execution or account entitlement. The
-temporary home is removed after discovery.
+Model availability comes from app-server `model/list` for the active provider. The offer checks that
+metadata against the current caller's named-role spawn capabilities. Recommendations use model
+classes and suggested efforts. The human confirms the concrete model and effort for each role, and
+Casefile rechecks the saved values before delegation. Use the normal
+[role assignment procedure](casefile/skills/casefile/references/codex-role-assignments.md).
 
-The complete replacement catalog comes from `casefile/adapters/codex/catalog/models.json`, not
-Codex's cache or the reduced app-server projection. Setup sets its runtime selectors to null for V1
-or `v2` for V2. The `models-casefile-v1.json` and `models-casefile-v2.json` names identify runtimes,
-not model releases. Casefile never directly edits or distributes Codex's `models_cache.json`.
-
-The Codex-only `casefile-codex-model-migrate` skill previews and applies a catalog/profile refresh
-through `setup-codex.py migrate-models`. Use the installed target package, and pass `--codex-home`
-when selecting a non-default home. Preview first, then explicitly approve its `approval_digest` and
-repeat with `--apply --expect-digest <approved-digest>`. Changed inputs require another preview. The
-operation replaces the selected owned catalog and Casefile profile registrations, preserving
-unrelated configuration, the root model, runtime flags, other catalog variant, MCP binding and
-binary, investigation selections, and original pre-install recovery state. Matching state is a
-no-op; failed apply restores the prior integration and receipt pointer. Runtime/receipt disagreement
-or missing catalog recovery state requires explicit setup reconciliation. Migration never switches
-runtimes or claims ownership of a foreign catalog. Restart Codex after a changed migration, then
-check the resolver's current offer without automatically selecting a binding.
+The provider and host configuration supply models for fresh setup. On upgrade or uninstall of an
+older installation, the active receipt identifies the legacy catalog files Casefile managed. Review
+the recovery preview for any file changes or prior setting it will restore. Host catalog settings,
+catalogs referenced by surviving profiles or agents, and Codex's `models_cache.json` stay with the
+host. Recovery snapshots retain the live bytes displaced during the operation. Use the installed
+[Codex setup and update guidance](casefile/adapters/codex/skills/codex-setup/SKILL.md).
 
 The Claude adapter supplies workflow skills, matrices, role agents, and a separate Casefile MCP
 binding transaction without owning the standing contract. Neither adapter removes the shared
@@ -387,7 +373,7 @@ workspace, package, or authenticated smoke gate on a local correction.
 
 For a release candidate, pin one exact source commit and run the complete commands in
 [Development environment](#development-environment), followed by the generated-marketplace checks
-below. Inspect all six generated vendor metadata manifests, both regenerated catalogs, generated
+below. Inspect all six generated vendor metadata manifests, both marketplace catalogs, generated
 Codex and Claude Casefile validation, and embedded-asset cleanliness. Run authenticated,
 configuration-isolated runtime smoke only when the release ticket requires it, and retain sanitized
 evidence without credentials, caches, or raw session logs.

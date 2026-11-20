@@ -1,2 +1,0 @@
-Apply the approved Casefile model migration. The command returned a nonzero exit code and
-reported that model migration failed but rollback was verified. Give me the handoff.

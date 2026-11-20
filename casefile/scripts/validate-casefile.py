@@ -22,6 +22,18 @@ MATRIX = {
     "x86_64-apple-darwin", "aarch64-apple-darwin",
     "x86_64-pc-windows-msvc", "aarch64-pc-windows-msvc",
 }
+CODEX_SELECTION_HELPERS = (
+    "scripts/list-codex-models.py",
+    "scripts/offer-role-models.py",
+    "scripts/recommend-role-assignments.py",
+    "scripts/resolve-role-assignment.py",
+)
+RETIRED_CODEX_INPUTS = (
+    "config/catalog",
+    "scripts/codex_model_migration.py",
+    "skills/casefile-codex-model-migrate",
+    "verification/suites/codex-model-migrate.toml",
+)
 
 def artifact_path(value: object, target: object) -> Path | None:
     if not isinstance(value, str) or not isinstance(target, str) or not value or "\0" in value:
@@ -69,8 +81,13 @@ def main() -> int:
         setup = "scripts/setup-codex.py" if codex.exists() else "scripts/setup-claude.py"
         if not (root / setup).is_file() or not (root / "scripts/casefile_runtime.py").is_file():
             errors.append("generated Casefile package lacks receipt-backed runtime setup")
-        if codex.exists() and not (root / "scripts/list-codex-models.py").is_file():
-            errors.append("generated Codex Casefile package lacks stable model discovery")
+        if codex.exists():
+            for relative in CODEX_SELECTION_HELPERS:
+                if not (root / relative).is_file():
+                    errors.append(f"generated Codex Casefile package lacks role selection helper: {relative}")
+            for relative in RETIRED_CODEX_INPUTS:
+                if (root / relative).exists() or (root / relative).is_symlink():
+                    errors.append(f"generated Codex Casefile package retains retired model catalog input: {relative}")
         try:
             manifest_path = root / "runtime/artifacts.json"
             if (

@@ -39,9 +39,6 @@ destination = "matrices"
 source = "casefile/adapters/codex/instructions"
 destination = "config/instructions"
 [[vendors.codex.copy]]
-source = "casefile/adapters/codex/catalog"
-destination = "config/catalog"
-[[vendors.codex.copy]]
 source = "casefile/adapters/codex/config-fragment.toml.in"
 destination = "config/config-fragment.toml.in"
 [[vendors.codex.copy]]

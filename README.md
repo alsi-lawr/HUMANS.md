@@ -36,9 +36,9 @@ claude plugin install coding@humans-md --scope user
 ```
 
 `humans-md` owns only the standing `AGENTS.md` / `CLAUDE.md` contract lifecycle and recovery.
-`casefile` owns Casefile workflows and Codex model, selected multi-agent runtime, profile, and role
-integration. `coding` owns Git contribution, README, skill-generation, and generic verification
-guidance. Removing one plugin never removes the shared marketplace or another plugin.
+`casefile` owns Casefile workflows, runtime setup, and named agent integration. `coding` owns Git
+contribution, README, skill-generation, and generic verification guidance. Removing one plugin never
+removes the shared marketplace or another plugin.
 
 The Casefile plugin bundles the complete supported Linux, macOS, and Windows x64/ARM64 executable
 matrix. After installing it, invoke its host-specific Casefile setup skill with one absolute
@@ -47,6 +47,10 @@ identity, required Provider operations, and MCP tools, then receipt-binds the ho
 `casefile mcp-package`. MCP startup then needs no Cargo, Python, Node, network, or `PATH` lookup.
 MCP retains exact previews in the live session and returns compact review envelopes that apply by
 `preview_id`. Routine writes proceed without a second confirmation; record deletions require one.
+
+For Codex, confirm a model and reasoning effort for each delegated role. Casefile recommends a model
+class and effort, shows choices from the current provider and spawn tool, and rechecks saved choices
+before delegation.
 
 Implementation offers three explicit governed shapes: a strictly serial ticket batch, a serial
 ticket batch with one read-only look-ahead, and a bounded pipeline that may overlap one independent,

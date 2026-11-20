@@ -1,2 +1,0 @@
-Switch my existing Casefile integration from multi-agent V1 to V2. Keep using the installed
-plugin version. I will review the setup preview before you apply it.

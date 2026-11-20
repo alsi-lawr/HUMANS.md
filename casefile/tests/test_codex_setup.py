@@ -36,14 +36,12 @@ def native_stub(target: str) -> bytes:
 
 
 class FakeCodex:
-    def __init__(self, catalog: dict, doctor_ok: bool = True, version: str = "0.145.0"):
-        self.catalog = catalog
+    def __init__(self, doctor_ok: bool = True, version: str = "0.145.0"):
         self.doctor_ok = doctor_ok
         self.version = version
         self.installed = True
         self.marketplace = True
         self.calls: list[list[str]] = []
-        self.model_acquisition_calls = 0
 
     def result(self, args, value, code=0):
         return subprocess.CompletedProcess(args, code, json.dumps(value), "")
@@ -93,7 +91,6 @@ class CodexSetupTests(unittest.TestCase):
         (plugin / "config").mkdir()
         for name in ("config-fragment.toml.in", "profiles.toml"):
             shutil.copy2(ROOT / "casefile/adapters/codex" / name, plugin / "config" / name)
-        shutil.copytree(ROOT / "casefile/adapters/codex/catalog", plugin / "config/catalog")
         shutil.copytree(ROOT / "casefile/adapters/codex/agents", plugin / "agents")
         shutil.copytree(ROOT / "casefile/adapters/codex/matrices", plugin / "matrices")
         (plugin / "scripts").mkdir()
@@ -116,27 +113,6 @@ class CodexSetupTests(unittest.TestCase):
         (plugin / "templates").mkdir()
         shutil.copy2(ROOT / "AGENTS.md", plugin / "templates/AGENTS.md")
 
-        profiles = tomllib.loads((plugin / "config/profiles.toml").read_text(encoding="ascii"))
-        catalog = {
-            "models": [
-                {
-                    "slug": target["id"],
-                    "display_name": target["expected"]["display_name"],
-                    "visibility": target["expected"]["visibility"],
-                    "base_instructions": "upstream",
-                    "model_messages": {"instructions_template": "upstream"},
-                    "supported_reasoning_levels": [
-                        {"effort": effort} for effort in target["required_reasoning"]
-                    ],
-                    **(
-                        {"multi_agent_version": "v2"}
-                        if target["id"] in setup.V1_SELECTOR_MODELS
-                        else {}
-                    ),
-                }
-                for target in profiles["catalog"]["targets"]
-            ]
-        }
         home = root / "codex-home"
         home.mkdir()
         original = (
@@ -149,37 +125,19 @@ class CodexSetupTests(unittest.TestCase):
         legacy = home / "skills/investigation-solo"
         legacy.mkdir(parents=True)
         (legacy / "SKILL.md").write_text("legacy\n", encoding="ascii")
-        return plugin, home, original, catalog, legacy
+        return plugin, home, original, legacy
 
     @contextlib.contextmanager
     def fake_command(self, fake):
         previous = setup.command
         previous_probe = setup.casefile_runtime.probe
-        previous_listing = setup.list_codex_models.listing
-
-        def listing(_executable, _profile_path, _timeout=20.0, *, environment=None):
-            fake.model_acquisition_calls += 1
-            return {
-                "models": [
-                    {
-                        "slug": model["slug"],
-                        "display_name": model["display_name"],
-                        "visibility": model["visibility"],
-                        "supported_reasoning_levels": model["supported_reasoning_levels"],
-                    }
-                    for model in fake.catalog["models"]
-                ]
-            }
-
         setup.command = fake
         setup.casefile_runtime.probe = lambda *_: None
-        setup.list_codex_models.listing = listing
         try:
             yield
         finally:
             setup.command = previous
             setup.casefile_runtime.probe = previous_probe
-            setup.list_codex_models.listing = previous_listing
 
     def legacy_install(self, plugin, home, *, version, catalogs, schema=6):
         config = home / "config.toml"
@@ -223,8 +181,8 @@ class CodexSetupTests(unittest.TestCase):
 
     def test_fresh_install_and_uninstall_preserve_unowned_config(self):
         with tempfile.TemporaryDirectory() as temporary:
-            plugin, home, original, catalog, legacy = self.fixture(Path(temporary))
-            fake = FakeCodex({"models": []})
+            plugin, home, original, legacy = self.fixture(Path(temporary))
+            fake = FakeCodex()
             cache = home / "models_cache.json"
             cache.write_bytes(b"native Codex cache\n")
             with self.fake_command(fake):
@@ -260,14 +218,13 @@ class CodexSetupTests(unittest.TestCase):
                 self.assertFalse(fake.installed)
                 self.assertTrue(fake.marketplace)
                 self.assertEqual("installed", result["status"])
-                self.assertEqual(0, fake.model_acquisition_calls)
                 self.assertEqual(b"native Codex cache\n", cache.read_bytes())
                 self.assertFalse(any("debug" in call for call in fake.calls))
 
     def test_fresh_v1_and_v2_setup_never_claim_existing_catalogs(self):
         for version in ("v1", "v2"):
             with self.subTest(version=version), tempfile.TemporaryDirectory() as temporary:
-                plugin, home, original, _, _ = self.fixture(Path(temporary))
+                plugin, home, original, _ = self.fixture(Path(temporary))
                 config = home / "config.toml"
                 original = b'model_catalog_json = "models-casefile-v1.json"\n' + original
                 config.write_bytes(original)
@@ -277,7 +234,7 @@ class CodexSetupTests(unittest.TestCase):
                 }
                 for path, data in unowned.items():
                     path.write_bytes(data)
-                fake = FakeCodex({"models": []})
+                fake = FakeCodex()
                 with self.fake_command(fake):
                     plan = setup.prepare(plugin, home, "codex", version=version)
                     self.assertEqual([], setup.preview(plan)["legacy_catalog_recovery"])
@@ -292,14 +249,13 @@ class CodexSetupTests(unittest.TestCase):
                     self.assertEqual(2, document["agents"]["max_depth"])
                     self.assertEqual(12, document["agents"]["max_threads"])
                     setup.uninstall(home, "codex", receipt_path, receipt)
-                self.assertEqual(0, fake.model_acquisition_calls)
                 self.assertEqual(original, config.read_bytes())
                 self.assertEqual(unowned, {path: path.read_bytes() for path in unowned})
 
     def test_verification_rejects_mixed_feature_flags(self):
         with tempfile.TemporaryDirectory() as temporary:
-            plugin, home, _, catalog, _ = self.fixture(Path(temporary))
-            with self.fake_command(FakeCodex(catalog)):
+            plugin, home, _, _ = self.fixture(Path(temporary))
+            with self.fake_command(FakeCodex()):
                 plan = setup.prepare(plugin, home, "codex", version="v2")
             mixed = plan["config"].replace(b"multi_agent_v2 = true", b"multi_agent_v2 = false")
             with self.assertRaisesRegex(setup.SetupError, "V2 feature flags"):
@@ -307,7 +263,7 @@ class CodexSetupTests(unittest.TestCase):
 
     def test_legacy_v1_uninstall_restores_displaced_setting_and_file(self):
         with tempfile.TemporaryDirectory() as temporary:
-            plugin, home, original, catalog, _ = self.fixture(Path(temporary))
+            plugin, home, original, _ = self.fixture(Path(temporary))
             config = home / "config.toml"
             original = b'model_catalog_json = "foreign.json" # original host setting\n' + original
             config.write_bytes(original)
@@ -321,7 +277,7 @@ class CodexSetupTests(unittest.TestCase):
             config.write_bytes(config.read_bytes().replace(b"pragmatic", b"friendly"))
             before = config.read_bytes()
             self.assertEqual("v1", setup.receipt_multi_agent_version(receipt))
-            with self.fake_command(FakeCodex(catalog)):
+            with self.fake_command(FakeCodex()):
                 setup.uninstall(home, "codex", receipt_path, receipt)
             self.assertEqual(original.replace(b"pragmatic", b"friendly"), config.read_bytes())
             self.assertEqual(b"", v1.read_bytes())
@@ -333,7 +289,7 @@ class CodexSetupTests(unittest.TestCase):
     def test_v2_upgrade_preserves_host_removed_or_replaced_override(self):
         for override in (None, "replacement.json"):
             with self.subTest(override=override), tempfile.TemporaryDirectory() as temporary:
-                plugin, home, original, catalog, _ = self.fixture(Path(temporary))
+                plugin, home, original, _ = self.fixture(Path(temporary))
                 config = home / "config.toml"
                 config.write_bytes(b'model_catalog_json = "displaced.json"\n' + original)
                 v1 = home / "models-casefile-v1.json"
@@ -350,7 +306,7 @@ class CodexSetupTests(unittest.TestCase):
                 config.write_bytes(setting + current)
                 cache = home / "models_cache.json"
                 cache.write_bytes(b"native cache")
-                with self.fake_command(FakeCodex(catalog)):
+                with self.fake_command(FakeCodex()):
                     plan = setup.prepare(plugin, home, "codex")
                     self.assertEqual("v2", plan["multi_agent_version"])
                     self.assertEqual(
@@ -375,7 +331,7 @@ class CodexSetupTests(unittest.TestCase):
     def test_mixed_variant_upgrade_recovers_earlier_state_or_preserves_live_selection(self):
         for host_selected in (False, True):
             with self.subTest(host_selected=host_selected), tempfile.TemporaryDirectory() as temporary:
-                plugin, home, original, catalog, _ = self.fixture(Path(temporary))
+                plugin, home, original, _ = self.fixture(Path(temporary))
                 config = home / "config.toml"
                 config.write_bytes(b'model_catalog_json = "earlier.json" # host original\n' + original)
                 v1, v2 = (home / f"models-casefile-{variant}.json" for variant in ("v1", "v2"))
@@ -387,7 +343,7 @@ class CodexSetupTests(unittest.TestCase):
                     config.write_bytes(config.read_bytes().replace(
                         json.dumps(str(v2)).encode(), json.dumps(str(v1)).encode(),
                     ))
-                with self.fake_command(FakeCodex(catalog)):
+                with self.fake_command(FakeCodex()):
                     plan = setup.prepare(plugin, home, "codex", version="v1")
                     expected = str(v1) if host_selected else "earlier.json"
                     self.assertEqual(expected, tomllib.loads(plan["config"].decode()).get("model_catalog_json"))
@@ -403,7 +359,7 @@ class CodexSetupTests(unittest.TestCase):
     def test_legacy_catalog_recovery_rolls_back_on_failure_and_retries(self):
         for operation in ("install", "uninstall"):
             with self.subTest(operation=operation), tempfile.TemporaryDirectory() as temporary:
-                plugin, home, original, catalog, _ = self.fixture(Path(temporary))
+                plugin, home, original, _ = self.fixture(Path(temporary))
                 config = home / "config.toml"
                 original = b'model_catalog_json = "foreign.json"\n' + original
                 config.write_bytes(original)
@@ -418,7 +374,7 @@ class CodexSetupTests(unittest.TestCase):
                 pointer = setup.pointer(home)
                 tracked = (config, v1, v2, pointer, receipt_path)
                 before = {path: path.read_bytes() for path in tracked}
-                fake = FakeCodex(catalog)
+                fake = FakeCodex()
                 with self.fake_command(fake):
                     if operation == "install":
                         plan = setup.prepare(plugin, home, "codex", version="v2")
@@ -442,12 +398,12 @@ class CodexSetupTests(unittest.TestCase):
 
     def test_uninstall_rejects_a_stale_receipt_without_tearing_down_current_install(self):
         with tempfile.TemporaryDirectory() as temporary:
-            plugin, home, _, catalog, _ = self.fixture(Path(temporary))
+            plugin, home, _, _ = self.fixture(Path(temporary))
             catalog_path = home / "models-casefile-v1.json"
             old_path, old = self.legacy_install(
                 plugin, home, version="v1", catalogs={catalog_path.name: b"owned"},
             )
-            fake = FakeCodex(catalog)
+            fake = FakeCodex()
             with self.fake_command(fake):
                 setup.install(setup.prepare(plugin, home, "codex"))
                 self.assertFalse(catalog_path.exists())
@@ -464,7 +420,7 @@ class CodexSetupTests(unittest.TestCase):
 
     def test_foreign_catalog_symlink_preserves_setting_and_managed_target(self):
         with tempfile.TemporaryDirectory() as temporary:
-            plugin, home, source, catalog, _ = self.fixture(Path(temporary))
+            plugin, home, source, _ = self.fixture(Path(temporary))
             config = home / "config.toml"
             config.write_bytes(b'model_catalog_json = "earlier.json"\n' + source)
             target = home / "models-casefile-v2.json"
@@ -478,7 +434,7 @@ class CodexSetupTests(unittest.TestCase):
             config.write_bytes(config.read_bytes().replace(
                 json.dumps(str(target)).encode(), json.dumps(str(alias)).encode(),
             ))
-            with self.fake_command(FakeCodex(catalog)):
+            with self.fake_command(FakeCodex()):
                 plan = setup.prepare(plugin, home, "codex")
                 self.assertEqual([], setup.preview(plan)["legacy_catalog_recovery"])
                 setup.install(plan)
@@ -491,7 +447,7 @@ class CodexSetupTests(unittest.TestCase):
     def test_inline_and_file_profiles_keep_their_referenced_catalogs(self):
         for operation in ("install", "uninstall"):
             with self.subTest(operation=operation), tempfile.TemporaryDirectory() as temporary:
-                plugin, home, _, catalog, _ = self.fixture(Path(temporary))
+                plugin, home, _, _ = self.fixture(Path(temporary))
                 config = home / "config.toml"
                 v1, v2 = (home / f"models-casefile-{version}.json" for version in ("v1", "v2"))
                 old = self.legacy_install(
@@ -501,7 +457,7 @@ class CodexSetupTests(unittest.TestCase):
                 config.write_bytes(config.read_bytes() + inline)
                 named = home / "named.config.toml"
                 named.write_text(f'model_catalog_json = {json.dumps(str(v2))}\n')
-                with self.fake_command(FakeCodex(catalog)):
+                with self.fake_command(FakeCodex()):
                     if operation == "install":
                         plan = setup.prepare(plugin, home, "codex")
                         self.assertEqual([], setup.preview(plan)["legacy_catalog_recovery"])
@@ -518,7 +474,7 @@ class CodexSetupTests(unittest.TestCase):
     def test_uninstall_recovers_missing_config_but_keeps_an_existing_override_removal(self):
         for missing_config in (False, True):
             with self.subTest(missing_config=missing_config), tempfile.TemporaryDirectory() as temporary:
-                plugin, home, source, catalog, _ = self.fixture(Path(temporary))
+                plugin, home, source, _ = self.fixture(Path(temporary))
                 config = home / "config.toml"
                 original = b'model_catalog_json = "earlier.json"\n' + source
                 config.write_bytes(original)
@@ -531,14 +487,14 @@ class CodexSetupTests(unittest.TestCase):
                     current = config.read_bytes()
                     detached, _ = setup.detach_catalog_setting(current, tomllib.loads(current.decode()))
                     config.write_bytes(detached.replace(b"pragmatic", b"friendly"))
-                with self.fake_command(FakeCodex(catalog)):
+                with self.fake_command(FakeCodex()):
                     setup.uninstall(home, "codex", *old)
                 self.assertEqual(original if missing_config else source.replace(b"pragmatic", b"friendly"), config.read_bytes())
 
     def test_surviving_agent_preserves_its_relative_catalog_during_recovery(self):
         for operation in ("install", "uninstall"):
             with self.subTest(operation=operation), tempfile.TemporaryDirectory() as temporary:
-                plugin, home, _, catalog, _ = self.fixture(Path(temporary))
+                plugin, home, _, _ = self.fixture(Path(temporary))
                 config = home / "config.toml"
                 v1, v2 = (home / f"models-casefile-{version}.json" for version in ("v1", "v2"))
                 old = self.legacy_install(
@@ -554,7 +510,7 @@ class CodexSetupTests(unittest.TestCase):
                     config.write_bytes(config.read_bytes() + registration)
                 else:
                     (home / "custom.config.toml").write_bytes(registration)
-                with self.fake_command(FakeCodex(catalog)):
+                with self.fake_command(FakeCodex()):
                     if operation == "install":
                         setup.install(setup.prepare(plugin, home, "codex"))
                     else:
@@ -567,12 +523,12 @@ class CodexSetupTests(unittest.TestCase):
 
     def test_unavailable_surviving_agent_config_keeps_receipt_catalog_recoverable(self):
         with tempfile.TemporaryDirectory() as temporary:
-            plugin, home, _, catalog, _ = self.fixture(Path(temporary))
+            plugin, home, _, _ = self.fixture(Path(temporary))
             config = home / "config.toml"
             v1 = home / "models-casefile-v1.json"
             old = self.legacy_install(plugin, home, version="v1", catalogs={v1.name: b"legacy catalog"})
             config.write_bytes(config.read_bytes() + b'\n[agents.custom]\nconfig_file = "missing.toml"\n')
-            with self.fake_command(FakeCodex(catalog)):
+            with self.fake_command(FakeCodex()):
                 setup.uninstall(home, "codex", *old)
             document = tomllib.loads(config.read_text())
             self.assertNotIn("model_catalog_json", document)
@@ -581,13 +537,13 @@ class CodexSetupTests(unittest.TestCase):
 
     def test_upgrade_preserves_active_runtime_when_it_differs_from_the_receipt(self):
         with tempfile.TemporaryDirectory() as temporary:
-            plugin, home, _, catalog, _ = self.fixture(Path(temporary))
+            plugin, home, _, _ = self.fixture(Path(temporary))
             self.legacy_install(plugin, home, version="v1", catalogs={"models-casefile-v1.json": b"legacy"})
             config = home / "config.toml"
             config.write_bytes(config.read_bytes().replace(
                 b"multi_agent = true\nmulti_agent_v2 = false", b"multi_agent = false\nmulti_agent_v2 = true",
             ))
-            with self.fake_command(FakeCodex(catalog)):
+            with self.fake_command(FakeCodex()):
                 self.assertEqual("v1", setup.receipt_multi_agent_version(setup.receipt(home, None)[1]))
                 plan = setup.prepare(plugin, home, "codex")
                 self.assertEqual("v2", setup.preview(plan)["multi_agent_version"])
@@ -597,10 +553,10 @@ class CodexSetupTests(unittest.TestCase):
 
     def test_upgrade_requires_explicit_runtime_when_active_flags_are_ambiguous(self):
         with tempfile.TemporaryDirectory() as temporary:
-            plugin, home, _, catalog, _ = self.fixture(Path(temporary))
+            plugin, home, _, _ = self.fixture(Path(temporary))
             self.legacy_install(plugin, home, version="v1", catalogs={"models-casefile-v1.json": b"legacy"})
             config = home / "config.toml"
-            with self.fake_command(FakeCodex(catalog)):
+            with self.fake_command(FakeCodex()):
                 plan = setup.prepare(plugin, home, "codex")
                 ambiguous = config.read_bytes().replace(b"multi_agent_v2 = false", b"multi_agent_v2 = true")
                 config.write_bytes(ambiguous)
@@ -624,9 +580,9 @@ class CodexSetupTests(unittest.TestCase):
             b'\n[agents]\nmax_threads = 12\n'
         )
         with tempfile.TemporaryDirectory() as temporary:
-            plugin, home, _, catalog, _ = self.fixture(Path(temporary))
+            plugin, home, _, _ = self.fixture(Path(temporary))
             (home / "config.toml").write_bytes(prior)
-            with self.fake_command(FakeCodex(catalog)):
+            with self.fake_command(FakeCodex()):
                 plan = setup.prepare(plugin, home, "codex")
             document = tomllib.loads(plan["config"].decode("utf-8"))
             self.assertEqual("other.json", document["model_catalog_json"])
@@ -641,9 +597,9 @@ class CodexSetupTests(unittest.TestCase):
 
     def test_thread_capacity_changes_after_preview_cannot_be_overwritten_by_install(self):
         with tempfile.TemporaryDirectory() as temporary:
-            plugin, home, _, catalog, _ = self.fixture(Path(temporary))
+            plugin, home, _, _ = self.fixture(Path(temporary))
             config = home / "config.toml"
-            with self.fake_command(FakeCodex(catalog)):
+            with self.fake_command(FakeCodex()):
                 setup.install(setup.prepare(plugin, home, "codex"))
                 plan = setup.prepare(plugin, home, "codex")
                 insufficient = setup.MINIMUM_AGENT_THREADS - 1
@@ -663,10 +619,10 @@ class CodexSetupTests(unittest.TestCase):
     def test_missing_thread_count_is_initialized_but_remains_host_owned(self):
         for config_source in (b"", b"[agents]\n"):
             with self.subTest(config=config_source), tempfile.TemporaryDirectory() as temporary:
-                plugin, home, _, catalog, _ = self.fixture(Path(temporary))
+                plugin, home, _, _ = self.fixture(Path(temporary))
                 config = home / "config.toml"
                 config.write_bytes(config_source)
-                with self.fake_command(FakeCodex(catalog)):
+                with self.fake_command(FakeCodex()):
                     setup.install(setup.prepare(plugin, home, "codex"))
                     threads = tomllib.loads(config.read_text())["agents"]["max_threads"]
                     self.assertGreaterEqual(threads, setup.MINIMUM_AGENT_THREADS)
@@ -687,9 +643,9 @@ class CodexSetupTests(unittest.TestCase):
     def test_thread_count_inside_old_owned_markers_survives_reinstall_and_uninstall(self):
         for reinstall in (False, True):
             with self.subTest(reinstall=reinstall), tempfile.TemporaryDirectory() as temporary:
-                plugin, home, original, catalog, _ = self.fixture(Path(temporary))
+                plugin, home, original, _ = self.fixture(Path(temporary))
                 config = home / "config.toml"
-                with self.fake_command(FakeCodex(catalog)):
+                with self.fake_command(FakeCodex()):
                     setup.install(setup.prepare(plugin, home, "codex"))
                     installed = config.read_bytes().replace(b"max_threads = 12\n", b"")
                     config.write_bytes(installed.replace(
@@ -704,13 +660,13 @@ class CodexSetupTests(unittest.TestCase):
 
     def test_dotted_host_thread_count_survives_the_complete_setup_lifecycle(self):
         with tempfile.TemporaryDirectory() as temporary:
-            plugin, home, original, catalog, _ = self.fixture(Path(temporary))
+            plugin, home, original, _ = self.fixture(Path(temporary))
             original = b"agents.max_threads = 12 # host capacity\n" + original.replace(
                 b"\n[agents]\nmax_threads = 12\n", b""
             )
             config = home / "config.toml"
             config.write_bytes(original)
-            with self.fake_command(FakeCodex(catalog)):
+            with self.fake_command(FakeCodex()):
                 setup.install(setup.prepare(plugin, home, "codex"))
                 setup.install(setup.prepare(plugin, home, "codex", version="v2"))
                 self.assertEqual(12, tomllib.loads(config.read_text())["agents"]["max_threads"])
@@ -718,7 +674,7 @@ class CodexSetupTests(unittest.TestCase):
                 setup.uninstall(home, "codex", receipt_path, receipt)
             self.assertEqual(original, config.read_bytes())
 
-    def test_incoherent_role_registration_fails_before_model_export(self):
+    def test_incoherent_role_registration_does_not_change_host_config(self):
         for drift, diagnostic in (
             ("agent model", "fixes a model or effort"),
             ("registered effort", "fixes a model or effort"),
@@ -726,7 +682,7 @@ class CodexSetupTests(unittest.TestCase):
             ("missing registration", "roles differ from the packaged profiles"),
         ):
             with self.subTest(drift=drift), tempfile.TemporaryDirectory() as temporary:
-                plugin, home, original, catalog, _ = self.fixture(Path(temporary))
+                plugin, home, original, _ = self.fixture(Path(temporary))
                 name = "casefile-implement-ticket-batch-implementation-writer"
                 agent = plugin / "agents" / f"{name}.toml"
                 fragment = plugin / "config/config-fragment.toml.in"
@@ -741,11 +697,10 @@ class CodexSetupTests(unittest.TestCase):
                     agent.write_text('developer_instructions = " "\n')
                 else:
                     fragment.write_text(fragment.read_text().replace(header, "[agents.custom]\n"))
-                fake = FakeCodex(catalog)
+                fake = FakeCodex()
                 with self.fake_command(fake):
                     with self.assertRaisesRegex(setup.SetupError, diagnostic):
                         setup.prepare(plugin, home, "codex", version="v2")
-                self.assertEqual(0, fake.model_acquisition_calls)
                 self.assertEqual(original, (home / "config.toml").read_bytes())
 
     def test_portable_bytes_write_and_resource_separator(self):
@@ -756,7 +711,7 @@ class CodexSetupTests(unittest.TestCase):
                 setup.atomic_write(target, b"portable")
             self.assertEqual(b"portable", target.read_bytes())
 
-            plugin, home, _, catalog, _ = self.fixture(root / "fixture")
+            plugin, home, _, _ = self.fixture(root / "fixture")
             profile = plugin / "config/profiles.toml"
             profile.write_text(
                 profile.read_text(encoding="ascii").replace(
@@ -765,7 +720,7 @@ class CodexSetupTests(unittest.TestCase):
                 ),
                 encoding="ascii",
             )
-            with self.fake_command(FakeCodex(catalog)):
+            with self.fake_command(FakeCodex()):
                 plan = setup.prepare(plugin, home, "codex")
 
                 def reformat_written_configuration(current):
@@ -788,8 +743,8 @@ class CodexSetupTests(unittest.TestCase):
             self.assertEqual(b"old", target.read_bytes())
             self.assertEqual([], list(root.glob(".target.*")))
 
-            plugin, home, original, catalog, legacy = self.fixture(root / "rollback")
-            with self.fake_command(FakeCodex(catalog, doctor_ok=False)):
+            plugin, home, original, legacy = self.fixture(root / "rollback")
+            with self.fake_command(FakeCodex(doctor_ok=False)):
                 with self.assertRaisesRegex(setup.SetupError, "rollback verified"):
                     setup.install(setup.prepare(plugin, home, "codex"))
             self.assertEqual(original, (home / "config.toml").read_bytes())
@@ -797,8 +752,8 @@ class CodexSetupTests(unittest.TestCase):
 
     def test_current_receipt_and_git_alert(self):
         with tempfile.TemporaryDirectory() as temporary:
-            plugin, home, _, catalog, _ = self.fixture(Path(temporary))
-            fake = FakeCodex(catalog)
+            plugin, home, _, _ = self.fixture(Path(temporary))
+            fake = FakeCodex()
             with self.fake_command(fake):
                 result = setup.install(setup.prepare(plugin, home, "codex"))
                 receipt_path, receipt = setup.receipt(home, Path(result["receipt"]))
@@ -813,8 +768,8 @@ class CodexSetupTests(unittest.TestCase):
 
     def test_uninstall_aborts_when_a_managed_file_changes_after_snapshot(self):
         with tempfile.TemporaryDirectory() as temporary:
-            plugin, home, _, catalog, _ = self.fixture(Path(temporary))
-            fake = FakeCodex(catalog)
+            plugin, home, _, _ = self.fixture(Path(temporary))
+            fake = FakeCodex()
             with self.fake_command(fake):
                 result = setup.install(setup.prepare(plugin, home, "codex"))
                 receipt_path, receipt = setup.receipt(home, Path(result["receipt"]))
