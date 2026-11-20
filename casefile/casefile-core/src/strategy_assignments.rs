@@ -1,6 +1,6 @@
 use crate::{Diagnostic, SCHEMA_VERSION};
 use serde::{Deserialize, Serialize};
-use std::{collections::BTreeSet, fmt};
+use std::{collections::BTreeSet, fmt, str::FromStr};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -17,6 +17,19 @@ impl fmt::Display for AssignmentPhase {
             Self::Review => "review",
             Self::Implementation => "implementation",
         })
+    }
+}
+
+impl FromStr for AssignmentPhase {
+    type Err = &'static str;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "investigation" => Ok(Self::Investigation),
+            "review" => Ok(Self::Review),
+            "implementation" => Ok(Self::Implementation),
+            _ => Err("assignment phase must be investigation, review, or implementation"),
+        }
     }
 }
 

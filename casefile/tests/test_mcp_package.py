@@ -118,6 +118,8 @@ class McpPackageTests(unittest.TestCase):
             metadata = json.loads((codex / ".codex-plugin/plugin.json").read_text(encoding="utf-8"))
             self.assertNotIn("mcpServers", metadata)
             self.assertTrue((codex / "scripts/list-codex-models.py").is_file())
+            self.assertTrue((codex / "scripts/resolve-role-assignment.py").is_file())
+            self.assertTrue((codex / "skills/casefile/references/codex-delegation.md").is_file())
             for root in (ROOT / "casefile/adapters/codex", codex):
                 scripts = "\n".join(
                     path.read_text(encoding="ascii") for path in root.rglob("*.py")

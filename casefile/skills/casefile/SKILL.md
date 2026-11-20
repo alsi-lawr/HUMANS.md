@@ -69,7 +69,8 @@ transition. Stop before delegation if provisioning fails; never replace a differ
 Follow [Codex role assignments](references/codex-role-assignments.md) after persisting the exact
 selected governed Codex matrix and on re-entry before delegation. Offer only roles of that strategy.
 The implementation phase requires the accepted dependency-safe plan and explicit strategy before
-offering role assignments.
+offering role assignments. Follow [Codex delegation](references/codex-delegation.md) for each
+governed spawn, follow-up, or resume, including when a nested worker makes the call.
 
 Keep investigation source access read-only. The root alone arbitrates duplicate findings, reserves
 ticket IDs and paths, records decisions, and disposes tickets. Reviewers write evidence only.

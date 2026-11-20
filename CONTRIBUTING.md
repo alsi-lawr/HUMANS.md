@@ -242,28 +242,27 @@ authority and projects these client-visible states:
 - `unresolved`: the overlay or matrix cannot identify one applicable effective writer; and
 - `invalid`: the binding source failed canonical validation.
 
-Historical Casefiles without `bindings.toml` remain valid and use the matrix writer pair. A present
-invalid or unresolved overlay never falls back silently. The TUI, server, and browser consume the
-Rust-owned typed projection and diagnostics; do not add another TOML parser to a client.
+The historical writer binding projection still displays the matrix writer pair when `bindings.toml`
+is absent. An invalid or unresolved overlay produces diagnostics. The TUI, server, and browser
+consume the Rust-owned typed projection and diagnostics.
 
 ### Codex offer and spawn resolution
-
-`casefile/adapters/codex/scripts/resolve-writer-binding.py` reads visible models and reasoning
-efforts through Codex app-server's stable `model/list` method, then validates runtime selectors from
-the configured receipt-owned Casefile catalog. It offers only pairs that match the selected
-multi-agent runtime and have a verified packaged resolution for all three implementation strategies.
-V1 requires an exact generated named profile for the pair. V2 requires each strategy's runtime
-wrapper, a positive fork context, and explicit model and effort overrides at spawn.
 
 The [Codex role assignment flow](casefile/skills/casefile/references/codex-role-assignments.md) uses
 the live eligible pairs for every distinct role in the exact selected strategy. Only explicit human
 confirmation of the full set authorizes the typed assignment preview and apply. Keep eligible saved
 selections on re-entry. A strategy with zero workers needs no assignment write.
 
-The legacy writer-binding replacement API derives inactivity from canonical ticket progress. For
-current selection, use the
-[strategy assignments schema](casefile/casefile-workflow/schemas/strategy-assignments.md) and the
-corresponding Provider tools. Use the existing progress gate for implementation delegation.
+Before each governed Codex delegation, `resolve-role-assignment.py` checks the explicit saved pair
+against live provider discovery and the current caller's named role capabilities. It returns the
+spawn arguments for that registration and runtime. A writer also needs canonical `in_progress` state
+for the exact ticket. See the
+[Codex delegation procedure](casefile/skills/casefile/references/codex-delegation.md).
+
+Use the [strategy assignments schema](casefile/casefile-workflow/schemas/strategy-assignments.md)
+and its Provider tools for current selection. `resolve-writer-binding.py offer` remains available
+for historical writer bindings and catalog migration. A historical binding can authorize a writer
+only when it explicitly records the pair and that pair passes the current delegation check.
 
 ### Workbench development
 

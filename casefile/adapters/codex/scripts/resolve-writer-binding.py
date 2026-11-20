@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Offer, persist, and resolve the active Codex Casefile writer binding."""
+"""Offer pairs and prepare requests for historical Codex writer bindings."""
 from __future__ import annotations
 
 import argparse
@@ -7,7 +7,6 @@ import importlib.util
 import json
 import os
 import shutil
-import subprocess
 import sys
 import tomllib
 from pathlib import Path, PurePosixPath
@@ -37,21 +36,6 @@ RUNTIMES = ("v1", "v2")
 
 class BindingError(RuntimeError):
     pass
-
-
-def checked(args: list[str], environment: dict[str, str] | None = None) -> str:
-    result = subprocess.run(
-        args,
-        env=environment,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="strict",
-    )
-    if result.returncode:
-        detail = result.stderr.strip() or result.stdout.strip() or "no diagnostic output"
-        raise BindingError(f"command failed ({result.returncode}): {' '.join(args)}: {detail}")
-    return result.stdout
 
 
 def load_profiles(path: Path) -> dict:
@@ -304,138 +288,6 @@ def selection_request(
     }
 
 
-def require_writer_progress(
-    casefile_executable: str,
-    planning_root: Path,
-    investigation: str,
-    ticket_id: str,
-) -> None:
-    checked(
-        [
-            casefile_executable,
-            "--root",
-            str(planning_root),
-            "require-writer-progress",
-            "--investigation",
-            investigation,
-            "--ticket-id",
-            ticket_id,
-        ]
-    )
-
-
-def binding_projection(
-    casefile_executable: str,
-    planning_root: Path,
-    investigation: str,
-    strategy_id: str,
-) -> dict:
-    try:
-        result = json.loads(
-            checked(
-                [
-                    casefile_executable,
-                    "--root",
-                    str(planning_root),
-                    "project-writer-binding",
-                    "--investigation",
-                    investigation,
-                    "--strategy-id",
-                    strategy_id,
-                ]
-            )
-        )
-    except json.JSONDecodeError as error:
-        raise BindingError("Casefile writer projection returned invalid JSON") from error
-    if not isinstance(result, dict):
-        raise BindingError("Casefile writer projection is not an object")
-    return result
-
-
-def resolve_spawn(
-    executable: str,
-    home: Path,
-    profiles_path: Path,
-    casefile_executable: str,
-    planning_root: Path,
-    investigation: str,
-    strategy_id: str,
-    ticket_id: str,
-) -> dict:
-    investigation = safe_investigation(investigation)
-    if strategy_id not in STRATEGIES:
-        raise BindingError(f"unsupported implementation strategy: {strategy_id}")
-    require_writer_progress(
-        casefile_executable,
-        planning_root,
-        investigation,
-        ticket_id,
-    )
-    profiles = load_profiles(profiles_path)
-    projection = binding_projection(
-        casefile_executable,
-        planning_root,
-        investigation,
-        strategy_id,
-    )
-    if projection.get("strategy_id") != strategy_id or projection.get("adapter") != "codex":
-        raise BindingError("Casefile writer projection does not match the selected strategy")
-    state = projection.get("binding")
-    state_name = state.get("state") if isinstance(state, dict) else None
-    if state_name not in {"absent", "resolved"}:
-        if state_name in {"pending", "unresolved", "invalid"}:
-            raise BindingError(
-                f"canonical writer binding state is {state_name}; stop before delegation and "
-                "repair or explicitly reselect while implementation is inactive"
-            )
-        raise BindingError("Casefile writer projection has an invalid binding state")
-    effective = state.get("effective")
-    if not isinstance(effective, dict):
-        raise BindingError("Casefile writer projection lacks an effective pair")
-    model, effort, source = (
-        effective.get("model"),
-        effective.get("reasoning_effort"),
-        effective.get("source"),
-    )
-    expected_source = "matrix" if state_name == "absent" else "binding"
-    if (
-        not isinstance(model, str)
-        or not model
-        or not isinstance(effort, str)
-        or not effort
-        or source != expected_source
-    ):
-        raise BindingError("Casefile writer projection has an invalid effective pair")
-    current = offer(executable, home, profiles_path)
-    try:
-        pair = selected_pair(current, model, effort)
-    except BindingError as error:
-        raise BindingError(
-            f"effective writer {model}/{effort} is unavailable; stop before delegation, "
-            "rerun offer, "
-            "and obtain explicit reselection while implementation is inactive"
-        ) from error
-    rows = resolution_rows(profiles, current["multi_agent_version"], model, effort)
-    row = next(item for item in rows if item["strategy_id"] == strategy_id)
-    spawn = {"agent_type": row["profile"]}
-    if current["multi_agent_version"] == "v2":
-        spawn.update(
-            {
-                "model": model,
-                "reasoning_effort": effort,
-                "fork_turns": str(row["fork_turns"]),
-            }
-        )
-    return {
-        "model": model,
-        "reasoning_effort": effort,
-        "binding_source": source,
-        "multi_agent_version": current["multi_agent_version"],
-        "spawn": spawn,
-        "revalidated": True,
-    }
-
-
 def parser() -> argparse.ArgumentParser:
     value = argparse.ArgumentParser(description=__doc__)
     value.add_argument(
@@ -453,12 +305,6 @@ def parser() -> argparse.ArgumentParser:
     select.add_argument("--investigation", required=True)
     select.add_argument("--model", required=True)
     select.add_argument("--reasoning-effort", required=True)
-    resolve = subparsers.add_parser("resolve")
-    resolve.add_argument("--casefile-executable", default=shutil.which("casefile"))
-    resolve.add_argument("--planning-root", type=Path, required=True)
-    resolve.add_argument("--investigation", required=True)
-    resolve.add_argument("--strategy-id", choices=STRATEGIES, required=True)
-    resolve.add_argument("--ticket-id", required=True)
     return value
 
 
@@ -471,7 +317,7 @@ def main() -> int:
         profiles = arguments.profiles.expanduser().resolve(strict=True)
         if arguments.operation == "offer":
             result = offer(arguments.codex_executable, home, profiles)
-        elif arguments.operation == "select":
+        else:
             investigation = safe_investigation(arguments.investigation)
             pair = selected_pair(
                 offer(arguments.codex_executable, home, profiles),
@@ -481,19 +327,6 @@ def main() -> int:
             result = selection_request(
                 investigation,
                 pair,
-            )
-        else:
-            if not arguments.casefile_executable:
-                raise BindingError("Casefile executable was not found")
-            result = resolve_spawn(
-                arguments.codex_executable,
-                home,
-                profiles,
-                arguments.casefile_executable,
-                arguments.planning_root.expanduser().resolve(strict=True),
-                arguments.investigation,
-                arguments.strategy_id,
-                arguments.ticket_id,
             )
         print(json.dumps(result, indent=2, sort_keys=True))
         return 0

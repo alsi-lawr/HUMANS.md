@@ -30,37 +30,10 @@ def model(
     }
 
 
-def projection(
-    state: str,
-    model_name: str | None = None,
-    effort: str | None = None,
-    source: str | None = None,
-    *,
-    strategy_id: str = "casefile-implement-ticket-batch",
-) -> dict:
-    binding_state = {"state": state}
-    if state in {"absent", "resolved"}:
-        binding_state["effective"] = {
-            "model": model_name,
-            "reasoning_effort": effort,
-            "source": source,
-        }
-    return {
-        "strategy_id": strategy_id,
-        "adapter": "codex",
-        "binding": binding_state,
-    }
-
-
 class WriterBindingTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.profiles = binding.load_profiles(PROFILES_PATH)
-
-    def setUp(self):
-        progress = mock.patch.object(binding, "require_writer_progress")
-        progress.start()
-        self.addCleanup(progress.stop)
 
     def test_complete_predicate_filters_visibility_selector_resolution_and_effort(self):
         catalog = {
@@ -268,205 +241,6 @@ class WriterBindingTests(unittest.TestCase):
         )
         self.assertNotIn("implementation_active", result["request"])
 
-    def test_resolve_requires_canonical_ticket_progress_before_projection(self):
-        with mock.patch.object(
-            binding,
-            "require_writer_progress",
-            side_effect=binding.BindingError("ticket is not in_progress"),
-        ), mock.patch.object(binding, "binding_projection") as projection:
-            with self.assertRaisesRegex(binding.BindingError, "not in_progress"):
-                binding.resolve_spawn(
-                    "codex",
-                    Path("/home"),
-                    PROFILES_PATH,
-                    "casefile",
-                    Path("/planning"),
-                    "projects/demo/investigations/sample",
-                    "casefile-implement-ticket-batch",
-                    "HMD-011",
-                )
-            projection.assert_not_called()
-
-    def test_v1_and_v2_resolve_alternate_binding_for_resume_and_correction(self):
-        catalog_v1 = {
-            "models": [
-                model("gpt-5.6-sol", ("high",), selector=None),
-                model("gpt-5.6-terra", ("medium",), selector=None),
-            ]
-        }
-        catalog_v2 = {
-            "models": [
-                model("gpt-5.6-sol", ("high",)),
-                model("gpt-5.6-terra", ("medium",)),
-            ]
-        }
-        for runtime, catalog in (("v1", catalog_v1), ("v2", catalog_v2)):
-            for strategy_id in binding.STRATEGIES:
-                with self.subTest(runtime=runtime, strategy=strategy_id), mock.patch.object(
-                    binding, "active_runtime", return_value=runtime
-                ), mock.patch.object(
-                    binding, "active_catalog", return_value=catalog
-                ), mock.patch.object(
-                    binding,
-                    "binding_projection",
-                    return_value=projection(
-                        "resolved",
-                        "gpt-5.6-terra",
-                        "medium",
-                        "binding",
-                        strategy_id=strategy_id,
-                    ),
-                ):
-                    first = binding.resolve_spawn(
-                        "codex",
-                        Path("/home"),
-                        PROFILES_PATH,
-                        "casefile",
-                        Path("/planning"),
-                        "projects/demo/investigations/sample",
-                        strategy_id,
-                        "HMD-011",
-                    )
-                    second = binding.resolve_spawn(
-                        "codex",
-                        Path("/home"),
-                        PROFILES_PATH,
-                        "casefile",
-                        Path("/planning"),
-                        "projects/demo/investigations/sample",
-                        strategy_id,
-                        "HMD-011",
-                    )
-                    self.assertEqual(first, second)
-                    self.assertEqual("binding", first["binding_source"])
-                    self.assertEqual(
-                        ("gpt-5.6-terra", "medium"),
-                        (first["model"], first["reasoning_effort"]),
-                    )
-                    if runtime == "v1":
-                        self.assertNotIn("model", first["spawn"])
-                        self.assertIn(
-                            "casefile-implementation-writer-gpt-5-6-terra-medium",
-                            first["spawn"]["agent_type"],
-                        )
-                    else:
-                        self.assertEqual("gpt-5.6-terra", first["spawn"]["model"])
-                        self.assertEqual("medium", first["spawn"]["reasoning_effort"])
-                        self.assertEqual("3", first["spawn"]["fork_turns"])
-
-    def test_v1_and_v2_use_store_derived_historical_matrix_pair_and_revalidate(self):
-        catalogs = {
-            "v1": {
-                "models": [
-                    model("gpt-6-astra", ("high",), selector=None),
-                    model("gpt-5.6-sol", ("high",), selector=None),
-                ]
-            },
-            "v2": {
-                "models": [
-                    model("gpt-6-astra", ("high",)),
-                    model("gpt-5.6-sol", ("high",)),
-                ]
-            },
-        }
-        for runtime, catalog in catalogs.items():
-            with self.subTest(runtime=runtime), mock.patch.object(
-                binding, "active_runtime", return_value=runtime
-            ), mock.patch.object(
-                binding, "active_catalog", return_value=catalog
-            ) as active_catalog, mock.patch.object(
-                binding,
-                "binding_projection",
-                return_value=projection(
-                    "absent", "gpt-5.6-sol", "high", "matrix"
-                ),
-            ):
-                first = binding.resolve_spawn(
-                    "codex",
-                    Path("/home"),
-                    PROFILES_PATH,
-                    "casefile",
-                    Path("/planning"),
-                    "projects/demo/investigations/sample",
-                    "casefile-implement-ticket-batch",
-                    "HMD-011",
-                )
-                second = binding.resolve_spawn(
-                    "codex",
-                    Path("/home"),
-                    PROFILES_PATH,
-                    "casefile",
-                    Path("/planning"),
-                    "projects/demo/investigations/sample",
-                    "casefile-implement-ticket-batch",
-                    "HMD-011",
-                )
-            self.assertEqual(first, second)
-            self.assertEqual(2, active_catalog.call_count)
-            self.assertEqual("matrix", first["binding_source"])
-            self.assertEqual(
-                ("gpt-5.6-sol", "high"),
-                (first["model"], first["reasoning_effort"]),
-            )
-
-    def test_unavailable_or_invalid_persisted_binding_stops_before_delegation(self):
-        catalog = {"models": [model("gpt-5.6-sol", ("high",))]}
-        with mock.patch.object(binding, "active_runtime", return_value="v2"), mock.patch.object(
-            binding, "active_catalog", return_value=catalog
-        ), mock.patch.object(
-            binding,
-            "binding_projection",
-            return_value=projection(
-                "resolved", "gpt-5.3-codex-spark", "low", "binding"
-            ),
-        ):
-            with self.assertRaisesRegex(binding.BindingError, "stop before delegation"):
-                binding.resolve_spawn(
-                    "codex",
-                    Path("/home"),
-                    PROFILES_PATH,
-                    "casefile",
-                    Path("/planning"),
-                    "projects/demo/investigations/sample",
-                    "casefile-implement-ticket-batch",
-                    "HMD-011",
-                )
-        for state in ("pending", "unresolved", "invalid"):
-            with self.subTest(state=state), mock.patch.object(
-                binding, "binding_projection", return_value=projection(state)
-            ):
-                with self.assertRaisesRegex(binding.BindingError, state):
-                    binding.resolve_spawn(
-                        "codex",
-                        Path("/home"),
-                        PROFILES_PATH,
-                        "casefile",
-                        Path("/planning"),
-                        "projects/demo/investigations/sample",
-                        "casefile-implement-ticket-batch",
-                        "HMD-011",
-                    )
-
-        for malformed in (
-            {"strategy_id": "wrong", "adapter": "codex", "binding": {"state": "absent"}},
-            projection("absent", None, "high", "matrix"),
-            projection("resolved", "gpt-5.6-sol", "high", "matrix"),
-        ):
-            with self.subTest(malformed=malformed), mock.patch.object(
-                binding, "binding_projection", return_value=malformed
-            ):
-                with self.assertRaises(binding.BindingError):
-                    binding.resolve_spawn(
-                        "codex",
-                        Path("/home"),
-                        PROFILES_PATH,
-                        "casefile",
-                        Path("/planning"),
-                        "projects/demo/investigations/sample",
-                        "casefile-implement-ticket-batch",
-                        "HMD-011",
-                    )
-
     def test_unavailable_selection_never_calls_persistence_bridge(self):
         with tempfile.TemporaryDirectory() as temporary:
             home = Path(temporary)
@@ -521,28 +295,9 @@ class WriterBindingTests(unittest.TestCase):
                 binding, "active_catalog", return_value=catalog
             ), mock.patch.object(
                 binding,
-                "binding_projection",
-                return_value=projection(
-                    "resolved", "gpt-5.6-sol", "high", "binding"
-                ),
-            ), mock.patch.object(
-                binding,
                 "selection_request",
                 return_value={"persisted": True},
             ) as persist:
-                with self.assertRaisesRegex(binding.BindingError, "stop before delegation"):
-                    binding.resolve_spawn(
-                        "codex",
-                        root,
-                        PROFILES_PATH,
-                        "casefile",
-                        root,
-                        "projects/demo/investigations/sample",
-                        "casefile-implement-ticket-batch",
-                        "HMD-011",
-                    )
-                persist.assert_not_called()
-
                 current = binding.offer("codex", root, PROFILES_PATH)
                 self.assertFalse(current["recommendation"]["available"])
                 self.assertEqual(

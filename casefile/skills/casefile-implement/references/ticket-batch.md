@@ -12,7 +12,6 @@ only after its recorded review flow accepts it.
 Keep ticket checks focused. Run full workspace, package, and authenticated verification at the
 release candidate unless this ticket explicitly owns that surface.
 
-For Codex, resolve the Casefile writer binding with strategy ID `casefile-implement-ticket-batch`
-immediately before the initial writer, each resumed batch, and each correction spawn. Use only the
-returned spawn arguments for the exact confirmed writer pair. Route an unavailable selection through
-the `casefile` assignment flow before delegation.
+For Codex, follow the delegation check in `casefile` for the writer, atomic ticket reviewer, and
+verification reviewer under `casefile-implement-ticket-batch`. Repeat it for each resumed batch and
+correction assignment.

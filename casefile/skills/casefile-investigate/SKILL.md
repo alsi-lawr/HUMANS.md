@@ -16,6 +16,7 @@ compatible options, recommend one from scope and capabilities, and wait for expl
 
 For a governed Codex investigation, persist the exact selected matrix through the strategy
 transition. Follow the role assignment flow in `casefile` before delegation, including on re-entry.
+Apply its delegation check each time a root or nested caller assigns work to a Codex worker.
 
 Investigators report candidates before ticket creation. The root verifies evidence, arbitrates
 uniqueness, reserves IDs and paths, and records accepted or rejected disposition.

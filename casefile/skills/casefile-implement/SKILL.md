@@ -39,16 +39,11 @@ only after the human rejects the expansion or amends the governing decision or t
 ticket only after the recorded flow accepts it. See the brief
 [correction-escalation case study](references/correction-escalation-case-study.md).
 
-For Codex, immediately before every implementation-writer spawn, first successfully transition the
-applicable ticket to canonical `in_progress`, then run the installed
-`scripts/resolve-writer-binding.py resolve` with the planning root, active investigation, exact
-selected implementation strategy ID, and exact ticket ID. The resolver independently requires that
-current progress before returning a spawn. This applies equally to the first ticket, later batches,
-pipeline overlap, resume, and every correction round. Use the returned `spawn` object only when its
-model and effort match the exact confirmed writer assignment. If the resolver fails or returns a
-different pair, explain the conflict and leave delegation pending. Use the role assignment flow in
-`casefile` when the confirmed pair is no longer eligible. Never reuse an earlier resolution without
-revalidation.
+For each Codex writer, reviewer, verifier, or look-ahead assignment, follow the delegation check in
+`casefile` immediately before calling the worker. An implementation writer also needs canonical
+`in_progress` state for the exact accepted ticket. Apply the same checks on resume and correction.
+When a saved pair becomes unavailable, obtain the human's replacement through the role assignment
+flow and rerun the delegation check before relaunch.
 
 Keep per-ticket review and verification focused on that ticket's acceptance criteria, changed
 surfaces, and concrete findings. Reserve full workspace, package, and authenticated gates for the
