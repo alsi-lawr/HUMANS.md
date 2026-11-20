@@ -112,6 +112,18 @@ fn kind_from_components<'a>(
         ("final-disposition.md", None, _, _) => Some(Kind::Closeout),
         ("implementation-plan", Some("PLAN.md"), None, _) => Some(Kind::Plan),
         ("strategy", Some("bindings.toml"), None, _) => Some(Kind::StrategyBinding),
+        (
+            "strategy",
+            Some("assignments"),
+            Some("investigation" | "review" | "implementation"),
+            Some(name),
+        ) if components.next().is_none()
+            && name
+                .strip_suffix(".toml")
+                .is_some_and(casefile_core::is_strategy_id) =>
+        {
+            Some(Kind::StrategyAssignments)
+        }
         ("strategy", Some("transitions"), Some(name), None)
             if name.ends_with(".toml") && name.contains('-') =>
         {
@@ -164,7 +176,12 @@ pub(super) fn scope_container_native_relative_path(path: &str) -> bool {
 
 fn scope_container_components<'a>(mut components: impl Iterator<Item = &'a str>) -> bool {
     matches!(
-        (components.next(), components.next(), components.next()),
+        (
+            components.next(),
+            components.next(),
+            components.next(),
+            components.next()
+        ),
         (
             Some(
                 "implementation-plan"
@@ -178,13 +195,24 @@ fn scope_container_components<'a>(mut components: impl Iterator<Item = &'a str>)
                     | "progress"
             ),
             None,
+            None,
             None
-        ) | (Some("strategy"), Some("transitions"), None)
-            | (
-                Some("tickets" | "epics"),
-                Some("accepted" | "provisional" | "rejected"),
-                None
-            )
+        ) | (
+            Some("strategy"),
+            Some("transitions" | "assignments"),
+            None,
+            None
+        ) | (
+            Some("strategy"),
+            Some("assignments"),
+            Some("investigation" | "review" | "implementation"),
+            None
+        ) | (
+            Some("tickets" | "epics"),
+            Some("accepted" | "provisional" | "rejected"),
+            None,
+            None
+        )
     )
 }
 

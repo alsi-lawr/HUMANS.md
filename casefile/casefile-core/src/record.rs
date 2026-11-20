@@ -24,6 +24,7 @@ pub enum Kind {
     Closeout,
     Strategy,
     StrategyBinding,
+    StrategyAssignments,
     StrategyTransition,
     Ticket,
     Epic,
@@ -57,6 +58,9 @@ pub enum RecordSummary {
     },
     StrategyBinding {
         binding: crate::strategy::StrategyBinding,
+    },
+    StrategyAssignments {
+        assignments: crate::strategy_assignments::StrategyAssignments,
     },
     StrategyTransition {
         record: Box<crate::strategy_transition::StrategyTransitionRecord>,

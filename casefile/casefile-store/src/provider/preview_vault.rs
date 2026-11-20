@@ -17,6 +17,7 @@ pub(super) enum StoredPreview {
     Board(Preview),
     StrategyTransition(StrategyTransitionPreview),
     WriterBinding(WriterBindingPreview),
+    StrategyAssignments(StrategyAssignmentPreview),
 }
 
 impl StoredPreview {
@@ -28,6 +29,7 @@ impl StoredPreview {
             Self::Board(_) => ProviderPreviewKind::DefaultDeliveryBoard,
             Self::StrategyTransition(_) => ProviderPreviewKind::StrategyTransition,
             Self::WriterBinding(_) => ProviderPreviewKind::WriterBinding,
+            Self::StrategyAssignments(_) => ProviderPreviewKind::StrategyAssignments,
         }
     }
 }

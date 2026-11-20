@@ -27,6 +27,7 @@ REQUIRED_OPERATIONS = {
     "preview_default_delivery_board", "apply_default_delivery_board",
     "preview_strategy_transition", "apply_strategy_transition", "preview_writer_binding",
     "apply_writer_binding",
+    "project_strategy_assignments", "preview_strategy_assignments", "apply_strategy_assignments",
 }
 
 

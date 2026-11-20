@@ -1,4 +1,6 @@
 use crate::{
+    StrategyAssignmentPreview, StrategyAssignmentProjection, StrategyAssignmentRequest,
+    StrategyAssignmentTarget,
     derived::{DerivedSnapshot, derive_snapshot},
     governance::{
         self, GovernedApplyResult, StrategyTransitionPreview, StrategyTransitionRequest,
@@ -169,6 +171,13 @@ impl Store {
         crate::scanning::selected::project_writer_binding(&self.root, investigation, strategy_id)
     }
 
+    pub fn project_strategy_assignments(
+        &self,
+        target: StrategyAssignmentTarget,
+    ) -> Result<StrategyAssignmentProjection, StoreError> {
+        crate::scanning::selected::project_strategy_assignments(&self.root, target)
+    }
+
     pub fn scan(&self) -> Result<ScanResult, StoreError> {
         scan(&self.root, &BTreeMap::new())
     }
@@ -297,6 +306,20 @@ impl Store {
         preview: WriterBindingPreview,
     ) -> Result<GovernedApplyResult, StoreError> {
         governance::apply_writer_binding(&self.root, preview)
+    }
+
+    pub fn preview_strategy_assignments(
+        &self,
+        request: StrategyAssignmentRequest,
+    ) -> Result<StrategyAssignmentPreview, StoreError> {
+        governance::preview_strategy_assignments(&self.root, request)
+    }
+
+    pub fn apply_strategy_assignments(
+        &self,
+        preview: &StrategyAssignmentPreview,
+    ) -> Result<GovernedApplyResult, StoreError> {
+        governance::apply_strategy_assignments(&self.root, preview)
     }
 
     pub fn require_writer_progress(

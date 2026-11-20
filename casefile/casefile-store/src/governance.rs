@@ -26,11 +26,16 @@ use crate::{
 const UNSELECTED_STRATEGY_ID: &str = "unselected";
 const ABSENT_MATRIX_REVISION: &str = "absent";
 
+mod strategy_assignments;
+pub use strategy_assignments::StrategyAssignmentPreview;
+pub(crate) use strategy_assignments::{apply_strategy_assignments, preview_strategy_assignments};
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum GovernedOperationKind {
     StrategyTransition,
     WriterBinding,
+    StrategyAssignments,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -512,24 +517,35 @@ pub(super) fn apply_writer_binding_ref(
             "binding validation changed after preview".into(),
         ));
     }
+    apply_governed_change(
+        root,
+        GovernedOperationKind::WriterBinding,
+        preview.changes.first(),
+        &context,
+        "writer binding verification",
+    )
+}
+
+fn apply_governed_change(
+    root: &Path,
+    operation: GovernedOperationKind,
+    change: Option<&GovernedChange>,
+    context: &MutationContext,
+    verification: &str,
+) -> Result<GovernedApplyResult, StoreError> {
     context.require_unchanged()?;
     let current = &context.before;
-    let change = preview
-        .changes
-        .first()
-        .ok_or_else(|| StoreError::Invalid("binding preview has no target".into()))?;
+    let Some(change) = change else {
+        return result_from_scan(operation, &[], current, true);
+    };
+    let changes = std::slice::from_ref(change);
     let entry = context.entry(&change.path);
     require_target_revision(
         &root.join(&change.path),
         change.expected_target_revision.as_ref(),
     )?;
-    if preview.no_op {
-        return result_from_scan(
-            GovernedOperationKind::WriterBinding,
-            &preview.changes,
-            current,
-            true,
-        );
+    if change.no_op {
+        return result_from_scan(operation, changes, current, true);
     }
     let receipt = crate::mutation_restore::apply(
         root,
@@ -537,12 +553,12 @@ pub(super) fn apply_writer_binding_ref(
         entry.map(|entry| entry.original_bytes.as_slice()),
         Some(&change.rendered_bytes),
     )?;
-    let resulting = match context.resulting(&changes_overlay(&preview.changes)) {
+    let resulting = match context.resulting(&changes_overlay(changes)) {
         Ok(resulting) => resulting,
         Err(error) => {
             return Err(crate::mutation_restore::rollback(
                 root,
-                "writer binding verification",
+                verification,
                 error,
                 &[receipt],
             ));
@@ -559,17 +575,12 @@ pub(super) fn apply_writer_binding_ref(
     if !verified {
         return Err(crate::mutation_restore::rollback(
             root,
-            "writer binding verification",
-            StoreError::Invalid("writer binding post-write verification failed".into()),
+            verification,
+            StoreError::Invalid(format!("{verification} failed after writing")),
             &[receipt],
         ));
     }
-    result_from_scan(
-        GovernedOperationKind::WriterBinding,
-        &preview.changes,
-        &resulting,
-        false,
-    )
+    result_from_scan(operation, changes, &resulting, false)
 }
 
 pub(super) fn require_writer_progress(

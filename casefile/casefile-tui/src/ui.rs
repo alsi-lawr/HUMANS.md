@@ -94,6 +94,7 @@ pub(crate) fn kind_name(kind: Kind) -> &'static str {
         Kind::Closeout => "closeout",
         Kind::Strategy => "strategy",
         Kind::StrategyBinding => "strategy binding",
+        Kind::StrategyAssignments => "strategy assignments",
         Kind::StrategyTransition => "strategy transition",
         Kind::Ticket => "ticket",
         Kind::Epic => "epic",

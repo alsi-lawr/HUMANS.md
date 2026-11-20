@@ -25,6 +25,7 @@ mod references;
 mod revision;
 mod scanning;
 mod store;
+mod strategy_assignments;
 mod validation;
 mod writing;
 
@@ -37,8 +38,9 @@ pub use derived::{
     ScopedIdentity, StrategyBindingState, WriterBindingSource, derive_relationships,
 };
 pub use governance::{
-    GovernedApplyResult, GovernedChange, GovernedOperationKind, StrategyTransitionPreview,
-    StrategyTransitionRequest, WriterBindingPreview, WriterBindingRequest,
+    GovernedApplyResult, GovernedChange, GovernedOperationKind, StrategyAssignmentPreview,
+    StrategyTransitionPreview, StrategyTransitionRequest, WriterBindingPreview,
+    WriterBindingRequest,
 };
 pub use index::{DerivedIndex, IndexPublicationId, Indexed, RevisionSource};
 pub use layout::normalize_planning_relative;
@@ -74,4 +76,9 @@ pub use scanning::{ScanResult, is_store_path_excluded};
 pub use store::{
     IncompleteRollback, RollbackCause, RollbackErrorCode, RollbackPathState, RollbackReason,
     RollbackRemainingState, Store, StoreError,
+};
+pub use strategy_assignments::{
+    ProjectedRoleAssignment, RoleAssignmentSource, SelectedRoleAssignment,
+    StrategyAssignmentProjection, StrategyAssignmentRequest, StrategyAssignmentRevisions,
+    StrategyAssignmentTarget,
 };
