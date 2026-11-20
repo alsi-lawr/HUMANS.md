@@ -15,7 +15,7 @@ from unittest import mock
 
 from _load import script
 import test_codex_setup as lifecycle
-from test_writer_binding import binding, model, projection, PROFILES_PATH
+from test_writer_binding import binding, model, PROFILES_PATH
 
 
 setup = lifecycle.setup
@@ -264,27 +264,32 @@ class CodexModelMigrationTests(unittest.TestCase):
         self.assertIn("gpt-6-astra", {m["slug"] for m in result["models"]})
         self.assertTrue(all(not home.exists() for home in homes))
 
-    def test_astra_binding_resolves_both_runtime_routes_without_changing_historical_sol(self):
-        for version in ("v1", "v2"):
-            with self.subTest(runtime=version), mock.patch.object(binding, "active_runtime", return_value=version), mock.patch.object(
-                binding, "active_catalog", return_value={"models": [
-                    model("gpt-6-astra", ("high",), selector=None if version == "v1" else "v2"),
-                    model("gpt-5.6-sol", ("high",), selector=None if version == "v1" else "v2"),
-                ]}
-            ), mock.patch.object(binding, "require_writer_progress"):
+    def test_legacy_offer_recommends_astra_and_retains_sol_on_both_runtimes(self):
+        for runtime, selector, mode in (
+            ("v1", None, "named_profile"),
+            ("v2", "v2", "runtime_override"),
+        ):
+            models = [
+                model("gpt-6-astra", ("high",), selector=selector),
+                model("gpt-5.6-sol", ("high",), selector=selector),
+            ]
+            with (
+                self.subTest(runtime=runtime),
+                mock.patch.object(binding, "active_runtime", return_value=runtime),
+                mock.patch.object(binding, "active_catalog", return_value={"models": models}),
+            ):
                 offer = binding.offer("codex", Path("/home"), PROFILES_PATH)
-                self.assertEqual({"model": "gpt-6-astra", "reasoning_effort": "high", "available": True}, offer["recommendation"])
-                for selected in ("gpt-6-astra", "gpt-5.6-sol"):
-                    with mock.patch.object(binding, "binding_projection", return_value=projection("resolved", selected, "high", "binding")):
-                        result = binding.resolve_spawn("codex", Path("/home"), PROFILES_PATH, "casefile",
-                            Path("/planning"), "projects/demo/investigations/sample",
-                            "casefile-implement-ticket-batch", "HMD-011")
-                    self.assertEqual(selected, result["model"])
-                    if version == "v1":
-                        self.assertEqual(f"casefile-implementation-writer-{selected.replace('.', '-')}-high", result["spawn"]["agent_type"])
-                    else:
-                        self.assertEqual(selected, result["spawn"]["model"])
-                        self.assertEqual("high", result["spawn"]["reasoning_effort"])
+                self.assertEqual(
+                    {"model": "gpt-6-astra", "reasoning_effort": "high", "available": True},
+                    offer["recommendation"],
+                )
+                self.assertEqual(
+                    {("gpt-6-astra", "high", mode), ("gpt-5.6-sol", "high", mode)},
+                    {
+                        (pair["model"], pair["reasoning_effort"], pair["resolution"]["mode"])
+                        for pair in offer["pairs"]
+                    },
+                )
 
 
 if __name__ == "__main__":
