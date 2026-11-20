@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import copy
 import datetime
 import importlib.util
 import json
@@ -53,6 +52,11 @@ V1_SELECTOR_MODELS = {
     "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna",
 }
 MULTI_AGENT_VERSIONS = {"v1", "v2"}
+LEGACY_CATALOGS = {f"models-casefile-{version}.json" for version in MULTI_AGENT_VERSIONS}
+CATALOG_KEY = "model_catalog_json"
+CATALOG_ASSIGNMENT = re.compile(
+    rb'''(?m)^[ \t]*(?:model_catalog_json|"model_catalog_json"|'model_catalog_json')[ \t]*=[^\n]*(?:\n|$)'''
+)
 MINIMUM_AGENT_THREADS = 6
 REQUIRED_CATALOG_FIELDS = {
     "additional_speed_tiers",
@@ -98,7 +102,6 @@ AGENT_BEGIN = b"# >>> casefile setup agent keys >>>\n"
 AGENT_END = b"# <<< casefile setup agent keys <<<\n"
 OWNED_KEYS = {
     "": (
-        "model_catalog_json",
         "features.multi_agent",
         "features.multi_agent_v2",
         "agents.max_depth",
@@ -181,7 +184,6 @@ def plugin_root(path: Path) -> tuple[Path, dict]:
         raise SetupError("installed plugin identity is not casefile")
     for relative in (
         "config/config-fragment.toml.in",
-        "config/catalog/models.json",
         "config/profiles.toml",
         "runtime/artifacts.json",
         "scripts/casefile_runtime.py",
@@ -392,7 +394,6 @@ def ensure_thread_capacity(current: bytes) -> bytes:
 def config_candidate(
     current: bytes,
     root: Path,
-    catalog: Path,
     version: str,
     binary: Path,
     planning_root: Path,
@@ -434,14 +435,10 @@ def config_candidate(
         agent_scalars = f"agents.max_depth = {owned['agents']['max_depth']}\n".encode("ascii")
     fragment = fragment.replace("\n[agents]\nmax_depth = 2\n", "\n", 1)
 
-    scalar_block = marked(
-        SCALAR_BEGIN,
-        f"model_catalog_json = {json.dumps(str(catalog))}\n".encode("utf-8") + agent_scalars,
-        SCALAR_END,
-    )
+    scalar_block = marked(SCALAR_BEGIN, agent_scalars, SCALAR_END) if agent_scalars else b""
     table_block = marked(TABLE_BEGIN, fragment.encode("ascii"), TABLE_END)
     data = scalar_block + current + table_block
-    verify_config(data, root, catalog, version, binary, planning_root)
+    verify_config(data, root, version, binary, planning_root)
     return data
 
 
@@ -498,7 +495,6 @@ def remove_owned_tables(data: bytes) -> bytes:
 def verify_config(
     data: bytes,
     root: Path,
-    catalog: Path,
     version: str,
     binary: Path | None = None,
     planning_root: Path | None = None,
@@ -506,12 +502,6 @@ def verify_config(
     document = tomllib.loads(data.decode("utf-8"))
     version = multi_agent_version(version)
     profiles = tomllib.loads((root / "config/profiles.toml").read_text(encoding="ascii"))
-    configured_catalog = document.get("model_catalog_json")
-    if (
-        not isinstance(configured_catalog, str)
-        or Path(configured_catalog).expanduser().resolve() != catalog.resolve()
-    ):
-        raise SetupError("catalog path is incorrect")
     features = document.get("features", {})
     expected_features = {"multi_agent": version == "v1", "multi_agent_v2": version == "v2"}
     if {name: features.get(name) for name in expected_features} != expected_features:
@@ -590,21 +580,6 @@ def same_path(first: Path, second: Path) -> bool:
     return not first.exists() and not second.exists()
 
 
-def path_landed(source: Path, target: Path) -> bool:
-    if source.is_symlink() or target.is_symlink():
-        return False
-    if source.is_file():
-        return target.is_file() and target.stat().st_size > 0
-    if source.is_dir():
-        if not target.is_dir():
-            return False
-        return all(
-            path_landed(source / relative, target / relative)
-            for relative in (item.relative_to(source) for item in source.rglob("*"))
-        )
-    return not target.exists()
-
-
 def snapshot(home: Path, paths: list[Path], destination: Path) -> list[dict]:
     secure_dir(destination)
     entries = []
@@ -617,25 +592,83 @@ def snapshot(home: Path, paths: list[Path], destination: Path) -> list[dict]:
     return entries
 
 
+def receipt_relative(entry: dict) -> Path:
+    return Path(*PurePosixPath(entry["path"].replace("\\", "/")).parts)
+
+
+def require_unchanged(home: Path, paths: list[Path], backup: Path, operation: str) -> None:
+    for target in paths:
+        if not same_path(target, backup / target.relative_to(home)):
+            raise SetupError(f"managed file changed after {operation} snapshot: {target}")
+
+
 def restore(home: Path, source: Path, entries: list[dict]) -> None:
     for entry in entries:
-        relative = Path(*PurePosixPath(entry["path"].replace("\\", "/")).parts)
+        relative = receipt_relative(entry)
         path = home / relative
         remove(path)
         if entry["existed"]:
             copy_path(source / relative, path)
-        if entry["existed"] and not path_landed(source / relative, path):
+        if entry["existed"] and not same_path(source / relative, path):
             raise SetupError(f"restore verification failed: {path}")
         if not entry["existed"] and (path.exists() or path.is_symlink()):
             raise SetupError(f"restore verification failed: {path}")
 
 
-def managed(home: Path, version: str = "v1", binary: Path | None = None) -> list[Path]:
-    version = multi_agent_version(version)
-    paths = [home / "config.toml", home / f"models-casefile-{version}.json"]
-    if binary is not None:
-        paths.append(binary)
-    return paths
+def catalog_target(home: Path, value: object) -> Path | None:
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        return (home / Path(value).expanduser()).resolve()
+    except (OSError, RuntimeError, ValueError):
+        return None
+
+
+def detach_catalog_setting(data: bytes, document: dict) -> tuple[bytes, bytes]:
+    remainder = {name: value for name, value in document.items() if name != CATALOG_KEY}
+    for match in CATALOG_ASSIGNMENT.finditer(data):
+        candidate = data[:match.start()] + data[match.end():]
+        try:
+            if tomllib.loads(candidate.decode("utf-8")) == remainder:
+                return candidate, match[0]
+        except tomllib.TOMLDecodeError:
+            continue
+    return data, b""
+
+
+def legacy_catalog_recovery(home: Path, config: bytes, previous: tuple[Path, dict] | None) -> tuple[bytes, list[dict]]:
+    if previous is None:
+        return config, []
+    receipt_path, receipt_data = previous
+    tracked = {entry["path"]: entry for entry in receipt_data["before"] if entry["path"] in LEGACY_CATALOGS}
+    if not tracked:
+        return config, []
+    home = home.resolve()
+    document = tomllib.loads(config.decode("utf-8"))
+    active = catalog_target(home, document.get(CATALOG_KEY))
+    selected = f"models-casefile-{receipt_multi_agent_version(receipt_data)}.json"
+    if selected in tracked and active == home / selected and (active.is_file() or not active.exists()):
+        detached, setting = detach_catalog_setting(config, document)
+        if setting:
+            original = receipt_path.parent / "before/config.toml"
+            if any(entry["path"] == "config.toml" and entry["existed"] for entry in receipt_data["before"]):
+                before = original.read_bytes()
+                before_document = tomllib.loads(before.decode("utf-8"))
+                if CATALOG_KEY in before_document:
+                    _, original_setting = detach_catalog_setting(before, before_document)
+                    if not original_setting:
+                        raise SetupError("original model catalog setting cannot be restored from the receipt")
+                    detached = original_setting.rstrip(b"\r\n") + b"\n" + detached
+            config = detached
+            active = None
+    recovery = []
+    for name, entry in tracked.items():
+        path = home / name
+        if path == active or path.is_symlink() or (path.exists() and not path.is_file()):
+            continue
+        if path.is_file() or entry["existed"]:
+            recovery.append(entry)
+    return config, recovery
 
 
 def pointer(home: Path) -> Path:
@@ -729,8 +762,11 @@ def prepare(
     home: Path,
     executable: str,
     planning_root: Path | None = None,
-    version: str = "v1",
+    version: str | None = None,
 ) -> dict:
+    previous = receipt(home, None) if pointer(home).is_file() else None
+    if version is None:
+        version = receipt_multi_agent_version(previous[1]) if previous else "v1"
     version = multi_agent_version(version)
     root, manifest = plugin_root(root)
     planning = casefile_runtime.planning_root(planning_root or root)
@@ -739,18 +775,12 @@ def prepare(
     casefile_runtime.probe(runtime["source"], manifest["version"], planning)
     environment = {**os.environ, "CODEX_HOME": str(home)}
     plugin = discover(executable, environment, manifest["version"])
-    catalog_path = home / f"models-casefile-{version}.json"
     config_path = home / "config.toml"
     current = config_path.read_bytes() if config_path.is_file() else b""
-    previous = receipt(home, None) if pointer(home).is_file() else None
+    config, catalog_recovery = legacy_catalog_recovery(home, current, previous)
     if previous is not None:
-        current = unowned_config(current)
-    # Build and verify the candidate before asking Codex for its model list.
-    config = config_candidate(current, root, catalog_path, version, binary, planning)
-    profiles_path = root / "config/profiles.toml"
-    projection = acquire_models(executable, profiles_path)
-    require_available_models(projection, pinned_models(profiles_path))
-    catalog, catalog_models = catalog_replacement(profiles_path, version)
+        config = unowned_config(config)
+    config = config_candidate(config, root, version, binary, planning)
     return {
         "root": root,
         "home": home,
@@ -758,9 +788,9 @@ def prepare(
         "environment": environment,
         "version": plugin["version"],
         "multi_agent_version": version,
+        "current_config": current,
         "config": config,
-        "catalog": catalog,
-        "catalog_models": catalog_models,
+        "catalog_recovery": catalog_recovery,
         "planning_root": planning,
         "runtime": runtime,
         "binary": binary,
@@ -770,16 +800,22 @@ def prepare(
 
 def preview(plan: dict) -> dict:
     home = plan["home"]
+    previous = tomllib.loads(plan["current_config"].decode("utf-8")).get(CATALOG_KEY)
+    updated = tomllib.loads(plan["config"].decode("utf-8"))
+    selected = updated.get(CATALOG_KEY)
     return {
         "operation": "install",
         "plugin_version": plan["version"],
         "config": str(home / "config.toml"),
-        "catalog": str(home / f"models-casefile-{plan['multi_agent_version']}.json"),
         "multi_agent_version": plan["multi_agent_version"],
         "receipt_root": str(home / "backups/casefile"),
-        "catalog_models": plan["catalog_models"],
+        "legacy_catalog_recovery": [
+            {"path": str(home / entry["path"]), "action": "restore" if entry["existed"] else "remove"}
+            for entry in plan["catalog_recovery"]
+        ],
+        **({"legacy_catalog_setting": {"from": previous, "to": selected}} if previous != selected else {}),
         "minimum_agent_threads": MINIMUM_AGENT_THREADS,
-        "agent_threads": tomllib.loads(plan["config"].decode("utf-8"))["agents"]["max_threads"],
+        "agent_threads": updated["agents"]["max_threads"],
         "config_ownership": "marked key and table blocks",
         "restart_required": True,
         "planning_root": str(plan["planning_root"]),
@@ -790,29 +826,20 @@ def preview(plan: dict) -> dict:
 
 def doctor(plan: dict) -> None:
     result = command(
-        [
-            plan["executable"],
-            "--strict-config",
-            "doctor",
-            "--summary",
-            "--ascii",
-            "--no-color",
-        ],
+        [plan["executable"], "--strict-config", "doctor", "--json"],
         plan["environment"],
     )
-    if not re.search(r"\[ok\]\s+config\s+loaded", result.stdout + result.stderr):
-        raise SetupError(result.stderr.strip() or result.stdout.strip() or "config load failed")
-
-
-def verify_effective_catalog(plan: dict) -> None:
-    version = multi_agent_version(plan.get("multi_agent_version", "v1"))
-    profiles_path = plan["root"] / "config/profiles.toml"
-    projection = acquire_models(plan["executable"], profiles_path)
-    require_available_models(projection, pinned_models(profiles_path))
-    catalog_path = plan["home"] / f"models-casefile-{version}.json"
-    document = read_catalog(catalog_path)
-    cross_check_catalog(carried_models(profiles_path), document, "written Casefile catalog")
-    verify_catalog_selectors(document, version, "effective catalog")
+    try:
+        check = json.loads(result.stdout)["checks"]["config.load"]
+        status = check["status"]
+        summary = check["summary"]
+    except (ValueError, KeyError, TypeError) as error:
+        raise SetupError(result.stderr.strip() or "Codex doctor did not report config loading") from error
+    if status == "ok":
+        return
+    if status == "warning" and summary == "config loaded" and check.get("details", {}).get("config.toml parse") == "ok":
+        return
+    raise SetupError(f"Codex config load failed: {summary}")
 
 
 def install(plan: dict) -> dict:
@@ -829,33 +856,40 @@ def install(plan: dict) -> dict:
         )
     )
     secure_dir(receipt_dir)
-    paths = managed(home, plan["multi_agent_version"], plan["binary"])
-    rollback = snapshot(home, [*paths, pointer(home)], receipt_dir / "rollback")
+    config = home / "config.toml"
+    paths = [config, plan["binary"]]
+    retiring = [home / entry["path"] for entry in plan["catalog_recovery"]]
+    rollback_paths = [*paths, *retiring, pointer(home)]
+    rollback = snapshot(home, rollback_paths, receipt_dir / "rollback")
     if plan["previous"] is None:
         before = snapshot(home, paths, receipt_dir / "before")
     else:
         previous_path, previous_value = plan["previous"]
-        before = copy.deepcopy(previous_value["before"])
-        copy_path(previous_path.parent / "before", receipt_dir / "before")
+        before = [entry for entry in previous_value["before"] if entry["path"] not in LEGACY_CATALOGS]
+        for entry in before:
+            if entry["existed"]:
+                relative = receipt_relative(entry)
+                copy_path(previous_path.parent / "before" / relative, receipt_dir / "before" / relative)
         recorded = {entry["path"] for entry in before}
         newly_owned = [path for path in paths if path.relative_to(home).as_posix() not in recorded]
         before.extend(snapshot(home, newly_owned, receipt_dir / "before"))
+    if (config.read_bytes() if config.is_file() else b"") != plan["current_config"]:
+        raise SetupError("Codex configuration changed during setup; preview again")
+    require_unchanged(home, rollback_paths, receipt_dir / "rollback", "setup")
     try:
-        config, catalog = paths[:2]
         casefile_runtime.atomic_copy(plan["runtime"]["source"], plan["binary"])
         casefile_runtime.require_landed(plan["binary"])
         casefile_runtime.probe(plan["binary"], plan["version"], plan["planning_root"])
         atomic_write(config, plan["config"], 0o600)
-        atomic_write(catalog, plan["catalog"], 0o600)
+        if retiring:
+            restore(home, plan["previous"][0].parent / "before", plan["catalog_recovery"])
         verify_config(
-            config.read_bytes(), plan["root"], catalog, plan["multi_agent_version"],
+            config.read_bytes(), plan["root"], plan["multi_agent_version"],
             plan["binary"], plan["planning_root"],
         )
-        read_catalog(catalog)
         doctor(plan)
-        verify_effective_catalog(plan)
         verify_config(
-            config.read_bytes(), plan["root"], catalog, plan["multi_agent_version"],
+            config.read_bytes(), plan["root"], plan["multi_agent_version"],
             plan["binary"], plan["planning_root"],
         )
         receipt = {
@@ -937,26 +971,37 @@ def uninstall_preview(path: Path, value: dict) -> dict:
     }
 
 
+def uninstall_recovery(home: Path, path: Path, value: dict, current: bytes | None) -> tuple[bytes | None, list[dict]]:
+    before = value["before"]
+    if not before or before[0].get("path") != "config.toml":
+        raise SetupError("receipt config inventory is invalid")
+    previous = None
+    if pointer(home).is_file() and receipt(home, None)[0] == path.resolve():
+        previous = (path, value)
+    config, catalogs = legacy_catalog_recovery(home, current or b"", previous)
+    entries = [entry for entry in before[1:] if entry["path"] not in LEGACY_CATALOGS]
+    return unowned_config(config) if current is not None else None, [*entries, *catalogs]
+
+
 def show_uninstall_diffs(home: Path, path: Path, value: dict) -> None:
-    current = managed(home, receipt_multi_agent_version(value))[:2]
-    before = {
-        Path(*PurePosixPath(item["path"].replace("\\", "/")).parts): item
-        for item in value["before"]
-    }
+    config = home / "config.toml"
+    current = config.read_bytes() if config.is_file() else None
+    restored_config, recovery = uninstall_recovery(home, path, value, current)
     with tempfile.TemporaryDirectory(prefix="humans-md-uninstall-") as temporary:
         temporary = Path(temporary)
         missing = temporary / "missing"
         missing.touch()
-        for target in current:
-            relative = target.relative_to(home)
-            if target == current[0] and target.is_file():
-                restored = temporary / relative
-                restored.parent.mkdir(parents=True, exist_ok=True)
-                restored.write_bytes(unowned_config(target.read_bytes()))
-            elif before[relative]["existed"]:
-                restored = path.parent / "before" / relative
-            else:
-                restored = missing
+        targets = []
+        if restored_config is not None:
+            restored = temporary / "config.toml"
+            restored.write_bytes(restored_config)
+            targets.append((config, restored))
+        for entry in recovery:
+            if entry["path"] in LEGACY_CATALOGS:
+                relative = receipt_relative(entry)
+                original = path.parent / "before" / relative if entry["existed"] else missing
+                targets.append((home / relative, original))
+        for target, restored in targets:
             existing = target if target.exists() or target.is_symlink() else missing
             result = subprocess.run(
                 ["git", "diff", "--no-index", "--", str(existing), str(restored)],
@@ -972,44 +1017,37 @@ def show_uninstall_diffs(home: Path, path: Path, value: dict) -> None:
 
 
 def uninstall(home: Path, executable: str, path: Path, value: dict) -> dict:
+    config = home / "config.toml"
+    initial_config = config.read_bytes() if config.is_file() else None
+    restored_config, recovery = uninstall_recovery(home, path, value, initial_config)
     binaries = [
         home / Path(*PurePosixPath(relative.replace("\\", "/")).parts)
         for relative in value.get("owned_binaries", [])
     ]
-    recovery_paths = [
-        home / Path(*PurePosixPath(entry["path"].replace("\\", "/")).parts)
-        for entry in value["before"]
-    ]
-    current = list(dict.fromkeys([
-        *managed(home, receipt_multi_agent_version(value)), *binaries, *recovery_paths,
-    ]))
-    config = current[0]
-    rollback_dir = home / "backups/casefile" / (
-        "uninstall-" + datetime.datetime.now(datetime.UTC).strftime("%Y%m%dT%H%M%SZ")
-    )
-    secure_dir(rollback_dir.parent)
+    recovery_paths = [home / receipt_relative(entry) for entry in recovery]
+    current = list(dict.fromkeys([config, *binaries, *recovery_paths]))
+    backup_root = home / "backups/casefile"
+    secure_dir(backup_root)
+    rollback_dir = Path(tempfile.mkdtemp(
+        prefix=datetime.datetime.now(datetime.UTC).strftime("uninstall-%Y%m%dT%H%M%SZ-"),
+        dir=backup_root,
+    ))
     rollback_paths = current + [
         home / "plugins/cache/casefile",
         pointer(home),
     ]
     rollback = snapshot(home, rollback_paths, rollback_dir / "before")
     environment = {**os.environ, "CODEX_HOME": str(home)}
+    if (config.read_bytes() if config.is_file() else None) != initial_config:
+        raise SetupError(f"managed file changed after uninstall snapshot: {config}")
+    require_unchanged(home, rollback_paths, rollback_dir / "before", "uninstall")
     try:
-        before = value["before"]
-        if not before or before[0].get("path") != "config.toml":
-            raise SetupError("receipt config inventory is invalid")
-        restored_config = unowned_config(config.read_bytes()) if config.is_file() else None
-        for target in current:
-            snapshot_path = rollback_dir / "before" / target.relative_to(home)
-            if not same_path(target, snapshot_path):
-                raise SetupError(f"managed file changed after uninstall snapshot: {target}")
-        restore(home, path.parent / "before", before[1:])
-        if restored_config is None:
-            restore(home, path.parent / "before", before[:1])
-        elif restored_config or before[0]["existed"]:
-            atomic_write(config, restored_config, 0o600)
-        else:
-            remove(config)
+        restore(home, path.parent / "before", recovery)
+        if restored_config is not None:
+            if restored_config or value["before"][0]["existed"]:
+                atomic_write(config, restored_config, 0o600)
+            else:
+                remove(config)
         if value["remove_plugin"]:
             checked([executable, "plugin", "remove", PLUGIN_ID, "--json"], environment)
         pointer(home).unlink(missing_ok=True)
@@ -1053,22 +1091,10 @@ def main() -> int:
         if not arguments.codex_executable:
             raise SetupError("Codex executable was not found")  # kept: nothing can run without it
         if arguments.operation == "migrate-models":
-            spec = importlib.util.spec_from_file_location(
-                "codex_model_migration", Path(__file__).with_name("codex_model_migration.py")
-            )
-            migration = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(migration)
-            api = sys.modules[__name__]
-            plan = migration.prepare(api, arguments.plugin_root, home, arguments.codex_executable)
-            print(json.dumps(migration.preview(api, plan), indent=2, sort_keys=True))
-            if arguments.apply:
-                print(json.dumps(migration.apply(api, plan, arguments.expect_digest), indent=2))
-            else:
-                print("preview only; no integration files changed")
-            return 0
+            raise SetupError("use Casefile setup to retire an earlier Casefile catalog")
         if arguments.operation == "install":
             selections = arguments.multi_agent_version or []
-            selected_version = selections[-1] if selections else "v1"
+            selected_version = selections[-1] if selections else None
             plan = prepare(
                 arguments.plugin_root, home, arguments.codex_executable,
                 arguments.planning_root, selected_version,

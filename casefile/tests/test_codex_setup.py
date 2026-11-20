@@ -71,8 +71,12 @@ class FakeCodex:
             self.installed = False
             return self.result(args, {})
         if "doctor" in args:
-            output = "Configuration\n  [ok] config loaded\n" if self.doctor_ok else "failed\n"
-            return subprocess.CompletedProcess(args, 0 if self.doctor_ok else 2, output, "")
+            check = {
+                "status": "warning" if self.doctor_ok else "error",
+                "summary": "config loaded" if self.doctor_ok else "failed",
+                "details": {"config.toml parse": "ok"} if self.doctor_ok else {},
+            }
+            return self.result(args, {"checks": {"config.load": check}}, 1 if self.doctor_ok else 2)
         raise AssertionError(args)
 
 
@@ -177,23 +181,58 @@ class CodexSetupTests(unittest.TestCase):
             setup.casefile_runtime.probe = previous_probe
             setup.list_codex_models.listing = previous_listing
 
-    def test_active_models_install_and_uninstall_preserve_unowned_config(self):
+    def legacy_install(self, plugin, home, *, version, catalogs, schema=6):
+        config = home / "config.toml"
+        receipt_dir = home / "backups/casefile/legacy-install"
+        paths = [home / name for name in catalogs]
+        binary = home / "casefile/runtime/0.9.0/local/casefile"
+        before = setup.snapshot(home, [config, *paths, binary] if schema == 6 else [config, *paths], receipt_dir / "before")
+        binary.parent.mkdir(parents=True)
+        binary.write_bytes(b"old runtime")
+        configuration = config.read_bytes()
+        configuration, _ = setup.detach_catalog_setting(configuration, tomllib.loads(configuration.decode()))
+        candidate = setup.config_candidate(configuration, plugin, version, binary, home)
+        selected = home / f"models-casefile-{version}.json"
+        setting = f"model_catalog_json = {json.dumps(str(selected))}\n".encode()
+        config.write_bytes(setup.marked(setup.SCALAR_BEGIN, setting, setup.SCALAR_END) + candidate)
+        for path in paths:
+            path.write_bytes(catalogs[path.name])
+        receipt = {
+            "schema_version": schema,
+            "status": "installed",
+            "install_id": receipt_dir.name,
+            "plugin_version": "0.9.0",
+            "before": before,
+            "remove_plugin": True,
+            "remove_marketplace": False,
+        }
+        if schema >= 5:
+            receipt["multi_agent_version"] = version
+        if schema == 6:
+            receipt.update({
+                "casefile_binary": binary.relative_to(home).as_posix(),
+                "owned_binaries": [binary.relative_to(home).as_posix()],
+                "planning_root": str(home),
+            })
+        receipt_path = receipt_dir / "receipt.json"
+        receipt_path.write_bytes(setup.canonical(receipt))
+        pointer = setup.pointer(home)
+        pointer.parent.mkdir(parents=True)
+        pointer.write_bytes(setup.canonical({"receipt": str(receipt_path)}))
+        return receipt_path, receipt
+
+    def test_fresh_install_and_uninstall_preserve_unowned_config(self):
         with tempfile.TemporaryDirectory() as temporary:
             plugin, home, original, catalog, legacy = self.fixture(Path(temporary))
-            fake = FakeCodex(catalog)
+            fake = FakeCodex({"models": []})
+            cache = home / "models_cache.json"
+            cache.write_bytes(b"native Codex cache\n")
             with self.fake_command(fake):
                 plan = setup.prepare(plugin, home, "codex")
                 result = setup.install(plan)
-
-                selected = {
-                    model["slug"]: model
-                    for model in json.loads((home / "models-casefile-v1.json").read_bytes())["models"]
-                }
-                self.assertIsNone(selected["gpt-5.6-sol"]["multi_agent_version"])
-                self.assertNotEqual("upstream", selected["gpt-6-sol"]["base_instructions"])
-                self.assertTrue(legacy.exists())
-
                 config = home / "config.toml"
+                self.assertNotIn("model_catalog_json", tomllib.loads(config.read_text()))
+                self.assertFalse(list(home.glob("models-casefile-*.json")))
                 config.write_bytes(config.read_bytes().replace(b"pragmatic", b"friendly"))
                 marketplace = (
                     b"\n[marketplaces.humans-md]\n"
@@ -221,170 +260,200 @@ class CodexSetupTests(unittest.TestCase):
                 self.assertFalse(fake.installed)
                 self.assertTrue(fake.marketplace)
                 self.assertEqual("installed", result["status"])
-                self.assertEqual(3, fake.model_acquisition_calls)
+                self.assertEqual(0, fake.model_acquisition_calls)
+                self.assertEqual(b"native Codex cache\n", cache.read_bytes())
                 self.assertFalse(any("debug" in call for call in fake.calls))
 
-    def test_v1_and_v2_lifecycle_record_selected_catalog_and_preserve_other_variant(self):
+    def test_fresh_v1_and_v2_setup_never_claim_existing_catalogs(self):
         for version in ("v1", "v2"):
             with self.subTest(version=version), tempfile.TemporaryDirectory() as temporary:
-                plugin, home, original, catalog, _ = self.fixture(Path(temporary))
-                other = home / f"models-casefile-{'v2' if version == 'v1' else 'v1'}.json"
-                other.write_bytes(b'{"unowned": true}\n')
-                catalog["models"] = [
-                    model for model in catalog["models"]
-                    if model["slug"] not in {"gpt-6.1-sol", "gpt-6-sol", "gpt-6-luna"}
-                ]
-                fake = FakeCodex(catalog)
+                plugin, home, original, _, _ = self.fixture(Path(temporary))
+                config = home / "config.toml"
+                original = b'model_catalog_json = "models-casefile-v1.json"\n' + original
+                config.write_bytes(original)
+                unowned = {
+                    home / f"models-casefile-{variant}.json": variant.encode()
+                    for variant in ("v1", "v2")
+                }
+                for path, data in unowned.items():
+                    path.write_bytes(data)
+                fake = FakeCodex({"models": []})
                 with self.fake_command(fake):
                     plan = setup.prepare(plugin, home, "codex", version=version)
-                    self.assertEqual(version, setup.preview(plan)["multi_agent_version"])
+                    self.assertEqual([], setup.preview(plan)["legacy_catalog_recovery"])
                     result = setup.install(plan)
                     receipt_path, receipt = setup.receipt(home, Path(result["receipt"]))
                     self.assertEqual(version, receipt["multi_agent_version"])
-                    self.assertEqual(version, setup.uninstall_preview(receipt_path, receipt)["multi_agent_version"])
-                    selected = json.loads((home / f"models-casefile-{version}.json").read_bytes())["models"]
-                    selectors = {
-                        model["slug"]: model.get("multi_agent_version") for model in selected
-                    }
-                    if version == "v1":
-                        self.assertTrue(all(selectors[model] is None for model in setup.V1_SELECTOR_MODELS))
-                    else:
-                        self.assertTrue(all(value == "v2" for value in selectors.values()))
-                    document = tomllib.loads((home / "config.toml").read_text(encoding="ascii"))
+                    self.assertFalse(setup.LEGACY_CATALOGS & {entry["path"] for entry in receipt["before"]})
+                    document = tomllib.loads(config.read_text())
+                    self.assertEqual("models-casefile-v1.json", document["model_catalog_json"])
                     self.assertEqual(version == "v1", document["features"]["multi_agent"])
                     self.assertEqual(version == "v2", document["features"]["multi_agent_v2"])
                     self.assertEqual(2, document["agents"]["max_depth"])
                     self.assertEqual(12, document["agents"]["max_threads"])
                     setup.uninstall(home, "codex", receipt_path, receipt)
-                self.assertEqual(original, (home / "config.toml").read_bytes())
-                self.assertEqual(b'{"unowned": true}\n', other.read_bytes())
-                self.assertFalse((home / f"models-casefile-{version}.json").exists())
+                self.assertEqual(0, fake.model_acquisition_calls)
+                self.assertEqual(original, config.read_bytes())
+                self.assertEqual(unowned, {path: path.read_bytes() for path in unowned})
 
-
-    def test_verification_rejects_v2_mixed_feature_and_catalog_states(self):
+    def test_verification_rejects_mixed_feature_flags(self):
         with tempfile.TemporaryDirectory() as temporary:
             plugin, home, _, catalog, _ = self.fixture(Path(temporary))
             with self.fake_command(FakeCodex(catalog)):
                 plan = setup.prepare(plugin, home, "codex", version="v2")
             mixed = plan["config"].replace(b"multi_agent_v2 = true", b"multi_agent_v2 = false")
             with self.assertRaisesRegex(setup.SetupError, "V2 feature flags"):
-                setup.verify_config(mixed, plugin, home / "models-casefile-v2.json", "v2")
-            catalog["models"][0]["multi_agent_version"] = None
-            with self.fake_command(FakeCodex(catalog)):
-                (home / "models-casefile-v2.json").write_bytes(setup.canonical(catalog))
-                with self.assertRaisesRegex(setup.SetupError, "did not activate V2"):
-                    setup.verify_effective_catalog(plan)
+                setup.verify_config(mixed, plugin, "v2")
 
-    def test_verification_rejects_invalid_v1_owned_selector(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            plugin, home, _, catalog, _ = self.fixture(Path(temporary))
-            with self.fake_command(FakeCodex(catalog)):
-                plan = setup.prepare(plugin, home, "codex", version="v1")
-                written = json.loads(plan["catalog"])
-                selected = {
-                    model["slug"]: model for model in written["models"]
-                }
-                selected["gpt-5.6-sol"]["multi_agent_version"] = "v2"
-                (home / "models-casefile-v1.json").write_bytes(setup.canonical(written))
-                with self.assertRaisesRegex(setup.SetupError, "did not activate V1"):
-                    setup.verify_effective_catalog(plan)
-
-    def test_existing_v1_receipt_without_version_remains_uninstallable(self):
+    def test_legacy_v1_uninstall_restores_displaced_setting_and_file(self):
         with tempfile.TemporaryDirectory() as temporary:
             plugin, home, original, catalog, _ = self.fixture(Path(temporary))
-            fake = FakeCodex(catalog)
-            with self.fake_command(fake):
-                result = setup.install(setup.prepare(plugin, home, "codex"))
-                receipt_path = Path(result["receipt"])
-                legacy = json.loads(receipt_path.read_bytes())
-                legacy["schema_version"] = 4
-                del legacy["multi_agent_version"]
-                receipt_path.write_bytes(setup.canonical(legacy))
-                checked_path, receipt = setup.receipt(home, receipt_path)
-                self.assertEqual("v1", setup.receipt_multi_agent_version(receipt))
-                setup.uninstall(home, "codex", checked_path, receipt)
-            self.assertEqual(original, (home / "config.toml").read_bytes())
-
-    def test_legacy_receipt_upgrades_side_by_side_and_uninstalls_to_original(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            plugin, home, original, catalog, _ = self.fixture(Path(temporary))
-            fake = FakeCodex(catalog)
-            with self.fake_command(fake):
-                first = setup.install(setup.prepare(plugin, home, "codex"))
-                first_path = Path(first["receipt"])
-                legacy = json.loads(first_path.read_bytes())
-                legacy["schema_version"] = 5
-                legacy["plugin_version"] = "0.3.4"
-                legacy.pop("casefile_binary")
-                legacy.pop("planning_root")
-                legacy.pop("artifact_sha256", None)
-                legacy.pop("owned_binaries")
-                legacy["before"] = legacy["before"][:2]
-                first_path.write_bytes(setup.canonical(legacy))
-                owned_catalog = home / "models-casefile-v1.json"
-                owned = json.loads(owned_catalog.read_bytes())
-                owned["upgrade_owned_marker"] = "retained"
-                owned_catalog.write_bytes(setup.canonical(owned))
-                (home / "models_cache.json").write_bytes(b"not JSON\n")
-                upgrade_plan = setup.prepare(plugin, home, "codex")
-                self.assertNotIn("upgrade_owned_marker", json.loads(upgrade_plan["catalog"]))
-                self.assertEqual(b"not JSON\n", (home / "models_cache.json").read_bytes())
-                upgraded = setup.install(upgrade_plan)
-                receipt_path, receipt = setup.receipt(home, Path(upgraded["receipt"]))
-                self.assertEqual(6, receipt["schema_version"])
-                self.assertTrue((home / receipt["casefile_binary"]).is_file())
+            config = home / "config.toml"
+            original = b'model_catalog_json = "foreign.json" # original host setting\n' + original
+            config.write_bytes(original)
+            v1 = home / "models-casefile-v1.json"
+            v1.write_bytes(b"")  # An empty original is still recovery data.
+            v2 = home / "models-casefile-v2.json"
+            v2.write_bytes(b"untracked v2")
+            receipt_path, receipt = self.legacy_install(
+                plugin, home, version="v1", catalogs={v1.name: b"legacy v1"}, schema=4,
+            )
+            config.write_bytes(config.read_bytes().replace(b"pragmatic", b"friendly"))
+            before = config.read_bytes()
+            self.assertEqual("v1", setup.receipt_multi_agent_version(receipt))
+            with self.fake_command(FakeCodex(catalog)):
                 setup.uninstall(home, "codex", receipt_path, receipt)
-            self.assertEqual(original, (home / "config.toml").read_bytes())
+            self.assertEqual(original.replace(b"pragmatic", b"friendly"), config.read_bytes())
+            self.assertEqual(b"", v1.read_bytes())
+            self.assertEqual(b"untracked v2", v2.read_bytes())
+            backups = list((home / "backups/casefile").glob("uninstall-*"))
+            self.assertEqual(before, (backups[0] / "before/config.toml").read_bytes())
+            self.assertEqual(b"legacy v1", (backups[0] / "before" / v1.name).read_bytes())
 
+    def test_v2_upgrade_preserves_host_removed_or_replaced_override(self):
+        for override in (None, "replacement.json"):
+            with self.subTest(override=override), tempfile.TemporaryDirectory() as temporary:
+                plugin, home, original, catalog, _ = self.fixture(Path(temporary))
+                config = home / "config.toml"
+                config.write_bytes(b'model_catalog_json = "displaced.json"\n' + original)
+                v1 = home / "models-casefile-v1.json"
+                v1.write_bytes(b"unproven v1")
+                v2 = home / "models-casefile-v2.json"
+                _, old = self.legacy_install(
+                    plugin, home, version="v2", catalogs={v2.name: b"later regular bytes"},
+                )
+                self.assertNotIn(v1.name, {entry["path"] for entry in old["before"]})
+                current, _ = setup.detach_catalog_setting(
+                    config.read_bytes(), tomllib.loads(config.read_text()),
+                )
+                setting = f"model_catalog_json = {json.dumps(override)}\n".encode() if override else b""
+                config.write_bytes(setting + current)
+                cache = home / "models_cache.json"
+                cache.write_bytes(b"native cache")
+                with self.fake_command(FakeCodex(catalog)):
+                    plan = setup.prepare(plugin, home, "codex")
+                    self.assertEqual("v2", plan["multi_agent_version"])
+                    self.assertEqual(
+                        [{"path": str(v2), "action": "remove"}],
+                        setup.preview(plan)["legacy_catalog_recovery"],
+                    )
+                    upgrade = setup.install(plan)
+                    self.assertEqual(override, tomllib.loads(config.read_text()).get("model_catalog_json"))
+                    self.assertFalse(v2.exists())
+                    self.assertEqual(b"later regular bytes", (Path(upgrade["receipt"]).parent / "rollback" / v2.name).read_bytes())
+                    repeat = setup.prepare(plugin, home, "codex")
+                    self.assertEqual([], setup.preview(repeat)["legacy_catalog_recovery"])
+                    setup.install(repeat)
+                    receipt_path, receipt = setup.receipt(home, None)
+                    self.assertFalse(setup.LEGACY_CATALOGS & {entry["path"] for entry in receipt["before"]})
+                    setup.uninstall(home, "codex", receipt_path, receipt)
+                self.assertEqual(setting + original, config.read_bytes())
+                self.assertEqual(b"unproven v1", v1.read_bytes())
+                self.assertFalse(v2.exists())
+                self.assertEqual(b"native cache", cache.read_bytes())
 
-    def test_missing_each_required_model_is_rejected_before_v1_or_v2_mutation(self):
-        for version in ("v1", "v2"):
-            # A pinned model is exempt: Codex may stop projecting it while it is still required.
-            pinned = setup.pinned_models(
-                Path(__file__).resolve().parents[1] / "adapters/codex/profiles.toml"
-            )
-            for missing in sorted(setup.REQUIRED_MODELS - pinned):
-                with self.subTest(version=version, missing=missing), tempfile.TemporaryDirectory() as temporary:
-                    plugin, home, original, catalog, _ = self.fixture(Path(temporary))
-                    fallback = {
-                        "models": [
-                            model for model in catalog["models"] if model["slug"] != missing
-                        ]
-                    }
-                    with self.fake_command(FakeCodex(fallback)):
-                        with self.assertRaisesRegex(
-                            setup.SetupError,
-                            f"Codex lacks required models: {missing}",
-                        ):
-                            setup.prepare(plugin, home, "codex", version=version)
-                    self.assertEqual(original, (home / "config.toml").read_bytes())
-                    self.assertFalse((home / f"models-casefile-{version}.json").exists())
-                    self.assertFalse((home / "backups/casefile").exists())
+    def test_mixed_variant_upgrade_recovers_earlier_state_or_preserves_live_selection(self):
+        for host_selected in (False, True):
+            with self.subTest(host_selected=host_selected), tempfile.TemporaryDirectory() as temporary:
+                plugin, home, original, catalog, _ = self.fixture(Path(temporary))
+                config = home / "config.toml"
+                config.write_bytes(b'model_catalog_json = "earlier.json" # host original\n' + original)
+                v1, v2 = (home / f"models-casefile-{variant}.json" for variant in ("v1", "v2"))
+                v1.write_bytes(b"original v1")
+                self.legacy_install(
+                    plugin, home, version="v2", catalogs={v1.name: b"legacy v1", v2.name: b"legacy v2"},
+                )
+                if host_selected:
+                    config.write_bytes(config.read_bytes().replace(
+                        json.dumps(str(v2)).encode(), json.dumps(str(v1)).encode(),
+                    ))
+                with self.fake_command(FakeCodex(catalog)):
+                    plan = setup.prepare(plugin, home, "codex", version="v1")
+                    expected = str(v1) if host_selected else "earlier.json"
+                    self.assertEqual(expected, tomllib.loads(plan["config"].decode()).get("model_catalog_json"))
+                    setup.install(plan)
+                    self.assertEqual(expected, tomllib.loads(config.read_text()).get("model_catalog_json"))
+                    self.assertEqual(b"legacy v1" if host_selected else b"original v1", v1.read_bytes())
+                    self.assertFalse(v2.exists())
+                    receipt_path, receipt = setup.receipt(home, None)
+                    setup.uninstall(home, "codex", receipt_path, receipt)
+                self.assertEqual(expected, tomllib.loads(config.read_text()).get("model_catalog_json"))
+                self.assertEqual(b"legacy v1" if host_selected else b"original v1", v1.read_bytes())
 
-    def test_unknown_projected_alias_does_not_change_replacement_catalog(self):
+    def test_legacy_catalog_recovery_rolls_back_on_failure_and_retries(self):
+        for operation in ("install", "uninstall"):
+            with self.subTest(operation=operation), tempfile.TemporaryDirectory() as temporary:
+                plugin, home, original, catalog, _ = self.fixture(Path(temporary))
+                config = home / "config.toml"
+                original = b'model_catalog_json = "foreign.json"\n' + original
+                config.write_bytes(original)
+                v1, v2 = (home / f"models-casefile-{variant}.json" for variant in ("v1", "v2"))
+                v1.write_bytes(b"original v1")
+                receipt_path, receipt = self.legacy_install(
+                    plugin, home, version="v2", catalogs={v1.name: b"managed v1", v2.name: b"managed v2"},
+                )
+                plugin_cache = home / "plugins/cache/casefile"
+                plugin_cache.mkdir(parents=True)
+                (plugin_cache / "plugin.json").write_bytes(b"retained plugin cache")
+                pointer = setup.pointer(home)
+                tracked = (config, v1, v2, pointer, receipt_path)
+                before = {path: path.read_bytes() for path in tracked}
+                fake = FakeCodex(catalog)
+                with self.fake_command(fake):
+                    if operation == "install":
+                        plan = setup.prepare(plugin, home, "codex", version="v2")
+                        fake.doctor_ok = False
+                        with self.assertRaisesRegex(setup.SetupError, "rollback verified"):
+                            setup.install(plan)
+                        fake.doctor_ok = True
+                        self.assertEqual(before, {path: path.read_bytes() for path in tracked})
+                        setup.install(plan)
+                        receipt_path, receipt = setup.receipt(home, None)
+                    else:
+                        with mock.patch.object(setup, "checked", side_effect=setup.SetupError("plugin removal failed")):
+                            with self.assertRaisesRegex(setup.SetupError, "rollback verified"):
+                                setup.uninstall(home, "codex", receipt_path, receipt)
+                        self.assertEqual(before, {path: path.read_bytes() for path in tracked})
+                    setup.uninstall(home, "codex", receipt_path, receipt)
+                self.assertEqual(original, config.read_bytes())
+                self.assertEqual(b"original v1", v1.read_bytes())
+                self.assertFalse(v2.exists())
+                self.assertFalse(pointer.exists())
+
+    def test_old_receipt_cannot_reclaim_a_reused_catalog_after_upgrade(self):
         with tempfile.TemporaryDirectory() as temporary:
-            plugin, home, _, projection, _ = self.fixture(Path(temporary))
-            projection["models"].append(
-                {
-                    "slug": "gpt-5.6-sol-wm",
-                    "display_name": "GPT-5.6-Sol-WM",
-                    "visibility": "hide",
-                    "supported_reasoning_levels": [
-                        {
-                            "effort": "high",
-                            "description": "Greater reasoning depth for complex problems",
-                        }
-                    ],
-                }
+            plugin, home, original, catalog, _ = self.fixture(Path(temporary))
+            catalog_path = home / "models-casefile-v1.json"
+            old_path, old = self.legacy_install(
+                plugin, home, version="v1", catalogs={catalog_path.name: b"owned"},
             )
-            with self.fake_command(FakeCodex(projection)):
-                plan = setup.prepare(plugin, home, "codex", version="v2")
-            slugs = {
-                model["slug"] for model in json.loads(plan["catalog"])["models"]
-            }
-            self.assertNotIn("gpt-5.6-sol-wm", slugs)
-            self.assertEqual(setup.carried_models(plugin / "config/profiles.toml"), slugs)
-
+            with self.fake_command(FakeCodex(catalog)):
+                setup.install(setup.prepare(plugin, home, "codex"))
+                self.assertFalse(catalog_path.exists())
+                catalog_path.write_bytes(b"new host file")
+                setup.uninstall(home, "codex", old_path, old)
+            self.assertEqual(b"new host file", catalog_path.read_bytes())
+            self.assertEqual(original, (home / "config.toml").read_bytes())
 
     def test_config_replaces_owned_keys_but_preserves_host_thread_count(self):
         prior = (
@@ -401,7 +470,7 @@ class CodexSetupTests(unittest.TestCase):
             with self.fake_command(FakeCodex(catalog)):
                 plan = setup.prepare(plugin, home, "codex")
             document = tomllib.loads(plan["config"].decode("utf-8"))
-            self.assertEqual(str(home / "models-casefile-v1.json"), document["model_catalog_json"])
+            self.assertEqual("other.json", document["model_catalog_json"])
             self.assertEqual(str(plan["binary"]), document["mcp_servers"]["casefile"]["command"])
             self.assertTrue(document["features"]["multi_agent"])
             self.assertFalse(document["features"]["multi_agent_v2"])
@@ -532,23 +601,17 @@ class CodexSetupTests(unittest.TestCase):
             profile = plugin / "config/profiles.toml"
             profile.write_text(
                 profile.read_text(encoding="ascii").replace(
-                    "catalog/models.json",
-                    r"catalog\\models.json",
+                    'agent_file = "agents/',
+                    r'agent_file = "agents\\',
                 ),
                 encoding="ascii",
             )
             with self.fake_command(FakeCodex(catalog)):
                 plan = setup.prepare(plugin, home, "codex")
-                self.assertIn("gpt-5.6-sol", plan["catalog_models"])
 
                 def reformat_written_configuration(current):
                     config = current["home"] / "config.toml"
                     config.write_bytes(config.read_bytes().replace(b"\n", b"\r\n"))
-                    catalog_path = current["home"] / "models-casefile-v1.json"
-                    document = json.loads(catalog_path.read_bytes())
-                    catalog_path.write_bytes(
-                        (json.dumps(document, separators=(", ", ": ")) + "\r\n").encode("ascii")
-                    )
 
                 with mock.patch.object(setup, "doctor", side_effect=reformat_written_configuration):
                     self.assertEqual("installed", setup.install(plan)["status"])
@@ -586,7 +649,7 @@ class CodexSetupTests(unittest.TestCase):
                 with contextlib.redirect_stdout(output):
                     setup.show_uninstall_diffs(home, receipt_path, receipt)
                 self.assertIn("diff --git", output.getvalue())
-                self.assertIn("# >>> casefile setup scalars >>>", output.getvalue())
+                self.assertIn("# >>> casefile setup tables >>>", output.getvalue())
                 setup.uninstall(home, "codex", receipt_path, receipt)
 
     def test_uninstall_aborts_when_a_managed_file_changes_after_snapshot(self):
@@ -609,7 +672,8 @@ class CodexSetupTests(unittest.TestCase):
                 with mock.patch.object(setup, "snapshot", snapshot):
                     with self.assertRaisesRegex(setup.SetupError, "changed after uninstall snapshot"):
                         setup.uninstall(home, "codex", receipt_path, receipt)
-                self.assertEqual(installed, contract.read_bytes())
+                self.assertEqual(installed + b"\nchanged_after_snapshot = true\n", contract.read_bytes())
+                self.assertTrue(setup.pointer(home).exists())
 
 
 if __name__ == "__main__":

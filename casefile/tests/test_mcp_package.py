@@ -132,7 +132,7 @@ class McpPackageTests(unittest.TestCase):
             for runtime in ("v1", "v2"):
                 with self.subTest(runtime=runtime):
                     data = setup.config_candidate(
-                        b"", codex, Path(temporary) / "catalog.json", runtime,
+                        b"", codex, runtime,
                         Path(temporary) / "casefile", Path(temporary),
                     )
                     agents = tomllib.loads(data.decode("ascii"))["agents"]
