@@ -108,7 +108,7 @@ for line in sys.stdin:
             for model in models
         ]), encoding="ascii")
 
-    def evidence(self, matrix, role, runtime="v2", *, locked=None):
+    def evidence(self, matrix, role, runtime="v2"):
         profile = next(worker["platform_profile"] for worker in matrix["workers"] if worker["role"] == role)
         fork = "fork_context" if runtime == "v1" else "fork_turns"
         return {
@@ -118,7 +118,7 @@ for line in sys.stdin:
             "fork_values": [False, True] if runtime == "v1" else ["none", "all"],
             "named_role_overrides": True,
             "models_scope": "exhaustive",
-            "roles": {profile: {} if locked is None else {"model": locked, "reasoning_effort": "high"}},
+            "roles": {profile: {}},
             "models": {SAVED: ["high"], OTHER: ["high"]},
         }
 
@@ -180,25 +180,41 @@ for line in sys.stdin:
         self.blocked(self.resolve(matrix, CHALLENGER, unavailable), "lacks a context-free named role")
         self.blocked(self.resolve(matrix, CHALLENGER, evidence, extra=("--platform-profile", "default")), "selected matrix")
 
-    def test_legacy_explicit_pair_can_use_a_matching_locked_registration_and_matrix_pin_alone_cannot(self):
+    def test_retired_writer_alias_uses_the_saved_pair_on_the_ordinary_role(self):
         matrix = self.matrix(IMPLEMENT)
         writer = next(worker for worker in matrix["workers"] if worker["role"] == WRITER)
-        legacy_model = writer.get("model", SAVED)
-        self.provider_models(legacy_model)
+        matrix_path = self.investigation / "strategy/implementation.toml"
+        profile_line = f'platform_profile = "{writer["platform_profile"]}"\n'
+        matrix_path.write_text(matrix_path.read_text().replace(
+            profile_line, profile_line + 'model = "gpt-6-astra"\nreasoning = "high"\n',
+        ))
+        legacy_model = "gpt-5.6-sol"
+        self.provider_models(legacy_model, OTHER)
         self.progress()
-        evidence = self.evidence(matrix, WRITER, "v1", locked=legacy_model)
+        evidence = self.evidence(matrix, WRITER, "v1")
+        evidence["models"][legacy_model] = ["high"]
         self.blocked(self.resolve(matrix, WRITER, evidence), "needs an explicit model and effort selection")
         legacy = self.investigation / "strategy/bindings.toml"
         legacy.write_text(
             'schema_version = 1\nadapter = "codex"\nrole = "implementation-writer"\n'
             f'model = "{legacy_model}"\nreasoning_effort = "high"\n[resolution]\n'
-            f'mode = "named_profile"\nvalue = "{IMPLEMENT}={writer["platform_profile"]}"\n',
+            f'mode = "named_profile"\nvalue = "{IMPLEMENT}=casefile-implementation-writer-gpt-5-6-sol-high"\n',
             encoding="ascii",
         )
         before = legacy.read_bytes()
         resolved = self.resolve(matrix, WRITER, evidence)
-        self.assertEqual({"agent_type": writer["platform_profile"], "fork_context": False}, self.spawn(resolved))
+        self.assertEqual(
+            {
+                "agent_type": writer["platform_profile"],
+                "fork_context": False,
+                "model": legacy_model,
+                "reasoning_effort": "high",
+            },
+            self.spawn(resolved),
+        )
         self.assertEqual("legacy_writer_binding", json.loads(resolved.stdout)["source"])
+        self.provider_models(OTHER)
+        self.blocked(self.resolve(matrix, WRITER, evidence), f"saved {legacy_model} / high")
         self.assertEqual(before, legacy.read_bytes())
 
     def test_assignment_changed_during_provider_discovery_requires_another_check(self):

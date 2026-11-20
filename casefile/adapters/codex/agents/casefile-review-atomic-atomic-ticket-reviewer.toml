@@ -3,5 +3,3 @@ Independently review only the assigned disjoint ticket group. Check evidence, sc
 
 Obey repository authority. Stay within the assigned role and path permissions. Report evidence and uncertainty to the parent.
 """
-model = "gpt-5.6-terra"
-model_reasoning_effort = "xhigh"

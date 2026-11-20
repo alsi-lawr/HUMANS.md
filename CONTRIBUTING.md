@@ -260,9 +260,9 @@ for the exact ticket. See the
 [Codex delegation procedure](casefile/skills/casefile/references/codex-delegation.md).
 
 Use the [strategy assignments schema](casefile/casefile-workflow/schemas/strategy-assignments.md)
-and its Provider tools for current selection. `resolve-writer-binding.py offer` remains available
-for historical writer bindings and catalog migration. A historical binding can authorize a writer
-only when it explicitly records the pair and that pair passes the current delegation check.
+and its Provider tools for current selection. A historical explicit writer binding can use the
+ordinary named writer registration when its saved pair passes the current delegation check. The old
+alias entry in `[resolution]` identifies the applicable strategy for historical records.
 
 ### Workbench development
 

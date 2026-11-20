@@ -91,16 +91,11 @@ class CodexSetupTests(unittest.TestCase):
             shutil.copy2(ROOT / "casefile/adapters/codex" / name, plugin / "config" / name)
         shutil.copytree(ROOT / "casefile/adapters/codex/catalog", plugin / "config/catalog")
         shutil.copytree(ROOT / "casefile/adapters/codex/agents", plugin / "agents")
+        shutil.copytree(ROOT / "casefile/adapters/codex/matrices", plugin / "matrices")
         (plugin / "scripts").mkdir()
         shutil.copy2(ROOT / "casefile/adapters/shared/casefile_runtime.py", plugin / "scripts/casefile_runtime.py")
-        shutil.copy2(
-            ROOT / "casefile/adapters/codex/scripts/resolve-writer-binding.py",
-            plugin / "scripts/resolve-writer-binding.py",
-        )
-        shutil.copy2(
-            ROOT / "casefile/adapters/codex/scripts/list-codex-models.py",
-            plugin / "scripts/list-codex-models.py",
-        )
+        for name in ("list-codex-models.py", "offer-role-models.py", "resolve-role-assignment.py"):
+            shutil.copy2(ROOT / "casefile/adapters/codex/scripts" / name, plugin / "scripts" / name)
         rows = []
         for target in (
             "aarch64-apple-darwin", "aarch64-pc-windows-msvc", "aarch64-unknown-linux-musl",
@@ -495,38 +490,35 @@ class CodexSetupTests(unittest.TestCase):
                 setup.uninstall(home, "codex", receipt_path, receipt)
             self.assertEqual(original, config.read_bytes())
 
-    def test_writer_profile_and_runtime_override_drift_reject_before_model_export(self):
-        for route in ("named", "runtime"):
-            with self.subTest(route=route), tempfile.TemporaryDirectory() as temporary:
-                plugin, home, _, catalog, _ = self.fixture(Path(temporary))
-                profiles = tomllib.loads(
-                    (plugin / "config/profiles.toml").read_text(encoding="ascii")
-                )
-                rows = (
-                    profiles["writer_profiles"]
-                    if route == "named"
-                    else profiles["writer_runtime_overrides"]
-                )
-                agent = plugin / rows[0]["agent_file"]
-                if route == "named":
-                    agent.write_text(
-                        agent.read_text(encoding="ascii").replace(
-                            f'model = "{rows[0]["model"]}"', 'model = "wrong"'
-                        ),
-                        encoding="ascii",
-                    )
-                    diagnostic = "incoherent"
+    def test_incoherent_role_registration_fails_before_model_export(self):
+        for drift, diagnostic in (
+            ("agent model", "fixes a model or effort"),
+            ("registered effort", "fixes a model or effort"),
+            ("missing instructions", "lacks developer instructions"),
+            ("missing registration", "roles differ from the packaged profiles"),
+        ):
+            with self.subTest(drift=drift), tempfile.TemporaryDirectory() as temporary:
+                plugin, home, original, catalog, _ = self.fixture(Path(temporary))
+                name = "casefile-implement-ticket-batch-implementation-writer"
+                agent = plugin / "agents" / f"{name}.toml"
+                fragment = plugin / "config/config-fragment.toml.in"
+                header = f"[agents.{name}]\n"
+                if drift == "agent model":
+                    agent.write_text(agent.read_text() + 'model = "gpt-5.6-sol"\n')
+                elif drift == "registered effort":
+                    fragment.write_text(fragment.read_text().replace(
+                        header, header + 'model_reasoning_effort = "medium"\n',
+                    ))
+                elif drift == "missing instructions":
+                    agent.write_text('developer_instructions = " "\n')
                 else:
-                    agent.write_text(
-                        agent.read_text(encoding="ascii") + 'model = "gpt-5.6-sol"\n',
-                        encoding="ascii",
-                    )
-                    diagnostic = "fixes a model"
+                    fragment.write_text(fragment.read_text().replace(header, "[agents.custom]\n"))
                 fake = FakeCodex(catalog)
                 with self.fake_command(fake):
                     with self.assertRaisesRegex(setup.SetupError, diagnostic):
                         setup.prepare(plugin, home, "codex", version="v2")
                 self.assertEqual(0, fake.model_acquisition_calls)
+                self.assertEqual(original, (home / "config.toml").read_bytes())
 
     def test_portable_bytes_write_and_resource_separator(self):
         with tempfile.TemporaryDirectory() as temporary:

@@ -16,6 +16,9 @@ If the matrix has several named registrations for the role, pass the intended on
 `--platform-profile`. The resolver uses the caller's Codex executable and active home. Supply
 `--codex-executable` or `--codex-home` when the session uses a different executable or home.
 
+An applicable historical writer binding supplies its saved model and effort for the selected
+matrix's ordinary writer registration, including when the historical record names a retired alias.
+
 For an implementation writer, pass `--ticket-id` for the exact accepted ticket. Confirm role
 assignments before starting ticket progress. Set the ticket to canonical `in_progress` through the
 existing progress workflow, including any required correction transition. An already active ticket

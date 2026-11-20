@@ -101,11 +101,6 @@ def prepare(setup, root: Path, home: Path, executable: str) -> dict:
         "version": manifest["version"],
         "multi_agent_version": version,
         "catalog_models": identifiers,
-        "writer_defaults": [
-            {"strategy": row["strategy_id"], "model": row["model"], "reasoning": row["reasoning"]}
-            for row in tomllib.loads(profiles_path.read_text(encoding="ascii"))["matrix_profiles"]
-            if row["role"] == "implementation-writer"
-        ],
         "previous": (receipt_path, receipt),
         "observed": observed,
         "candidate": candidate,
@@ -127,7 +122,6 @@ def preview(setup, plan: dict) -> dict:
         "catalog": str(catalog),
         "config": str(config),
         "multi_agent_version": plan["multi_agent_version"],
-        "writer_defaults": plan["writer_defaults"],
         "catalog_changes": changes({m["slug"]: m for m in before}, {m["slug"]: m for m in after}),
         "profile_changes": changes(
             {k: v for k, v in old_profiles.items() if k.startswith("casefile-")},

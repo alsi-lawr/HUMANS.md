@@ -13,13 +13,15 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from _load import script
+from _load import ROOT, script
 import test_codex_setup as lifecycle
-from test_writer_binding import binding, model, PROFILES_PATH
 
 
 setup = lifecycle.setup
 migration = script("casefile/adapters/codex/scripts/codex_model_migration.py")
+PROFILES_PATH = ROOT / "casefile/adapters/codex/profiles.toml"
+WRITER = "casefile-implement-ticket-batch-implementation-writer"
+LEGACY_ALIAS = "casefile-implementation-writer-gpt-5-6-sol-high"
 
 
 def files(root: Path) -> dict[str, bytes]:
@@ -30,20 +32,10 @@ def legacy_package(plugin: Path) -> Path:
     legacy = plugin.with_name("pre-astra-plugin")
     shutil.copytree(plugin, legacy)
     profiles = legacy / "config/profiles.toml"
-    matrix, rest = profiles.read_text().split("[catalog]", 1)
-    source = matrix.replace('model = "gpt-6-astra"', 'model = "gpt-5.6-sol"') + "[catalog]" + rest
-    source = re.sub(
-        r"(?ms)^\[\[(?:catalog.targets|writer_profiles)\]\].*?(?=^\[\[|\Z)",
-        lambda match: "" if "gpt-6-astra" in match[0] else match[0], source,
-    )
-    profiles.write_text(source)
-    fragment = legacy / "config/config-fragment.toml.in"
-    fragment.write_text("".join(
-        block for block in re.split(r"(?m)(?=^\[agents\.)", fragment.read_text())
-        if not block.startswith("[agents.casefile-implementation-writer-gpt-6-astra-")
+    profiles.write_text(re.sub(
+        r'(?ms)^\[\[catalog.targets\]\]\nid = "gpt-6-astra"\n.*?(?=^\[\[|\Z)',
+        "", profiles.read_text(),
     ))
-    for path in (legacy / "agents").glob("casefile-implement-*-implementation-writer.toml"):
-        path.write_text(path.read_text().replace('model = "gpt-6-astra"', 'model = "gpt-5.6-sol"'))
     catalog = legacy / "config/catalog/models.json"
     document = json.loads(catalog.read_bytes())
     document["models"] = [m for m in document["models"] if m["slug"] != "gpt-6-astra"]
@@ -64,6 +56,16 @@ class CodexModelMigrationTests(unittest.TestCase):
                     setup, "V1_SELECTOR_MODELS", setup.V1_SELECTOR_MODELS - {"gpt-6-astra"}
                 ):
                     setup.install(setup.prepare(old_plugin, home, "codex", version=version))
+                writer = old_plugin / "agents" / f"{WRITER}.toml"
+                pinned = writer.read_text() + 'model = "gpt-5.6-sol"\nmodel_reasoning_effort = "high"\n'
+                writer.write_text(pinned)
+                alias = writer.with_name(f"{LEGACY_ALIAS}.toml")
+                alias.write_text(pinned)
+                config = home / "config.toml"
+                registration = f"\n[agents.{LEGACY_ALIAS}]\nconfig_file = {json.dumps(alias.as_posix())}\n"
+                config.write_bytes(config.read_bytes().replace(
+                    setup.TABLE_END, registration.encode("ascii") + setup.TABLE_END, 1,
+                ))
                 yield plugin, home, fake
 
     def test_upgrade_preserves_runtime_config_and_recovery_and_repeats_without_changes(self):
@@ -134,14 +136,16 @@ class CodexModelMigrationTests(unittest.TestCase):
             catalog.write_bytes(replacement)
             original_catalog = catalog.read_bytes()
             plan = migration.prepare(setup, plugin, home, "codex")
-            self.assertEqual([str(config)], migration.preview(setup, plan)["changed_files"])
+            preview = migration.preview(setup, plan)
+            self.assertEqual([str(config)], preview["changed_files"])
+            self.assertIn(LEGACY_ALIAS, preview["profile_changes"]["removed"])
             migration.apply(setup, plan, plan["approval_digest"])
             self.assertEqual(original_catalog, catalog.read_bytes())
-            astra_role = tomllib.loads(config.read_text())["agents"][
-                "casefile-implementation-writer-gpt-6-astra-high"
-            ]
-            definition = tomllib.loads(Path(astra_role["config_file"]).read_text())
-            self.assertEqual("gpt-6-astra", definition["model"])
+            roles = tomllib.loads(config.read_text())["agents"]
+            self.assertNotIn(LEGACY_ALIAS, roles)
+            definition = tomllib.loads(Path(roles[WRITER]["config_file"]).read_text())
+            self.assertTrue(definition["developer_instructions"])
+            self.assertFalse({"model", "model_reasoning_effort"} & definition.keys())
 
     def test_partial_write_failure_restores_the_previous_integration(self):
         with self.installed_legacy() as (plugin, home, fake):
@@ -263,34 +267,6 @@ class CodexModelMigrationTests(unittest.TestCase):
             result = setup.acquire_models("codex", PROFILES_PATH)
         self.assertIn("gpt-6-astra", {m["slug"] for m in result["models"]})
         self.assertTrue(all(not home.exists() for home in homes))
-
-    def test_legacy_offer_recommends_astra_and_retains_sol_on_both_runtimes(self):
-        for runtime, selector, mode in (
-            ("v1", None, "named_profile"),
-            ("v2", "v2", "runtime_override"),
-        ):
-            models = [
-                model("gpt-6-astra", ("high",), selector=selector),
-                model("gpt-5.6-sol", ("high",), selector=selector),
-            ]
-            with (
-                self.subTest(runtime=runtime),
-                mock.patch.object(binding, "active_runtime", return_value=runtime),
-                mock.patch.object(binding, "active_catalog", return_value={"models": models}),
-            ):
-                offer = binding.offer("codex", Path("/home"), PROFILES_PATH)
-                self.assertEqual(
-                    {"model": "gpt-6-astra", "reasoning_effort": "high", "available": True},
-                    offer["recommendation"],
-                )
-                self.assertEqual(
-                    {("gpt-6-astra", "high", mode), ("gpt-5.6-sol", "high", mode)},
-                    {
-                        (pair["model"], pair["reasoning_effort"], pair["resolution"]["mode"])
-                        for pair in offer["pairs"]
-                    },
-                )
-
 
 if __name__ == "__main__":
     unittest.main()

@@ -30,6 +30,6 @@ configuration, other catalog variant, and original pre-install recovery state. D
 writer bindings. A new recommendation is not consent to replace an existing writer.
 
 Report `migrated` or `unchanged` from the command result. A failure must remain a failure even when
-rollback succeeds. After migration, restart Codex to reload profiles and the catalog, then run
-`${CODEX_PLUGIN_ROOT}/scripts/resolve-writer-binding.py offer` against the same home to check the
-offered model/effort pairs. Report availability without selecting or persisting a binding.
+rollback succeeds. After migration, restart Codex to reload the profiles and catalog. Use
+`${CODEX_PLUGIN_ROOT}/scripts/offer-role-models.py` with live evidence for any named role whose
+availability the human asks to verify.

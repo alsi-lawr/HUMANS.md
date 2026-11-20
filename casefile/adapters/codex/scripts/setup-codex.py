@@ -186,7 +186,8 @@ def plugin_root(path: Path) -> tuple[Path, dict]:
         "runtime/artifacts.json",
         "scripts/casefile_runtime.py",
         "scripts/list-codex-models.py",
-        "scripts/resolve-writer-binding.py",
+        "scripts/offer-role-models.py",
+        "scripts/resolve-role-assignment.py",
     ):
         if not (root / relative).is_file():
             raise SetupError(f"installed plugin lacks {relative}")
@@ -522,68 +523,38 @@ def verify_config(
         ]:
             raise SetupError("Casefile MCP binding is incorrect")
     agents = document.get("agents", {})
-    matrix_rows = profiles.get("matrix_profiles", [])
-    writer_rows = profiles.get("writer_profiles", [])
-    override_rows = profiles.get("writer_runtime_overrides", [])
-    rows = [*matrix_rows, *writer_rows, *override_rows]
+    rows = profiles.get("matrix_profiles", [])
     names = [row.get("profile") for row in rows]
-    if any(not isinstance(name, str) or not name for name in names) or len(names) != len(set(names)):
-        raise SetupError("role profile names must be non-empty and unique")
-    targets = {target.get("id"): target for target in profiles.get("catalog", {}).get("targets", [])}
-    expected_v1 = {
-        (model, effort)
-        for model in V1_SELECTOR_MODELS
-        for effort in targets.get(model, {}).get("required_reasoning", [])
-    }
-    actual_v1 = {
-        (row.get("model"), row.get("reasoning")) for row in writer_rows
-    }
-    if actual_v1 != expected_v1 or any(
-        row.get("multi_agent_version") != "v1"
-        or row.get("role") != "implementation-writer"
-        or set(row.get("strategy_ids", []))
-        != {
-            "casefile-implement-ticket-batch",
-            "casefile-implement-ticket-batch-look-ahead",
-            "casefile-implement-pipeline",
-        }
-        for row in writer_rows
-    ):
-        raise SetupError("V1 writer profile catalog is incomplete or unsupported")
-    if {
-        row.get("strategy_id") for row in override_rows
-    } != {
-        "casefile-implement-ticket-batch",
-        "casefile-implement-ticket-batch-look-ahead",
-        "casefile-implement-pipeline",
-    } or any(
-        row.get("multi_agent_version") != "v2"
-        or row.get("role") != "implementation-writer"
-        or row.get("model_override") is not True
-        or row.get("reasoning_override") is not True
-        or not isinstance(row.get("fork_turns"), int)
-        or row["fork_turns"] <= 0
-        for row in override_rows
-    ):
-        raise SetupError("V2 writer runtime-override catalog is incomplete or unsupported")
+    if not names or any(not isinstance(name, str) or not name for name in names) or len(names) != len(set(names)):
+        raise SetupError("role profile names must be present and unique")
+    matrix_roles = set()
+    for source in (root / "matrices").glob("*.toml"):
+        matrix = tomllib.loads(source.read_text(encoding="ascii"))
+        for worker in matrix.get("workers", []):
+            matrix_roles.add((matrix["strategy_id"], worker["role"], worker["platform_profile"]))
+    if matrix_roles != {(row["strategy_id"], row["role"], row["profile"]) for row in rows}:
+        raise SetupError("Casefile role profiles differ from the packaged strategies")
+    if {name for name in agents if name.startswith("casefile-")} != set(names):
+        raise SetupError("registered Casefile roles differ from the packaged profiles")
+    selection_fields = {"model", "model_reasoning_effort"}
     for row in rows:
+        name = row["profile"]
         relative = PurePosixPath(row["agent_file"].replace("\\", "/"))
         expected = root / Path(*relative.parts)
-        actual = agents.get(row["profile"], {}).get("config_file")
+        registration = agents[name]
+        actual = registration.get("config_file")
         if (
             not isinstance(actual, str)
             or Path(actual) != expected
             or not Path(actual).is_file()
         ):
-            raise SetupError(f"role binding is incorrect: {row['profile']}")
+            raise SetupError(f"role binding is incorrect: {name}")
         agent = tomllib.loads(expected.read_text(encoding="ascii"))
-        if row in override_rows:
-            if "model" in agent or "model_reasoning_effort" in agent:
-                raise SetupError(f"runtime-override role fixes a model: {row['profile']}")
-        elif agent.get("model") != row.get("model") or agent.get(
-            "model_reasoning_effort"
-        ) != row.get("reasoning"):
-            raise SetupError(f"role model binding is incoherent: {row['profile']}")
+        if selection_fields.intersection(registration) or selection_fields.intersection(agent):
+            raise SetupError(f"Casefile role fixes a model or effort: {name}")
+        instructions = agent.get("developer_instructions")
+        if not isinstance(instructions, str) or not instructions.strip():
+            raise SetupError(f"Casefile role lacks developer instructions: {name}")
 
 
 def remove(path: Path) -> None:

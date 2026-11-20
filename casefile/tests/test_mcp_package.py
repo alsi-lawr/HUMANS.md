@@ -8,8 +8,9 @@ import tempfile
 import tomllib
 import unittest
 from pathlib import Path
+from unittest import mock
 
-from _load import ROOT
+from _load import ROOT, script
 
 TARGETS = (
     "aarch64-apple-darwin", "aarch64-pc-windows-msvc", "aarch64-unknown-linux-musl",
@@ -120,6 +121,22 @@ class McpPackageTests(unittest.TestCase):
             self.assertTrue((codex / "scripts/list-codex-models.py").is_file())
             self.assertTrue((codex / "scripts/resolve-role-assignment.py").is_file())
             self.assertTrue((codex / "skills/casefile/references/codex-delegation.md").is_file())
+            with mock.patch.object(sys, "path", [str(codex / "scripts"), *sys.path]):
+                setup = script(codex / "scripts/setup-codex.py")
+            casefile_roles = set()
+            for path in (codex / "matrices").glob("*.toml"):
+                matrix = tomllib.loads(path.read_text(encoding="ascii"))
+                for worker in matrix.get("workers", []):
+                    casefile_roles.add(worker["platform_profile"])
+                    self.assertFalse({"model", "reasoning"} & worker.keys())
+            for runtime in ("v1", "v2"):
+                with self.subTest(runtime=runtime):
+                    data = setup.config_candidate(
+                        b"", codex, Path(temporary) / "catalog.json", runtime,
+                        Path(temporary) / "casefile", Path(temporary),
+                    )
+                    agents = tomllib.loads(data.decode("ascii"))["agents"]
+                    self.assertEqual(casefile_roles, {name for name in agents if name.startswith("casefile-")})
             for root in (ROOT / "casefile/adapters/codex", codex):
                 scripts = "\n".join(
                     path.read_text(encoding="ascii") for path in root.rglob("*.py")
