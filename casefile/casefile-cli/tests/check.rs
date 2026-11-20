@@ -448,8 +448,8 @@ fn writer_projection_uses_canonical_matrix_and_binding_states() {
     let historical = fs::read_to_string(shipped)
         .expect("shipped matrix")
         .replacen(
-            "role = \"implementation-writer\"\n",
-            "role = \"implementation-writer\"\nmodel = \"gpt-5.6-terra\"\nreasoning = \"high\"\n",
+            "role = \"implementation-writer\"",
+            "role = \"implementation-writer\"\nmodel = \"gpt-5.6-terra\"\nreasoning = \"high\"",
             1,
         );
     fs::write(&implementation, historical).expect("historical implementation matrix");
